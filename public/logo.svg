@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#0b0f14"/>
+      <stop offset="100%" stop-color="#111926"/>
+    </linearGradient>
+  </defs>
+  <rect width="240" height="240" fill="url(#bg)"/>
+  <!-- Stylized H3: red H stem and white 3 -->
+  <g transform="translate(30,30)">
+    <!-- Red H left bar -->
+    <rect x="0" y="10" width="30" height="170" rx="6" fill="#e21a2c"/>
+    <!-- Red H cross bar -->
+    <rect x="0" y="90" width="90" height="30" rx="6" fill="#e21a2c"/>
+    <!-- White 3 outline -->
+    <path d="M135,30c32,0 55,18 55,45c0,17-9,30-24,37c17,6 28,20 28,39c0,27-24,49-59,49h-42c-6,0-11-5-11-11v-10c0-6 5-11 11-11h39c18,0 30-10 30-24c0-14-12-23-30-23h-31c-6,0-11-5-11-11v-10c0-6 5-11 11-11h30c16,0 27-9 27-22c0-13-12-22-30-22h-39c-6,0-11-5-11-11v-10c0-6 5-11 11-11h46z" fill="#ffffff"/>
+  </g>
+</svg>
+
+

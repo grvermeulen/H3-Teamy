@@ -1,0 +1,41 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String  @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  firstName String
+  lastName  String
+  // Optional: link to sessions/devices in future
+  rsvps     Rsvp[]
+}
+
+model Rsvp {
+  id        String  @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String
+  eventId   String
+  status    String  // "yes" | "no" | "maybe"
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, eventId])
+  @@index([eventId])
+}
+
+model LinkCode {
+  code      String  @id
+  userId    String
+  createdAt DateTime @default(now())
+  // Expiry handled at app layer (TTL); can be pruned later
+}
+
+
