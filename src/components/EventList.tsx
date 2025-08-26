@@ -13,35 +13,47 @@ export default function EventList({ events }: Props) {
   const [lists, setLists] = useState<Record<string, { yes: { id: string; name: string }[]; no: { id: string; name: string }[]; maybe: { id: string; name: string }[] }>>({});
   const [loadedLists, setLoadedLists] = useState<Record<string, boolean>>({});
   const [mounted, setMounted] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  async function loadAll() {
+    setIsRefreshing(true);
+    const rsvpEntries = await Promise.all(
+      events.map(async (e) => {
+        const res = await fetch(`/api/rsvp?eventId=${encodeURIComponent(e.id)}`, { cache: "no-store" });
+        if (!res.ok) return [e.id, null] as const;
+        const data = await res.json();
+        return [e.id, (data?.status ?? null) as RsvpStatus] as const;
+      })
+    );
+    const countsEntries = await Promise.all(
+      events.map(async (e) => {
+        const res = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(e.id)}&countsOnly=1`, { cache: "no-store" });
+        if (!res.ok) return [e.id, { yes: 0, no: 0, maybe: 0 }, { yes: [], no: [], maybe: [] }] as const;
+        const data = await res.json();
+        return [e.id, data.counts as { yes: number; no: number; maybe: number }, data.lists as any] as const;
+      })
+    );
+    const map: RsvpMap = {};
+    const cMap: Record<string, { yes: number; no: number; maybe: number }> = {};
+    const lMap: Record<string, { yes: { id: string; name: string }[]; no: { id: string; name: string }[]; maybe: { id: string; name: string }[] }> = {};
+    for (const [id, status] of rsvpEntries) map[id] = status;
+    for (const [id, c, l] of countsEntries) { cMap[id] = c; lMap[id] = l; }
+    setRsvpMap(map);
+    setCounts(cMap);
+    setLists(lMap);
+    setIsRefreshing(false);
+  }
 
   useEffect(() => {
-    // Preload RSVPs for visible events
-    (async () => {
-      const rsvpEntries = await Promise.all(
-        events.map(async (e) => {
-          const res = await fetch(`/api/rsvp?eventId=${encodeURIComponent(e.id)}`, { cache: "no-store" });
-          if (!res.ok) return [e.id, null] as const;
-          const data = await res.json();
-          return [e.id, (data?.status ?? null) as RsvpStatus] as const;
-        })
-      );
-      const countsEntries = await Promise.all(
-        events.map(async (e) => {
-          const res = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(e.id)}&countsOnly=1`, { cache: "no-store" });
-          if (!res.ok) return [e.id, { yes: 0, no: 0, maybe: 0 }, { yes: [], no: [], maybe: [] }] as const;
-          const data = await res.json();
-          return [e.id, data.counts as { yes: number; no: number; maybe: number }, data.lists as any] as const;
-        })
-      );
-      const map: RsvpMap = {};
-      const cMap: Record<string, { yes: number; no: number; maybe: number }> = {};
-      const lMap: Record<string, { yes: { id: string; name: string }[]; no: { id: string; name: string }[]; maybe: { id: string; name: string }[] }> = {};
-      for (const [id, status] of rsvpEntries) map[id] = status;
-      for (const [id, c, l] of countsEntries) { cMap[id] = c; lMap[id] = l; }
-      setRsvpMap(map);
-      setCounts(cMap);
-      setLists(lMap);
-    })();
+    void loadAll();
+  }, [events]);
+
+  useEffect(() => {
+    function onFocus() {
+      void loadAll();
+    }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [events]);
 
   useEffect(() => {
@@ -84,6 +96,10 @@ export default function EventList({ events }: Props) {
 
   return (
     <div className="list">
+      <div className="row" style={{ marginBottom: 12, alignItems: "center", gap: 8 }}>
+        <button onClick={() => void loadAll()} disabled={isRefreshing}>{isRefreshing ? "Refreshing…" : "Refresh"}</button>
+        <span className="muted">Pull to refresh: focus page or press Refresh</span>
+      </div>
       {grouped.map((evt) => {
         const start = new Date(evt.start);
         const end = evt.end ? new Date(evt.end) : undefined;
