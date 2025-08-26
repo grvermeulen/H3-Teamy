@@ -13,6 +13,13 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <meta name="theme-color" content="#0B1220" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <link rel="apple-touch-icon" href="/logo.svg" />
+      </head>
       <body>
         <header className="container" style={{ display: "flex", alignItems: "center", gap: 12, paddingTop: 20 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -32,6 +39,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <footer className="container" style={{ marginTop: 24 }}>
           <a href="/privacy" className="muted">Privacy policy</a>
         </footer>
+        <script dangerouslySetInnerHTML={{ __html: `
+          if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+              navigator.serviceWorker.register('/sw.js').catch(()=>{});
+            });
+          }
+        ` }} />
       </body>
     </html>
   );
