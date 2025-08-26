@@ -110,13 +110,11 @@ export default function EventList({ events }: Props) {
               <div className="grow">
                 <div className="eventTitle">{evt.title}</div>
                 <div className="eventMeta muted">
-                  <span className="badge" suppressHydrationWarning>
-                    {mounted ? (
-                      <>
-                        {start.toLocaleDateString()} {start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        {end ? ` - ${end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}
-                      </>
-                    ) : ""}
+                  <span className="badge badge-date" suppressHydrationWarning>
+                    {mounted ? start.toLocaleDateString(undefined, { weekday: "short", day: "2-digit", month: "short" }) : ""}
+                  </span>
+                  <span className="badge badge-time" suppressHydrationWarning>
+                    {mounted ? `${start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${end ? ` – ${end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}` : ""}
                   </span>
                   {evt.location ? <span className="badge">{evt.location}</span> : null}
                   {counts[evt.id] ? (
