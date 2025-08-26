@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
           create: { userId: row.userId, eventId: canonicalId, status: row.status },
           update: { status: row.status },
         }),
-        prisma.rsvp.delete({ where: { userId_eventId: { userId: row.userId, eventId: oldId } } }).catch(() => null),
+        prisma.rsvp.deleteMany({ where: { userId: row.userId, eventId: oldId } }),
       ]);
       migrated += 1;
     }
