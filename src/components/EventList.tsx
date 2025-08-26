@@ -11,6 +11,8 @@ export default function EventList({ events }: Props) {
   const [rsvpMap, setRsvpMap] = useState<RsvpMap>({});
   const [counts, setCounts] = useState<Record<string, { yes: number; no: number; maybe: number }>>({});
   const [lists, setLists] = useState<Record<string, { yes: { id: string; name: string }[]; no: { id: string; name: string }[]; maybe: { id: string; name: string }[] }>>({});
+  const [loadedLists, setLoadedLists] = useState<Record<string, boolean>>({});
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     // Preload RSVPs for visible events
@@ -25,7 +27,7 @@ export default function EventList({ events }: Props) {
       );
       const countsEntries = await Promise.all(
         events.map(async (e) => {
-          const res = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(e.id)}`, { cache: "no-store" });
+          const res = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(e.id)}&countsOnly=1`, { cache: "no-store" });
           if (!res.ok) return [e.id, { yes: 0, no: 0, maybe: 0 }, { yes: [], no: [], maybe: [] }] as const;
           const data = await res.json();
           return [e.id, data.counts as { yes: number; no: number; maybe: number }, data.lists as any] as const;
@@ -42,6 +44,10 @@ export default function EventList({ events }: Props) {
     })();
   }, [events]);
 
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   async function setRsvp(id: string, status: RsvpStatus) {
     setRsvpMap((prev) => ({ ...prev, [id]: status }));
     await fetch(`/api/rsvp`, {
@@ -55,6 +61,18 @@ export default function EventList({ events }: Props) {
       const data = await res.json();
       setCounts((prev) => ({ ...prev, [id]: data.counts }));
       setLists((prev) => ({ ...prev, [id]: data.lists }));
+      setLoadedLists((prev) => ({ ...prev, [id]: true }));
+    }
+  }
+
+  async function ensureListsLoaded(id: string) {
+    if (loadedLists[id]) return;
+    const res = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(id)}`, { cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      setCounts((prev) => ({ ...prev, [id]: data.counts }));
+      setLists((prev) => ({ ...prev, [id]: data.lists }));
+      setLoadedLists((prev) => ({ ...prev, [id]: true }));
     }
   }
 
@@ -76,7 +94,14 @@ export default function EventList({ events }: Props) {
               <div className="grow">
                 <div className="eventTitle">{evt.title}</div>
                 <div className="eventMeta muted">
-                  <span className="badge">{start.toLocaleDateString()} {start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{end ? ` - ${end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}</span>
+                  <span className="badge" suppressHydrationWarning>
+                    {mounted ? (
+                      <>
+                        {start.toLocaleDateString()} {start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        {end ? ` - ${end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}
+                      </>
+                    ) : ""}
+                  </span>
                   {evt.location ? <span className="badge">{evt.location}</span> : null}
                   {counts[evt.id] ? (
                     <span className="badge">Yes {counts[evt.id].yes} · Maybe {counts[evt.id].maybe} · No {counts[evt.id].no}</span>
@@ -101,7 +126,10 @@ export default function EventList({ events }: Props) {
             {evt.description ? (
               <div className="muted" style={{ marginTop: 8 }}>{evt.description}</div>
             ) : null}
-            <details style={{ marginTop: 10 }}>
+            <details style={{ marginTop: 10 }} onToggle={(e) => {
+              const el = e.currentTarget as HTMLDetailsElement;
+              if (el.open) void ensureListsLoaded(evt.id);
+            }}>
               <summary className="muted">Show RSVP list</summary>
               <div className="row" style={{ gap: 16, marginTop: 8 }}>
                 <div>

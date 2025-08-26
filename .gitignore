@@ -5,4 +5,7 @@ node_modules
 .env
 .env.*
 
+# Local curl/browser cookie jars (should never be committed)
+.cookie_*
+
 

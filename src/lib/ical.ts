@@ -1,10 +1,11 @@
 import ical, { CalendarComponent } from "node-ical";
 import { TeamEvent } from "../types";
 
-const DEFAULT_FEED = "https://data.sportlink.com/ical-team?token=7p25tkklfu41fb25p9015ia85b";
-
 export async function fetchTeamEvents(): Promise<TeamEvent[]> {
-  const url = process.env.SPORTLINK_ICAL_URL || DEFAULT_FEED;
+  const url = process.env.SPORTLINK_ICAL_URL;
+  if (!url) {
+    throw new Error("SPORTLINK_ICAL_URL environment variable is not set");
+  }
 
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {

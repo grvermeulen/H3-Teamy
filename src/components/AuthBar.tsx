@@ -12,6 +12,7 @@ export default function AuthBar() {
   const [saving, setSaving] = useState(false);
   const [linkCode, setLinkCode] = useState<string | null>(null);
   const [redeem, setRedeem] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
 
   const { data: session, status } = useSession();
 
@@ -29,15 +30,29 @@ export default function AuthBar() {
 
   async function save() {
     setSaving(true);
-    await fetch("/api/me", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ firstName, lastName }),
-    });
-    // If authenticated, also link profile to cookie user
-    try { await fetch("/api/auth/link", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ firstName, lastName }) }); } catch {}
-    setSaving(false);
-    setUser({ id: "me", firstName, lastName });
+    try {
+      const res = await fetch("/api/me", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ firstName, lastName }),
+      });
+      if (!res.ok) throw new Error(`Save failed (${res.status})`);
+      // If authenticated, also link profile to cookie user
+      try {
+        await fetch("/api/auth/link", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ firstName, lastName }),
+        });
+      } catch {}
+      setUser({ id: "me", firstName, lastName });
+      setNotice("Saved");
+      setTimeout(() => setNotice(null), 2000);
+    } catch (e: any) {
+      setNotice(e?.message || "Could not save");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function generateLink() {
@@ -98,6 +113,7 @@ export default function AuthBar() {
           <button onClick={redeemLink} style={{ padding: "6px 10px", borderRadius: 6 }}>Redeem</button>
         </div>
       )}
+      {notice ? <div className="muted">{notice}</div> : null}
     </div>
   );
 }

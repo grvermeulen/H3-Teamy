@@ -5,6 +5,9 @@ import Providers from "../components/Providers";
 export const metadata: Metadata = {
   title: "De Rijn H3 Teamy MVP",
   description: "Waterpolo team calendar and RSVP",
+  verification: {
+    google: "ckmxM__EYIWSkCl_NQgW_pc2ausN1rpyDARkm80onEo",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -26,6 +29,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
         <Providers>{children}</Providers>
+        <footer className="container" style={{ marginTop: 24 }}>
+          <a href="/privacy" className="muted">Privacy policy</a>
+        </footer>
       </body>
     </html>
   );

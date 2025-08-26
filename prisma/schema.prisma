@@ -13,8 +13,11 @@ model User {
   updatedAt DateTime @updatedAt
   firstName String
   lastName  String
+  email     String? @unique
+  passwordHash String?
   // Optional: link to sessions/devices in future
   rsvps     Rsvp[]
+  identities Identity[]
 }
 
 model Rsvp {
@@ -36,6 +39,19 @@ model LinkCode {
   userId    String
   createdAt DateTime @default(now())
   // Expiry handled at app layer (TTL); can be pruned later
+}
+
+model Identity {
+  id              String  @id @default(cuid())
+  createdAt       DateTime @default(now())
+  userId          String
+  provider        String   // "cookie" | "email" | other providers
+  providerUserId  String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
 }
 
 
