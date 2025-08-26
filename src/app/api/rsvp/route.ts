@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRsvp, setRsvp } from "../../../lib/kv";
 import { getActiveUser } from "../../../lib/activeUser";
+import { prisma } from "../../../lib/db";
 
 export async function GET(req: NextRequest) {
   try {
@@ -24,6 +25,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "invalid status" }, { status: 400 });
     }
     const { userId } = await getActiveUser(req);
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const first = (user?.firstName || "").trim();
+    const last = (user?.lastName || "").trim();
+    if (!first || !last) {
+      return NextResponse.json({ error: "profile_incomplete", message: "Please add your first and last name before RSVP-ing." }, { status: 412 });
+    }
     await setRsvp(userId, eventId, status ?? null);
     return NextResponse.json({ ok: true });
   } catch {

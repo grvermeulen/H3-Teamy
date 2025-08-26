@@ -61,19 +61,30 @@ export default function EventList({ events }: Props) {
   }, []);
 
   async function setRsvp(id: string, status: RsvpStatus) {
-    setRsvpMap((prev) => ({ ...prev, [id]: status }));
-    await fetch(`/api/rsvp`, {
+    const prev = rsvpMap[id] || null;
+    setRsvpMap((p) => ({ ...p, [id]: status }));
+    const res = await fetch(`/api/rsvp`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ eventId: id, status }),
     });
+    if (res.status === 412) {
+      // profile incomplete → revert optimistic UI and redirect to profile
+      setRsvpMap((p) => ({ ...p, [id]: prev }));
+      if (typeof window !== "undefined") {
+        const message = "Please complete your profile (first and last name) before RSVP-ing.";
+        alert(message);
+        window.location.href = "/profile";
+      }
+      return;
+    }
     // Refresh counts/lists for this event
-    const res = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(id)}`, { cache: "no-store" });
-    if (res.ok) {
-      const data = await res.json();
-      setCounts((prev) => ({ ...prev, [id]: data.counts }));
-      setLists((prev) => ({ ...prev, [id]: data.lists }));
-      setLoadedLists((prev) => ({ ...prev, [id]: true }));
+    const listRes = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(id)}`, { cache: "no-store" });
+    if (listRes.ok) {
+      const data = await listRes.json();
+      setCounts((p) => ({ ...p, [id]: data.counts }));
+      setLists((p) => ({ ...p, [id]: data.lists }));
+      setLoadedLists((p) => ({ ...p, [id]: true }));
     }
   }
 
