@@ -118,7 +118,7 @@ export default function EventList({ events }: Props) {
                   </span>
                   {evt.location ? <span className="badge">{evt.location}</span> : null}
                   {counts[evt.id] ? (
-                    <span className="badge">Yes {counts[evt.id].yes} · Maybe {counts[evt.id].maybe} · No {counts[evt.id].no}</span>
+                    <span className="badge">Yes <span className="count-yes">{counts[evt.id].yes}</span> · Maybe <span className="count-maybe">{counts[evt.id].maybe}</span> · No <span className="count-no">{counts[evt.id].no}</span></span>
                   ) : null}
                 </div>
               </div>

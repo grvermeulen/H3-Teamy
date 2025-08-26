@@ -73,6 +73,10 @@ h1, h2, h3 {
   font-size: 12px;
 }
 
+.count-yes { color: var(--positive); }
+.count-no { color: var(--negative); }
+.count-maybe { color: var(--accent); }
+
 .badge-date {
   background: color-mix(in oklab, var(--date) 18%, transparent);
   color: var(--text);
