@@ -178,6 +178,12 @@ export default function EventList({ events }: Props) {
                     {(lists[evt.id]?.no || []).length === 0 ? <div>—</div> : null}
                   </div>
                 </div>
+                <div>
+                  <div className="badge">1e wissel:</div>
+                  <div className="muted" style={{ marginTop: 4 }}>
+                    <div>Hans</div>
+                  </div>
+                </div>
               </div>
             </details>
           </div>
