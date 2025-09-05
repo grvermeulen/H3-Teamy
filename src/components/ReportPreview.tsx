@@ -34,7 +34,13 @@ export default function ReportPreview({ eventId }: { eventId: string }) {
     <>
       <div className="rsvp" style={{ justifyContent: "flex-end", marginTop: 8 }}>
         {hasReport ? (
-          <button onClick={() => setOpen(true)}>Bekijk wedstrijd verslag</button>
+          <button onClick={async () => {
+            setOpen(true);
+            // Refresh content when opening overlay
+            const rep = await fetch(`/api/report?eventId=${encodeURIComponent(eventId)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => ({ report: null }));
+            const text = rep?.report?.content ? String(rep.report.content) : null;
+            setContent(text);
+          }}>Bekijk wedstrijd verslag</button>
         ) : null}
       </div>
       {open ? (
