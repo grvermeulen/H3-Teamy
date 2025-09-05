@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { TeamEvent, RsvpStatus } from "../types";
 import Link from "next/link";
 import ReportLink from "./ReportLink";
+import GenerateReportButton from "./GenerateReportButton";
 
 type Props = { events: TeamEvent[] };
 
@@ -150,8 +151,9 @@ export default function EventList({ events }: Props) {
                 >No</button>
               </div>
             </div>
-            {/* Match report link (bottom-right) */}
+            {/* Match report controls (bottom-right) */}
             <ReportLink eventId={evt.id} />
+            <GenerateReportButton eventId={evt.id} opponent={evt.title} />
             {evt.description ? (
               <div className="muted" style={{ marginTop: 8 }}>{evt.description}</div>
             ) : null}
