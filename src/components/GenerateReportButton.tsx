@@ -36,14 +36,14 @@ export default function GenerateReportButton({ eventId, opponent }: { eventId: s
   if (!isAdmin) return null;
 
   return (
-    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
+    <div className="rsvp" style={{ justifyContent: "flex-end", marginTop: 8 }}>
       <button
         onClick={onGenerate}
         disabled={loading}
         className={done ? "active-yes" : undefined}
-        style={{ minWidth: 140 }}
+        style={{ minWidth: 160 }}
       >
-        {loading ? "Generating…" : done ? "Generated" : "Generate report"}
+        {loading ? "Genereren…" : done ? "Gegenereerd" : "Verslag genereren"}
       </button>
     </div>
   );

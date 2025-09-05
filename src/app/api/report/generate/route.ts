@@ -37,11 +37,11 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "OPENAI_API_KEY not configured" }, { status: 500 });
 
-    const prompt = `Write a short, humorous water polo match report (120-200 words) for De Rijn H3.
-Opponent: ${opponent || "unknown"}.
-Final score: ${typeof scoreHome === 'number' && typeof scoreAway === 'number' ? `${scoreHome} - ${scoreAway}` : "n/a"}.
-Tone: witty, light, respectful to opponents, include 1-2 playful metaphors.
-Avoid profanity. Include one short standout moment.`;
+    const prompt = `Schrijf een korte, humoristische wedstrijdsamenvatting (120–200 woorden) voor De Rijn H3 waterpolo.
+Tegenstander: ${opponent || "onbekend"}.
+Uitslag: ${typeof scoreHome === 'number' && typeof scoreAway === 'number' ? `${scoreHome} - ${scoreAway}` : "n.v.t."}.
+Stijl: luchtig, geestig en sportief naar de tegenstander. Gebruik 1–2 speelse metaforen, geen grof taalgebruik.
+Noem één opvallend moment in de wedstrijd. Schrijf in het Nederlands.`;
 
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",

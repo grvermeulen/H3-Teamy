@@ -23,14 +23,14 @@ export default function ReportPreview({ eventId }: { eventId: string }) {
   }, [eventId]);
 
   if (!loggedIn) return null;
-
   const hasReport = Boolean(content && content.trim());
-  if (!hasReport) return null;
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-        <button onClick={() => setOpen(true)}>Bekijk wedstrijd verslag</button>
+      <div className="rsvp" style={{ justifyContent: "flex-end", marginTop: 8 }}>
+        {hasReport ? (
+          <button onClick={() => setOpen(true)}>Bekijk wedstrijd verslag</button>
+        ) : null}
       </div>
       {open ? (
         <div
