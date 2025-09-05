@@ -171,27 +171,55 @@ type MatchReport = { content: string; createdAt: string; authorId?: string };
 
 export async function getReport(eventId: string): Promise<MatchReport | null> {
   const key = `report:${eventId}`;
-  const redis = await getRedis();
-  if (redis) {
-    const raw = (await redis.get(key)) as string | null;
+  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+    const redis = await getRedis();
+    if (redis) {
+      const raw = (await redis.get(key)) as string | null;
+      if (!raw) return null;
+      try { return JSON.parse(raw) as MatchReport; } catch { return null; }
+    }
+    const raw = memoryStore.get(key) as unknown as string | undefined;
     if (!raw) return null;
     try { return JSON.parse(raw) as MatchReport; } catch { return null; }
   }
-  const raw = memoryStore.get(key) as unknown as string | undefined;
+  const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => ({} as any));
+  const raw = data?.result ?? null;
   if (!raw) return null;
   try { return JSON.parse(raw) as MatchReport; } catch { return null; }
 }
 
 export async function setReport(eventId: string, report: MatchReport | null): Promise<void> {
   const key = `report:${eventId}`;
-  const redis = await getRedis();
-  if (redis) {
-    if (report === null) { await redis.del(key); return; }
-    await redis.set(key, JSON.stringify(report));
+  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+    const redis = await getRedis();
+    if (redis) {
+      if (report === null) { await redis.del(key); return; }
+      await redis.set(key, JSON.stringify(report));
+      return;
+    }
+    if (report === null) memoryStore.delete(key);
+    else memoryStore.set(key, JSON.stringify(report) as any);
     return;
   }
-  if (report === null) memoryStore.delete(key);
-  else memoryStore.set(key, JSON.stringify(report) as any);
+  const url = `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`;
+  const body = new URLSearchParams();
+  body.set("value", report ? JSON.stringify(report) : "");
+  await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
 }
 
 export async function createLinkCode(userId: string): Promise<string> {
