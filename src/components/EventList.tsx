@@ -24,18 +24,6 @@ export default function EventList({ events }: Props) {
   async function loadAll() {
     setIsRefreshing(true);
     
-    // Check login status first
-    let isLoggedIn = false;
-    try {
-      const me = await fetch("/api/me", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ user: null }));
-      isLoggedIn = Boolean(me?.user?.id);
-      setLoggedIn(isLoggedIn);
-    } catch {
-      isLoggedIn = false;
-      setLoggedIn(false);
-    }
-    setAuthChecked(true);
-    
     // Always load public counts
     const countsEntries = await Promise.all(
       events.map(async (e) => {
@@ -49,7 +37,7 @@ export default function EventList({ events }: Props) {
     for (const [id, c] of countsEntries) { cMap[id] = c; }
     setCounts(cMap);
     
-    if (!isLoggedIn) {
+    if (!loggedIn) {
       // If not logged in, only show counts
       setRsvpMap({});
       setLists({});
@@ -73,17 +61,36 @@ export default function EventList({ events }: Props) {
     setIsRefreshing(false);
   }
 
+  // Check authentication on mount only
   useEffect(() => {
-    void loadAll();
-  }, [events]);
+    async function checkAuth() {
+      try {
+        const me = await fetch("/api/me", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ user: null }));
+        const isLoggedIn = Boolean(me?.user?.id);
+        setLoggedIn(isLoggedIn);
+      } catch {
+        setLoggedIn(false);
+      }
+      setAuthChecked(true);
+    }
+    checkAuth();
+  }, []);
+
+  useEffect(() => {
+    if (authChecked) {
+      void loadAll();
+    }
+  }, [events, authChecked]);
 
   useEffect(() => {
     function onFocus() {
-      void loadAll();
+      if (authChecked) {
+        void loadAll();
+      }
     }
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [events]);
+  }, [authChecked]);
 
   useEffect(() => {
     setMounted(true);
