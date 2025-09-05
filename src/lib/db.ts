@@ -7,9 +7,10 @@ declare global {
 
 const prismaInstance =
   global.prisma ||
-  (process.env.DATABASE_URL
-    ? new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } })
-    : new PrismaClient());
+  (() => {
+    const url = process.env.PRISMA_DATABASE_URL || process.env.DATABASE_URL;
+    return url ? new PrismaClient({ datasources: { db: { url } } }) : new PrismaClient();
+  })();
 
 export const prisma = prismaInstance;
 if (process.env.NODE_ENV !== "production") global.prisma = prismaInstance;
