@@ -18,9 +18,40 @@ export default function EventList({ events }: Props) {
   const [loadedLists, setLoadedLists] = useState<Record<string, boolean>>({});
   const [mounted, setMounted] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(false);
 
   async function loadAll() {
     setIsRefreshing(true);
+    
+    // Check login status first
+    try {
+      const me = await fetch("/api/me", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ user: null }));
+      const isLoggedIn = Boolean(me?.user?.id);
+      setLoggedIn(isLoggedIn);
+      
+      if (!isLoggedIn) {
+        // If not logged in, only load public counts
+        const countsEntries = await Promise.all(
+          events.map(async (e) => {
+            const res = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(e.id)}&countsOnly=1`, { cache: "no-store" });
+            if (!res.ok) return [e.id, { yes: 0, no: 0, maybe: 0 }] as const;
+            const data = await res.json();
+            return [e.id, data.counts as { yes: number; no: number; maybe: number }] as const;
+          })
+        );
+        const cMap: Record<string, { yes: number; no: number; maybe: number }> = {};
+        for (const [id, c] of countsEntries) { cMap[id] = c; }
+        setCounts(cMap);
+        setRsvpMap({});
+        setLists({});
+        setIsRefreshing(false);
+        return;
+      }
+    } catch {
+      setLoggedIn(false);
+    }
+    
+    // If logged in, load full RSVP data
     const rsvpEntries = await Promise.all(
       events.map(async (e) => {
         const res = await fetch(`/api/rsvp?eventId=${encodeURIComponent(e.id)}`, { cache: "no-store" });
@@ -137,20 +168,22 @@ export default function EventList({ events }: Props) {
                   ) : null}
                 </div>
               </div>
-              <div className="rsvp">
-                <button
-                  className={status === "yes" ? "active-yes" : ""}
-                  onClick={() => setRsvp(evt.id, status === "yes" ? null : "yes")}
-                >Yes</button>
-                <button
-                  className={status === "maybe" ? "active-maybe" : ""}
-                  onClick={() => setRsvp(evt.id, status === "maybe" ? null : "maybe")}
-                >Maybe</button>
-                <button
-                  className={status === "no" ? "active-no" : ""}
-                  onClick={() => setRsvp(evt.id, status === "no" ? null : "no")}
-                >No</button>
-              </div>
+              {loggedIn ? (
+                <div className="rsvp">
+                  <button
+                    className={status === "yes" ? "active-yes" : ""}
+                    onClick={() => setRsvp(evt.id, status === "yes" ? null : "yes")}
+                  >Yes</button>
+                  <button
+                    className={status === "maybe" ? "active-maybe" : ""}
+                    onClick={() => setRsvp(evt.id, status === "maybe" ? null : "maybe")}
+                  >Maybe</button>
+                  <button
+                    className={status === "no" ? "active-no" : ""}
+                    onClick={() => setRsvp(evt.id, status === "no" ? null : "no")}
+                  >No</button>
+                </div>
+              ) : null}
             </div>
             {/* Match report controls (bottom-right) */}
             <ReportPreview eventId={evt.id} />
@@ -158,41 +191,43 @@ export default function EventList({ events }: Props) {
             {evt.description ? (
               <div className="muted" style={{ marginTop: 8 }}>{evt.description}</div>
             ) : null}
-            <details style={{ marginTop: 10 }} onToggle={(e) => {
-              const el = e.currentTarget as HTMLDetailsElement;
-              if (el.open) void ensureListsLoaded(evt.id);
-            }}>
-              <summary className="muted">Show RSVP list</summary>
-              <div className="row" style={{ gap: 16, marginTop: 8, alignItems: "flex-start" }}>
-                <div>
-                  <div className="badge">Yes</div>
-                  <div className="muted" style={{ marginTop: 4 }}>
-                    {(lists[evt.id]?.yes || []).map((u) => (<div key={u.id}>{u.name}</div>))}
-                    {(lists[evt.id]?.yes || []).length === 0 ? <div>—</div> : null}
+            {loggedIn ? (
+              <details style={{ marginTop: 10 }} onToggle={(e) => {
+                const el = e.currentTarget as HTMLDetailsElement;
+                if (el.open) void ensureListsLoaded(evt.id);
+              }}>
+                <summary className="muted">Show RSVP list</summary>
+                <div className="row" style={{ gap: 16, marginTop: 8, alignItems: "flex-start" }}>
+                  <div>
+                    <div className="badge">Yes</div>
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      {(lists[evt.id]?.yes || []).map((u) => (<div key={u.id}>{u.name}</div>))}
+                      {(lists[evt.id]?.yes || []).length === 0 ? <div>—</div> : null}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="badge">Maybe</div>
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      {(lists[evt.id]?.maybe || []).map((u) => (<div key={u.id}>{u.name}</div>))}
+                      {(lists[evt.id]?.maybe || []).length === 0 ? <div>—</div> : null}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="badge">No</div>
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      {(lists[evt.id]?.no || []).map((u) => (<div key={u.id}>{u.name}</div>))}
+                      {(lists[evt.id]?.no || []).length === 0 ? <div>—</div> : null}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="badge">1e wissel:</div>
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      <div>Hans</div>
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <div className="badge">Maybe</div>
-                  <div className="muted" style={{ marginTop: 4 }}>
-                    {(lists[evt.id]?.maybe || []).map((u) => (<div key={u.id}>{u.name}</div>))}
-                    {(lists[evt.id]?.maybe || []).length === 0 ? <div>—</div> : null}
-                  </div>
-                </div>
-                <div>
-                  <div className="badge">No</div>
-                  <div className="muted" style={{ marginTop: 4 }}>
-                    {(lists[evt.id]?.no || []).map((u) => (<div key={u.id}>{u.name}</div>))}
-                    {(lists[evt.id]?.no || []).length === 0 ? <div>—</div> : null}
-                  </div>
-                </div>
-                <div>
-                  <div className="badge">1e wissel:</div>
-                  <div className="muted" style={{ marginTop: 4 }}>
-                    <div>Hans</div>
-                  </div>
-                </div>
-              </div>
-            </details>
+              </details>
+            ) : null}
           </div>
         );
       })}
