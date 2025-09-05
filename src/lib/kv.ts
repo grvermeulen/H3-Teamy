@@ -166,6 +166,34 @@ export async function listEventRsvps(eventId: string): Promise<{ userId: string;
   return out;
 }
 
+// Match Reports
+type MatchReport = { content: string; createdAt: string; authorId?: string };
+
+export async function getReport(eventId: string): Promise<MatchReport | null> {
+  const key = `report:${eventId}`;
+  const redis = await getRedis();
+  if (redis) {
+    const raw = (await redis.get(key)) as string | null;
+    if (!raw) return null;
+    try { return JSON.parse(raw) as MatchReport; } catch { return null; }
+  }
+  const raw = memoryStore.get(key) as unknown as string | undefined;
+  if (!raw) return null;
+  try { return JSON.parse(raw) as MatchReport; } catch { return null; }
+}
+
+export async function setReport(eventId: string, report: MatchReport | null): Promise<void> {
+  const key = `report:${eventId}`;
+  const redis = await getRedis();
+  if (redis) {
+    if (report === null) { await redis.del(key); return; }
+    await redis.set(key, JSON.stringify(report));
+    return;
+  }
+  if (report === null) memoryStore.delete(key);
+  else memoryStore.set(key, JSON.stringify(report) as any);
+}
+
 export async function createLinkCode(userId: string): Promise<string> {
   const code = Math.random().toString(36).slice(2, 8).toUpperCase();
   const key = `link:${code}`;

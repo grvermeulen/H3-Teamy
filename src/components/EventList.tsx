@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { TeamEvent, RsvpStatus } from "../types";
+import Link from "next/link";
+import ReportLink from "./ReportLink";
 
 type Props = { events: TeamEvent[] };
 
@@ -148,6 +150,8 @@ export default function EventList({ events }: Props) {
                 >No</button>
               </div>
             </div>
+            {/* Match report link (bottom-right) */}
+            <ReportLink eventId={evt.id} />
             {evt.description ? (
               <div className="muted" style={{ marginTop: 8 }}>{evt.description}</div>
             ) : null}
