@@ -5,6 +5,7 @@ import type { TeamEvent, RsvpStatus } from "../types";
 import Link from "next/link";
 import ReportLink from "./ReportLink";
 import GenerateReportButton from "./GenerateReportButton";
+import ReportPreview from "./ReportPreview";
 
 type Props = { events: TeamEvent[] };
 
@@ -152,7 +153,7 @@ export default function EventList({ events }: Props) {
               </div>
             </div>
             {/* Match report controls (bottom-right) */}
-            <ReportLink eventId={evt.id} />
+            <ReportPreview eventId={evt.id} />
             <GenerateReportButton eventId={evt.id} opponent={evt.title} />
             {evt.description ? (
               <div className="muted" style={{ marginTop: 8 }}>{evt.description}</div>

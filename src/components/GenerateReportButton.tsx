@@ -37,7 +37,12 @@ export default function GenerateReportButton({ eventId, opponent }: { eventId: s
 
   return (
     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
-      <button onClick={onGenerate} disabled={loading}>
+      <button
+        onClick={onGenerate}
+        disabled={loading}
+        className={done ? "active-yes" : undefined}
+        style={{ minWidth: 140 }}
+      >
         {loading ? "Generating…" : done ? "Generated" : "Generate report"}
       </button>
     </div>
