@@ -80,7 +80,7 @@ export default function EventList({ events }: Props) {
     if (authChecked) {
       void loadAll();
     }
-  }, [events, authChecked]);
+  }, [events, authChecked, loggedIn]);
 
   useEffect(() => {
     function onFocus() {
@@ -141,6 +141,15 @@ export default function EventList({ events }: Props) {
     return upcoming;
   }, [events]);
 
+  // Don't render anything until authentication is checked
+  if (!authChecked) {
+    return (
+      <div className="list">
+        <div className="muted">Loading...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="list">
       <div className="row" style={{ marginBottom: 12, alignItems: "center", gap: 8 }}>
@@ -169,7 +178,7 @@ export default function EventList({ events }: Props) {
                   ) : null}
                 </div>
               </div>
-              {authChecked && loggedIn ? (
+              {loggedIn ? (
                 <div className="rsvp">
                   <button
                     className={status === "yes" ? "active-yes" : ""}
@@ -187,12 +196,12 @@ export default function EventList({ events }: Props) {
               ) : null}
             </div>
             {/* Match report controls (bottom-right) */}
-            {authChecked && loggedIn ? <ReportPreview eventId={evt.id} /> : null}
-            {authChecked && loggedIn ? <GenerateReportButton eventId={evt.id} opponent={evt.title} /> : null}
+            {loggedIn ? <ReportPreview eventId={evt.id} /> : null}
+            {loggedIn ? <GenerateReportButton eventId={evt.id} opponent={evt.title} /> : null}
             {evt.description ? (
               <div className="muted" style={{ marginTop: 8 }}>{evt.description}</div>
             ) : null}
-            {authChecked && loggedIn ? (
+            {loggedIn ? (
               <details style={{ marginTop: 10 }} onToggle={(e) => {
                 const el = e.currentTarget as HTMLDetailsElement;
                 if (el.open) void ensureListsLoaded(evt.id);
