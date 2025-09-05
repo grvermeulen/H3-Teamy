@@ -19,6 +19,7 @@ export default function EventList({ events }: Props) {
   const [mounted, setMounted] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
   async function loadAll() {
     setIsRefreshing(true);
@@ -33,6 +34,7 @@ export default function EventList({ events }: Props) {
       isLoggedIn = false;
       setLoggedIn(false);
     }
+    setAuthChecked(true);
     
     // Always load public counts
     const countsEntries = await Promise.all(
@@ -85,17 +87,6 @@ export default function EventList({ events }: Props) {
 
   useEffect(() => {
     setMounted(true);
-    
-    // Check login status on mount
-    async function checkLogin() {
-      try {
-        const me = await fetch("/api/me", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ user: null }));
-        setLoggedIn(Boolean(me?.user?.id));
-      } catch {
-        setLoggedIn(false);
-      }
-    }
-    checkLogin();
   }, []);
 
   async function setRsvp(id: string, status: RsvpStatus) {
@@ -171,7 +162,7 @@ export default function EventList({ events }: Props) {
                   ) : null}
                 </div>
               </div>
-              {loggedIn ? (
+              {authChecked && loggedIn ? (
                 <div className="rsvp">
                   <button
                     className={status === "yes" ? "active-yes" : ""}
@@ -189,12 +180,12 @@ export default function EventList({ events }: Props) {
               ) : null}
             </div>
             {/* Match report controls (bottom-right) */}
-            {loggedIn ? <ReportPreview eventId={evt.id} /> : null}
-            {loggedIn ? <GenerateReportButton eventId={evt.id} opponent={evt.title} /> : null}
+            {authChecked && loggedIn ? <ReportPreview eventId={evt.id} /> : null}
+            {authChecked && loggedIn ? <GenerateReportButton eventId={evt.id} opponent={evt.title} /> : null}
             {evt.description ? (
               <div className="muted" style={{ marginTop: 8 }}>{evt.description}</div>
             ) : null}
-            {loggedIn ? (
+            {authChecked && loggedIn ? (
               <details style={{ marginTop: 10 }} onToggle={(e) => {
                 const el = e.currentTarget as HTMLDetailsElement;
                 if (el.open) void ensureListsLoaded(evt.id);
