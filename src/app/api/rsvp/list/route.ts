@@ -17,8 +17,7 @@ export async function GET(req: NextRequest) {
       continue;
     }
     const profile = await getUserProfile(userId);
-    let name = profile ? `${profile.firstName} ${profile.lastName}`.trim() : `User ${userId.slice(0, 6)}`;
-    if (!name) name = `User ${userId.slice(0, 6)}`;
+    let name = profile && profile.firstName ? profile.firstName : `User ${userId.slice(0, 6)}`;
     if (status === "yes") yes.push({ id: userId, name });
     else if (status === "no") no.push({ id: userId, name });
     else if (status === "maybe") maybe.push({ id: userId, name });

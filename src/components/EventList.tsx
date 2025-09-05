@@ -156,7 +156,7 @@ export default function EventList({ events }: Props) {
               if (el.open) void ensureListsLoaded(evt.id);
             }}>
               <summary className="muted">Show RSVP list</summary>
-              <div className="row" style={{ gap: 16, marginTop: 8 }}>
+              <div className="row" style={{ gap: 16, marginTop: 8, alignItems: "flex-start" }}>
                 <div>
                   <div className="badge">Yes</div>
                   <div className="muted" style={{ marginTop: 4 }}>
@@ -176,6 +176,12 @@ export default function EventList({ events }: Props) {
                   <div className="muted" style={{ marginTop: 4 }}>
                     {(lists[evt.id]?.no || []).map((u) => (<div key={u.id}>{u.name}</div>))}
                     {(lists[evt.id]?.no || []).length === 0 ? <div>—</div> : null}
+                  </div>
+                </div>
+                <div>
+                  <div className="badge">1e wissel:</div>
+                  <div className="muted" style={{ marginTop: 4 }}>
+                    <div>Hans</div>
                   </div>
                 </div>
               </div>

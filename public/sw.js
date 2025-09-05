@@ -1,31 +1,62 @@
-/* Minimal service worker: network-first for API, cache-first for static */
-const STATIC_CACHE = 'static-v1';
+/* Service Worker: safe caching and instant updates */
+const CACHE_VERSION = 'v3';
+const STATIC_CACHE = `static-${CACHE_VERSION}`;
+
+// Only cache immutable static assets. Do NOT cache HTML (like '/') to avoid stale UIs.
 const STATIC_ASSETS = [
-  '/',
   '/logo.svg',
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(STATIC_CACHE).then((c) => c.addAll(STATIC_ASSETS)));
+  self.skipWaiting();
+  event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.addAll(STATIC_ASSETS)));
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== STATIC_CACHE).map((k) => caches.delete(k))))
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== STATIC_CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
+});
+
+// Allow the page to tell SW to take control immediately
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match(event.request))
-    );
+  const { request } = event;
+  const url = new URL(request.url);
+
+  // Never serve cached HTML. Fetch fresh app shell so users get latest code.
+  if (request.mode === 'navigate') {
+    event.respondWith(fetch(request));
     return;
   }
-  event.respondWith(
-    caches.match(event.request).then((res) => res || fetch(event.request))
-  );
+
+  // Network-first for API calls to avoid stale data; fall back to cache if available.
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(request).catch(() => caches.match(request)));
+    return;
+  }
+
+  // Cache-first for static assets
+  const cacheableDestinations = ['script', 'style', 'image', 'font'];
+  if (cacheableDestinations.includes(request.destination)) {
+    event.respondWith(
+      caches.open(STATIC_CACHE).then(async (cache) => {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        const response = await fetch(request);
+        if (request.method === 'GET' && response.ok) {
+          cache.put(request, response.clone());
+        }
+        return response;
+      })
+    );
+  }
 });
-
-
