@@ -27,13 +27,23 @@ export default function GenerateReportButton({ eventId, opponent }: { eventId: s
         if (er.ok) {
           const data = await er.json();
           setExtracted(data?.result || null);
-          if (data?.result?.homeScore != null && data?.result?.awayScore != null) {
-            payload.scoreHome = Number(data.result.homeScore);
-            payload.scoreAway = Number(data.result.awayScore);
+          const result = data?.result;
+          
+          // Basic match data
+          if (result?.homeScore != null && result?.awayScore != null) {
+            payload.scoreHome = Number(result.homeScore);
+            payload.scoreAway = Number(result.awayScore);
           }
-          if (data?.result?.homeTeam && data?.result?.awayTeam) {
-            payload.opponent = data.result.homeTeam && String(data.result.homeTeam).includes("De Rijn") ? data.result.awayTeam : data.result.homeTeam;
+          if (result?.homeTeam && result?.awayTeam) {
+            payload.opponent = result.homeTeam && String(result.homeTeam).includes("De Rijn") ? result.awayTeam : result.homeTeam;
           }
+          
+          // Additional match details for richer reports
+          if (result?.venue) payload.venue = result.venue;
+          if (result?.scorers?.length) payload.scorers = result.scorers;
+          if (result?.mvp) payload.mvp = result.mvp;
+          if (result?.periods?.length) payload.periods = result.periods;
+          if (result?.highlights?.length) payload.highlights = result.highlights;
         }
       }
       const res = await fetch("/api/report/generate", {

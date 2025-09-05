@@ -25,9 +25,13 @@ Geef uitsluitend JSON met velden:
   "venue"?: string,
   "date"?: string,
   "periods"?: number[] | string[],
-  "highlights"?: string[]
+  "highlights"?: string[],
+  "scorers"?: string[],
+  "mvp"?: string,
+  "keeperSaves"?: number,
+  "cards"?: string[]
 }
-Laat onbekende velden weg.`;
+Laat onbekende velden weg. Focus op het extraheren van alle beschikbare wedstrijdgegevens.`;
 
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
