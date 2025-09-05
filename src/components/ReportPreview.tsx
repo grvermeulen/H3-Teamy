@@ -3,17 +3,14 @@
 import { useEffect, useState } from "react";
 
 export default function ReportPreview({ eventId }: { eventId: string }) {
-  const [loggedIn, setLoggedIn] = useState(false);
   const [content, setContent] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
     async function load() {
-      const me = await fetch("/api/me", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ user: null }));
       const rep = await fetch(`/api/report?eventId=${encodeURIComponent(eventId)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => ({ report: null }));
       if (!mounted) return;
-      setLoggedIn(Boolean(me?.user?.id));
       const text = rep?.report?.content ? String(rep.report.content) : null;
       setContent(text);
     }
@@ -26,8 +23,6 @@ export default function ReportPreview({ eventId }: { eventId: string }) {
     window.addEventListener("report:updated", onUpdated as any);
     return () => { mounted = false; window.removeEventListener("report:updated", onUpdated as any); };
   }, [eventId]);
-
-  if (!loggedIn) return null;
   const hasReport = Boolean(content && content.trim());
 
   return (

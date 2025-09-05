@@ -189,8 +189,8 @@ export default function EventList({ events }: Props) {
               ) : null}
             </div>
             {/* Match report controls (bottom-right) */}
-            <ReportPreview eventId={evt.id} />
-            <GenerateReportButton eventId={evt.id} opponent={evt.title} />
+            {loggedIn ? <ReportPreview eventId={evt.id} /> : null}
+            {loggedIn ? <GenerateReportButton eventId={evt.id} opponent={evt.title} /> : null}
             {evt.description ? (
               <div className="muted" style={{ marginTop: 8 }}>{evt.description}</div>
             ) : null}

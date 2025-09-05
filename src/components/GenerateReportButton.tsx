@@ -4,32 +4,22 @@ import { useEffect, useState } from "react";
 
 export default function GenerateReportButton({ eventId, opponent }: { eventId: string; opponent?: string }) {
   const [isAdmin, setIsAdmin] = useState(false);
-  const [loggedIn, setLoggedIn] = useState(false);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [extracted, setExtracted] = useState<{ homeScore?: number; awayScore?: number } | null>(null);
 
   useEffect(() => {
-    async function checkAuth() {
+    async function checkAdmin() {
       try {
-        const me = await fetch("/api/me", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ user: null }));
-        const isLoggedIn = Boolean(me?.user?.id);
-        setLoggedIn(isLoggedIn);
-        
-        if (isLoggedIn) {
-          const adminRes = await fetch("/api/admin/status", { cache: "no-store" });
-          const adminData = await adminRes.json();
-          setIsAdmin(Boolean(adminData?.isAdmin));
-        } else {
-          setIsAdmin(false);
-        }
+        const adminRes = await fetch("/api/admin/status", { cache: "no-store" });
+        const adminData = await adminRes.json();
+        setIsAdmin(Boolean(adminData?.isAdmin));
       } catch {
-        setLoggedIn(false);
         setIsAdmin(false);
       }
     }
-    checkAuth();
+    checkAdmin();
   }, []);
 
   async function onGenerate() {
@@ -80,7 +70,7 @@ export default function GenerateReportButton({ eventId, opponent }: { eventId: s
     }
   }
 
-  if (!loggedIn || !isAdmin) return null;
+  if (!isAdmin) return null;
 
   return (
     <div className="rsvp" style={{ justifyContent: "flex-end", marginTop: 8, gap: 8 }}>
