@@ -24,34 +24,38 @@ export default function EventList({ events }: Props) {
     setIsRefreshing(true);
     
     // Check login status first
+    let isLoggedIn = false;
     try {
       const me = await fetch("/api/me", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ user: null }));
-      const isLoggedIn = Boolean(me?.user?.id);
+      isLoggedIn = Boolean(me?.user?.id);
       setLoggedIn(isLoggedIn);
-      
-      if (!isLoggedIn) {
-        // If not logged in, only load public counts
-        const countsEntries = await Promise.all(
-          events.map(async (e) => {
-            const res = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(e.id)}&countsOnly=1`, { cache: "no-store" });
-            if (!res.ok) return [e.id, { yes: 0, no: 0, maybe: 0 }] as const;
-            const data = await res.json();
-            return [e.id, data.counts as { yes: number; no: number; maybe: number }] as const;
-          })
-        );
-        const cMap: Record<string, { yes: number; no: number; maybe: number }> = {};
-        for (const [id, c] of countsEntries) { cMap[id] = c; }
-        setCounts(cMap);
-        setRsvpMap({});
-        setLists({});
-        setIsRefreshing(false);
-        return;
-      }
     } catch {
+      isLoggedIn = false;
       setLoggedIn(false);
     }
     
-    // If logged in, load full RSVP data
+    // Always load public counts
+    const countsEntries = await Promise.all(
+      events.map(async (e) => {
+        const res = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(e.id)}&countsOnly=1`, { cache: "no-store" });
+        if (!res.ok) return [e.id, { yes: 0, no: 0, maybe: 0 }] as const;
+        const data = await res.json();
+        return [e.id, data.counts as { yes: number; no: number; maybe: number }] as const;
+      })
+    );
+    const cMap: Record<string, { yes: number; no: number; maybe: number }> = {};
+    for (const [id, c] of countsEntries) { cMap[id] = c; }
+    setCounts(cMap);
+    
+    if (!isLoggedIn) {
+      // If not logged in, only show counts
+      setRsvpMap({});
+      setLists({});
+      setIsRefreshing(false);
+      return;
+    }
+    
+    // If logged in, also load personal RSVP data and lists
     const rsvpEntries = await Promise.all(
       events.map(async (e) => {
         const res = await fetch(`/api/rsvp?eventId=${encodeURIComponent(e.id)}`, { cache: "no-store" });
@@ -60,22 +64,10 @@ export default function EventList({ events }: Props) {
         return [e.id, (data?.status ?? null) as RsvpStatus] as const;
       })
     );
-    const countsEntries = await Promise.all(
-      events.map(async (e) => {
-        const res = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(e.id)}&countsOnly=1`, { cache: "no-store" });
-        if (!res.ok) return [e.id, { yes: 0, no: 0, maybe: 0 }, { yes: [], no: [], maybe: [] }] as const;
-        const data = await res.json();
-        return [e.id, data.counts as { yes: number; no: number; maybe: number }, data.lists as any] as const;
-      })
-    );
     const map: RsvpMap = {};
-    const cMap: Record<string, { yes: number; no: number; maybe: number }> = {};
-    const lMap: Record<string, { yes: { id: string; name: string }[]; no: { id: string; name: string }[]; maybe: { id: string; name: string }[] }> = {};
     for (const [id, status] of rsvpEntries) map[id] = status;
-    for (const [id, c, l] of countsEntries) { cMap[id] = c; lMap[id] = l; }
     setRsvpMap(map);
-    setCounts(cMap);
-    setLists(lMap);
+    setLists({}); // Will be loaded on demand when user opens RSVP list
     setIsRefreshing(false);
   }
 
@@ -93,6 +85,17 @@ export default function EventList({ events }: Props) {
 
   useEffect(() => {
     setMounted(true);
+    
+    // Check login status on mount
+    async function checkLogin() {
+      try {
+        const me = await fetch("/api/me", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ user: null }));
+        setLoggedIn(Boolean(me?.user?.id));
+      } catch {
+        setLoggedIn(false);
+      }
+    }
+    checkLogin();
   }, []);
 
   async function setRsvp(id: string, status: RsvpStatus) {
