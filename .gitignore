@@ -9,3 +9,4 @@ node_modules
 .cookie_*
 
 
+.env*.local
