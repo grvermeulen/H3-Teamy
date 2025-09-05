@@ -30,9 +30,7 @@ export async function POST(req: NextRequest) {
     const opponent = body?.opponent as string | undefined;
     if (!eventId) return NextResponse.json({ error: "eventId required" }, { status: 400 });
 
-    // Idempotency: if a report already exists, return it
-    const existing = await getReport(eventId);
-    if (existing?.content) return NextResponse.json({ report: existing, reused: true });
+    // Always (re)generate a fresh report on request
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "OPENAI_API_KEY not configured" }, { status: 500 });
@@ -40,8 +38,8 @@ export async function POST(req: NextRequest) {
     const prompt = `Schrijf een korte, humoristische wedstrijdsamenvatting (120–200 woorden) voor De Rijn H3 waterpolo.
 Tegenstander: ${opponent || "onbekend"}.
 Uitslag: ${typeof scoreHome === 'number' && typeof scoreAway === 'number' ? `${scoreHome} - ${scoreAway}` : "n.v.t."}.
-Stijl: luchtig, geestig en sportief naar de tegenstander. Gebruik 1–2 speelse metaforen, geen grof taalgebruik.
-Noem één opvallend moment in de wedstrijd. Schrijf in het Nederlands.`;
+Stijl: luchtig, geestig en sportief naar de tegenstander. Gebruik 1–2 speelse metaforen. 
+Noem één opvallend moment in de wedstrijd. Schrijf in het Nederlands. Als er nog geen data is van de wedstrijd benoem dit dan en maak geen wedstrijd verslag. Maar geef een korte teaser van wat er misschien gaat komen op basis van eerdere wedstrijden.`;
 
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",

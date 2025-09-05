@@ -28,6 +28,8 @@ export default function GenerateReportButton({ eventId, opponent }: { eventId: s
         return;
       }
       setDone(true);
+      // Notify other components to refresh report content
+      window.dispatchEvent(new CustomEvent("report:updated", { detail: { eventId } }));
     } finally {
       setLoading(false);
     }

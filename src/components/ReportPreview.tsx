@@ -9,17 +9,22 @@ export default function ReportPreview({ eventId }: { eventId: string }) {
 
   useEffect(() => {
     let mounted = true;
-    // Fetch login status and report in parallel
-    Promise.all([
-      fetch("/api/me", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ user: null })),
-      fetch(`/api/report?eventId=${encodeURIComponent(eventId)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => ({ report: null })),
-    ]).then(([me, rep]) => {
+    async function load() {
+      const me = await fetch("/api/me", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ user: null }));
+      const rep = await fetch(`/api/report?eventId=${encodeURIComponent(eventId)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => ({ report: null }));
       if (!mounted) return;
       setLoggedIn(Boolean(me?.user?.id));
       const text = rep?.report?.content ? String(rep.report.content) : null;
       setContent(text);
-    });
-    return () => { mounted = false; };
+    }
+    load();
+    function onUpdated(e: any) {
+      if (e?.detail?.eventId === eventId) {
+        load();
+      }
+    }
+    window.addEventListener("report:updated", onUpdated as any);
+    return () => { mounted = false; window.removeEventListener("report:updated", onUpdated as any); };
   }, [eventId]);
 
   if (!loggedIn) return null;
