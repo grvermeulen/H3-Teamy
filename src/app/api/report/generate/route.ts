@@ -55,7 +55,6 @@ Noem één opvallend moment in de wedstrijd. Schrijf in het Nederlands.`;
           { role: "system", content: "You are a sports reporter for De Rijn H3 water polo club." },
           { role: "user", content: prompt },
         ],
-        temperature: 0.9,
       }),
     });
     if (!resp.ok) {
