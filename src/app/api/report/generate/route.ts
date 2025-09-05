@@ -50,7 +50,7 @@ Avoid profanity. Include one short standout moment.`;
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: "gpt-5-nano",
         messages: [
           { role: "system", content: "You are a sports reporter for De Rijn H3 water polo club." },
           { role: "user", content: prompt },
