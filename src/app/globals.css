@@ -90,3 +90,48 @@ h1, h2, h3 {
 }
 
 
+/* Modal (report preview) */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.modalContent {
+  background: #0B1220;
+  color: #E6EDF7;
+  border-radius: 10px;
+  padding: 16px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  position: relative;
+}
+
+.modalCloseBtn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #111926;
+  color: #E6EDF7;
+  border: 1px solid #293241;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+@media (max-width: 480px) {
+  .container { padding: 16px 12px 56px; }
+  .row { gap: 8px; }
+  .rsvp { flex-wrap: wrap; }
+  .rsvp button { flex: 1 1 100%; }
+  .modalOverlay { padding: 12px; }
+  .modalContent { padding: 12px; max-height: 85vh; }
+}
+

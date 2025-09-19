@@ -73,7 +73,7 @@ export default function GenerateReportButton({ eventId, opponent }: { eventId: s
   if (!isAdmin) return null;
 
   return (
-    <div className="rsvp" style={{ justifyContent: "flex-end", marginTop: 8, gap: 8 }}>
+    <div className="rsvp" style={{ justifyContent: "flex-end", marginTop: 8, gap: 8, flexWrap: "wrap" }}>
       <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files?.[0] || null)} />
       <button
         onClick={onGenerate}

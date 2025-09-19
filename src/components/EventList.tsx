@@ -152,9 +152,9 @@ export default function EventList({ events }: Props) {
 
   return (
     <div className="list">
-      <div className="row" style={{ marginBottom: 12, alignItems: "center", gap: 8 }}>
+      <div className="row" style={{ marginBottom: 12, alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <button onClick={() => void loadAll()} disabled={isRefreshing}>{isRefreshing ? "Refreshing…" : "Refresh"}</button>
-        <span className="muted">Pull to refresh: focus page or press Refresh</span>
+        <span className="muted" style={{ fontSize: 13 }}>Pull to refresh: focus page or press Refresh</span>
       </div>
       {grouped.map((evt) => {
         const start = new Date(evt.start);
@@ -162,7 +162,7 @@ export default function EventList({ events }: Props) {
         const status = rsvpMap[evt.id] || null;
         return (
           <div className="card" key={evt.id}>
-            <div className="row">
+            <div className="row" style={{ flexWrap: "wrap" }}>
               <div className="grow">
                 <div className="eventTitle">{evt.title}</div>
                 <div className="eventMeta muted">
@@ -179,7 +179,7 @@ export default function EventList({ events }: Props) {
                 </div>
               </div>
               {loggedIn ? (
-                <div className="rsvp">
+                <div className="rsvp" style={{ width: "100%", justifyContent: "flex-end" }}>
                   <button
                     className={status === "yes" ? "active-yes" : ""}
                     onClick={() => setRsvp(evt.id, status === "yes" ? null : "yes")}
