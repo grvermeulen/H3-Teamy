@@ -222,6 +222,50 @@ export async function setReport(eventId: string, report: MatchReport | null): Pr
   });
 }
 
+// Training Attendance
+export async function getAttendance(dateYmd: string): Promise<string[]> {
+  const key = `att:${dateYmd}`;
+  const redis = await getRedis();
+  if (redis) {
+    const raw = (await redis.get(key)) as string | null;
+    if (!raw) return [];
+    try { return JSON.parse(raw) as string[]; } catch { return []; }
+  }
+  const raw = memoryStore.get(key) as unknown as string | undefined;
+  if (!raw) return [];
+  try { return JSON.parse(raw) as string[]; } catch { return []; }
+}
+
+export async function setAttendanceBatch(dateYmd: string, presentUserIds: string[], markedBy: string): Promise<void> {
+  const key = `att:${dateYmd}`;
+  const redis = await getRedis();
+  const payload = JSON.stringify(presentUserIds);
+  if (redis) { await redis.set(key, payload); return; }
+  memoryStore.set(key, payload as any);
+}
+
+export async function getAttendanceForDates(dates: string[]): Promise<Record<string, string[]>> {
+  const out: Record<string, string[]> = {};
+  const redis = await getRedis();
+  if (redis) {
+    if (dates.length === 0) return out;
+    const keys = dates.map((d) => `att:${d}`);
+    const vals = await redis.mget(keys);
+    for (let i = 0; i < dates.length; i++) {
+      const raw = vals[i] as string | null;
+      if (!raw) { out[dates[i]] = []; continue; }
+      try { out[dates[i]] = JSON.parse(raw) as string[]; } catch { out[dates[i]] = []; }
+    }
+    return out;
+  }
+  for (const d of dates) {
+    const raw = memoryStore.get(`att:${d}`) as unknown as string | undefined;
+    if (!raw) { out[d] = []; continue; }
+    try { out[d] = JSON.parse(raw) as string[]; } catch { out[d] = []; }
+  }
+  return out;
+}
+
 export async function createLinkCode(userId: string): Promise<string> {
   const code = Math.random().toString(36).slice(2, 8).toUpperCase();
   const key = `link:${code}`;
