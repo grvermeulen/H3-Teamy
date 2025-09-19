@@ -5,6 +5,7 @@ import Link from "next/link";
 export default function SessionStatus() {
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
   const [isTrainer, setIsTrainer] = useState<boolean>(false);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
 
   useEffect(() => {
     let alive = true;
@@ -18,6 +19,9 @@ export default function SessionStatus() {
           const t = await fetch("/api/trainer/status", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ isTrainer: false }));
           if (!alive) return;
           setIsTrainer(Boolean(t?.isTrainer));
+          const a = await fetch("/api/admin/status", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ isAdmin: false }));
+          if (!alive) return;
+          setIsAdmin(Boolean(a?.isAdmin));
         }
       } catch {
         if (!alive) return;
@@ -38,6 +42,7 @@ export default function SessionStatus() {
           <span className="muted">Logged in</span>
           <Link href={{ pathname: "/attendance" }}>Attendance</Link>
           {isTrainer ? <Link href={{ pathname: "/trainer/attendance" }}>Trainer</Link> : null}
+          {isAdmin ? <Link href={{ pathname: "/admin" }}>Admin</Link> : null}
           <form action="/api/auth/signout" method="post">
             <input type="hidden" name="callbackUrl" value="/" />
             <button type="submit">Log out</button>

@@ -266,6 +266,30 @@ export async function getAttendanceForDates(dates: string[]): Promise<Record<str
   return out;
 }
 
+// Roles (admin/trainer/player) stored in KV/Redis for simplicity
+type Roles = { admin?: boolean; trainer?: boolean; player?: boolean };
+
+export async function getUserRoles(userId: string): Promise<Roles> {
+  const key = `roles:${userId}`;
+  const redis = await getRedis();
+  if (redis) {
+    const raw = (await redis.get(key)) as string | null;
+    if (!raw) return { player: true };
+    try { return JSON.parse(raw) as Roles; } catch { return { player: true }; }
+  }
+  const raw = memoryStore.get(key) as unknown as string | undefined;
+  if (!raw) return { player: true };
+  try { return JSON.parse(raw) as Roles; } catch { return { player: true }; }
+}
+
+export async function setUserRoles(userId: string, roles: Roles): Promise<void> {
+  const key = `roles:${userId}`;
+  const payload = JSON.stringify(roles);
+  const redis = await getRedis();
+  if (redis) { await redis.set(key, payload); return; }
+  memoryStore.set(key, payload as any);
+}
+
 export async function createLinkCode(userId: string): Promise<string> {
   const code = Math.random().toString(36).slice(2, 8).toUpperCase();
   const key = `link:${code}`;
