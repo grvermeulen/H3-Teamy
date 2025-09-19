@@ -12,10 +12,6 @@ export default async function Page() {
       <div className="container">
         <h1>De Rijn H3 — Waterpolo</h1>
         <div className="muted">Matches from Sportlink (read-only)</div>
-        <div className="muted" style={{ marginTop: 6, display: "flex", gap: 12 }}>
-          <SessionStatus />
-          <Link href={"/profile" as any}>Profile</Link>
-        </div>
         <EventList events={events} />
       </div>
     </main>

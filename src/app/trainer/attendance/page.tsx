@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 type Session = { date: string };
 
@@ -24,7 +25,7 @@ export default function TrainerAttendanceList() {
   }, []);
 
   if (isTrainer === false) {
-    return <div className="container"><h1>Training attendance</h1><div className="muted">You do not have access.</div></div>;
+    return <div className="container"><h1>Training attendance</h1><div className="muted">You do not have access.</div><div style={{ marginTop: 12 }}><Link href="/">← Back to matches</Link></div></div>;
   }
   if (isTrainer === null) {
     return <div className="container"><div className="muted">Loading…</div></div>;
@@ -34,13 +35,14 @@ export default function TrainerAttendanceList() {
     <main>
       <div className="container">
         <h1>Training attendance</h1>
+        <div className="muted" style={{ marginBottom: 12 }}><Link href="/">← Back to matches</Link></div>
         <div className="list">
           {sessions.map((s) => (
             <a className="card" key={s.date} href={`/trainer/attendance/${s.date}`}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
                   <div style={{ fontWeight: 600 }}>{s.date}</div>
-                  <div className="muted" style={{ fontSize: 13 }}>Wednesday/Friday session</div>
+                  <div className="muted" style={{ fontSize: 13 }}>{new Date(s.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long' })} session</div>
                 </div>
                 <div className="badge">Open</div>
               </div>
