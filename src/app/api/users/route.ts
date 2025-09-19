@@ -11,7 +11,7 @@ function displayName(u: { firstName: string; lastName: string; id: string; email
 
 export async function GET() {
   const users = await prisma.user
-    .findMany({ select: { id: true, firstName: true, lastName: true, email: true } })
+    .findMany({ select: { id: true, firstName: true, lastName: true, email: true }, cacheStrategy: { ttl: 300, swr: 300 } as any })
     .catch(() => [] as any[]);
   const seen = new Set<string>();
   const list = [] as { id: string; name: string }[];
