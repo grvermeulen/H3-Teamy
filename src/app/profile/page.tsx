@@ -81,9 +81,7 @@ export default function ProfilePage() {
     <main>
       <div className="container">
         <h1>My Profile</h1>
-        <div className="muted" style={{ marginBottom: 12 }}>
-          <Link href="/">← Back to matches</Link>
-        </div>
+        
 
         {needsLink ? (
           <div className="card" style={{ maxWidth: 520, marginBottom: 12, border: "1px solid #8b5cf6" }}>

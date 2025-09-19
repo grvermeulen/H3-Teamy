@@ -75,10 +75,7 @@ export default function SessionChecklist({ params }: Params) {
     <main>
       <div className="container">
         <h1>Attendance – {date}</h1>
-        <div className="muted" style={{ marginBottom: 12, display: "flex", gap: 12 }}>
-          <Link href={"/trainer/attendance" as any}>← Back to trainings</Link>
-          <Link href={"/" as any}>Back to matches</Link>
-        </div>
+        
         <div className="card" style={{ position: "sticky", top: 0, zIndex: 1 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div className="muted">Present: {present.size}</div>

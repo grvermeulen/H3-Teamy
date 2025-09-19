@@ -51,7 +51,7 @@ export default function AttendanceOverview() {
     <main>
       <div className="container">
         <h1>Attendance</h1>
-        <div className="muted" style={{ marginBottom: 12 }}><a href="/">← Back to matches</a></div>
+        
         <div className="card" style={{ marginBottom: 12 }}>
           <div className="muted">Season total trainings: {total}</div>
           {my ? <div style={{ marginTop: 6 }}>You: {my.attended}/{my.total} ({my.pct}%)</div> : null}

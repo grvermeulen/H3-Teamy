@@ -25,7 +25,7 @@ export default function TrainerAttendanceList() {
   }, []);
 
   if (isTrainer === false) {
-    return <div className="container"><h1>Training attendance</h1><div className="muted">You do not have access.</div><div style={{ marginTop: 12 }}><Link href="/">← Back to matches</Link></div></div>;
+    return <div className="container"><h1>Training attendance</h1><div className="muted">You do not have access.</div></div>;
   }
   if (isTrainer === null) {
     return <div className="container"><div className="muted">Loading…</div></div>;
@@ -35,7 +35,7 @@ export default function TrainerAttendanceList() {
     <main>
       <div className="container">
         <h1>Training attendance</h1>
-        <div className="muted" style={{ marginBottom: 12 }}><Link href="/">← Back to matches</Link></div>
+        
         <div className="list">
           {sessions.map((s) => (
             <a className="card" key={s.date} href={`/trainer/attendance/${s.date}`}>

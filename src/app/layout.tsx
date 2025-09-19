@@ -41,7 +41,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="container" style={{ marginTop: 4 }}>
           <div className="muted" style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <SessionStatus />
-            <a href="/profile">Profile</a>
           </div>
         </div>
         <Providers>{children}</Providers>

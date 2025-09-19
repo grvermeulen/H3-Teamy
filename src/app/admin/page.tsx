@@ -49,13 +49,13 @@ export default function AdminUsersPage() {
 
   const sorted = useMemo(() => rows.slice().sort((a, b) => a.name.localeCompare(b.name)), [rows]);
 
-  if (forbidden) return <div className="container"><h1>Admin</h1><div className="muted">You do not have access.</div><div style={{ marginTop: 12 }}><Link href={"/" as any}>← Back to matches</Link></div></div>;
+  if (forbidden) return <div className="container"><h1>Admin</h1><div className="muted">You do not have access.</div></div>;
 
   return (
     <main>
       <div className="container">
         <h1>Admin</h1>
-        <div className="muted" style={{ marginBottom: 12 }}><Link href={"/" as any}>← Back to matches</Link></div>
+        
         <div className="card" style={{ position: "sticky", top: 0, zIndex: 1 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div className="muted">User roles</div>
