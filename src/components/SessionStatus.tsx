@@ -6,6 +6,7 @@ export default function SessionStatus() {
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
   const [isTrainer, setIsTrainer] = useState<boolean>(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -36,21 +37,42 @@ export default function SessionStatus() {
   if (loggedIn === null) return null;
 
   return (
-    <div className="row" style={{ alignItems: "center", gap: 12 }}>
-      {loggedIn ? (
-        <>
-          <span className="muted">Logged in</span>
-          <Link href={{ pathname: "/attendance" }}>Attendance</Link>
-          {isTrainer ? <Link href={{ pathname: "/trainer/attendance" }}>Trainer</Link> : null}
-          {isAdmin ? <Link href={{ pathname: "/admin" }}>Admin</Link> : null}
-          <form action="/api/auth/signout" method="post">
-            <input type="hidden" name="callbackUrl" value="/" />
-            <button type="submit">Log out</button>
-          </form>
-        </>
-      ) : (
-        <Link href={{ pathname: "/login", query: { callbackUrl: "/" } }}>Login</Link>
-      )}
+    <div className="navBar">
+      <div className="navLinks">
+        {loggedIn ? (
+          <>
+            <Link href={{ pathname: "/attendance" }}>Attendance</Link>
+            {isTrainer ? <Link href={{ pathname: "/trainer/attendance" }}>Trainer</Link> : null}
+            {isAdmin ? <Link href={{ pathname: "/admin" }}>Admin</Link> : null}
+            <Link href={{ pathname: "/profile" }}>Profile</Link>
+            <form action="/api/auth/signout" method="post">
+              <input type="hidden" name="callbackUrl" value="/" />
+              <button type="submit">Log out</button>
+            </form>
+          </>
+        ) : (
+          <Link href={{ pathname: "/login", query: { callbackUrl: "/" } }}>Login</Link>
+        )}
+      </div>
+      <button className="burger" aria-label="Menu" onClick={() => setOpen((v) => !v)}>☰</button>
+      <div className={open ? "drawer open" : "drawer"} onClick={() => setOpen(false)}>
+        <div className="row" style={{ gap: 16, flexWrap: "wrap" }} onClick={(e) => e.stopPropagation()}>
+          {loggedIn ? (
+            <>
+              <Link href={{ pathname: "/attendance" }} onClick={() => setOpen(false)}>Attendance</Link>
+              {isTrainer ? <Link href={{ pathname: "/trainer/attendance" }} onClick={() => setOpen(false)}>Trainer</Link> : null}
+              {isAdmin ? <Link href={{ pathname: "/admin" }} onClick={() => setOpen(false)}>Admin</Link> : null}
+              <Link href={{ pathname: "/profile" }} onClick={() => setOpen(false)}>Profile</Link>
+              <form action="/api/auth/signout" method="post">
+                <input type="hidden" name="callbackUrl" value="/" />
+                <button type="submit">Log out</button>
+              </form>
+            </>
+          ) : (
+            <Link href={{ pathname: "/login", query: { callbackUrl: "/" } }} onClick={() => setOpen(false)}>Login</Link>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
