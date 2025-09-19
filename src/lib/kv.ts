@@ -82,7 +82,7 @@ async function kvSet(key: string, value: RsvpStatus): Promise<void> {
 export async function getRsvp(userId: string, eventId: string): Promise<RsvpStatus> {
   const p = await getPrisma();
   if (p) {
-    const rec = await p.rsvp.findUnique({ where: { userId_eventId: { userId, eventId } }, cacheStrategy: { ttl: 60, swr: 60 } as any });
+    const rec = await (p as any).rsvp.findUnique({ where: { userId_eventId: { userId, eventId } }, cacheStrategy: { ttl: 60, swr: 60 } });
     const val = (rec?.status as RsvpStatus) ?? null;
     if (val !== "yes" && val !== "no" && val !== "maybe") return null;
     return val;
@@ -126,7 +126,7 @@ export async function setUserProfile(userId: string, profile: UserProfile) {
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
   const p = await getPrisma();
   if (p) {
-    const u = await p.user.findUnique({ where: { id: userId }, cacheStrategy: { ttl: 300, swr: 300 } as any });
+    const u = await (p as any).user.findUnique({ where: { id: userId }, cacheStrategy: { ttl: 300, swr: 300 } });
     if (!u) return null;
     return { firstName: u.firstName, lastName: u.lastName };
   }
@@ -145,7 +145,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
 export async function listEventRsvps(eventId: string): Promise<{ userId: string; status: RsvpStatus }[]> {
   const p = await getPrisma();
   if (p) {
-    const rows = await p.rsvp.findMany({ where: { eventId }, cacheStrategy: { ttl: 60, swr: 60 } as any });
+    const rows = await (p as any).rsvp.findMany({ where: { eventId }, cacheStrategy: { ttl: 60, swr: 60 } });
     return rows.map((r: any) => ({ userId: r.userId, status: (r.status as RsvpStatus) ?? null }));
   }
   const redis = await getRedis();
