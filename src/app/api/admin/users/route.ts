@@ -12,7 +12,7 @@ function displayName(u: { firstName: string; lastName: string; id: string; email
   if (full) return full;
   const email = (u.email || "").trim();
   if (email) return email;
-  return ""; // filter out unknowns
+  return `User ${u.id.slice(0, 6)}`; // always show a fallback name on admin
 }
 
 export async function GET(req: NextRequest) {
@@ -21,14 +21,9 @@ export async function GET(req: NextRequest) {
   const adminFull = norm(process.env.ADMIN_FULL_NAME || "");
   const trainerNames = (process.env.TRAINER_FULL_NAMES || "").split(",").map(norm).filter(Boolean);
   const users = await (prisma as any).user.findMany({ select: { id: true, firstName: true, lastName: true, email: true }, cacheStrategy: { ttl: 300, swr: 300 } });
-  const seen = new Set<string>();
   const list = [] as { id: string; name: string; roles: { admin?: boolean; trainer?: boolean; player?: boolean } }[];
   for (const u of users as any[]) {
     const name = displayName(u);
-    if (!name) continue;
-    const key = norm(name);
-    if (seen.has(key)) continue; // dedupe by name
-    seen.add(key);
     const kv = await getUserRoles(u.id).catch(() => ({ player: true } as any));
     const full = `${(u.firstName || "").trim()} ${(u.lastName || "").trim()}`.trim();
     const envAdmin = adminFull && norm(full) === adminFull;
