@@ -149,8 +149,8 @@ h1, h2, h3 {
 
 /* Bottom navigation */
 .bottomBar { display: none; position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid rgba(255,255,255,0.06); padding: 10px calc(12px + env(safe-area-inset-left, 0)) calc(10px + env(safe-area-inset-bottom, 0)) calc(12px + env(safe-area-inset-left, 0)); z-index: 1000; }
-.bottomNavLinks { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.bottomNavLinks a, .bottomNavLinks button { color: var(--text); text-decoration: none; background: transparent; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 6px 10px; }
+.bottomNavLinks { display: flex; align-items: center; gap: 12px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+.bottomNavLinks a, .bottomNavLinks button { color: var(--text); text-decoration: none; background: transparent; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 6px 10px; display: inline-block; white-space: nowrap; }
 
 @media (max-width: 640px) {
   .bottomBar { display: block; }

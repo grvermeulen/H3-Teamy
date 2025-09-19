@@ -60,8 +60,6 @@ export default function SessionStatus() {
             <>
               <Link href={{ pathname: "/" }}>RSVP</Link>
               <Link href={{ pathname: "/attendance" }}>Attendance</Link>
-              <Link href={{ pathname: "/" }}>RSVP</Link>
-              <Link href={{ pathname: "/attendance" }}>Attendance</Link>
               {isTrainer ? <Link href={{ pathname: "/trainer/attendance" }}>Trainer</Link> : null}
               {isAdmin ? <Link href={{ pathname: "/admin" }}>Admin</Link> : null}
               <Link href={{ pathname: "/profile" }}>Profile</Link>
