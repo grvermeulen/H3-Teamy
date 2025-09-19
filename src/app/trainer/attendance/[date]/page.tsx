@@ -20,7 +20,7 @@ export default function SessionChecklist({ params }: Params) {
       if (!mounted) return;
       setIsTrainer(Boolean(st?.isTrainer));
       // Roster: list all users by name
-      const users = await fetch("/api/profile", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ users: [] }));
+      const users = await fetch("/api/users", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ users: [] }));
       const list: User[] = Array.isArray(users?.users) ? users.users : [];
       if (!mounted) return;
       setRoster(list);
