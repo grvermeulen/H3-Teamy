@@ -54,22 +54,21 @@ export default function SessionStatus() {
           <Link href={{ pathname: "/login", query: { callbackUrl: "/" } }}>Login</Link>
         )}
       </div>
-      <button className="burger" aria-label="Menu" onClick={() => setOpen((v) => !v)}>☰</button>
-      <div className={open ? "drawer open" : "drawer"} onClick={() => setOpen(false)}>
-        <div className="row" style={{ gap: 16, flexWrap: "wrap" }} onClick={(e) => e.stopPropagation()}>
+      <div className="bottomBar">
+        <div className="bottomNavLinks">
           {loggedIn ? (
             <>
-              <Link href={{ pathname: "/attendance" }} onClick={() => setOpen(false)}>Attendance</Link>
-              {isTrainer ? <Link href={{ pathname: "/trainer/attendance" }} onClick={() => setOpen(false)}>Trainer</Link> : null}
-              {isAdmin ? <Link href={{ pathname: "/admin" }} onClick={() => setOpen(false)}>Admin</Link> : null}
-              <Link href={{ pathname: "/profile" }} onClick={() => setOpen(false)}>Profile</Link>
+              <Link href={{ pathname: "/attendance" }}>Attendance</Link>
+              {isTrainer ? <Link href={{ pathname: "/trainer/attendance" }}>Trainer</Link> : null}
+              {isAdmin ? <Link href={{ pathname: "/admin" }}>Admin</Link> : null}
+              <Link href={{ pathname: "/profile" }}>Profile</Link>
               <form action="/api/auth/signout" method="post">
                 <input type="hidden" name="callbackUrl" value="/" />
                 <button type="submit">Log out</button>
               </form>
             </>
           ) : (
-            <Link href={{ pathname: "/login", query: { callbackUrl: "/" } }} onClick={() => setOpen(false)}>Login</Link>
+            <Link href={{ pathname: "/login", query: { callbackUrl: "/" } }}>Login</Link>
           )}
         </div>
       </div>
