@@ -9,7 +9,7 @@
     "lint": "next lint",
     "prisma:generate": "prisma generate",
     "prebuild": "node scripts/generate-icons.js",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate --accelerate"
   },
   "dependencies": {
     "@prisma/client": "5.19.1",
