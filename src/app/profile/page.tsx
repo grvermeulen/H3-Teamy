@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 
 type Profile = { id: string; firstName: string; lastName: string; email: string } | null;
+type Roles = { admin: boolean; trainer: boolean; player: boolean };
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile>(null);
@@ -13,11 +14,14 @@ export default function ProfilePage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [needsLink, setNeedsLink] = useState(false);
   const [adopting, setAdopting] = useState(false);
+  const [roles, setRoles] = useState<Roles>({ admin: false, trainer: false, player: true });
 
   async function load() {
-    const [p, s] = await Promise.all([
+    const [p, s, a, t] = await Promise.all([
       fetch("/api/profile", { cache: "no-store" }).then((r) => r.json()),
       fetch("/api/identity/status", { cache: "no-store" }).then((r) => r.json()),
+      fetch("/api/admin/status", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ isAdmin: false })),
+      fetch("/api/trainer/status", { cache: "no-store" }).then((r) => r.json()).catch(() => ({ isTrainer: false })),
     ]);
     setProfile(p.user);
     if (p.user) {
@@ -26,6 +30,7 @@ export default function ProfilePage() {
       setEmail(p.user.email || "");
     }
     setNeedsLink(!!s.needsLink);
+    setRoles({ admin: !!a?.isAdmin, trainer: !!t?.isTrainer, player: true });
   }
 
   useEffect(() => {
@@ -90,6 +95,10 @@ export default function ProfilePage() {
         ) : null}
 
         <div className="card" style={{ maxWidth: 520 }}>
+          <div className="row" style={{ marginBottom: 12 }}>
+            <div className="badge">Roles:</div>
+            <div className="muted">{roles.admin ? "Admin" : null}{roles.admin && (roles.trainer || roles.player) ? ", " : ""}{roles.trainer ? "Trainer" : null}{roles.trainer && roles.player ? ", " : ""}{roles.player ? "Player" : null}</div>
+          </div>
           <div className="row" style={{ gap: 12 }}>
             <div className="grow">
               <label className="muted" htmlFor="first">First name</label>
