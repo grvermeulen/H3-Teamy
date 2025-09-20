@@ -161,6 +161,8 @@ h1, h2, h3 {
 .bottomNavLinks { display: flex; align-items: center; gap: 12px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
 .bottomNavLinks a, .bottomNavLinks button { color: var(--text); text-decoration: none; background: transparent; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 6px 10px; display: inline-block; white-space: nowrap; }
 
+.navActive { border-color: var(--accent); color: var(--accent) !important; }
+
 @media (max-width: 640px) {
   .bottomBar { display: block; }
 }

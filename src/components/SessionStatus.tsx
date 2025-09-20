@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import Link from "next/link";
 
 export default function SessionStatus() {
@@ -7,6 +8,12 @@ export default function SessionStatus() {
   const [isTrainer, setIsTrainer] = useState<boolean>(false);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+
+  function isActive(target: string): boolean {
+    if (target === "/") return pathname === "/";
+    return pathname.startsWith(target);
+  }
 
   useEffect(() => {
     let alive = true;
@@ -41,11 +48,11 @@ export default function SessionStatus() {
       <div className="navLinks">
         {loggedIn ? (
           <>
-            <Link href={{ pathname: "/" }}>RSVP</Link>
-            <Link href={{ pathname: "/attendance" }}>Attendance</Link>
-            {isTrainer ? <Link href={{ pathname: "/trainer/attendance" }}>Trainer</Link> : null}
-            {isAdmin ? <Link href={{ pathname: "/admin" }}>Admin</Link> : null}
-            <Link href={{ pathname: "/profile" }}>Profile</Link>
+            <Link href={{ pathname: "/" }} className={isActive("/") ? "navActive" : undefined}>RSVP</Link>
+            <Link href={{ pathname: "/attendance" }} className={isActive("/attendance") ? "navActive" : undefined}>Attendance</Link>
+            {isTrainer ? <Link href={{ pathname: "/trainer/attendance" }} className={isActive("/trainer/attendance") ? "navActive" : undefined}>Trainer</Link> : null}
+            {isAdmin ? <Link href={{ pathname: "/admin" }} className={isActive("/admin") ? "navActive" : undefined}>Admin</Link> : null}
+            <Link href={{ pathname: "/profile" }} className={isActive("/profile") ? "navActive" : undefined}>Profile</Link>
             <form action="/api/auth/signout" method="post">
               <input type="hidden" name="callbackUrl" value="/" />
               <button type="submit">Log out</button>
@@ -59,11 +66,11 @@ export default function SessionStatus() {
         <div className="bottomNavLinks">
           {loggedIn ? (
             <>
-              <Link href={{ pathname: "/" }}>RSVP</Link>
-              <Link href={{ pathname: "/attendance" }}>Attendance</Link>
-              {isTrainer ? <Link href={{ pathname: "/trainer/attendance" }}>Trainer</Link> : null}
-              {isAdmin ? <Link href={{ pathname: "/admin" }}>Admin</Link> : null}
-              <Link href={{ pathname: "/profile" }}>Profile</Link>
+              <Link href={{ pathname: "/" }} className={isActive("/") ? "navActive" : undefined}>RSVP</Link>
+              <Link href={{ pathname: "/attendance" }} className={isActive("/attendance") ? "navActive" : undefined}>Attendance</Link>
+              {isTrainer ? <Link href={{ pathname: "/trainer/attendance" }} className={isActive("/trainer/attendance") ? "navActive" : undefined}>Trainer</Link> : null}
+              {isAdmin ? <Link href={{ pathname: "/admin" }} className={isActive("/admin") ? "navActive" : undefined}>Admin</Link> : null}
+              <Link href={{ pathname: "/profile" }} className={isActive("/profile") ? "navActive" : undefined}>Profile</Link>
               <form action="/api/auth/signout" method="post">
                 <input type="hidden" name="callbackUrl" value="/" />
                 <button type="submit">Log out</button>
