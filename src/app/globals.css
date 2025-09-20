@@ -147,6 +147,7 @@ h1, h2, h3 {
 /* Mobile nav */
 .navBar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .navLinks { display: flex; gap: 12px; align-items: center; }
+.navLinks a { color: var(--text); text-decoration: none; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 6px 10px; }
 .burger { display: none; background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 6px 10px; }
 .drawer { position: fixed; inset: 0 0 auto 0; background: var(--card); padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); display: none; }
 .drawer.open { display: block; }
