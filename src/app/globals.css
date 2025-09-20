@@ -29,6 +29,12 @@ html, body {
 /* Reduce extra gap below header nav on mobile */
 .topNavSpacer { margin-top: 8px; }
 
+/* Reduce heading-to-content gap and improve contrast on cards/links */
+h1 { margin-top: 12px; }
+.card a, a { color: #a8c5ff; }
+.card { border-color: rgba(255,255,255,0.12); background: #101826; }
+.badge { background: rgba(255,255,255,0.08); color: #c9d7ee; }
+
 h1, h2, h3 {
   margin: 0 0 12px;
 }

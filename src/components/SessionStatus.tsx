@@ -41,6 +41,7 @@ export default function SessionStatus() {
       <div className="navLinks">
         {loggedIn ? (
           <>
+            <Link href={{ pathname: "/" }}>RSVP</Link>
             <Link href={{ pathname: "/attendance" }}>Attendance</Link>
             {isTrainer ? <Link href={{ pathname: "/trainer/attendance" }}>Trainer</Link> : null}
             {isAdmin ? <Link href={{ pathname: "/admin" }}>Admin</Link> : null}

@@ -34,14 +34,14 @@ export default function TrainerAttendanceList() {
   return (
     <main>
       <div className="container">
-        <h1>Training attendance</h1>
+        <h1 style={{ marginBottom: 8 }}>Training attendance</h1>
         
         <div className="list">
           {sessions.map((s) => (
-            <a className="card" key={s.date} href={`/trainer/attendance/${s.date}`}>
+            <a className="card" key={s.date} href={`/trainer/attendance/${s.date}`} style={{ textDecoration: "none" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <div style={{ fontWeight: 600 }}>{s.date}</div>
+                  <div style={{ fontWeight: 600, color: "#e6edf7" }}>{s.date}</div>
                   <div className="muted" style={{ fontSize: 13 }}>{new Date(s.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long' })} session</div>
                 </div>
                 <div className="badge">Open</div>
