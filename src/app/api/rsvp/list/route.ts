@@ -5,7 +5,12 @@ export async function GET(req: NextRequest) {
   const eventId = req.nextUrl.searchParams.get("eventId");
   if (!eventId) return NextResponse.json({ error: "eventId required" }, { status: 400 });
   const countsOnly = req.nextUrl.searchParams.get("countsOnly") === "1";
-  const items = await listEventRsvps(eventId);
+  let items: { userId: string; status: any }[] = [];
+  try {
+    items = await listEventRsvps(eventId);
+  } catch (e: any) {
+    return NextResponse.json({ error: "list_failed", message: e?.message || String(e) }, { status: 500 });
+  }
   const yes: { id: string; name: string }[] = [];
   const no: { id: string; name: string }[] = [];
   const maybe: { id: string; name: string }[] = [];
