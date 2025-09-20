@@ -6,21 +6,19 @@ function displayName(u: { firstName: string; lastName: string; id: string; email
   if (full) return full;
   const email = (u.email || "").trim();
   if (email) return email;
-  return ""; // no display name -> filtered out
+  return `User ${u.id.slice(0, 6)}`; // fallback so roster is never empty
 }
 
 export async function GET() {
   const users = await (prisma as any).user
     .findMany({ select: { id: true, firstName: true, lastName: true, email: true }, cacheStrategy: { ttl: 300, swr: 300 } })
     .catch(() => [] as any[]);
-  const seen = new Set<string>();
+  const seenIds = new Set<string>();
   const list = [] as { id: string; name: string }[];
   for (const u of users as any[]) {
+    if (seenIds.has(u.id)) continue; // dedupe by id only
+    seenIds.add(u.id);
     const name = displayName(u);
-    if (!name) continue; // skip users with no usable name
-    const key = name.toLowerCase();
-    if (seen.has(key)) continue; // skip duplicates by display name
-    seen.add(key);
     list.push({ id: u.id, name });
   }
   list.sort((a, b) => a.name.localeCompare(b.name));
