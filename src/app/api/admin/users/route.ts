@@ -20,7 +20,12 @@ export async function GET(req: NextRequest) {
   if (!isAdmin) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const adminFull = norm(process.env.ADMIN_FULL_NAME || "");
   const trainerNames = (process.env.TRAINER_FULL_NAMES || "").split(",").map(norm).filter(Boolean);
-  const users = await (prisma as any).user.findMany({ select: { id: true, firstName: true, lastName: true, email: true }, cacheStrategy: { ttl: 300, swr: 300 } });
+  let users: any[] = [];
+  try {
+    users = await prisma.user.findMany({ select: { id: true, firstName: true, lastName: true, email: true } });
+  } catch (e: any) {
+    return NextResponse.json({ error: "users_query_failed", message: e?.message || String(e) }, { status: 500 });
+  }
   const list = [] as { id: string; name: string; roles: { admin?: boolean; trainer?: boolean; player?: boolean } }[];
   for (const u of users as any[]) {
     const name = displayName(u);
