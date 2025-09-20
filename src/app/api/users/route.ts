@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../lib/db";
+import { kvGetJson, kvSetJson } from "../../../lib/kv";
 import { } from "../../../lib/kv";
 import { } from "next/server";
 import { } from "next/server";
@@ -108,6 +109,14 @@ function displayName(u: { firstName: string; lastName: string; id: string; email
 }
 
 export async function GET(req: NextRequest) {
+  const refresh = req.nextUrl.searchParams.get("refresh") === "1";
+  const cacheKey = "users:roster:v1";
+  if (!refresh) {
+    const cached = await kvGetJson<{ id: string; name: string }[]>(cacheKey);
+    if (cached && Array.isArray(cached) && cached.length) {
+      return NextResponse.json({ users: cached });
+    }
+  }
   let users: any[] = [];
   try {
     users = await prisma.user.findMany({ select: { id: true, firstName: true, lastName: true, email: true } });
@@ -125,5 +134,6 @@ export async function GET(req: NextRequest) {
     list.push({ id: u.id, name });
   }
   list.sort((a, b) => a.name.localeCompare(b.name));
+  await kvSetJson(cacheKey, list);
   return NextResponse.json({ users: list });
 }

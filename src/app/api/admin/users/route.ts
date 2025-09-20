@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../lib/db";
-import { getUserRoles, setUserRoles } from "../../../../lib/kv";
+import { getUserRoles, setUserRoles, kvDelete } from "../../../../lib/kv";
 import { isAdminUser } from "../../../../lib/trainer";
 
 function norm(s: string) {
@@ -57,6 +57,8 @@ export async function PUT(req: NextRequest) {
     };
     await setUserRoles(it.id, roles);
   }
+  // Invalidate roster cache so admin list updates reflect immediately
+  await kvDelete("users:roster:v1");
   return NextResponse.json({ ok: true });
 }
 

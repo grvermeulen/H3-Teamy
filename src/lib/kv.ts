@@ -11,8 +11,9 @@ async function getPrisma() {
   return prisma;
 }
 
-// Simple in-memory fallback store (not persistent across server restarts)
+// Simple in-memory fallback stores (not persistent across server restarts)
 const memoryStore = new Map<string, RsvpStatus>();
+const memoryJson = new Map<string, string>();
 
 // Vercel KV compatibility if provided via env
 // Expect standard env: KV_REST_API_URL, KV_REST_API_TOKEN, KV_REST_API_READ_ONLY_TOKEN, KV_URL
@@ -109,6 +110,53 @@ export async function setRsvp(userId: string, eventId: string, status: RsvpStatu
   }
   const key = `rsvp:${userId}:${eventId}`;
   await kvSet(key, status);
+}
+
+// Generic JSON KV helpers for caching lists/objects
+export async function kvGetJson<T = any>(key: string): Promise<T | null> {
+  const redis = await getRedis();
+  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+    if (redis) {
+      const raw = (await redis.get(key)) as string | null;
+      if (!raw) return null;
+      try { return JSON.parse(raw) as T; } catch { return null; }
+    }
+    const raw = memoryJson.get(key);
+    if (!raw) return null;
+    try { return JSON.parse(raw) as T; } catch { return null; }
+  }
+  const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` }, cache: "no-store" });
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => ({} as any));
+  const raw = data?.result ?? null;
+  if (!raw) return null;
+  try { return JSON.parse(raw) as T; } catch { return null; }
+}
+
+export async function kvSetJson(key: string, value: any): Promise<void> {
+  const redis = await getRedis();
+  const payload = JSON.stringify(value);
+  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+    if (redis) { await redis.set(key, payload); return; }
+    memoryJson.set(key, payload);
+    return;
+  }
+  const url = `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`;
+  const body = new URLSearchParams();
+  body.set("value", payload);
+  await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`, "content-type": "application/x-www-form-urlencoded" }, body });
+}
+
+export async function kvDelete(key: string): Promise<void> {
+  const redis = await getRedis();
+  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+    if (redis) { await redis.del(key).catch(() => {}); return; }
+    memoryJson.delete(key);
+    return;
+  }
+  const url = `${process.env.KV_REST_API_URL}/del/${encodeURIComponent(key)}`;
+  await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` } }).catch(() => {});
 }
 
 export async function setUserProfile(userId: string, profile: UserProfile) {
