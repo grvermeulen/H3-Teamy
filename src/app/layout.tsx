@@ -38,8 +38,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="muted" style={{ fontSize: 13 }}>Matches from Sportlink • RSVP on device</div>
           </div>
         </header>
-        <div className="container" style={{ marginTop: 4 }}>
-          <div className="muted" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+        <div className="container topNavSpacer">
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             <SessionStatus />
           </div>
         </div>

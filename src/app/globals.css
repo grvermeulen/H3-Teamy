@@ -26,6 +26,9 @@ html, body {
   padding: 24px 16px 64px;
 }
 
+/* Reduce extra gap below header nav on mobile */
+.topNavSpacer { margin-top: 8px; }
+
 h1, h2, h3 {
   margin: 0 0 12px;
 }
