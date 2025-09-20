@@ -10,6 +10,7 @@ export default function AdminUsersPage() {
   const [rows, setRows] = useState<UserRow[]>([]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [forbidden, setForbidden] = useState(false);
 
   useEffect(() => {
@@ -47,6 +48,22 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function onRefresh() {
+    setRefreshing(true);
+    try {
+      // Rebuild roster cache for other pages and then reload admin list
+      await fetch("/api/users?refresh=1", { cache: "no-store" }).catch(() => {});
+      const res = await fetch("/api/admin/users", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setRows((data?.users || []) as UserRow[]);
+        setDirty(false);
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   const sorted = useMemo(() => rows.slice().sort((a, b) => a.name.localeCompare(b.name)), [rows]);
 
   if (forbidden) return <div className="container"><h1>Admin</h1><div className="muted">You do not have access.</div></div>;
@@ -59,7 +76,10 @@ export default function AdminUsersPage() {
         <div className="card" style={{ position: "sticky", top: 0, zIndex: 1 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div className="muted">User roles</div>
-            <button onClick={onSave} disabled={!dirty || saving}>{saving ? "Saving…" : "Save"}</button>
+            <div className="row" style={{ gap: 8 }}>
+              <button onClick={onRefresh} disabled={refreshing}>{refreshing ? "Refreshing…" : "Refresh"}</button>
+              <button onClick={onSave} disabled={!dirty || saving}>{saving ? "Saving…" : "Save"}</button>
+            </div>
           </div>
         </div>
         <div className="list">
