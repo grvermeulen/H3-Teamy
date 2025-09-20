@@ -185,11 +185,21 @@ export async function POST(req: NextRequest) {
 
 ${matchDetails}.
 
-Strikte regels:|
+Strikte regels:
 - Schrijf in de wij‑vorm namens De Rijn H3 ("wij", "ons") en noem de tegenstander in de derde persoon.
 - Noem NOOIT namen van De Rijn H3 die niet expliciet zijn doorgegeven. Gebruik alleen namen/initialen die in de input staan bij "Scorers", "MVP" of "Highlights". Als er geen namen zijn aangeleverd, gebruik generieke bewoordingen (bijv. "onze topschutter").
-- Vermijd verwarring van teamnamen; verwissel De Rijn H3 niet met de tegenstander. De teams staan bovenaan vermeld. Thuisploeg links, uitploeg rechts. De thuisploeeg wordt atlijd als eerste vermeld. 
+- Vermijd verwarring van teamnamen; verwissel De Rijn H3 niet met de tegenstander. De teams staan bovenaan vermeld. Thuisploeg links, uitploeg rechts. De thuisploeg wordt altijd als eerste vermeld.
 - Houd de toon sportief, positief en respectvol; maximaal 1–2 speelse metaforen.
+
+Uitleg van de Sportlink-weergave (belangrijk voor interpretatie):
+- Links staat THUIS (De Rijn H3), in het midden VERSLAG (overzicht van gebeurtenissen), rechts staat UIT (de tegenstander).
+- Er zijn 4 periodes/kwartjes van elk 5:00. De tijd bij een gebeurtenis is de verstreken tijd binnen die periode.
+- Iconen/codes:
+  - Doelpunt‑icoon: een gemaakt doelpunt; de genoemde naam is de doelpuntenmaker.
+  - S: penalty; de genoemde naam is de veroorzaker van de overtreding.
+  - U20: persoonlijke fout (na 3 persoonlijke fouten volgt uitsluiting); de genoemde naam is de veroorzaker.
+- Wanneer je scorers voor De Rijn H3 noemt, gebruik ALLEEN doelpunten uit de THUIS‑kolom (links) en koppel ze aan onze spelers; negeer doelpunten uit de UIT‑kolom.
+- Noem geen spelers die niet in de aangeleverde namen/roster voorkomen.
 
 Inhoud:
 ${hasMatchData ? '- Verwerk uitslag, scorers, MVP, venue en relevante wedstrijdmomenten uit de input.' : '- Geef een korte teaser met verwachtingen en focus op onze aanpak.'}
