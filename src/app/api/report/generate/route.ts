@@ -55,13 +55,19 @@ export async function POST(req: NextRequest) {
       matchDetails += `. Uitslag: nog niet bekend`;
     }
 
-    const prompt = `Schrijf een korte, humoristische wedstrijdsamenvatting (120–200 woorden) voor De Rijn H3 waterpolo.
+    const prompt = `Je bent verslaggever voor De Rijn H3 (waterpolo). Schrijf een korte, pakkende wedstrijdsamenvatting (120–200 woorden) EXCLUSIEF vanuit het perspectief van De Rijn H3.
 
 ${matchDetails}.
 
-Stijl: luchtig, geestig en sportief naar de tegenstander. Gebruik 1–2 speelse metaforen. 
-${hasMatchData ? 'Beschrijf de wedstrijd op basis van de uitslag en gebruik de beschikbare details (scorers, MVP, etc.) om een levendig verhaal te maken.' : 'Geef een korte teaser van wat er misschien gaat komen op basis van eerdere wedstrijden.'}
-Schrijf in het Nederlands.`;
+Strikte regels:
+- Schrijf in de wij‑vorm namens De Rijn H3 ("wij", "ons") en noem de tegenstander in de derde persoon.
+- Noem NOOIT namen van De Rijn H3 die niet expliciet zijn doorgegeven. Gebruik alleen namen/initialen die in de input staan bij "Scorers", "MVP" of "Highlights". Als er geen namen zijn aangeleverd, gebruik generieke bewoordingen (bijv. "onze topschutter").
+- Vermijd verwarring van teamnamen; verwissel De Rijn H3 niet met de tegenstander.
+- Houd de toon sportief, positief en respectvol; maximaal 1–2 speelse metaforen.
+
+Inhoud:
+${hasMatchData ? '- Verwerk uitslag, scorers, MVP, venue en relevante wedstrijdmomenten uit de input.' : '- Geef een korte teaser met verwachtingen en focus op onze aanpak.'}
+Eindig met een korte nuchtere conclusie in één zin. Schrijf in het Nederlands.`;
 
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",

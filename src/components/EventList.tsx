@@ -137,8 +137,10 @@ export default function EventList({ events }: Props) {
 
   const grouped = useMemo(() => {
     const now = Date.now();
-    const upcoming = events.filter((e) => new Date(e.start).getTime() >= now);
-    return upcoming;
+    const twoWeeksMs = 14 * 24 * 60 * 60 * 1000;
+    const threshold = now - twoWeeksMs;
+    // Show all matches from the last 14 days up to the future
+    return events.filter((e) => new Date(e.start).getTime() >= threshold);
   }, [events]);
 
   // Don't render anything until authentication is checked
@@ -241,7 +243,7 @@ export default function EventList({ events }: Props) {
           </div>
         );
       })}
-      {grouped.length === 0 ? <div className="muted">No upcoming events.</div> : null}
+      {grouped.length === 0 ? <div className="muted">No matches in the past 14 days or upcoming.</div> : null}
     </div>
   );
 }
