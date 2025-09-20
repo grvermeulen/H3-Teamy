@@ -137,14 +137,14 @@ export default function EventList({ events }: Props) {
 
   const grouped = useMemo(() => {
     const now = Date.now();
-    const past = events
-      .filter((e) => new Date(e.start).getTime() < now)
-      .sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime())
-      .slice(0, 2)
-      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
-    const future = events
-      .filter((e) => new Date(e.start).getTime() >= now)
-      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+    const allSorted = events.slice().sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+    const idx = allSorted.findIndex((e) => new Date(e.start).getTime() >= now);
+    const future = idx === -1 ? [] : allSorted.slice(idx);
+    // last two past (if available)
+    const past = (idx === -1 ? allSorted : allSorted.slice(0, idx))
+      .slice(-2);
+    // If there are no past items at all yet (first ever match hasn't been played), just return future
+    // But once the very first match has been played, ensure at least that single past match remains visible
     return [...past, ...future];
   }, [events]);
 
