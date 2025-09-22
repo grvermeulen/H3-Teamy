@@ -15,7 +15,45 @@ export async function POST(req: NextRequest) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "openai_key_missing" }, { status: 500 });
 
-    const prompt = `Lees de wedstrijdgegevens uit deze screenshot van de KNZB/Sportlink app.
+    // 1) Try OCR.space first for robust text extraction (free tier: 1MB limit)
+    const ocrKey = process.env.OCR_SPACE_API_KEY || process.env.OCRSPACE_API_KEY;
+    let ocrText: string | null = null;
+    let ocrOk = false;
+    if (!ocrKey) {
+      // Continue without OCR (fallback to direct image parsing by LLM)
+    } else if (file.size > 1_000_000) {
+      // Free-tier limit reached; surface a clear error with guidance
+      return NextResponse.json(
+        { error: "image_too_large", message: "OCR.space free tier accepts images up to 1MB. Please upload a smaller screenshot." },
+        { status: 413 }
+      );
+    } else {
+      try {
+        const fd = new FormData();
+        // Prefer direct File upload for better accuracy and Edge compatibility
+        fd.append("file", file, file.name || ("screenshot" + (mime.includes("png") ? ".png" : ".jpg")));
+        fd.append("language", "dut"); // Dutch UI
+        fd.append("isOverlayRequired", "false");
+        fd.append("OCREngine", "2");
+        const ocrResp = await fetch("https://api.ocr.space/parse/image", {
+          method: "POST",
+          headers: { apikey: ocrKey },
+          body: fd,
+        });
+        if (ocrResp.ok) {
+          const ocrJson: any = await ocrResp.json();
+          const errored = ocrJson?.IsErroredOnProcessing;
+          const parsed = ocrJson?.ParsedResults?.[0];
+          const parsedText = parsed?.ParsedText as string | undefined;
+          if (!errored && parsedText && parsedText.trim()) {
+            ocrText = parsedText.trim();
+            ocrOk = true;
+          }
+        }
+      } catch {}
+    }
+
+    const prompt = `Lees de wedstrijdgegevens uit de KNZB/Sportlink app.
 Geef uitsluitend JSON met velden:
 {
   "homeTeam": string,
@@ -45,27 +83,36 @@ Regels voor events:
 - Sorteer events binnen hetzelfde kwart oplopend op tijd.
 Laat onbekende velden weg. Geef alleen geldige JSON terug.`;
 
+    // 2) Ask LLM to normalize into our JSON schema
+    const llmPayload = ocrOk
+      ? {
+          // Prefer text-only when OCR succeeded
+          model: "gpt-4o-2024-11-20",
+          temperature: 0.1,
+          messages: [
+            { role: "system", content: "Je bent een nauwkeurige parser die alleen geldige JSON terugstuurt." },
+            { role: "user", content: `${prompt}\n\nTekst uit OCR:\n\n\u3010BEGIN\u3011\n${ocrText}\n\u3010EINDE\u3011` },
+          ],
+          response_format: { type: "json_object" },
+        }
+      : {
+          // Fallback: send the original image to the vision model
+          model: "gpt-4o-2024-11-20",
+          temperature: 0.1,
+          messages: [
+            { role: "system", content: "Je bent een nauwkeurige parser die alleen geldige JSON terugstuurt." },
+            { role: "user", content: [ { type: "text", text: prompt }, { type: "image_url", image_url: { url: dataUrl } } ] },
+          ],
+          response_format: { type: "json_object" },
+        };
+
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "content-type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model: "gpt-4o-2024-11-20",
-        temperature: 0.1,
-        messages: [
-          { role: "system", content: "Je bent een nauwkeurige parser die alleen geldige JSON terugstuurt." },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: dataUrl } },
-            ],
-          },
-        ],
-        response_format: { type: "json_object" },
-      }),
+      body: JSON.stringify(llmPayload),
     });
     if (!resp.ok) {
       const info = await resp.text();
