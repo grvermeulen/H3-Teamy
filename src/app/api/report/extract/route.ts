@@ -29,9 +29,21 @@ Geef uitsluitend JSON met velden:
   "scorers"?: string[],
   "mvp"?: string,
   "keeperSaves"?: number,
-  "cards"?: string[]
+  "cards"?: string[],
+  "events"?: Array<{
+    "quarter": 1 | 2 | 3 | 4,
+    "time"?: string,              // tijd binnen de periode, zoals getoond (bijv. "02:35")
+    "team": "home" | "away",    // THUIS = home (links), UIT = away (rechts)
+    "type": "goal" | "penalty" | "personal_foul",
+    "player"?: string             // weergegeven naam naast de gebeurtenis
+  }>
 }
-Laat onbekende velden weg. Focus op het extraheren van alle beschikbare wedstrijdgegevens.`;
+Regels voor events:
+- Een sectiekop zoals "1e periode" duidt het kwart aan; gebruik dit om "quarter" te bepalen (1..4).
+- Iconen/codes: doelpunt‑icoon = "goal"; "S" = "penalty" (genoemde speler veroorzaakte de penalty); "U20" = "personal_foul" (persoonlijke fout).
+- Bepaal het team uit de kolom: links (THUIS) -> "home"; rechts (UIT) -> "away".
+- Sorteer events binnen hetzelfde kwart oplopend op tijd.
+Laat onbekende velden weg. Geef alleen geldige JSON terug.`;
 
     const resp = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",

@@ -154,6 +154,13 @@ export async function POST(req: NextRequest) {
     const mvpInput = body?.mvp as string | undefined;
     const periods = body?.periods as (number | string)[] | undefined;
     const highlights = body?.highlights as string[] | undefined;
+    const events = body?.events as Array<{
+      quarter: 1 | 2 | 3 | 4;
+      time?: string;
+      team: "home" | "away";
+      type: "goal" | "penalty" | "personal_foul";
+      player?: string;
+    }> | undefined;
     if (!eventId) return NextResponse.json({ error: "eventId required" }, { status: 400 });
 
     // Always (re)generate a fresh report on request
@@ -167,6 +174,22 @@ export async function POST(req: NextRequest) {
     const { resolveMany, resolveMaybeOne } = buildRosterIndex(users);
     const scorers = resolveMany(scorersInput);
     const mvp = resolveMaybeOne(mvpInput);
+
+    // Validate event player names via roster as well
+    let eventsForPrompt: string | undefined = undefined;
+    if (events && Array.isArray(events) && events.length) {
+      const normalized = events
+        .map((e) => {
+          const mappedPlayer = resolveMaybeOne(e.player);
+          const typeNl = e.type === "goal" ? "doelpunt" : e.type === "penalty" ? "penalty (veroorzaakt)" : "persoonlijke fout (U20)";
+          const teamNl = e.team === "home" ? "De Rijn H3" : "tegenstander";
+          const t = e.time ? ` op ${e.time}` : "";
+          const p = mappedPlayer ? ` door ${mappedPlayer}` : "";
+          return `P${e.quarter}: ${teamNl} – ${typeNl}${p}${t}`;
+        })
+        .join("; ");
+      if (normalized) eventsForPrompt = normalized;
+    }
     const hasMatchData = typeof scoreHome === 'number' && typeof scoreAway === 'number' && opponent;
     
     let matchDetails = `Wedstrijd: De Rijn H3 tegen ${opponent || "onbekende tegenstander"}`;
@@ -200,6 +223,10 @@ Uitleg van de Sportlink-weergave (belangrijk voor interpretatie):
   - U20: persoonlijke fout (na 3 persoonlijke fouten volgt uitsluiting); de genoemde naam is de veroorzaker.
 - Wanneer je scorers voor De Rijn H3 noemt, gebruik ALLEEN doelpunten uit de THUIS‑kolom (links) en koppel ze aan onze spelers; negeer doelpunten uit de UIT‑kolom.
 - Noem geen spelers die niet in de aangeleverde namen/roster voorkomen.
+
+Als er gebeurtenissen zijn aangeleverd, verwerk ze:
+- Gebruik de onderstaande gebeurtenissen als leidraad voor het wedstrijdverloop (per periode). Respecteer teamtoewijzing (THUIS = De Rijn H3, UIT = tegenstander) en interpreteer types correct (doelpunt, penalty, persoonlijke fout).
+${eventsForPrompt ? `Gebeurtenissen: ${eventsForPrompt}` : ''}
 
 Inhoud:
 ${hasMatchData ? '- Verwerk uitslag, scorers, MVP, venue en relevante wedstrijdmomenten uit de input.' : '- Geef een korte teaser met verwachtingen en focus op onze aanpak.'}
