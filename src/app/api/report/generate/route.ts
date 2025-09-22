@@ -178,17 +178,68 @@ export async function POST(req: NextRequest) {
     // Validate event player names via roster as well
     let eventsForPrompt: string | undefined = undefined;
     if (events && Array.isArray(events) && events.length) {
-      const normalized = events
-        .map((e) => {
-          const mappedPlayer = resolveMaybeOne(e.player);
-          const typeNl = e.type === "goal" ? "doelpunt" : e.type === "penalty" ? "penalty (veroorzaakt)" : "persoonlijke fout (U20)";
-          const teamNl = e.team === "home" ? "De Rijn H3" : "tegenstander";
-          const t = e.time ? ` op ${e.time}` : "";
-          const p = mappedPlayer ? ` door ${mappedPlayer}` : "";
-          return `P${e.quarter}: ${teamNl} – ${typeNl}${p}${t}`;
+      function parseTimeToSeconds(s?: string) {
+        if (!s) return Number.MAX_SAFE_INTEGER;
+        const m = /^(\d{1,2}):(\d{2})$/.exec(s.trim());
+        if (!m) return Number.MAX_SAFE_INTEGER;
+        return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+      }
+
+      // Consider De Rijn H3 (home) events to drive our narrative and stats
+      const home = events.filter((e) => e.team === "home");
+
+      const grouped: Record<number, Array<{ t: number; line: string; type: string; player?: string }>> = {
+        1: [], 2: [], 3: [], 4: [],
+      };
+      const goalsBy = new Map<string, number>();
+      const foulsBy = new Map<string, number>();
+
+      for (const e of home) {
+        const q = e.quarter;
+        const playerName = resolveMaybeOne(e.player);
+        const tSec = parseTimeToSeconds(e.time);
+        let line = "";
+        if (e.type === "goal") {
+          line = `${e.time || ""} doelpunt${playerName ? ` door ${playerName}` : ""}`;
+          if (playerName) goalsBy.set(playerName, (goalsBy.get(playerName) || 0) + 1);
+        } else if (e.type === "penalty") {
+          line = `${e.time || ""} penalty veroorzaakt${playerName ? ` door ${playerName}` : ""}`;
+          if (playerName) foulsBy.set(playerName, (foulsBy.get(playerName) || 0) + 1);
+        } else {
+          line = `${e.time || ""} persoonlijke fout${playerName ? ` door ${playerName}` : ""}`;
+          if (playerName) foulsBy.set(playerName, (foulsBy.get(playerName) || 0) + 1);
+        }
+        grouped[q] = grouped[q] || [];
+        grouped[q].push({ t: tSec, line, type: e.type, player: playerName });
+      }
+      for (const q of [1, 2, 3, 4]) {
+        grouped[q]?.sort((a, b) => a.t - b.t);
+      }
+
+      const perQuarter = [1, 2, 3, 4]
+        .map((q) => {
+          const lines = (grouped[q] || []).map((ev) => `- ${ev.line}`).join("\n");
+          return lines ? `Periode ${q}:\n${lines}` : `Periode ${q}: (geen opvallende gebeurtenissen)`;
         })
-        .join("; ");
-      if (normalized) eventsForPrompt = normalized;
+        .join("\n");
+
+      const goalsStats = Array.from(goalsBy.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, count]) => `${name}: ${count}`)
+        .join(", ");
+      const foulsStats = Array.from(foulsBy.entries())
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, count]) => `${name}: ${count}`)
+        .join(", ");
+
+      const facts: string[] = [];
+      if (typeof scoreHome === 'number' && typeof scoreAway === 'number') {
+        facts.push(`Eindstand (letterlijk opnemen): ${scoreHome}-${scoreAway}`);
+      }
+      if (goalsStats) facts.push(`Doelpunten per speler (De Rijn H3): ${goalsStats}`);
+      if (foulsStats) facts.push(`Persoonlijke fouten + penalties per speler (De Rijn H3): ${foulsStats}`);
+
+      eventsForPrompt = `\nGebeurtenissen per periode (De Rijn H3):\n${perQuarter}` + (facts.length ? `\n\nFeiten:\n- ${facts.join("\n- ")}` : "");
     }
     const hasMatchData = typeof scoreHome === 'number' && typeof scoreAway === 'number' && opponent;
     
@@ -204,7 +255,7 @@ export async function POST(req: NextRequest) {
       matchDetails += `. Uitslag: nog niet bekend`;
     }
 
-    const prompt = `Je bent verslaggever voor De Rijn H3 (waterpolo). Schrijf een korte, pakkende wedstrijdsamenvatting (120–200 woorden) EXCLUSIEF vanuit het perspectief van De Rijn H3.
+    const prompt = `Je bent verslaggever voor De Rijn H3 (waterpolo). Schrijf een korte, pakkende wedstrijdsamenvatting (140–220 woorden) EXCLUSIEF vanuit het perspectief van De Rijn H3.
 
 ${matchDetails}.
 
@@ -225,8 +276,11 @@ Uitleg van de Sportlink-weergave (belangrijk voor interpretatie):
 - Noem geen spelers die niet in de aangeleverde namen/roster voorkomen.
 
 Als er gebeurtenissen zijn aangeleverd, verwerk ze:
-- Gebruik de onderstaande gebeurtenissen als leidraad voor het wedstrijdverloop (per periode). Respecteer teamtoewijzing (THUIS = De Rijn H3, UIT = tegenstander) en interpreteer types correct (doelpunt, penalty, persoonlijke fout).
-${eventsForPrompt ? `Gebeurtenissen: ${eventsForPrompt}` : ''}
+- Gebruik de onderstaande gebeurtenissen als leidraad voor het wedstrijdverloop (per periode) in CHRONOLOGISCHE volgorde. Geef per periode 1–3 concrete momenten met naam + tijd, en een korte analyse.
+- Neem de eindstand letterlijk op in de tekst.
+- Benoem doelpuntenmakers (De Rijn H3) bij naam.
+- Voeg onderaan één korte regelsamenvatting toe met: "Doelpunten per speler" en "Fouten (U20+S) per speler" voor De Rijn H3.
+${eventsForPrompt ? `${eventsForPrompt}` : ''}
 
 Inhoud:
 ${hasMatchData ? '- Verwerk uitslag, scorers, MVP, venue en relevante wedstrijdmomenten uit de input.' : '- Geef een korte teaser met verwachtingen en focus op onze aanpak.'}
