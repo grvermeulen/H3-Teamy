@@ -212,7 +212,8 @@ Eindig met een korte nuchtere conclusie in één zin. Schrijf in het Nederlands.
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-5-nano",
+        model: "gpt-5-chat-latest",
+        temperature: 0.2,
         messages: [
           { role: "system", content: "You are a sports reporter for De Rijn H3 water polo club." },
           { role: "user", content: prompt },

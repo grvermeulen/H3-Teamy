@@ -40,7 +40,8 @@ Laat onbekende velden weg. Focus op het extraheren van alle beschikbare wedstrij
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: "gpt-4o-2024-11-20",
+        temperature: 0.1,
         messages: [
           { role: "system", content: "Je bent een nauwkeurige parser die alleen geldige JSON terugstuurt." },
           {
