@@ -50,6 +50,7 @@ export default function GenerateReportButton({ eventId, opponent }: { eventId: s
           if (result?.mvp) payload.mvp = result.mvp;
           if (result?.periods?.length) payload.periods = result.periods;
           if (result?.highlights?.length) payload.highlights = result.highlights;
+          if (result?.events?.length) payload.events = result.events;
         }
       }
       const res = await fetch("/api/report/generate", {
