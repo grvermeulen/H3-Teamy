@@ -25,7 +25,7 @@ export default function GenerateReportButton({ eventId, opponent }: { eventId: s
   async function onGenerate() {
     setLoading(true);
     try {
-      let payload: any = { eventId, opponent };
+      let payload: any = { eventId };
       if (imageFile) {
         const form = new FormData();
         form.set("image", imageFile);
@@ -35,21 +35,13 @@ export default function GenerateReportButton({ eventId, opponent }: { eventId: s
           setExtracted(data?.result || null);
           const result = data?.result;
           
-          // Basic match data
-          if (result?.homeScore != null && result?.awayScore != null) {
-            payload.scoreHome = Number(result.homeScore);
-            payload.scoreAway = Number(result.awayScore);
-          }
-          if (result?.homeTeam && result?.awayTeam) {
-            payload.opponent = result.homeTeam && String(result.homeTeam).includes("De Rijn") ? result.awayTeam : result.homeTeam;
-          }
+          // Basic match data passed straight through
+          if (result?.homeTeam) payload.homeTeam = result.homeTeam;
+          if (result?.awayTeam) payload.awayTeam = result.awayTeam;
+          if (result?.homeScore != null) payload.homeScore = Number(result.homeScore);
+          if (result?.awayScore != null) payload.awayScore = Number(result.awayScore);
+          if (result?.date) payload.date = result.date;
           
-          // Additional match details for richer reports
-          if (result?.venue) payload.venue = result.venue;
-          if (result?.scorers?.length) payload.scorers = result.scorers;
-          if (result?.mvp) payload.mvp = result.mvp;
-          if (result?.periods?.length) payload.periods = result.periods;
-          if (result?.highlights?.length) payload.highlights = result.highlights;
           if (result?.events?.length) payload.events = result.events;
         }
       }

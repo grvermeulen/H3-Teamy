@@ -53,35 +53,29 @@ export async function POST(req: NextRequest) {
       } catch {}
     }
 
-    const prompt = `Lees de wedstrijdgegevens uit de KNZB/Sportlink app.
-Geef uitsluitend JSON met velden:
+    const prompt = `Lees de wedstrijdgegevens en geef ALLEEN geldig JSON terug in exact dit schema:
 {
   "homeTeam": string,
   "awayTeam": string,
   "homeScore": number,
   "awayScore": number,
-  "venue"?: string,
   "date"?: string,
-  "periods"?: number[] | string[],
-  "highlights"?: string[],
-  "scorers"?: string[],
-  "mvp"?: string,
-  "keeperSaves"?: number,
-  "cards"?: string[],
-  "events"?: Array<{
+  "events": Array<{
     "quarter": 1 | 2 | 3 | 4,
-    "time"?: string,              // tijd binnen de periode, zoals getoond (bijv. "02:35")
-    "team": "home" | "away",    // THUIS = home (links), UIT = away (rechts)
-    "type": "goal" | "penalty" | "personal_foul",
-    "player"?: string             // weergegeven naam naast de gebeurtenis
+    "time": string,              // mm:ss exact zoals getoond (bijv. "02:35")
+    "team": "home" | "away",
+    "type": "goal" | "personal_foul",
+    "player"?: string
   }>
 }
-Regels voor events:
-- Een sectiekop zoals "1e periode" duidt het kwart aan; gebruik dit om "quarter" te bepalen (1..4).
-- Iconen/codes: doelpunt‑icoon = "goal"; "S" = "penalty" (genoemde speler veroorzaakte de penalty); "U20" = "personal_foul" (persoonlijke fout).
-- Bepaal het team uit de kolom: links (THUIS) -> "home"; rechts (UIT) -> "away".
-- Sorteer events binnen hetzelfde kwart oplopend op tijd.
-Laat onbekende velden weg. Geef alleen geldige JSON terug.`;
+Regels:
+- Bepaal het kwart uit sectiekoppen zoals "1e periode", "2e periode", enz. (1..4).
+- Iconen/codes: doelpunt‑icoon = "goal"; "U20" = "personal_foul".
+- "team" is relatief: "home" verwijst naar homeTeam, "away" naar awayTeam (zet hier nooit teamnamen).
+- Neem namen en tijden exact over; laat velden weg als ze onleesbaar zijn.
+- Sorteer events eerst op "quarter" (1..4), en binnen hetzelfde kwart oplopend op "time".
+- Gebruik waardes precies zoals ze in de tekst/afbeelding staan; herbereken geen scores.
+- Geef uitsluitend het JSON-object terug, zonder extra tekst of toelichting.`;
 
     // 2) Ask LLM to normalize into our JSON schema
     const llmPayload = ocrOk
