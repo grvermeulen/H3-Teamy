@@ -10,9 +10,10 @@
     "prisma": {
       "command": "node",
       "args": ["prisma-mcp-server.js"],
+      "cwd": "C:\\Users\\GuidoV011337\\Projects\\H3-teamy\\H3-Teamy",
       "env": {
-        "DATABASE_URL": "your-database-url-here",
-        "DIRECT_DATABASE_URL": "your-direct-database-url-here"
+        "DATABASE_URL": "prisma://accelerate.prisma-data.net/?api_key=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqd3RfaWQiOjEsInNlY3VyZV9rZXkiOiJza190TUY2WG52c00xVk5fYjFQYlY5RGMiLCJhcGlfa2V5IjoiMDFLMzlRU1FCRFlWNzVFV1NNN1g4QjAxOEsiLCJ0ZW5hbnRfaWQiOiJlN2ZjZGUzNjdkMjIzZjI4OTkxYzQ3ZmU5ZDdkYTgyN2ZkMTI3NzUxM2IyYzdlYzhmNzJiYzFlODJiZDYzYThlIiwiaW50ZXJuYWxfc2VjcmV0IjoiODJiMmI3NjAtNGNkMi00NjQ5LTk3NmYtYzE2NmI1MjIwNTdlIn0.lr1Fm60EN3pwgHAC3DmCW_I2yH6-wB5DHhVPP4UoIQM",
+        "DIRECT_DATABASE_URL": "postgresql://your-actual-database-connection-string-here"
       }
     }
   }

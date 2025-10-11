@@ -2,10 +2,10 @@ import EventList from "../components/EventList";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 
-import { fetchTeamEvents } from "../lib/ical";
+import { getSeasonEvents } from "../lib/events";
 
 export default async function Page() {
-  const events = await fetchTeamEvents();
+  const events = await getSeasonEvents(false);
   const SessionStatus = dynamic(() => import("../components/SessionStatus"), { ssr: false });
   return (
     <main>

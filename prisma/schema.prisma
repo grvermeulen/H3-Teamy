@@ -9,6 +9,21 @@ generator client {
   engineType = "binary"
 }
 
+model Event {
+  id           String   @id // primary key: prefer iCal UID; fallback to canonical ID if UID missing
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  uid          String?  @unique
+  canonicalId  String?
+  title        String
+  start        DateTime
+  end          DateTime?
+  location     String?
+  description  String?
+
+  @@index([start])
+}
+
 model User {
   id        String  @id @default(cuid())
   createdAt DateTime @default(now())

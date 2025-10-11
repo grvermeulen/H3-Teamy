@@ -3,12 +3,12 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
-  CallToolRequest,
+  CallToolRequestSchema,
   ErrorCode,
-  ListResourcesRequest,
-  ListToolsRequest,
+  ListResourcesRequestSchema,
+  ListToolsRequestSchema,
   McpError,
-  ReadResourceRequest,
+  ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { PrismaClient } from '@prisma/client';
 
@@ -34,7 +34,7 @@ class PrismaMCPServer {
 
   setupHandlers() {
     // List available tools
-    this.server.setRequestHandler(ListToolsRequest, async () => {
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: [
           {
@@ -113,7 +113,7 @@ class PrismaMCPServer {
     });
 
     // Handle tool calls
-    this.server.setRequestHandler(CallToolRequest, async (request) => {
+    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
       try {
@@ -137,7 +137,7 @@ class PrismaMCPServer {
     });
 
     // List available resources
-    this.server.setRequestHandler(ListResourcesRequest, async () => {
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
       return {
         resources: [
           {
@@ -157,7 +157,7 @@ class PrismaMCPServer {
     });
 
     // Read resources
-    this.server.setRequestHandler(ReadResourceRequest, async (request) => {
+    this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
       const { uri } = request.params;
 
       switch (uri) {

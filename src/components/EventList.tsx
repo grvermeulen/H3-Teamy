@@ -99,17 +99,23 @@ export default function EventList({ events }: Props) {
     }
   }
 
+  const [showPast, setShowPast] = useState(false);
+
   const grouped = useMemo(() => {
+    if (showPast) return [...events];
     const now = Date.now();
-    const upcoming = events.filter((e) => new Date(e.start).getTime() >= now);
-    return upcoming;
-  }, [events]);
+    return events.filter((e) => new Date(e.start).getTime() >= now);
+  }, [events, showPast]);
 
   return (
     <div className="list">
       <div className="row" style={{ marginBottom: 12, alignItems: "center", gap: 8 }}>
         <button onClick={() => void loadAll()} disabled={isRefreshing}>{isRefreshing ? "Refreshing…" : "Refresh"}</button>
         <span className="muted">Pull to refresh: focus page or press Refresh</span>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <input type="checkbox" checked={showPast} onChange={(e) => setShowPast(e.target.checked)} />
+          Show past matches
+        </label>
       </div>
       {grouped.map((evt) => {
         const start = new Date(evt.start);
