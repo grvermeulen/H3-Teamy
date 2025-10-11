@@ -18,7 +18,7 @@ const memoryStore = new Map<string, RsvpStatus>();
 // Expect standard env: KV_REST_API_URL, KV_REST_API_TOKEN, KV_REST_API_READ_ONLY_TOKEN, KV_URL
 // Also supports Redis via REDIS_URL using ioredis
 let redisClient: any = null;
-async function getRedis() {
+export async function getRedis() {
   if (redisClient) return redisClient;
   const url = process.env.REDIS_URL;
   if (!url) return null;
@@ -42,7 +42,6 @@ async function kvGet(key: string): Promise<RsvpStatus | null> {
     headers: {
       Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
     },
-    cache: "no-store",
   });
   if (!res.ok) return null;
   const data = await res.json().catch(() => ({} as any));
@@ -145,7 +144,15 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
 export async function listEventRsvps(eventId: string): Promise<{ userId: string; status: RsvpStatus }[]> {
   const p = await getPrisma();
   if (p) {
-    const rows = await p.rsvp.findMany({ where: { eventId } });
+    // Optimized query: get RSVPs with user data in one query to avoid N+1 problem
+    const rows = await p.rsvp.findMany({
+      where: { eventId },
+      include: {
+        user: {
+          select: { id: true, firstName: true, lastName: true }
+        }
+      }
+    });
     return rows.map((r: any) => ({ userId: r.userId, status: (r.status as RsvpStatus) ?? null }));
   }
   const redis = await getRedis();

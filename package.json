@@ -12,14 +12,14 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
-    "@prisma/client": "5.19.1",
+    "@prisma/client": "^6.17.1",
+    "@sentry/nextjs": "^10.19.0",
     "bcryptjs": "^2.4.3",
     "ical": "^0.8.0",
     "ioredis": "^5.4.1",
     "next": "14.2.33",
     "next-auth": "^4.24.7",
     "node-ical": "^0.20.1",
-    "prisma": "5.19.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "sharp": "^0.33.4"
@@ -31,6 +31,7 @@
     "@types/react-dom": "18.2.22",
     "eslint": "8.57.0",
     "eslint-config-next": "14.2.5",
+    "prisma": "^6.17.1",
     "typescript": "5.4.5"
   }
 }

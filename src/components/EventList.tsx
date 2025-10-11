@@ -19,7 +19,7 @@ export default function EventList({ events }: Props) {
     setIsRefreshing(true);
     const rsvpEntries = await Promise.all(
       events.map(async (e) => {
-        const res = await fetch(`/api/rsvp?eventId=${encodeURIComponent(e.id)}`, { cache: "no-store" });
+        const res = await fetch(`/api/rsvp?eventId=${encodeURIComponent(e.id)}`);
         if (!res.ok) return [e.id, null] as const;
         const data = await res.json();
         return [e.id, (data?.status ?? null) as RsvpStatus] as const;
@@ -27,7 +27,7 @@ export default function EventList({ events }: Props) {
     );
     const countsEntries = await Promise.all(
       events.map(async (e) => {
-        const res = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(e.id)}&countsOnly=1`, { cache: "no-store" });
+        const res = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(e.id)}&countsOnly=1`);
         if (!res.ok) return [e.id, { yes: 0, no: 0, maybe: 0 }, { yes: [], no: [], maybe: [] }] as const;
         const data = await res.json();
         return [e.id, data.counts as { yes: number; no: number; maybe: number }, data.lists as any] as const;
@@ -79,7 +79,7 @@ export default function EventList({ events }: Props) {
       return;
     }
     // Refresh counts/lists for this event
-    const listRes = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(id)}`, { cache: "no-store" });
+    const listRes = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(id)}`);
     if (listRes.ok) {
       const data = await listRes.json();
       setCounts((p) => ({ ...p, [id]: data.counts }));
@@ -90,7 +90,7 @@ export default function EventList({ events }: Props) {
 
   async function ensureListsLoaded(id: string) {
     if (loadedLists[id]) return;
-    const res = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(id)}`, { cache: "no-store" });
+    const res = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(id)}`);
     if (res.ok) {
       const data = await res.json();
       setCounts((prev) => ({ ...prev, [id]: data.counts }));

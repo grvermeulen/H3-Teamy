@@ -16,8 +16,8 @@ export default function ProfilePage() {
 
   async function load() {
     const [p, s] = await Promise.all([
-      fetch("/api/profile", { cache: "no-store" }).then((r) => r.json()),
-      fetch("/api/identity/status", { cache: "no-store" }).then((r) => r.json()),
+      fetch("/api/profile").then((r) => r.json()),
+      fetch("/api/identity/status").then((r) => r.json()),
     ]);
     setProfile(p.user);
     if (p.user) {
