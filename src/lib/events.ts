@@ -72,7 +72,8 @@ export async function getSeasonEvents(includePast: boolean): Promise<Array<{
 }>> {
   const now = new Date();
   const where = includePast ? {} : { start: { gte: now } };
-  const rows = await prisma.event.findMany({ where, orderBy: { start: "asc" } });
+  // If table doesn't exist yet (migration not applied), return empty list gracefully
+  const rows = await prisma.event.findMany({ where, orderBy: { start: "asc" } }).catch(() => [] as any[]);
   return rows.map((r) => ({
     id: r.id,
     uid: r.uid,
