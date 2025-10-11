@@ -9,12 +9,19 @@
     "lint": "next lint",
     "prisma:generate": "prisma generate",
     "prebuild": "node scripts/generate-icons.js",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "mcp:github": "node ./node_modules/.bin/github-mcp-server",
+    "mcp:prisma": "node prisma-mcp-server.js",
+    "mcp:install": "node -e \"console.log('MCP servers installed. Configure your MCP client with mcp-config.json')\""
   },
   "dependencies": {
+    "@mastra/mcp": "^0.13.4",
+    "@modelcontextprotocol/sdk": "^1.20.0",
     "@prisma/client": "^6.17.1",
     "@sentry/nextjs": "^10.19.0",
+    "@vercel/mcp-adapter": "^1.0.0",
     "bcryptjs": "^2.4.3",
+    "github-mcp-server": "^1.8.7",
     "ical": "^0.8.0",
     "ioredis": "^5.4.1",
     "next": "14.2.33",

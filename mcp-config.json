@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "node",
+      "args": ["./node_modules/.bin/github-mcp-server"],
+      "env": {
+        "GITHUB_TOKEN": "your-github-token-here"
+      }
+    },
+    "prisma": {
+      "command": "node",
+      "args": ["prisma-mcp-server.js"],
+      "env": {
+        "DATABASE_URL": "your-database-url-here",
+        "DIRECT_DATABASE_URL": "your-direct-database-url-here"
+      }
+    }
+  }
+}
