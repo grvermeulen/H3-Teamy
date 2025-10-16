@@ -50,6 +50,9 @@ jobs:
         run: node scripts/ai-review.js
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
 
       - name: Skip (no high-risk changes)
         if: steps.risk.outputs.risk != 'true'
