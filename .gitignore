@@ -1,12 +1,33 @@
-node_modules
-.next
-.vercel
-*.log
+﻿# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+.vercel/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+**/*.log
+
+# Build outputs
+coverage/
+dist/
+build/
+
+# Env
 .env
 .env.*
+.env*.local
 
-# Local curl/browser cookie jars (should never be committed)
+# Local cookie jars
 .cookie_*
 
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
 
-.env*.local

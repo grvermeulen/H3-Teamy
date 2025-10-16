@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import type { TeamEvent, RsvpStatus } from "../types";
+import Link from "next/link";
+import ReportLink from "./ReportLink";
+import GenerateReportButton from "./GenerateReportButton";
+import ReportPreview from "./ReportPreview";
 
 type Props = { events: TeamEvent[] };
 
@@ -9,52 +13,108 @@ type RsvpMap = Record<string, RsvpStatus>;
 
 export default function EventList({ events }: Props) {
   const [rsvpMap, setRsvpMap] = useState<RsvpMap>({});
-  const [counts, setCounts] = useState<Record<string, { yes: number; no: number; maybe: number }>>({});
-  const [lists, setLists] = useState<Record<string, { yes: { id: string; name: string }[]; no: { id: string; name: string }[]; maybe: { id: string; name: string }[] }>>({});
+  const [counts, setCounts] = useState<
+    Record<string, { yes: number; no: number; maybe: number }>
+  >({});
+  const [lists, setLists] = useState<
+    Record<
+      string,
+      {
+        yes: { id: string; name: string }[];
+        no: { id: string; name: string }[];
+        maybe: { id: string; name: string }[];
+      }
+    >
+  >({});
   const [loadedLists, setLoadedLists] = useState<Record<string, boolean>>({});
   const [mounted, setMounted] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
-  async function loadAll() {
+  const loadAll = useCallback(async () => {
     setIsRefreshing(true);
+
+    // Always load public counts
+    const countsEntries = await Promise.all(
+      events.map(async (e) => {
+        const res = await fetch(
+          `/api/rsvp/list?eventId=${encodeURIComponent(e.id)}&countsOnly=1`,
+          { cache: "no-store" },
+        );
+        if (!res.ok) return [e.id, { yes: 0, no: 0, maybe: 0 }] as const;
+        const data = await res.json();
+        return [
+          e.id,
+          data.counts as { yes: number; no: number; maybe: number },
+        ] as const;
+      }),
+    );
+    const cMap: Record<string, { yes: number; no: number; maybe: number }> = {};
+    for (const [id, c] of countsEntries) {
+      cMap[id] = c;
+    }
+    setCounts(cMap);
+
+    if (!loggedIn) {
+      // If not logged in, only show counts
+      setRsvpMap({});
+      setLists({});
+      setIsRefreshing(false);
+      return;
+    }
+
+    // If logged in, also load personal RSVP data and lists
     const rsvpEntries = await Promise.all(
       events.map(async (e) => {
-        const res = await fetch(`/api/rsvp?eventId=${encodeURIComponent(e.id)}`, { cache: "no-store" });
+        const res = await fetch(
+          `/api/rsvp?eventId=${encodeURIComponent(e.id)}`,
+          { cache: "no-store" },
+        );
         if (!res.ok) return [e.id, null] as const;
         const data = await res.json();
         return [e.id, (data?.status ?? null) as RsvpStatus] as const;
-      })
-    );
-    const countsEntries = await Promise.all(
-      events.map(async (e) => {
-        const res = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(e.id)}&countsOnly=1`, { cache: "no-store" });
-        if (!res.ok) return [e.id, { yes: 0, no: 0, maybe: 0 }, { yes: [], no: [], maybe: [] }] as const;
-        const data = await res.json();
-        return [e.id, data.counts as { yes: number; no: number; maybe: number }, data.lists as any] as const;
-      })
+      }),
     );
     const map: RsvpMap = {};
-    const cMap: Record<string, { yes: number; no: number; maybe: number }> = {};
-    const lMap: Record<string, { yes: { id: string; name: string }[]; no: { id: string; name: string }[]; maybe: { id: string; name: string }[] }> = {};
     for (const [id, status] of rsvpEntries) map[id] = status;
-    for (const [id, c, l] of countsEntries) { cMap[id] = c; lMap[id] = l; }
     setRsvpMap(map);
-    setCounts(cMap);
-    setLists(lMap);
+    setLists({}); // Will be loaded on demand when user opens RSVP list
     setIsRefreshing(false);
-  }
+  }, [events, loggedIn]);
+
+  // Check authentication on mount only
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const me = await fetch("/api/me", { cache: "no-store" })
+          .then((r) => r.json())
+          .catch(() => ({ user: null }));
+        const isLoggedIn = Boolean(me?.user?.id);
+        setLoggedIn(isLoggedIn);
+      } catch {
+        setLoggedIn(false);
+      }
+      setAuthChecked(true);
+    }
+    checkAuth();
+  }, []);
 
   useEffect(() => {
-    void loadAll();
-  }, [events]);
+    if (authChecked) {
+      void loadAll();
+    }
+  }, [authChecked, loadAll]);
 
   useEffect(() => {
     function onFocus() {
-      void loadAll();
+      if (authChecked) {
+        void loadAll();
+      }
     }
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
-  }, [events]);
+  }, [authChecked, loadAll]);
 
   useEffect(() => {
     setMounted(true);
@@ -72,14 +132,18 @@ export default function EventList({ events }: Props) {
       // profile incomplete → revert optimistic UI and redirect to profile
       setRsvpMap((p) => ({ ...p, [id]: prev }));
       if (typeof window !== "undefined") {
-        const message = "Please complete your profile (first and last name) before RSVP-ing.";
+        const message =
+          "Please complete your profile (first and last name) before RSVP-ing.";
         alert(message);
         window.location.href = "/profile";
       }
       return;
     }
     // Refresh counts/lists for this event
-    const listRes = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(id)}`, { cache: "no-store" });
+    const listRes = await fetch(
+      `/api/rsvp/list?eventId=${encodeURIComponent(id)}`,
+      { cache: "no-store" },
+    );
     if (listRes.ok) {
       const data = await listRes.json();
       setCounts((p) => ({ ...p, [id]: data.counts }));
@@ -90,7 +154,10 @@ export default function EventList({ events }: Props) {
 
   async function ensureListsLoaded(id: string) {
     if (loadedLists[id]) return;
-    const res = await fetch(`/api/rsvp/list?eventId=${encodeURIComponent(id)}`, { cache: "no-store" });
+    const res = await fetch(
+      `/api/rsvp/list?eventId=${encodeURIComponent(id)}`,
+      { cache: "no-store" },
+    );
     if (res.ok) {
       const data = await res.json();
       setCounts((prev) => ({ ...prev, [id]: data.counts }));
@@ -101,15 +168,46 @@ export default function EventList({ events }: Props) {
 
   const grouped = useMemo(() => {
     const now = Date.now();
-    const upcoming = events.filter((e) => new Date(e.start).getTime() >= now);
-    return upcoming;
+    const allSorted = events
+      .slice()
+      .sort(
+        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+      );
+    const idx = allSorted.findIndex((e) => new Date(e.start).getTime() >= now);
+    const future = idx === -1 ? [] : allSorted.slice(idx);
+    // last two past (if available)
+    const past = (idx === -1 ? allSorted : allSorted.slice(0, idx)).slice(-2);
+    // If there are no past items at all yet (first ever match hasn't been played), just return future
+    // But once the very first match has been played, ensure at least that single past match remains visible
+    return [...past, ...future];
   }, [events]);
+
+  // Don't render anything until authentication is checked
+  if (!authChecked) {
+    return (
+      <div className="list">
+        <div className="muted">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="list">
-      <div className="row" style={{ marginBottom: 12, alignItems: "center", gap: 8 }}>
-        <button onClick={() => void loadAll()} disabled={isRefreshing}>{isRefreshing ? "Refreshing…" : "Refresh"}</button>
-        <span className="muted">Pull to refresh: focus page or press Refresh</span>
+      <div
+        className="row"
+        style={{
+          marginBottom: 12,
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        <button onClick={() => void loadAll()} disabled={isRefreshing}>
+          {isRefreshing ? "Refreshing…" : "Refresh"}
+        </button>
+        <span className="muted" style={{ fontSize: 13 }}>
+          Pull to refresh: focus page or press Refresh
+        </span>
       </div>
       {grouped.map((evt) => {
         const start = new Date(evt.start);
@@ -117,81 +215,143 @@ export default function EventList({ events }: Props) {
         const status = rsvpMap[evt.id] || null;
         return (
           <div className="card" key={evt.id}>
-            <div className="row">
+            <div className="row" style={{ flexWrap: "wrap" }}>
               <div className="grow">
                 <div className="eventTitle">{evt.title}</div>
                 <div className="eventMeta muted">
                   <span className="badge badge-date" suppressHydrationWarning>
-                    {mounted ? start.toLocaleDateString(undefined, { weekday: "short", day: "2-digit", month: "short" }) : ""}
+                    {mounted
+                      ? start.toLocaleDateString(undefined, {
+                          weekday: "short",
+                          day: "2-digit",
+                          month: "short",
+                        })
+                      : ""}
                   </span>
                   <span className="badge badge-time" suppressHydrationWarning>
-                    {mounted ? `${start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${end ? ` – ${end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}` : ""}
+                    {mounted
+                      ? `${start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${end ? ` – ${end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}`
+                      : ""}
                   </span>
-                  {evt.location ? <span className="badge">{evt.location}</span> : null}
+                  {evt.location ? (
+                    <span className="badge">{evt.location}</span>
+                  ) : null}
                   {counts[evt.id] ? (
-                    <span className="badge">Yes <span className="count-yes">{counts[evt.id].yes}</span> · Maybe <span className="count-maybe">{counts[evt.id].maybe}</span> · No <span className="count-no">{counts[evt.id].no}</span></span>
+                    <span className="badge">
+                      Yes{" "}
+                      <span className="count-yes">{counts[evt.id].yes}</span> ·
+                      Maybe{" "}
+                      <span className="count-maybe">
+                        {counts[evt.id].maybe}
+                      </span>{" "}
+                      · No <span className="count-no">{counts[evt.id].no}</span>
+                    </span>
                   ) : null}
                 </div>
               </div>
-              <div className="rsvp">
-                <button
-                  className={status === "yes" ? "active-yes" : ""}
-                  onClick={() => setRsvp(evt.id, status === "yes" ? null : "yes")}
-                >Yes</button>
-                <button
-                  className={status === "maybe" ? "active-maybe" : ""}
-                  onClick={() => setRsvp(evt.id, status === "maybe" ? null : "maybe")}
-                >Maybe</button>
-                <button
-                  className={status === "no" ? "active-no" : ""}
-                  onClick={() => setRsvp(evt.id, status === "no" ? null : "no")}
-                >No</button>
-              </div>
+              {loggedIn ? (
+                <div
+                  className="rsvp"
+                  style={{ width: "100%", justifyContent: "flex-end" }}
+                >
+                  <button
+                    className={status === "yes" ? "active-yes" : ""}
+                    onClick={() =>
+                      setRsvp(evt.id, status === "yes" ? null : "yes")
+                    }
+                  >
+                    Yes
+                  </button>
+                  <button
+                    className={status === "maybe" ? "active-maybe" : ""}
+                    onClick={() =>
+                      setRsvp(evt.id, status === "maybe" ? null : "maybe")
+                    }
+                  >
+                    Maybe
+                  </button>
+                  <button
+                    className={status === "no" ? "active-no" : ""}
+                    onClick={() =>
+                      setRsvp(evt.id, status === "no" ? null : "no")
+                    }
+                  >
+                    No
+                  </button>
+                </div>
+              ) : null}
             </div>
-            {evt.description ? (
-              <div className="muted" style={{ marginTop: 8 }}>{evt.description}</div>
+            {/* Match report controls (bottom-right) */}
+            {loggedIn ? <ReportPreview eventId={evt.id} /> : null}
+            {loggedIn ? (
+              <GenerateReportButton eventId={evt.id} opponent={evt.title} />
             ) : null}
-            <details style={{ marginTop: 10 }} onToggle={(e) => {
-              const el = e.currentTarget as HTMLDetailsElement;
-              if (el.open) void ensureListsLoaded(evt.id);
-            }}>
-              <summary className="muted">Show RSVP list</summary>
-              <div className="row" style={{ gap: 16, marginTop: 8, alignItems: "flex-start" }}>
-                <div>
-                  <div className="badge">Yes</div>
-                  <div className="muted" style={{ marginTop: 4 }}>
-                    {(lists[evt.id]?.yes || []).map((u) => (<div key={u.id}>{u.name}</div>))}
-                    {(lists[evt.id]?.yes || []).length === 0 ? <div>—</div> : null}
-                  </div>
-                </div>
-                <div>
-                  <div className="badge">Maybe</div>
-                  <div className="muted" style={{ marginTop: 4 }}>
-                    {(lists[evt.id]?.maybe || []).map((u) => (<div key={u.id}>{u.name}</div>))}
-                    {(lists[evt.id]?.maybe || []).length === 0 ? <div>—</div> : null}
-                  </div>
-                </div>
-                <div>
-                  <div className="badge">No</div>
-                  <div className="muted" style={{ marginTop: 4 }}>
-                    {(lists[evt.id]?.no || []).map((u) => (<div key={u.id}>{u.name}</div>))}
-                    {(lists[evt.id]?.no || []).length === 0 ? <div>—</div> : null}
-                  </div>
-                </div>
-                <div>
-                  <div className="badge">1e wissel:</div>
-                  <div className="muted" style={{ marginTop: 4 }}>
-                    <div>Hans</div>
-                  </div>
-                </div>
+            {evt.description ? (
+              <div className="muted" style={{ marginTop: 8 }}>
+                {evt.description}
               </div>
-            </details>
+            ) : null}
+            {loggedIn ? (
+              <details
+                style={{ marginTop: 10 }}
+                onToggle={(e) => {
+                  const el = e.currentTarget as HTMLDetailsElement;
+                  if (el.open) void ensureListsLoaded(evt.id);
+                }}
+              >
+                <summary className="muted">Show RSVP list</summary>
+                <div
+                  className="row"
+                  style={{ gap: 16, marginTop: 8, alignItems: "flex-start" }}
+                >
+                  <div>
+                    <div className="badge">Yes</div>
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      {(lists[evt.id]?.yes || []).map((u) => (
+                        <div key={u.id}>{u.name}</div>
+                      ))}
+                      {(lists[evt.id]?.yes || []).length === 0 ? (
+                        <div>—</div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="badge">Maybe</div>
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      {(lists[evt.id]?.maybe || []).map((u) => (
+                        <div key={u.id}>{u.name}</div>
+                      ))}
+                      {(lists[evt.id]?.maybe || []).length === 0 ? (
+                        <div>—</div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="badge">No</div>
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      {(lists[evt.id]?.no || []).map((u) => (
+                        <div key={u.id}>{u.name}</div>
+                      ))}
+                      {(lists[evt.id]?.no || []).length === 0 ? (
+                        <div>—</div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="badge">1e wissel:</div>
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      <div>Hans</div>
+                    </div>
+                  </div>
+                </div>
+              </details>
+            ) : null}
           </div>
         );
       })}
-      {grouped.length === 0 ? <div className="muted">No upcoming events.</div> : null}
+      {grouped.length === 0 ? (
+        <div className="muted">No recent or upcoming matches.</div>
+      ) : null}
     </div>
   );
 }
-
-
