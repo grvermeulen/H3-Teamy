@@ -1,6 +1,6 @@
 import EventList from "../components/EventList";
 import Link from "next/link";
-import dynamic from "next/dynamic";
+import NextDynamic from "next/dynamic";
 
 import { getSeasonEvents } from "../lib/events";
 
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function Page() {
   let events = await getSeasonEvents(false).catch(() => []);
-  const SessionStatus = dynamic(() => import("../components/SessionStatus"), { ssr: false });
+  const SessionStatus = NextDynamic(() => import("../components/SessionStatus"), { ssr: false });
   return (
     <main>
       <div className="container">
