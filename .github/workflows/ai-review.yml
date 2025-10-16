@@ -1,0 +1,56 @@
+name: AI Review (High-Risk)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  ai_review:
+    name: AI Review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect high-risk changes
+        id: risk
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl -s -H "Authorization: Bearer $GH_TOKEN" \
+               -H "Accept: application/vnd.github+json" \
+               "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/files" > files.json
+          files=$(jq -r '.[].filename' files.json)
+          echo "$files" > files.txt
+          echo "Changed files:\n$files"
+          risk_patterns='^src/app/api/|^src/lib/|^prisma/|^src/middleware|^src/app/middleware|^src/app/(admin|trainer)/'
+          if echo "$files" | grep -E "$risk_patterns" >/dev/null; then
+            echo "risk=true" >> $GITHUB_OUTPUT
+          else
+            echo "risk=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Node
+        if: steps.risk.outputs.risk == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        if: steps.risk.outputs.risk == 'true'
+        run: npm ci
+
+      - name: AI Review
+        if: steps.risk.outputs.risk == 'true'
+        run: node scripts/ai-review.js
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Skip (no high-risk changes)
+        if: steps.risk.outputs.risk != 'true'
+        run: echo "No high-risk changes detected. Skipping AI review."
