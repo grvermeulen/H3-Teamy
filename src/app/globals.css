@@ -89,4 +89,7 @@ h1, h2, h3 {
   border: 1px solid color-mix(in oklab, var(--time) 35%, transparent);
 }
 
+.attendee { display: flex; align-items: center; gap: 8px; margin: 2px 0; }
+.attendance-badge { width: 18px; height: 18px; border-radius: 4px; object-fit: cover; }
+
 

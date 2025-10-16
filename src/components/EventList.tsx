@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { TeamEvent, RsvpStatus } from "../types";
+import type { TeamEvent, RsvpStatus, EventRsvpList } from "../types";
 
 type Props = { events: TeamEvent[] };
 
@@ -10,7 +10,7 @@ type RsvpMap = Record<string, RsvpStatus>;
 export default function EventList({ events }: Props) {
   const [rsvpMap, setRsvpMap] = useState<RsvpMap>({});
   const [counts, setCounts] = useState<Record<string, { yes: number; no: number; maybe: number }>>({});
-  const [lists, setLists] = useState<Record<string, { yes: { id: string; name: string }[]; no: { id: string; name: string }[]; maybe: { id: string; name: string }[] }>>({});
+  const [lists, setLists] = useState<Record<string, EventRsvpList>>({});
   const [loadedLists, setLoadedLists] = useState<Record<string, boolean>>({});
   const [mounted, setMounted] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -35,7 +35,7 @@ export default function EventList({ events }: Props) {
     );
     const map: RsvpMap = {};
     const cMap: Record<string, { yes: number; no: number; maybe: number }> = {};
-    const lMap: Record<string, { yes: { id: string; name: string }[]; no: { id: string; name: string }[]; maybe: { id: string; name: string }[] }> = {};
+    const lMap: Record<string, EventRsvpList> = {};
     for (const [id, status] of rsvpEntries) map[id] = status;
     for (const [id, c, l] of countsEntries) { cMap[id] = c; lMap[id] = l; }
     setRsvpMap(map);
@@ -160,21 +160,48 @@ export default function EventList({ events }: Props) {
                 <div>
                   <div className="badge">Yes</div>
                   <div className="muted" style={{ marginTop: 4 }}>
-                    {(lists[evt.id]?.yes || []).map((u) => (<div key={u.id}>{u.name}</div>))}
+                    {(lists[evt.id]?.yes || []).map((u) => (
+                      <div key={u.id} className="attendee">
+                        <img
+                          className="attendance-badge"
+                          src={`/badges/${u.badge?.slug ?? "none"}.svg`}
+                          alt={u.badge?.label ?? "No badge"}
+                        />
+                        <span>{u.name}</span>
+                      </div>
+                    ))}
                     {(lists[evt.id]?.yes || []).length === 0 ? <div>—</div> : null}
                   </div>
                 </div>
                 <div>
                   <div className="badge">Maybe</div>
                   <div className="muted" style={{ marginTop: 4 }}>
-                    {(lists[evt.id]?.maybe || []).map((u) => (<div key={u.id}>{u.name}</div>))}
+                    {(lists[evt.id]?.maybe || []).map((u) => (
+                      <div key={u.id} className="attendee">
+                        <img
+                          className="attendance-badge"
+                          src={`/badges/${u.badge?.slug ?? "none"}.svg`}
+                          alt={u.badge?.label ?? "No badge"}
+                        />
+                        <span>{u.name}</span>
+                      </div>
+                    ))}
                     {(lists[evt.id]?.maybe || []).length === 0 ? <div>—</div> : null}
                   </div>
                 </div>
                 <div>
                   <div className="badge">No</div>
                   <div className="muted" style={{ marginTop: 4 }}>
-                    {(lists[evt.id]?.no || []).map((u) => (<div key={u.id}>{u.name}</div>))}
+                    {(lists[evt.id]?.no || []).map((u) => (
+                      <div key={u.id} className="attendee">
+                        <img
+                          className="attendance-badge"
+                          src={`/badges/${u.badge?.slug ?? "none"}.svg`}
+                          alt={u.badge?.label ?? "No badge"}
+                        />
+                        <span>{u.name}</span>
+                      </div>
+                    ))}
                     {(lists[evt.id]?.no || []).length === 0 ? <div>—</div> : null}
                   </div>
                 </div>
