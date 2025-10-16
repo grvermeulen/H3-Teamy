@@ -1,5 +1,6 @@
 import { prisma } from "./db";
 import { fetchTeamEvents } from "./ical";
+import type { TeamEvent } from "../types";
 
 type UpsertResult = { created: number; updated: number };
 
@@ -61,27 +62,21 @@ export async function syncEventsFromIcal(): Promise<UpsertResult> {
   return { created, updated };
 }
 
-export async function getSeasonEvents(includePast: boolean): Promise<Array<{
-  id: string;
-  uid?: string | null;
-  title: string;
-  start: string;
-  end?: string | null;
-  location?: string | null;
-  description?: string | null;
-}>> {
+export async function getSeasonEvents(includePast: boolean): Promise<TeamEvent[]> {
   const now = new Date();
   const where = includePast ? {} : { start: { gte: now } };
   // If table doesn't exist yet (migration not applied), return empty list gracefully
-  const rows = await prisma.event.findMany({ where, orderBy: { start: "asc" } }).catch(() => [] as any[]);
+  const rows = await prisma.event
+    .findMany({ where, orderBy: { start: "asc" } })
+    .catch(() => [] as any[]);
   return rows.map((r) => ({
     id: r.id,
-    uid: r.uid,
+    uid: r.uid ?? undefined,
     title: r.title,
     start: r.start.toISOString(),
-    end: r.end ? r.end.toISOString() : null,
-    location: r.location,
-    description: r.description,
+    end: r.end ? r.end.toISOString() : undefined,
+    location: r.location ?? undefined,
+    description: r.description ?? undefined,
   }));
 }
 

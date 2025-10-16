@@ -7,7 +7,7 @@ import { getSeasonEvents } from "../lib/events";
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
-  let events = await getSeasonEvents(false).catch(() => []);
+  let events = await getSeasonEvents(false).catch(() => [] as import("../types").TeamEvent[]);
   const SessionStatus = NextDynamic(() => import("../components/SessionStatus"), { ssr: false });
   return (
     <main>
