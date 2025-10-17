@@ -3,8 +3,6 @@ import "./globals.css";
 import Providers from "../components/Providers";
 import dynamic from "next/dynamic";
 
-import BottomNav from "../components/BottomNav";
-
 export const metadata: Metadata = {
   title: "De Rijn H3 Teamy MVP",
   description: "Waterpolo team calendar and RSVP",
@@ -49,7 +47,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <footer className="container" style={{ marginTop: 24 }}>
           <a href="/privacy" className="muted">Privacy policy</a>
         </footer>
-        <BottomNav />
         <script dangerouslySetInnerHTML={{ __html: `
           if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
