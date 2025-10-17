@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Providers from "../components/Providers";
-import AuthBar from "../components/AuthBar";
 
 export const metadata: Metadata = {
   title: "De Rijn H3 Teamy MVP",
@@ -22,8 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png" />
       </head>
       <body>
-        <Providers>
-          <header className="container" style={{ display: "flex", alignItems: "center", gap: 12, paddingTop: 20 }}>
+        <header className="container" style={{ display: "flex", alignItems: "center", gap: 12, paddingTop: 20 }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={process.env.NEXT_PUBLIC_LOGO_URL || "/logo.svg"}
@@ -36,13 +34,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <div style={{ fontWeight: 700, fontSize: 18 }}>De Rijn H3 — Waterpolo</div>
               <div className="muted" style={{ fontSize: 13 }}>Matches from Sportlink • RSVP on device</div>
             </div>
-          </header>
-          <AuthBar />
-          {children}
-          <footer className="container" style={{ marginTop: 24 }}>
-            <a href="/privacy" className="muted">Privacy policy</a>
-          </footer>
-        </Providers>
+        </header>
+        <Providers>{children}</Providers>
+        <footer className="container" style={{ marginTop: 24 }}>
+          <a href="/privacy" className="muted">Privacy policy</a>
+        </footer>
         <script dangerouslySetInnerHTML={{ __html: `
           if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {

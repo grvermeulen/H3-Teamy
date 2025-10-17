@@ -35,7 +35,6 @@ model User {
   // Optional: link to sessions/devices in future
   rsvps     Rsvp[]
   identities Identity[]
-  passwordResetTokens PasswordResetToken[]
 }
 
 model Rsvp {
@@ -72,15 +71,6 @@ model Identity {
   @@index([userId])
 }
 
-model PasswordResetToken {
-  token     String   @id
-  userId    String
-  createdAt DateTime @default(now())
-  usedAt    DateTime?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
+// Password reset model removed
 
 
