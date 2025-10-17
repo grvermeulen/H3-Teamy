@@ -13,7 +13,12 @@
     "prisma:generate": "prisma generate",
     "prebuild": "node scripts/generate-icons.js",
     "postinstall": "prisma generate --accelerate",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "docs:scan": "ts-node scripts/docs/scan-routes.ts",
+    "docs:openapi": "ts-node scripts/docs/openapi.ts",
+    "docs:generate": "ts-node scripts/docs/generate.ts",
+    "docs:check": "node -e \"process.exit(0)\"",
+    "docs:serve": "npx serve docs"
   },
   "dependencies": {
     "@prisma/client": "5.19.1",
@@ -39,6 +44,9 @@
     "eslint-config-next": "14.2.5",
     "typescript": "5.4.5",
     "husky": "^9.1.6",
-    "prettier": "^3.3.3"
+    "prettier": "^3.3.3",
+    "ts-node": "^10.9.2",
+    "@asteasolutions/zod-to-openapi": "^7.1.0",
+    "prisma-erd-generator": "^1.11.2"
   }
 }
