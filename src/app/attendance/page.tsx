@@ -61,7 +61,8 @@ export default function AttendanceOverview() {
         <div className="list">
           {sorted.map((r) => {
             const rr = recentMap.get(r.userId);
-            const badge = getBadgeForAttendance(r.pct); // Badge based on season percentage only
+            const badge = getBadgeForAttendance(r.pct); // season-based
+            const tierClass = `badge-${badge.slug}` as const;
             return (
               <div key={r.userId} className="card">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -69,7 +70,7 @@ export default function AttendanceOverview() {
                   <div className="row" style={{ gap: 8 }}>
                     <div className="badge">{r.attended}/{r.total} ({r.pct}%)</div>
                     {rr ? <div className="badge">{rr.attended}/{recentTotal} ({rr.pct}%)</div> : null}
-                    <div className="badge">{badge.label}</div>
+                    <div className={`badge ${tierClass}`}>{badge.label}</div>
                   </div>
                 </div>
               </div>

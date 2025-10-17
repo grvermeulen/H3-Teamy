@@ -82,6 +82,12 @@ h1, h2, h3 {
   font-size: 12px;
 }
 
+/* Attendance tier badges */
+.badge-rookie { background: color-mix(in oklab, #f59e0b 18%, transparent); color: #ffd89e; border: 1px solid color-mix(in oklab, #f59e0b 35%, transparent); }
+.badge-average { background: color-mix(in oklab, #22c55e 18%, transparent); color: #c9f7d1; border: 1px solid color-mix(in oklab, #22c55e 35%, transparent); }
+.badge-veteran { background: color-mix(in oklab, #3b82f6 18%, transparent); color: #cfe0ff; border: 1px solid color-mix(in oklab, #3b82f6 35%, transparent); }
+.badge-furniture { background: color-mix(in oklab, #a855f7 18%, transparent); color: #e5ccff; border: 1px solid color-mix(in oklab, #a855f7 35%, transparent); }
+
 .count-yes { color: var(--positive); }
 .count-no { color: var(--negative); }
 .count-maybe { color: var(--accent); }
