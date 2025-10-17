@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { createPasswordResetToken } from "../../../../lib/kv";
+import { createPasswordResetToken } from "../../../../../lib/kv";
 
 export async function POST(req: NextRequest) {
   return Sentry.startSpan(
@@ -11,7 +11,9 @@ export async function POST(req: NextRequest) {
         span.setAttribute("email_present", Boolean(email));
         if (!email) return NextResponse.json({ ok: true });
 
-        const { ok, token } = await createPasswordResetToken(String(email).toLowerCase());
+        const { ok, token } = await createPasswordResetToken(
+          String(email).toLowerCase(),
+        );
         const enableEmail = process.env.ENABLE_EMAIL === "true";
         const appUrl = process.env.APP_URL || "";
         const fromEmail = process.env.EMAIL_FROM || "";
@@ -42,8 +44,6 @@ export async function POST(req: NextRequest) {
         Sentry.captureException(error as any);
         return NextResponse.json({ ok: true }); // generic success to avoid enumeration
       }
-    }
+    },
   );
 }
-
-
