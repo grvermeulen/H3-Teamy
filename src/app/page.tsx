@@ -2,12 +2,18 @@ import EventList from "../components/EventList";
 import Link from "next/link";
 import NextDynamic from "next/dynamic";
 
-import { getSeasonEvents } from "../lib/events";
+import { getSeasonEvents, syncEventsFromIcal } from "../lib/events";
 
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
   let events = await getSeasonEvents(false).catch(() => [] as import("../types").TeamEvent[]);
+  if (!events || events.length === 0) {
+    try {
+      await syncEventsFromIcal();
+      events = await getSeasonEvents(false).catch(() => [] as import("../types").TeamEvent[]);
+    } catch {}
+  }
   const SessionStatus = NextDynamic(() => import("../components/SessionStatus"), { ssr: false });
   return (
     <main>
