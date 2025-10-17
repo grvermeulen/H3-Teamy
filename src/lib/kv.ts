@@ -14,6 +14,7 @@ async function getPrisma() {
 // Simple in-memory fallback stores (not persistent across server restarts)
 const memoryStore = new Map<string, RsvpStatus>();
 const memoryJson = new Map<string, string>();
+const memoryTtl = new Map<string, number>(); // unix ms expiration for local tokens
 
 // Vercel KV compatibility if provided via env
 // Expect standard env: KV_REST_API_URL, KV_REST_API_TOKEN, KV_REST_API_READ_ONLY_TOKEN, KV_URL
@@ -121,6 +122,8 @@ export async function kvGetJson<T = any>(key: string): Promise<T | null> {
       if (!raw) return null;
       try { return JSON.parse(raw) as T; } catch { return null; }
     }
+    const exp = memoryTtl.get(key);
+    if (typeof exp === "number" && Date.now() > exp) { memoryJson.delete(key); memoryTtl.delete(key); return null; }
     const raw = memoryJson.get(key);
     if (!raw) return null;
     try { return JSON.parse(raw) as T; } catch { return null; }
@@ -153,10 +156,60 @@ export async function kvDelete(key: string): Promise<void> {
   if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
     if (redis) { await redis.del(key).catch(() => {}); return; }
     memoryJson.delete(key);
+    memoryTtl.delete(key);
     return;
   }
   const url = `${process.env.KV_REST_API_URL}/del/${encodeURIComponent(key)}`;
   await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` } }).catch(() => {});
+}
+
+// Password reset token helpers
+import bcrypt from "bcryptjs";
+
+function makeToken(): string {
+  // short code for dev; can switch to uuid if preferred
+  return Math.random().toString(36).slice(2, 10).toUpperCase();
+}
+
+export async function createPasswordResetToken(email: string): Promise<{ ok: boolean; token?: string }>{
+  const p = await getPrisma();
+  const user = p ? await p.user.findFirst({ where: { email } }) : null;
+  if (!user) return { ok: true }; // do not leak existence
+  const token = makeToken();
+  const key = `pwreset:${token}`;
+  const redis = await getRedis();
+  const ttlSec = 15 * 60;
+  if (redis) {
+    await redis.set(key, user.id, "EX", ttlSec);
+  } else {
+    memoryJson.set(key, JSON.stringify({ userId: user.id }));
+    memoryTtl.set(key, Date.now() + ttlSec * 1000);
+  }
+  return { ok: true, token };
+}
+
+export async function redeemPasswordResetToken(token: string, newPassword: string): Promise<{ ok: boolean; error?: string }>{
+  if (!token || !newPassword || newPassword.length < 8) return { ok: false, error: "invalid" };
+  const key = `pwreset:${token}`;
+  const redis = await getRedis();
+  let userId: string | null = null;
+  if (redis) {
+    userId = (await redis.get(key)) as string | null;
+  } else {
+    const exp = memoryTtl.get(key);
+    if (typeof exp === "number" && Date.now() > exp) { memoryJson.delete(key); memoryTtl.delete(key); }
+    const val = memoryJson.get(key);
+    if (val) {
+      try { userId = JSON.parse(val).userId as string; } catch { userId = null; }
+    }
+  }
+  if (!userId) return { ok: false, error: "invalid_or_expired" };
+  const p = await getPrisma();
+  if (!p) return { ok: false, error: "db_unavailable" };
+  const hash = await bcrypt.hash(newPassword, 10);
+  await p.user.update({ where: { id: userId }, data: { passwordHash: hash } }).catch(() => null);
+  if (redis) { await redis.del(key).catch(() => {}); } else { memoryJson.delete(key); memoryTtl.delete(key); }
+  return { ok: true };
 }
 
 export async function setUserProfile(userId: string, profile: UserProfile) {

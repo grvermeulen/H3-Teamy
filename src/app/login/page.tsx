@@ -42,6 +42,9 @@ function Content() {
             <input placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: 6, borderRadius: 6 }} />
             <button onClick={login}>Sign in</button>
           </div>
+          <div className="muted" style={{ marginTop: 8 }}>
+            <a href="/reset-request">Forgot password?</a>
+          </div>
           <h4 style={{ marginTop: 12 }}>Or create an account</h4>
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             <input placeholder="Email" value={signupEmail} onChange={(e) => setSignupEmail(e.target.value)} style={{ padding: 6, borderRadius: 6 }} />
