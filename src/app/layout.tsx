@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Providers from "../components/Providers";
+import dynamic from "next/dynamic";
 
 export const metadata: Metadata = {
   title: "De Rijn H3 Teamy MVP",
@@ -11,10 +12,12 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const SessionStatus = dynamic(() => import("../components/SessionStatus"), { ssr: false });
   return (
     <html lang="en">
       <head>
         <link rel="manifest" href="/manifest.webmanifest" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="theme-color" content="#0B1220" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -35,6 +38,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="muted" style={{ fontSize: 13 }}>Matches from Sportlink • RSVP on device</div>
           </div>
         </header>
+        <div className="container topNavSpacer">
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <SessionStatus />
+          </div>
+        </div>
         <Providers>{children}</Providers>
         <footer className="container" style={{ marginTop: 24 }}>
           <a href="/privacy" className="muted">Privacy policy</a>

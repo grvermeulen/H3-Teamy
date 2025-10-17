@@ -26,6 +26,15 @@ html, body {
   padding: 24px 16px 64px;
 }
 
+/* Reduce extra gap below header nav on mobile */
+.topNavSpacer { margin-top: 8px; }
+
+/* Reduce heading-to-content gap and improve contrast on cards/links */
+h1 { margin-top: 12px; }
+.card a, a { color: #a8c5ff; }
+.card { border-color: rgba(255,255,255,0.12); background: #101826; }
+.badge { background: rgba(255,255,255,0.08); color: #c9d7ee; }
+
 h1, h2, h3 {
   margin: 0 0 12px;
 }
@@ -92,4 +101,73 @@ h1, h2, h3 {
 .attendee { display: flex; align-items: center; gap: 8px; margin: 2px 0; }
 .attendance-badge { width: 18px; height: 18px; border-radius: 4px; object-fit: cover; }
 
+
+/* Modal (report preview) */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.modalContent {
+  background: #0B1220;
+  color: #E6EDF7;
+  border-radius: 10px;
+  padding: 16px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  position: relative;
+}
+
+.modalCloseBtn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #111926;
+  color: #E6EDF7;
+  border: 1px solid #293241;
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+
+@media (max-width: 480px) {
+  .container { padding: 16px 12px 56px; }
+  .row { gap: 8px; }
+  .rsvp { flex-wrap: wrap; }
+  .rsvp button { flex: 1 1 100%; }
+  .modalOverlay { padding: 12px; }
+  .modalContent { padding: 12px; max-height: 85vh; }
+}
+
+/* Mobile nav */
+.navBar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.navLinks { display: flex; gap: 12px; align-items: center; }
+.navLinks a { color: var(--text); text-decoration: none; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 6px 10px; }
+.burger { display: none; background: transparent; color: var(--text); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 6px 10px; }
+.drawer { position: fixed; inset: 0 0 auto 0; background: var(--card); padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); display: none; }
+.drawer.open { display: block; }
+
+@media (max-width: 640px) {
+  .navLinks { display: none; }
+  .burger { display: none; }
+}
+
+/* Bottom navigation */
+.bottomBar { display: none; position: fixed; left: 0; right: 0; bottom: 0; background: var(--card); border-top: 1px solid rgba(255,255,255,0.06); padding: 10px calc(12px + env(safe-area-inset-left, 0)) calc(10px + env(safe-area-inset-bottom, 0)) calc(12px + env(safe-area-inset-left, 0)); z-index: 1000; }
+.bottomNavLinks { display: flex; align-items: center; gap: 12px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+.bottomNavLinks a, .bottomNavLinks button { color: var(--text); text-decoration: none; background: transparent; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 6px 10px; display: inline-block; white-space: nowrap; }
+
+.navActive { border-color: var(--accent); color: var(--accent) !important; }
+
+@media (max-width: 640px) {
+  .bottomBar { display: block; }
+}
 

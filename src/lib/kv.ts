@@ -11,8 +11,9 @@ async function getPrisma() {
   return prisma;
 }
 
-// Simple in-memory fallback store (not persistent across server restarts)
+// Simple in-memory fallback stores (not persistent across server restarts)
 const memoryStore = new Map<string, RsvpStatus>();
+const memoryJson = new Map<string, string>();
 
 // Vercel KV compatibility if provided via env
 // Expect standard env: KV_REST_API_URL, KV_REST_API_TOKEN, KV_REST_API_READ_ONLY_TOKEN, KV_URL
@@ -82,7 +83,7 @@ async function kvSet(key: string, value: RsvpStatus): Promise<void> {
 export async function getRsvp(userId: string, eventId: string): Promise<RsvpStatus> {
   const p = await getPrisma();
   if (p) {
-    const rec = await p.rsvp.findUnique({ where: { userId_eventId: { userId, eventId } } });
+    const rec = await (p as any).rsvp.findUnique({ where: { userId_eventId: { userId, eventId } }, cacheStrategy: { ttl: 60, swr: 60 } });
     const val = (rec?.status as RsvpStatus) ?? null;
     if (val !== "yes" && val !== "no" && val !== "maybe") return null;
     return val;
@@ -109,6 +110,53 @@ export async function setRsvp(userId: string, eventId: string, status: RsvpStatu
   }
   const key = `rsvp:${userId}:${eventId}`;
   await kvSet(key, status);
+}
+
+// Generic JSON KV helpers for caching lists/objects
+export async function kvGetJson<T = any>(key: string): Promise<T | null> {
+  const redis = await getRedis();
+  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+    if (redis) {
+      const raw = (await redis.get(key)) as string | null;
+      if (!raw) return null;
+      try { return JSON.parse(raw) as T; } catch { return null; }
+    }
+    const raw = memoryJson.get(key);
+    if (!raw) return null;
+    try { return JSON.parse(raw) as T; } catch { return null; }
+  }
+  const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` }, cache: "no-store" });
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => ({} as any));
+  const raw = data?.result ?? null;
+  if (!raw) return null;
+  try { return JSON.parse(raw) as T; } catch { return null; }
+}
+
+export async function kvSetJson(key: string, value: any): Promise<void> {
+  const redis = await getRedis();
+  const payload = JSON.stringify(value);
+  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+    if (redis) { await redis.set(key, payload); return; }
+    memoryJson.set(key, payload);
+    return;
+  }
+  const url = `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`;
+  const body = new URLSearchParams();
+  body.set("value", payload);
+  await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`, "content-type": "application/x-www-form-urlencoded" }, body });
+}
+
+export async function kvDelete(key: string): Promise<void> {
+  const redis = await getRedis();
+  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+    if (redis) { await redis.del(key).catch(() => {}); return; }
+    memoryJson.delete(key);
+    return;
+  }
+  const url = `${process.env.KV_REST_API_URL}/del/${encodeURIComponent(key)}`;
+  await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` } }).catch(() => {});
 }
 
 export async function setUserProfile(userId: string, profile: UserProfile) {
@@ -166,28 +214,128 @@ export async function listEventRsvps(eventId: string): Promise<{ userId: string;
   return out;
 }
 
-export async function listUserRsvps(userId: string): Promise<{ eventId: string; status: RsvpStatus }[]> {
-  const p = await getPrisma();
-  if (p) {
-    const rows = await p.rsvp.findMany({ where: { userId } });
-    return rows.map((r: any) => ({ eventId: r.eventId, status: (r.status as RsvpStatus) ?? null }));
+// Match Reports
+type MatchReport = { content: string; createdAt: string; authorId?: string };
+
+export async function getReport(eventId: string): Promise<MatchReport | null> {
+  const key = `report:${eventId}`;
+  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+    const redis = await getRedis();
+    if (redis) {
+      const raw = (await redis.get(key)) as string | null;
+      if (!raw) return null;
+      try { return JSON.parse(raw) as MatchReport; } catch { return null; }
+    }
+    const raw = memoryStore.get(key) as unknown as string | undefined;
+    if (!raw) return null;
+    try { return JSON.parse(raw) as MatchReport; } catch { return null; }
   }
+  const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => ({} as any));
+  const raw = data?.result ?? null;
+  if (!raw) return null;
+  try { return JSON.parse(raw) as MatchReport; } catch { return null; }
+}
+
+export async function setReport(eventId: string, report: MatchReport | null): Promise<void> {
+  const key = `report:${eventId}`;
+  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+    const redis = await getRedis();
+    if (redis) {
+      if (report === null) { await redis.del(key); return; }
+      await redis.set(key, JSON.stringify(report));
+      return;
+    }
+    if (report === null) memoryStore.delete(key);
+    else memoryStore.set(key, JSON.stringify(report) as any);
+    return;
+  }
+  const url = `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`;
+  const body = new URLSearchParams();
+  body.set("value", report ? JSON.stringify(report) : "");
+  await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body,
+  });
+}
+
+// Training Attendance
+export async function getAttendance(dateYmd: string): Promise<string[]> {
+  const key = `att:${dateYmd}`;
   const redis = await getRedis();
   if (redis) {
-    const keys: string[] = await redis.keys(`rsvp:${userId}:*`);
-    if (keys.length === 0) return [];
-    const vals = await redis.mget(keys);
-    return keys.map((k, i) => ({ eventId: k.split(":")[2]!, status: (vals[i] as RsvpStatus) ?? null }));
+    const raw = (await redis.get(key)) as string | null;
+    if (!raw) return [];
+    try { return JSON.parse(raw) as string[]; } catch { return []; }
   }
-  const out: { eventId: string; status: RsvpStatus }[] = [];
-  for (const [k, v] of memoryStore.entries()) {
-    if (typeof k === "string" && k.startsWith(`rsvp:${userId}:`)) {
-      const eventId = k.split(":")[2] || "";
-      const status = (v as RsvpStatus) ?? null;
-      out.push({ eventId, status });
+  const raw = memoryStore.get(key) as unknown as string | undefined;
+  if (!raw) return [];
+  try { return JSON.parse(raw) as string[]; } catch { return []; }
+}
+
+export async function setAttendanceBatch(dateYmd: string, presentUserIds: string[], markedBy: string): Promise<void> {
+  const key = `att:${dateYmd}`;
+  const redis = await getRedis();
+  const payload = JSON.stringify(presentUserIds);
+  if (redis) { await redis.set(key, payload); return; }
+  memoryStore.set(key, payload as any);
+}
+
+export async function getAttendanceForDates(dates: string[]): Promise<Record<string, string[]>> {
+  const out: Record<string, string[]> = {};
+  const redis = await getRedis();
+  if (redis) {
+    if (dates.length === 0) return out;
+    const keys = dates.map((d) => `att:${d}`);
+    const vals = await redis.mget(keys);
+    for (let i = 0; i < dates.length; i++) {
+      const raw = vals[i] as string | null;
+      if (!raw) { out[dates[i]] = []; continue; }
+      try { out[dates[i]] = JSON.parse(raw) as string[]; } catch { out[dates[i]] = []; }
     }
+    return out;
+  }
+  for (const d of dates) {
+    const raw = memoryStore.get(`att:${d}`) as unknown as string | undefined;
+    if (!raw) { out[d] = []; continue; }
+    try { out[d] = JSON.parse(raw) as string[]; } catch { out[d] = []; }
   }
   return out;
+}
+
+// Roles (admin/trainer/player) stored in KV/Redis for simplicity
+type Roles = { admin?: boolean; trainer?: boolean; player?: boolean };
+
+export async function getUserRoles(userId: string): Promise<Roles> {
+  const key = `roles:${userId}`;
+  const redis = await getRedis();
+  if (redis) {
+    const raw = (await redis.get(key)) as string | null;
+    if (!raw) return { player: true };
+    try { return JSON.parse(raw) as Roles; } catch { return { player: true }; }
+  }
+  const raw = memoryStore.get(key) as unknown as string | undefined;
+  if (!raw) return { player: true };
+  try { return JSON.parse(raw) as Roles; } catch { return { player: true }; }
+}
+
+export async function setUserRoles(userId: string, roles: Roles): Promise<void> {
+  const key = `roles:${userId}`;
+  const payload = JSON.stringify(roles);
+  const redis = await getRedis();
+  if (redis) { await redis.set(key, payload); return; }
+  memoryStore.set(key, payload as any);
 }
 
 export async function createLinkCode(userId: string): Promise<string> {
