@@ -202,5 +202,32 @@ export async function redeemLinkCode(code: string): Promise<string | null> {
 }
 
 // Password reset helpers removed
+export async function createPasswordResetToken(userId: string): Promise<string> {
+  const code = Math.random().toString(36).slice(2, 10).toUpperCase();
+  const key = `pwreset:${code}`;
+  const redis = await getRedis();
+  if (redis) {
+    await redis.set(key, userId, "EX", 15 * 60);
+  } else {
+    memoryStore.set(key, userId as any);
+    setTimeout(() => memoryStore.delete(key), 15 * 60 * 1000);
+  }
+  return code;
+}
+
+export async function redeemPasswordResetToken(code: string): Promise<string | null> {
+  const key = `pwreset:${code}`;
+  const redis = await getRedis();
+  if (redis) {
+    const userId = (await redis.get(key)) as string | null;
+    if (!userId) return null;
+    await redis.del(key);
+    return userId;
+  }
+  const userId = (memoryStore.get(key) as unknown as string) || null;
+  if (!userId) return null;
+  memoryStore.delete(key);
+  return userId;
+}
 
 
