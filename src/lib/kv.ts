@@ -203,12 +203,38 @@ export async function listEventRsvps(eventId: string): Promise<{ userId: string;
     const vals = await redis.mget(keys);
     return keys.map((k, i) => ({ userId: k.split(":")[1]!, status: (vals[i] as RsvpStatus) ?? null }));
   }
-  const out: { userId: string; status: RsvpStatus }[] = [];
+  const out: { userId: string; status: RsvpStatus }[] = {} as any;
+  const outArr: { userId: string; status: RsvpStatus }[] = [];
   for (const [k, v] of memoryStore.entries()) {
     if (typeof k === "string" && k.startsWith(`rsvp:`) && k.endsWith(`:${eventId}`)) {
       const userId = k.split(":")[1] || "";
       const status = (v as RsvpStatus) ?? null;
-      out.push({ userId, status });
+      outArr.push({ userId, status });
+    }
+  }
+  return outArr;
+}
+
+// NEW: List all RSVPs for a given user (used for attendance badge %)
+export async function listUserRsvps(userId: string): Promise<{ eventId: string; status: RsvpStatus }[]> {
+  const p = await getPrisma();
+  if (p) {
+    const rows = await p.rsvp.findMany({ where: { userId } });
+    return rows.map((r: any) => ({ eventId: r.eventId, status: (r.status as RsvpStatus) ?? null }));
+  }
+  const redis = await getRedis();
+  if (redis) {
+    const keys: string[] = await redis.keys(`rsvp:${userId}:*`);
+    if (keys.length === 0) return [];
+    const vals = await redis.mget(keys);
+    return keys.map((k, i) => ({ eventId: k.split(":")[2]!, status: (vals[i] as RsvpStatus) ?? null }));
+  }
+  const out: { eventId: string; status: RsvpStatus }[] = [];
+  for (const [k, v] of memoryStore.entries()) {
+    if (typeof k === "string" && k.startsWith(`rsvp:${userId}:`)) {
+      const eventId = k.split(":")[2] || "";
+      const status = (v as RsvpStatus) ?? null;
+      out.push({ eventId, status });
     }
   }
   return out;
