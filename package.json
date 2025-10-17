@@ -46,7 +46,6 @@
     "husky": "^9.1.6",
     "prettier": "^3.3.3",
     "ts-node": "^10.9.2",
-    "@asteasolutions/zod-to-openapi": "^7.1.0",
-    "prisma-erd-generator": "^1.11.2"
+    "@asteasolutions/zod-to-openapi": "^7.1.0"
   }
 }
