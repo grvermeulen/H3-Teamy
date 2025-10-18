@@ -14,9 +14,9 @@
     "prebuild": "node scripts/generate-icons.js",
     "postinstall": "prisma generate --accelerate",
     "prepare": "husky install",
-    "docs:scan": "ts-node scripts/docs/scan-routes.ts",
-    "docs:openapi": "ts-node scripts/docs/openapi.ts",
-    "docs:generate": "ts-node scripts/docs/generate.ts",
+    "docs:scan": "ts-node --esm scripts/docs/scan-routes.ts",
+    "docs:openapi": "ts-node --esm scripts/docs/openapi.ts",
+    "docs:generate": "ts-node --esm scripts/docs/generate.ts",
     "docs:check": "node -e \"process.exit(0)\"",
     "docs:serve": "npx serve docs"
   },
