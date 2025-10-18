@@ -46,7 +46,7 @@ jobs:
 
       - name: Install deps
         if: steps.risk.outputs.risk == 'true'
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: AI Review
         if: steps.risk.outputs.risk == 'true'
