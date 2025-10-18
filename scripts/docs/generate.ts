@@ -2,17 +2,7 @@ import fs from "fs";
 import path from "path";
 import { execSync } from "child_process";
 import { pathToFileURL } from "url";
-
-function injectSection(filePath: string, marker: string, content: string) {
-  const start = `<!-- ${marker} -->`;
-  const end = `<!-- /${marker} -->`;
-  const src = fs.readFileSync(filePath, "utf8");
-  const next = src.replace(
-    new RegExp(`${start}[\\n\\r\\s\\S]*?${end}`),
-    `${start}\n${content}\n${end}`,
-  );
-  fs.writeFileSync(filePath, next);
-}
+import { injectSection } from "./utils.ts";
 
 function main() {
   const root = process.cwd();
