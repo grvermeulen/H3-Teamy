@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { pathToFileURL } from "url";
 
 function walk(
   dir: string,
@@ -51,4 +52,9 @@ function main() {
   console.log("Wrote docs/_generated/routes.md");
 }
 
-if (require.main === module) main();
+try {
+  const isDirect = import.meta.url === pathToFileURL(process.argv[1]).href;
+  if (isDirect) main();
+} catch {
+  // no-op
+}

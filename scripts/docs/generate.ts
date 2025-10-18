@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { execSync } from "child_process";
+import { pathToFileURL } from "url";
 
 function injectSection(filePath: string, marker: string, content: string) {
   const start = `<!-- ${marker} -->`;
@@ -21,8 +22,10 @@ function main() {
   fs.mkdirSync(path.join(root, "docs/api"), { recursive: true });
   fs.mkdirSync(path.join(root, "docs/data"), { recursive: true });
 
-  // 1) routes (ensure ts-node runs the TS scanner)
-  execSync("npx ts-node scripts/docs/scan-routes.ts", { stdio: "inherit" });
+  // 1) routes (ensure Node runs TS via ts-node ESM loader)
+  execSync("node --loader ts-node/esm scripts/docs/scan-routes.ts", {
+    stdio: "inherit",
+  });
   const routesMd = fs.readFileSync(
     path.join(root, "docs/_generated/routes.md"),
     "utf8",
@@ -53,9 +56,17 @@ function main() {
   );
 
   // 3) openapi from zod
-  execSync("npx ts-node scripts/docs/openapi.ts", { stdio: "inherit" });
+  execSync("node --loader ts-node/esm scripts/docs/openapi.ts", {
+    stdio: "inherit",
+  });
 
   console.log("Docs generated.");
 }
 
-if (require.main === module) main();
+// ESM-friendly main guard
+try {
+  const isDirect = import.meta.url === pathToFileURL(process.argv[1]).href;
+  if (isDirect) main();
+} catch {
+  // no-op fallback
+}

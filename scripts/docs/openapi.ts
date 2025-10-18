@@ -4,6 +4,7 @@ import {
 } from "@asteasolutions/zod-to-openapi";
 import fs from "fs";
 import path from "path";
+import { pathToFileURL } from "url";
 import {
   PasswordResetRequestBodySchema,
   PasswordResetRequestResponseSchema,
@@ -83,4 +84,9 @@ function main() {
   console.log("Wrote docs/api/openapi.json");
 }
 
-if (require.main === module) main();
+try {
+  const isDirect = import.meta.url === pathToFileURL(process.argv[1]).href;
+  if (isDirect) main();
+} catch {
+  // no-op
+}
