@@ -15,6 +15,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
       - name: Detect high-risk changes
         id: risk
         env:
@@ -43,7 +46,7 @@ jobs:
 
       - name: Install deps
         if: steps.risk.outputs.risk == 'true'
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: AI Review
         if: steps.risk.outputs.risk == 'true'
