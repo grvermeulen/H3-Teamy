@@ -12,8 +12,8 @@ function main() {
   fs.mkdirSync(path.join(root, "docs/api"), { recursive: true });
   fs.mkdirSync(path.join(root, "docs/data"), { recursive: true });
 
-  // 1) routes (ensure Node runs TS via ts-node ESM loader)
-  execSync("node --loader ts-node/esm scripts/docs/scan-routes.ts", {
+  // 1) routes
+  execSync("npx tsx scripts/docs/scan-routes.ts", {
     stdio: "inherit",
   });
   const routesMd = fs.readFileSync(
@@ -46,7 +46,7 @@ function main() {
   );
 
   // 3) openapi from zod
-  execSync("node --loader ts-node/esm scripts/docs/openapi.ts", {
+  execSync("npx tsx scripts/docs/openapi.ts", {
     stdio: "inherit",
   });
 

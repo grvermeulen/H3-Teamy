@@ -1,10 +1,12 @@
 import {
   OpenAPIRegistry,
   OpenApiGeneratorV3,
+  extendZodWithOpenApi,
 } from "@asteasolutions/zod-to-openapi";
 import fs from "fs";
 import path from "path";
 import { pathToFileURL } from "url";
+import { z } from "zod";
 import {
   PasswordResetRequestBodySchema,
   PasswordResetRequestResponseSchema,
@@ -12,6 +14,7 @@ import {
   PasswordResetConfirmResponseSchema,
 } from "../../src/lib/schemas/auth";
 
+extendZodWithOpenApi(z);
 const registry = new OpenAPIRegistry();
 
 // Register schemas

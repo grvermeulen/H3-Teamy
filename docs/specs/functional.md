@@ -10,7 +10,17 @@ This document reflects the features that exist in the code today. Planned or fut
 
 <!-- AUTOGEN:features -->
 
-_generated features table goes here_
+| Feature        | Docs                               |
+| -------------- | ---------------------------------- |
+| admin          | docs/tech/admin/README.md          |
+| auth           | docs/tech/auth/README.md           |
+| events         | docs/tech/events/README.md         |
+| identity-link  | docs/tech/identity-link/README.md  |
+| password-reset | docs/tech/password-reset/README.md |
+| profile        | docs/tech/profile/README.md        |
+| reports        | docs/tech/reports/README.md        |
+| rsvp           | docs/tech/rsvp/README.md           |
+| training       | docs/tech/training/README.md       |
 
 <!-- /AUTOGEN:features -->
 
@@ -35,7 +45,11 @@ _generated features table goes here_
 
 <!-- AUTOGEN:routes -->
 
-_generated routes list goes here_
+# Routes Inventory
+
+## API Routes
+
+## Pages
 
 <!-- /AUTOGEN:routes -->
 
