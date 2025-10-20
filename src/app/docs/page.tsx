@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 
 export const dynamic = "force-static";
+export const runtime = "nodejs";
 
 async function readFileSafe(p: string): Promise<string | null> {
   try {
