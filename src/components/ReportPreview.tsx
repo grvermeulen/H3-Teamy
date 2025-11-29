@@ -25,6 +25,19 @@ export default function ReportPreview({ eventId }: { eventId: string }) {
   }, [eventId]);
   const hasReport = Boolean(content && content.trim());
 
+  useEffect(() => {
+    if (!open) return;
+    const { body } = document;
+    const previousOverflow = body.style.overflow;
+    const previousTouchAction = body.style.touchAction;
+    body.style.overflow = "hidden";
+    body.style.touchAction = "none";
+    return () => {
+      body.style.overflow = previousOverflow;
+      body.style.touchAction = previousTouchAction;
+    };
+  }, [open]);
+
   return (
     <>
       <div className="rsvp" style={{ justifyContent: "flex-end", marginTop: 8 }}>

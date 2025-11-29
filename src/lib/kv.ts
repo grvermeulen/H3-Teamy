@@ -294,7 +294,8 @@ export async function listUserRsvps(userId: string): Promise<{ eventId: string; 
 }
 
 // Match Reports
-type MatchReport = { content: string; createdAt: string; authorId?: string };
+type MvpResult = { name: string; percent: number; votes: number; totalVotes: number; decidedAt: string };
+type MatchReport = { content: string; createdAt: string; authorId?: string; mvpResult?: MvpResult };
 
 export async function getReport(eventId: string): Promise<MatchReport | null> {
   const key = `report:${eventId}`;

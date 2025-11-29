@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { setReport } from "../../../../lib/kv";
+import { getReport, setReport } from "../../../../lib/kv";
 
 // Simplified generation: consume provided JSON and let the model write the report.
 
@@ -31,21 +31,27 @@ export async function POST(req: NextRequest) {
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "OPENAI_API_KEY not configured" }, { status: 500 });
-    const prompt = `Je krijgt JSON met wedstrijdgegevens. Schrijf een korte, energieke wedstrijdsamenvatting (140–220 woorden) in het Nederlands, vanuit het perspectief van De Rijn Heren 3 ("wij/ons").
+
+    // Validate that we actually have meaningful JSON for the model
+    const hasScores = typeof input.homeScore === "number" && typeof input.awayScore === "number";
+    const hasEvents = Array.isArray(input.events) && (input.events as any[]).length > 0;
+    if (!hasScores || !hasEvents) {
+      return NextResponse.json(
+        { error: "report_input_incomplete", message: "Missing scores or events in JSON", received: input },
+        { status: 422 }
+      );
+    }
+const prompt = `Je krijgt JSON met wedstrijdgegevens. Schrijf een korte, energieke wedstrijdsamenvatting (140–220 woorden) in het Nederlands, vanuit het perspectief van De Rijn Heren 3 ("wij/ons").
 
 Regels:
+- Schrijf het verslag altijd vanuit het standpunt van De Rijn Heren 3 ("wij/ons") ook voor uit wedstrijden.
 - Gebruik uitsluitend de informatie uit de JSON. Geen extra bronnen of controles.
 - Noem doelpuntenmakers van De Rijn Heren 3 expliciet bij naam op basis van events (type "goal" en team "home").
-- Sluit af met de eindstand (homeScore-awayScore) en benoem kort een De Rijn Heren 3 MVP op basis van de events.
+- Sluit af met de eindstand (homeScore-awayScore) en vermeld dat de MVP-stemming nog openstaat via de knop hieronder.
 - Houd het sportief, positief en enthousiast; maximaal 2 uitroeptekens.
-- Bovenaan de JSON staat uitgelegd welk team "home" is en welk team "away" is.
+- Bovenaan de JSON staat uitgelegd welk team "home" is en welk team "away" is.`;
 
-
-JSON:
-${JSON.stringify(input, null, 2)}
-`;
-
-    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+    const resp = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -54,9 +60,19 @@ ${JSON.stringify(input, null, 2)}
       body: JSON.stringify({
         model: "gpt-5-chat-latest",
         temperature: 0.2,
-        messages: [
-          { role: "system", content: "You are an enthusiastic, pro–De Rijn Heren 3 reporter. Write energetic, respectful Dutch match reports using only the provided JSON." },
-          { role: "user", content: prompt },
+        input: [
+          {
+            role: "system",
+            content: [ { type: "input_text", text: "You are an enthusiastic, pro–De Rijn Heren 3 reporter. Write energetic, respectful Dutch match reports using only the provided JSON." } ],
+          },
+          {
+            role: "user",
+            content: [ { type: "input_text", text: prompt } ],
+          },
+          {
+            role: "user",
+            content: [ { type: "input_text", text: `JSON:\n${JSON.stringify(input)}` } ],
+          },
         ],
       }),
     });
@@ -65,10 +81,11 @@ ${JSON.stringify(input, null, 2)}
       return NextResponse.json({ error: "openai_failed", info: text }, { status: 502 });
     }
     const data = await resp.json();
-    const content = data.choices?.[0]?.message?.content?.trim?.() || "";
+    const content = (data?.output_text || data?.output?.[0]?.content?.[0]?.text || "").trim?.() || "";
     if (!content) return NextResponse.json({ error: "no_content" }, { status: 500 });
 
-    const report = { content, createdAt: new Date().toISOString() };
+    const previous = await getReport(eventId);
+    const report = { content, createdAt: new Date().toISOString(), authorId: previous?.authorId, mvpResult: previous?.mvpResult };
     await setReport(eventId, report);
     return NextResponse.json({ ok: true, report });
   } catch (e: any) {
