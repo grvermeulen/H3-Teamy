@@ -28,6 +28,7 @@ html, body {
 
 /* Reduce extra gap below header nav on mobile */
 .topNavSpacer { margin-top: 8px; }
+.container.topNavSpacer { padding: 8px 16px 0; }
 
 /* Reduce heading-to-content gap and improve contrast on cards/links */
 h1 { margin-top: 12px; }
@@ -82,6 +83,12 @@ h1, h2, h3 {
   font-size: 12px;
 }
 
+/* Attendance tier badges */
+.badge-rookie { background: color-mix(in oklab, #f59e0b 18%, transparent); color: #ffd89e; border: 1px solid color-mix(in oklab, #f59e0b 35%, transparent); }
+.badge-average { background: color-mix(in oklab, #22c55e 18%, transparent); color: #c9f7d1; border: 1px solid color-mix(in oklab, #22c55e 35%, transparent); }
+.badge-veteran { background: color-mix(in oklab, #3b82f6 18%, transparent); color: #cfe0ff; border: 1px solid color-mix(in oklab, #3b82f6 35%, transparent); }
+.badge-furniture { background: color-mix(in oklab, #a855f7 18%, transparent); color: #e5ccff; border: 1px solid color-mix(in oklab, #a855f7 35%, transparent); }
+
 .count-yes { color: var(--positive); }
 .count-no { color: var(--negative); }
 .count-maybe { color: var(--accent); }
@@ -97,6 +104,9 @@ h1, h2, h3 {
   color: var(--text);
   border: 1px solid color-mix(in oklab, var(--time) 35%, transparent);
 }
+
+.attendee { display: flex; align-items: center; gap: 8px; margin: 2px 0; }
+.attendance-badge { width: 18px; height: 18px; border-radius: 4px; object-fit: cover; }
 
 
 /* Modal (report preview) */
@@ -152,6 +162,9 @@ h1, h2, h3 {
 .drawer { position: fixed; inset: 0 0 auto 0; background: var(--card); padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.06); display: none; }
 .drawer.open { display: block; }
 
+.navLinks form button, .bottomNavLinks form button { color: var(--text); background: transparent; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+.navLinks form, .bottomNavLinks form { display: inline; }
+
 @media (max-width: 640px) {
   .navLinks { display: none; }
   .burger { display: none; }
@@ -166,5 +179,6 @@ h1, h2, h3 {
 
 @media (max-width: 640px) {
   .bottomBar { display: block; }
+  .container.topNavSpacer { padding: 6px 12px 0; }
 }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserProfile, listEventRsvps } from "../../../../lib/kv";
+import { getUserProfile, listEventRsvps, listUserRsvps } from "../../../../lib/kv";
+import { getBadgeForAttendance } from "../../../../lib/badges";
 
 export async function GET(req: NextRequest) {
   const eventId = req.nextUrl.searchParams.get("eventId");
@@ -22,7 +23,14 @@ export async function GET(req: NextRequest) {
       continue;
     }
     const profile = await getUserProfile(userId);
-    let name = profile && profile.firstName ? profile.firstName : `User ${userId.slice(0, 6)}`;
+    const name = profile && profile.firstName ? profile.firstName : `User ${userId.slice(0, 6)}`;
+    // Compute simple attendance percentage as Yes/(Yes+No+Maybe) across all events (kept for potential future use)
+    try {
+      const history = await listUserRsvps(userId);
+      const total = history.length;
+      const yesCount = history.filter((h) => h.status === "yes").length;
+      void getBadgeForAttendance(total > 0 ? (yesCount / total) * 100 : 0);
+    } catch {}
     if (status === "yes") yes.push({ id: userId, name });
     else if (status === "no") no.push({ id: userId, name });
     else if (status === "maybe") maybe.push({ id: userId, name });

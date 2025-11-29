@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toYMD } from "../../lib/training";
+import { getBadgeForAttendance } from "../../lib/badges";
 
 type Row = { userId: string; name: string; attended: number; total: number; pct: number };
 
@@ -60,6 +61,8 @@ export default function AttendanceOverview() {
         <div className="list">
           {sorted.map((r) => {
             const rr = recentMap.get(r.userId);
+            const badge = getBadgeForAttendance(r.pct); // season-based
+            const tierClass = `badge-${badge.slug}` as const;
             return (
               <div key={r.userId} className="card">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -67,6 +70,7 @@ export default function AttendanceOverview() {
                   <div className="row" style={{ gap: 8 }}>
                     <div className="badge">{r.attended}/{r.total} ({r.pct}%)</div>
                     {rr ? <div className="badge">{rr.attended}/{recentTotal} ({rr.pct}%)</div> : null}
+                    <div className={`badge ${tierClass}`}>{badge.label}</div>
                   </div>
                 </div>
               </div>

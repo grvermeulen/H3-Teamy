@@ -16,9 +16,9 @@ export type UserProfile = {
 };
 
 export type EventRsvpList = {
-  yes: { id: string; name: string }[];
-  no: { id: string; name: string }[];
-  maybe: { id: string; name: string }[];
+  yes: { id: string; name: string; badge?: { slug: string; label: string } }[];
+  no: { id: string; name: string; badge?: { slug: string; label: string } }[];
+  maybe: { id: string; name: string; badge?: { slug: string; label: string } }[];
 };
 
 export type EventRsvpCounts = { yes: number; no: number; maybe: number };

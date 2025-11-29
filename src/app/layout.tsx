@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Providers from "../components/Providers";
 import dynamic from "next/dynamic";
+import BottomNav from "../components/BottomNav";
 
 export const metadata: Metadata = {
   title: "De Rijn H3 Teamy MVP",
@@ -44,6 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </div>
         <Providers>{children}</Providers>
+        <BottomNav />
         <footer className="container" style={{ marginTop: 24 }}>
           <a href="/privacy" className="muted">Privacy policy</a>
         </footer>
