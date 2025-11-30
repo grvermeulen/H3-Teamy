@@ -101,6 +101,21 @@ function canonicalizePlayer(name: string | undefined, roster: string[]): string 
   return bestScore >= 0.72 ? bestName : null;
 }
 
+function guessPerspectiveFromEvents(events: RawEvent[] | undefined, roster: string[]): boolean | null {
+  if (!Array.isArray(events) || events.length === 0 || roster.length === 0) return null;
+  let homeHits = 0;
+  let awayHits = 0;
+  for (const evt of events) {
+    if (!evt?.player) continue;
+    const canonical = canonicalizePlayer(evt.player, roster);
+    if (!canonical) continue;
+    if (evt.team === "home") homeHits += 1;
+    else if (evt.team === "away") awayHits += 1;
+  }
+  if (homeHits === awayHits) return null;
+  return homeHits > awayHits;
+}
+
 function prepareNarrativeInput(input: {
   homeTeam?: string;
   awayTeam?: string;
@@ -112,7 +127,24 @@ function prepareNarrativeInput(input: {
   const awayTeam = (input.awayTeam || "").trim() || "Onbekende tegenstander";
   const homeIsUs = isOurTeamName(homeTeam);
   const awayIsUs = isOurTeamName(awayTeam);
-  const weAreHome = homeIsUs && !awayIsUs ? true : !homeIsUs && awayIsUs ? false : true;
+  let weAreHome: boolean;
+  if (homeIsUs && !awayIsUs) {
+    weAreHome = true;
+  } else if (!homeIsUs && awayIsUs) {
+    weAreHome = false;
+  } else {
+    const rosterGuess = guessPerspectiveFromEvents(input.events, rosterNames);
+    if (rosterGuess !== null) {
+      weAreHome = rosterGuess;
+    } else {
+      const baseline = normalizeName("De Rijn Heren 3");
+      const homeSimilarity = similarity(normalizeName(homeTeam), baseline);
+      const awaySimilarity = similarity(normalizeName(awayTeam), baseline);
+      if (homeSimilarity > awaySimilarity) weAreHome = true;
+      else if (awaySimilarity > homeSimilarity) weAreHome = false;
+      else weAreHome = true;
+    }
+  }
   const opponentTeam = weAreHome ? awayTeam : homeTeam;
   const ourScore = weAreHome ? Number(input.homeScore) : Number(input.awayScore);
   const opponentScore = weAreHome ? Number(input.awayScore) : Number(input.homeScore);

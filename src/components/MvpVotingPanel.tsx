@@ -18,7 +18,7 @@ type ApiPayload = {
   closedAt: string | null;
 };
 
-type Props = { eventId: string; variant?: "card" | "inline" };
+type Props = { eventId: string; variant?: "card" | "inline"; onStatusChange?: (payload: ApiPayload) => void };
 
 async function parseError(res: Response): Promise<string> {
   try {
@@ -38,7 +38,7 @@ async function parseError(res: Response): Promise<string> {
   return res.statusText || "Onbekende fout";
 }
 
-export default function MvpVotingPanel({ eventId, variant = "card" }: Props) {
+export default function MvpVotingPanel({ eventId, variant = "card", onStatusChange }: Props) {
   const [data, setData] = useState<ApiPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +60,7 @@ export default function MvpVotingPanel({ eventId, variant = "card" }: Props) {
         const payload = (await res.json()) as ApiPayload;
         if (!isMounted) return;
         setData(payload);
+        onStatusChange?.(payload);
         if (payload.hasVoted && payload.votedFor) {
           setSelected(payload.votedFor.id);
         } else if (payload.roster.length) {
@@ -76,7 +77,7 @@ export default function MvpVotingPanel({ eventId, variant = "card" }: Props) {
     }
     load();
     return () => { isMounted = false; };
-  }, [eventId]);
+  }, [eventId, onStatusChange]);
 
   const statusText = useMemo(() => {
     if (!data) return "";
@@ -104,6 +105,7 @@ export default function MvpVotingPanel({ eventId, variant = "card" }: Props) {
       }
       const payload = (await res.json()) as ApiPayload;
       setData(payload);
+      onStatusChange?.(payload);
       if (payload.votedFor) {
         setSelected(payload.votedFor.id);
       }
@@ -128,6 +130,7 @@ export default function MvpVotingPanel({ eventId, variant = "card" }: Props) {
       }
       const payload = (await fetch(`/api/report/mvp?eventId=${encodeURIComponent(eventId)}`, { cache: "no-store" }).then((r) => r.json())) as ApiPayload;
       setData(payload);
+      onStatusChange?.(payload);
       if (payload.votedFor) {
         setSelected(payload.votedFor.id);
       }
@@ -152,6 +155,7 @@ export default function MvpVotingPanel({ eventId, variant = "card" }: Props) {
       }
       const payload = (await fetch(`/api/report/mvp?eventId=${encodeURIComponent(eventId)}`, { cache: "no-store" }).then((r) => r.json())) as ApiPayload;
       setData(payload);
+      onStatusChange?.(payload);
       if (payload.votedFor) {
         setSelected(payload.votedFor.id);
       }
