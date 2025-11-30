@@ -118,17 +118,24 @@ function guessPerspectiveFromEvents(events: RawEvent[] | undefined, roster: stri
   return homeHits > awayHits;
 }
 
-function inferHomeFromTitle(title?: string | null): boolean | null {
+type TitleTeams = { home?: string; away?: string };
+
+function extractTeamsFromTitle(title?: string | null): TitleTeams | null {
   if (!title) return null;
   const parts = title.split(/[-–—]/);
   if (parts.length < 2) return null;
-  const first = parts[0]?.trim();
-  const second = parts.slice(1).join("-").trim();
-  if (!first || !second) return null;
-  const firstIsUs = isOurTeamName(first);
-  const secondIsUs = isOurTeamName(second);
-  if (firstIsUs && !secondIsUs) return true;
-  if (!firstIsUs && secondIsUs) return false;
+  const home = parts[0]?.trim();
+  const away = parts.slice(1).join("-").trim();
+  if (!home || !away) return null;
+  return { home, away };
+}
+
+function inferHomeFromTitle(teams?: TitleTeams | null): boolean | null {
+  if (!teams?.home || !teams?.away) return null;
+  const homeIsUs = isOurTeamName(teams.home);
+  const awayIsUs = isOurTeamName(teams.away);
+  if (homeIsUs && !awayIsUs) return true;
+  if (!homeIsUs && awayIsUs) return false;
   return null;
 }
 
@@ -149,7 +156,8 @@ function prepareNarrativeInput(
   const awayIsUs = isOurTeamName(awayTeam);
   let weAreHome: boolean | null = null;
 
-  const titleGuess = inferHomeFromTitle(eventMeta?.title);
+  const titleTeams = extractTeamsFromTitle(eventMeta?.title);
+  const titleGuess = inferHomeFromTitle(titleTeams);
   if (titleGuess !== null) {
     weAreHome = titleGuess;
   }
@@ -174,7 +182,23 @@ function prepareNarrativeInput(
     else if (awaySimilarity > homeSimilarity) weAreHome = false;
     else weAreHome = true;
   }
-  const opponentTeam = weAreHome ? awayTeam : homeTeam;
+  let opponentTeam = weAreHome ? awayTeam : homeTeam;
+  if (titleTeams) {
+    if (weAreHome && titleTeams.away && !isOurTeamName(titleTeams.away)) {
+      opponentTeam = titleTeams.away;
+    } else if (!weAreHome && titleTeams.home && !isOurTeamName(titleTeams.home)) {
+      opponentTeam = titleTeams.home;
+    }
+  }
+  if (!opponentTeam || isOurTeamName(opponentTeam)) {
+    const fallback = weAreHome ? awayTeam : homeTeam;
+    if (fallback && !isOurTeamName(fallback)) {
+      opponentTeam = fallback;
+    }
+  }
+  if (!opponentTeam) {
+    opponentTeam = weAreHome ? awayTeam : homeTeam;
+  }
   const ourScore = weAreHome ? Number(input.homeScore) : Number(input.awayScore);
   const opponentScore = weAreHome ? Number(input.awayScore) : Number(input.homeScore);
   const preparedEvents: PreparedEvent[] = Array.isArray(input.events)
