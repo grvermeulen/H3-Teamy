@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
   }>
 }
 Regels:
+- Home/away: in de header staat altijd een scoreblok "TEAM A 12-23 TEAM B". Het eerste team links (bovenaan) is altijd homeTeam; het team rechts op exact dezelfde hoogte is awayTeam. Neem de namen precies zo over zoals geschreven.
 - Bepaal het kwart uit sectiekoppen zoals "1e periode", "2e periode", enz. (1..4).
 - Iconen/codes: doelpunt‑icoon = "goal"; "U20" = "personal_foul".
 - "team" is relatief: "home" verwijst naar homeTeam, "away" naar awayTeam (zet hier nooit teamnamen).
