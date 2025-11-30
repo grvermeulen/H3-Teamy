@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
   const content = body?.content as string | undefined;
   if (!eventId || typeof content !== "string") return NextResponse.json({ error: "invalid" }, { status: 400 });
   const { userId } = await getActiveUser(req);
-  await setReport(eventId, { content, createdAt: new Date().toISOString(), authorId: userId });
+  const existing = await getReport(eventId);
+  await setReport(eventId, { content, createdAt: new Date().toISOString(), authorId: userId, mvpResult: existing?.mvpResult });
   return NextResponse.json({ ok: true });
 }
