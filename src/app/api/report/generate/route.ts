@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getReport, setReport, kvGetJson } from "../../../../lib/kv";
+import { MVP_PLACEHOLDER } from "../../../../lib/mvpNarrative";
 
 type RawEvent = {
   quarter: 1 | 2 | 3 | 4;
@@ -237,7 +238,7 @@ Regels:
 - Noem nooit namen van individuele tegenstanders. Je mag de teamnaam (${narrativeInput.opponentTeam}) gebruiken, maar spreek verder over "de tegenstander".
 - Meld opponent-events hooguit kort en zonder namen (bijv. "de tegenstander kwam nog even terug").
 - Schrijf energiek en sportief, maximaal 2 uitroeptekens, en blijf positief vanuit ons perspectief.
-- Sluit altijd af met de stand in de vorm ourScore-opponentScore en de zin dat de MVP-stemming nog openstaat via de knop hieronder.
+- Sluit altijd af met de stand in de vorm ourScore-opponentScore en sluit af met exact deze zin op een eigen regel: "${MVP_PLACEHOLDER}"
 - Gebruik uitsluitend de gegevens uit de JSON; geen eigen aannames of extra bronnen.`;
 
     const resp = await fetch("https://api.openai.com/v1/responses", {

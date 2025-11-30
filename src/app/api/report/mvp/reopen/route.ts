@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAdminUser } from "../../../../../lib/trainer";
 import { getMvpState, saveMvpState } from "../../../../../lib/mvp";
 import { getReport, setReport } from "../../../../../lib/kv";
+import { reinstateMvpPlaceholder } from "../../../../../lib/mvpNarrative";
 
 export async function POST(req: NextRequest) {
   const adminInfo = await isAdminUser(req);
@@ -23,8 +24,11 @@ export async function POST(req: NextRequest) {
   await saveMvpState(eventId, state);
 
   const report = await getReport(eventId);
-  if (report?.mvpResult) {
-    const nextReport = { ...report };
+  if (report) {
+    const nextReport = {
+      ...report,
+      content: reinstateMvpPlaceholder(report.content),
+    };
     delete (nextReport as any).mvpResult;
     await setReport(eventId, nextReport);
   }
