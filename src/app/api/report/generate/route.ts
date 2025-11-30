@@ -1,5 +1,144 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getReport, setReport } from "../../../../lib/kv";
+import { getReport, setReport, kvGetJson } from "../../../../lib/kv";
+
+type RawEvent = {
+  quarter: 1 | 2 | 3 | 4;
+  time?: string;
+  team: "home" | "away";
+  type: "goal" | "personal_foul";
+  player?: string;
+};
+
+type PreparedEvent = {
+  quarter: 1 | 2 | 3 | 4;
+  time: string;
+  team: "us" | "opponent";
+  type: "goal" | "personal_foul";
+  player?: string;
+};
+
+type NarrativeInput = {
+  ourTeam: string;
+  opponentTeam: string;
+  ourScore: number;
+  opponentScore: number;
+  location: "home" | "away";
+  events: PreparedEvent[];
+  sourceTeams: { homeTeam?: string; awayTeam?: string };
+};
+
+const OUR_TEAM_KEYWORDS = ["de rijn", "rijn h3", "rijn heren 3", "de rijn heren 3", "drh3"];
+
+function normalizeName(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^a-z\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isOurTeamName(name?: string | null): boolean {
+  if (!name) return false;
+  const norm = normalizeName(name);
+  return OUR_TEAM_KEYWORDS.some((kw) => norm.includes(kw));
+}
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const dp = Array.from({ length: b.length + 1 }, () => 0);
+  for (let j = 0; j <= b.length; j++) dp[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    let prev = i - 1;
+    let min = i;
+    dp[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const temp = dp[j];
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + cost);
+      prev = temp;
+      if (dp[j] < min) min = dp[j];
+    }
+  }
+  return dp[b.length];
+}
+
+function similarity(a: string, b: string): number {
+  if (!a || !b) return 0;
+  const dist = levenshtein(a, b);
+  const maxLen = Math.max(a.length, b.length);
+  if (!maxLen) return 0;
+  return 1 - dist / maxLen;
+}
+
+async function getRosterNames(): Promise<string[]> {
+  try {
+    const cached = await kvGetJson<{ id: string; name: string }[]>("users:roster:v1");
+    if (Array.isArray(cached) && cached.length) {
+      return cached.map((u) => u.name).filter(Boolean);
+    }
+  } catch {}
+  return [];
+}
+
+function canonicalizePlayer(name: string | undefined, roster: string[]): string | null {
+  const raw = (name || "").trim();
+  if (!raw) return null;
+  const norm = normalizeName(raw);
+  if (!norm) return null;
+  let bestName: string | null = null;
+  let bestScore = 0;
+  for (const candidate of roster) {
+    const score = similarity(norm, normalizeName(candidate));
+    if (score > bestScore) {
+      bestScore = score;
+      bestName = candidate;
+    }
+  }
+  return bestScore >= 0.72 ? bestName : null;
+}
+
+function prepareNarrativeInput(input: {
+  homeTeam?: string;
+  awayTeam?: string;
+  homeScore?: number;
+  awayScore?: number;
+  events?: RawEvent[];
+}, rosterNames: string[]): NarrativeInput {
+  const homeTeam = (input.homeTeam || "").trim() || "De Rijn Heren 3";
+  const awayTeam = (input.awayTeam || "").trim() || "Onbekende tegenstander";
+  const homeIsUs = isOurTeamName(homeTeam);
+  const awayIsUs = isOurTeamName(awayTeam);
+  const weAreHome = homeIsUs && !awayIsUs ? true : !homeIsUs && awayIsUs ? false : true;
+  const opponentTeam = weAreHome ? awayTeam : homeTeam;
+  const ourScore = weAreHome ? Number(input.homeScore) : Number(input.awayScore);
+  const opponentScore = weAreHome ? Number(input.awayScore) : Number(input.homeScore);
+  const preparedEvents: PreparedEvent[] = Array.isArray(input.events)
+    ? input.events.map((evt) => {
+        const perspective = weAreHome ? (evt.team === "home" ? "us" : "opponent") : (evt.team === "away" ? "us" : "opponent");
+        const matchedPlayer = perspective === "us" ? canonicalizePlayer(evt.player, rosterNames) : null;
+        return {
+          quarter: evt.quarter,
+          time: evt.time || "",
+          team: perspective as "us" | "opponent",
+          type: evt.type,
+          player: matchedPlayer ?? undefined,
+        };
+      }).filter((evt) => Boolean(evt.time))
+    : [];
+  return {
+    ourTeam: "De Rijn Heren 3",
+    opponentTeam: opponentTeam || "Onbekende tegenstander",
+    ourScore,
+    opponentScore,
+    location: weAreHome ? "home" : "away",
+    events: preparedEvents,
+    sourceTeams: { homeTeam, awayTeam },
+  };
+}
 
 // Simplified generation: consume provided JSON and let the model write the report.
 
@@ -41,15 +180,33 @@ export async function POST(req: NextRequest) {
         { status: 422 }
       );
     }
-const prompt = `Je krijgt JSON met wedstrijdgegevens. Schrijf een korte, energieke wedstrijdsamenvatting (140–220 woorden) in het Nederlands, vanuit het perspectief van De Rijn Heren 3 ("wij/ons").
+    const rosterNames = await getRosterNames();
+    const narrativeInput = prepareNarrativeInput(input, rosterNames);
+    const prompt = `Je krijgt JSON met wedstrijdgegevens in dit schema:
+{
+  "ourTeam": string,          // altijd "De Rijn Heren 3"
+  "opponentTeam": string,
+  "ourScore": number,
+  "opponentScore": number,
+  "location": "home" | "away",
+  "events": Array<{
+    "quarter": 1 | 2 | 3 | 4,
+    "time": string,
+    "team": "us" | "opponent",
+    "type": "goal" | "personal_foul",
+    "player"?: string         // alleen aanwezig bij onze spelers
+  }>
+}
 
 Regels:
-- Schrijf het verslag altijd vanuit het standpunt van De Rijn Heren 3 ("wij/ons") ook voor uit wedstrijden.
-- Gebruik uitsluitend de informatie uit de JSON. Geen extra bronnen of controles.
-- Noem doelpuntenmakers van De Rijn Heren 3 expliciet bij naam op basis van events (type "goal" en team "home").
-- Sluit af met de eindstand (homeScore-awayScore) en vermeld dat de MVP-stemming nog openstaat via de knop hieronder.
-- Houd het sportief, positief en enthousiast; maximaal 2 uitroeptekens.
-- Bovenaan de JSON staat uitgelegd welk team "home" is en welk team "away" is.`;
+- "Wij/ons" = De Rijn Heren 3, ongeacht of we thuis of uit spelen.
+- Baseer het resultaat uitsluitend op ourScore versus opponentScore. Benoem expliciet dat wij gewonnen hebben bij ourScore > opponentScore, verloren bij ourScore < opponentScore, of dat het gelijkspel was wanneer de scores gelijk zijn.
+- Gebruik alleen spelersnamen die voorkomen bij events met "team": "us". Als er geen naam staat, omschrijf de actie algemeen ("een van onze schutters") maar verzin geen namen.
+- Noem nooit namen van individuele tegenstanders. Je mag de teamnaam (${narrativeInput.opponentTeam}) gebruiken, maar spreek verder over "de tegenstander".
+- Meld opponent-events hooguit kort en zonder namen (bijv. "de tegenstander kwam nog even terug").
+- Schrijf energiek en sportief, maximaal 2 uitroeptekens, en blijf positief vanuit ons perspectief.
+- Sluit altijd af met de stand in de vorm ourScore-opponentScore en de zin dat de MVP-stemming nog openstaat via de knop hieronder.
+- Gebruik uitsluitend de gegevens uit de JSON; geen eigen aannames of extra bronnen.`;
 
     const resp = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -71,7 +228,7 @@ Regels:
           },
           {
             role: "user",
-            content: [ { type: "input_text", text: `JSON:\n${JSON.stringify(input)}` } ],
+            content: [ { type: "input_text", text: `JSON:\n${JSON.stringify(narrativeInput)}` } ],
           },
         ],
       }),

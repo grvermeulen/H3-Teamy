@@ -18,7 +18,7 @@ type ApiPayload = {
   closedAt: string | null;
 };
 
-type Props = { eventId: string };
+type Props = { eventId: string; variant?: "card" | "inline" };
 
 async function parseError(res: Response): Promise<string> {
   try {
@@ -38,7 +38,7 @@ async function parseError(res: Response): Promise<string> {
   return res.statusText || "Onbekende fout";
 }
 
-export default function MvpVotingPanel({ eventId }: Props) {
+export default function MvpVotingPanel({ eventId, variant = "card" }: Props) {
   const [data, setData] = useState<ApiPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -162,17 +162,22 @@ export default function MvpVotingPanel({ eventId }: Props) {
     }
   }
 
+  const isInline = variant === "inline";
+  const Container: keyof JSX.IntrinsicElements = isInline ? "div" : "section";
+  const containerClassName = isInline ? undefined : "card";
+  const containerStyle = isInline ? undefined : { marginTop: 24 };
+
   if (loading && !data) {
     return (
-      <section className="card" style={{ marginTop: 24 }}>
+      <Container className={containerClassName} style={containerStyle}>
         <h2 style={{ marginTop: 0 }}>Man of the Match</h2>
         <div className="muted">Laden…</div>
-      </section>
+      </Container>
     );
   }
 
   return (
-    <section className="card" style={{ marginTop: 24 }}>
+    <Container className={containerClassName} style={containerStyle}>
       <h2 style={{ marginTop: 0 }}>Man of the Match</h2>
       <p className="muted" style={{ marginTop: -4, marginBottom: 12 }}>{statusText}</p>
       {error ? <div style={{ color: "#ff7b72", marginBottom: 12 }}>{error}</div> : null}
@@ -228,7 +233,7 @@ export default function MvpVotingPanel({ eventId }: Props) {
           ) : null}
         </>
       )}
-    </section>
+    </Container>
   );
 }
 
