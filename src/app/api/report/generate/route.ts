@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getReport, setReport, kvGetJson } from "../../../../lib/kv";
 import { MVP_PLACEHOLDER } from "../../../../lib/mvpNarrative";
+import type { TeamEvent } from "../../../../types";
 
 type RawEvent = {
   quarter: 1 | 2 | 3 | 4;
@@ -117,34 +118,61 @@ function guessPerspectiveFromEvents(events: RawEvent[] | undefined, roster: stri
   return homeHits > awayHits;
 }
 
-function prepareNarrativeInput(input: {
-  homeTeam?: string;
-  awayTeam?: string;
-  homeScore?: number;
-  awayScore?: number;
-  events?: RawEvent[];
-}, rosterNames: string[]): NarrativeInput {
+function inferHomeFromTitle(title?: string | null): boolean | null {
+  if (!title) return null;
+  const parts = title.split(/[-–—]/);
+  if (parts.length < 2) return null;
+  const first = parts[0]?.trim();
+  const second = parts.slice(1).join("-").trim();
+  if (!first || !second) return null;
+  const firstIsUs = isOurTeamName(first);
+  const secondIsUs = isOurTeamName(second);
+  if (firstIsUs && !secondIsUs) return true;
+  if (!firstIsUs && secondIsUs) return false;
+  return null;
+}
+
+function prepareNarrativeInput(
+  input: {
+    homeTeam?: string;
+    awayTeam?: string;
+    homeScore?: number;
+    awayScore?: number;
+    events?: RawEvent[];
+  },
+  rosterNames: string[],
+  eventMeta?: TeamEvent | null,
+): NarrativeInput {
   const homeTeam = (input.homeTeam || "").trim() || "De Rijn Heren 3";
   const awayTeam = (input.awayTeam || "").trim() || "Onbekende tegenstander";
   const homeIsUs = isOurTeamName(homeTeam);
   const awayIsUs = isOurTeamName(awayTeam);
-  let weAreHome: boolean;
-  if (homeIsUs && !awayIsUs) {
-    weAreHome = true;
-  } else if (!homeIsUs && awayIsUs) {
-    weAreHome = false;
-  } else {
+  let weAreHome: boolean | null = null;
+
+  const titleGuess = inferHomeFromTitle(eventMeta?.title);
+  if (titleGuess !== null) {
+    weAreHome = titleGuess;
+  }
+
+  if (weAreHome === null) {
+    if (homeIsUs && !awayIsUs) weAreHome = true;
+    else if (!homeIsUs && awayIsUs) weAreHome = false;
+  }
+
+  if (weAreHome === null) {
     const rosterGuess = guessPerspectiveFromEvents(input.events, rosterNames);
     if (rosterGuess !== null) {
       weAreHome = rosterGuess;
-    } else {
-      const baseline = normalizeName("De Rijn Heren 3");
-      const homeSimilarity = similarity(normalizeName(homeTeam), baseline);
-      const awaySimilarity = similarity(normalizeName(awayTeam), baseline);
-      if (homeSimilarity > awaySimilarity) weAreHome = true;
-      else if (awaySimilarity > homeSimilarity) weAreHome = false;
-      else weAreHome = true;
     }
+  }
+
+  if (weAreHome === null) {
+    const baseline = normalizeName("De Rijn Heren 3");
+    const homeSimilarity = similarity(normalizeName(homeTeam), baseline);
+    const awaySimilarity = similarity(normalizeName(awayTeam), baseline);
+    if (homeSimilarity > awaySimilarity) weAreHome = true;
+    else if (awaySimilarity > homeSimilarity) weAreHome = false;
+    else weAreHome = true;
   }
   const opponentTeam = weAreHome ? awayTeam : homeTeam;
   const ourScore = weAreHome ? Number(input.homeScore) : Number(input.awayScore);
@@ -214,7 +242,14 @@ export async function POST(req: NextRequest) {
       );
     }
     const rosterNames = await getRosterNames();
-    const narrativeInput = prepareNarrativeInput(input, rosterNames);
+    let eventMeta: TeamEvent | null = null;
+    try {
+      const cachedEvents = await kvGetJson<TeamEvent[]>("calendar:events:v1");
+      eventMeta = cachedEvents?.find((evt) => evt.id === eventId) ?? null;
+    } catch {
+      eventMeta = null;
+    }
+    const narrativeInput = prepareNarrativeInput(input, rosterNames, eventMeta);
     const prompt = `Je krijgt JSON met wedstrijdgegevens in dit schema:
 {
   "ourTeam": string,          // altijd "De Rijn Heren 3"
