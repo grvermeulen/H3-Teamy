@@ -22,3 +22,4 @@ jobs:
         run: node node_modules/tsx/dist/cli.mjs scripts/verify-cache.ts
         env:
           PRISMA_CACHE_ENABLED: "1"
+          DATABASE_URL: ${{ secrets.DIRECT_DATABASE_URL }}

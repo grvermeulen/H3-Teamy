@@ -15,9 +15,11 @@ These rules are always attached to the model context for this repo.
 - Follow Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`, `perf:`, `build:`, `ci:`.
 - Keep subject ≤72 chars; use imperative mood.
 - Reference issues in the body when relevant (e.g., `Closes #123`).
+- always create a new branch when starting a new feature
 
 ## Test norms
 
+- Always run a local compilation first before pushing
 - Co-locate tests next to source or in a `__tests__` folder.
 - Aim for fast unit tests, focused integration tests, and minimal E2E smoke.
 - For regressions, add a failing test first.
