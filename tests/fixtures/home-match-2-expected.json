@@ -1,0 +1,170 @@
+{
+  "homeTeam": "De Rijn H3",
+  "awayTeam": "DOS H1",
+  "homeScore": 2,
+  "awayScore": 9,
+  "date": "Zaterdag 6 december, 17:15 uur",
+  "events": [
+    {
+      "quarter": 1,
+      "time": "01:06",
+      "team": "home",
+      "type": "goal",
+      "player": "Jan Willem Pater"
+    },
+    {
+      "quarter": 1,
+      "time": "01:07",
+      "team": "away",
+      "type": "goal",
+      "player": "Koen van Lent"
+    },
+    {
+      "quarter": 1,
+      "time": "02:22",
+      "team": "home",
+      "type": "personal_foul",
+      "player": "Tycho Veens"
+    },
+    {
+      "quarter": 1,
+      "time": "01:34",
+      "team": "away",
+      "type": "goal",
+      "player": "Koen van Lent"
+    },
+    {
+      "quarter": 1,
+      "time": "02:14",
+      "team": "home",
+      "type": "personal_foul",
+      "player": "Marc Bastiaansen"
+    },
+    {
+      "quarter": 1,
+      "time": "02:18",
+      "team": "away",
+      "type": "goal",
+      "player": "Koen van Lent"
+    },
+    {
+      "quarter": 1,
+      "time": "03:13",
+      "team": "away",
+      "type": "goal",
+      "player": "Lars Damsteegt"
+    },
+    {
+      "quarter": 1,
+      "time": "03:56",
+      "team": "home",
+      "type": "personal_foul",
+      "player": "Jan Willem Pater"
+    },
+    {
+      "quarter": 2,
+      "time": "00:32",
+      "team": "away",
+      "type": "goal",
+      "player": "Niels Damsteegt"
+    },
+    {
+      "quarter": 2,
+      "time": "02:24",
+      "team": "home",
+      "type": "goal",
+      "player": "Marc Bastiaansen"
+    },
+    {
+      "quarter": 2,
+      "time": "02:53",
+      "team": "away",
+      "type": "goal",
+      "player": "Maxim Mulder"
+    },
+    {
+      "quarter": 2,
+      "time": "04:12",
+      "team": "home",
+      "type": "personal_foul",
+      "player": "Levy de Rijke"
+    },
+    {
+      "quarter": 2,
+      "time": "04:30",
+      "team": "away",
+      "type": "goal",
+      "player": "Koen van Lent"
+    },
+    {
+      "quarter": 2,
+      "time": "04:48",
+      "team": "away",
+      "type": "goal",
+      "player": "Maxim Mulder"
+    },
+    {
+      "quarter": 3,
+      "time": "02:26",
+      "team": "away",
+      "type": "goal",
+      "player": "Lars Damsteegt"
+    },
+    {
+      "quarter": 3,
+      "time": "02:34",
+      "team": "home",
+      "type": "personal_foul",
+      "player": "Koen Peters"
+    },
+    {
+      "quarter": 3,
+      "time": "02:50",
+      "team": "away",
+      "type": "goal",
+      "player": "Niels Damsteegt"
+    },
+    {
+      "quarter": 3,
+      "time": "02:59",
+      "team": "away",
+      "type": "goal",
+      "player": "Koen van Lent"
+    },
+    {
+      "quarter": 3,
+      "time": "03:55",
+      "team": "home",
+      "type": "personal_foul",
+      "player": "Lars Damsteegt"
+    },
+    {
+      "quarter": 4,
+      "time": "00:26",
+      "team": "away",
+      "type": "goal",
+      "player": "Niels Damsteegt"
+    },
+    {
+      "quarter": 4,
+      "time": "03:14",
+      "team": "home",
+      "type": "personal_foul",
+      "player": "Jan Willem Pater"
+    },
+    {
+      "quarter": 4,
+      "time": "03:29",
+      "team": "away",
+      "type": "goal",
+      "player": "Koen van Lent"
+    },
+    {
+      "quarter": 4,
+      "time": "04:38",
+      "team": "away",
+      "type": "goal",
+      "player": "Lars Damsteegt"
+    }
+  ]
+}

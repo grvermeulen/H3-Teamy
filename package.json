@@ -10,6 +10,10 @@
     "lint:fix": "next lint --fix || eslint . --fix",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:ui": "vitest --ui",
+    "test:extract-fixtures": "node scripts/extract-test-fixtures.js",
     "prisma:generate": "prisma generate",
     "prebuild": "node scripts/generate-icons.js",
     "postinstall": "prisma generate --accelerate",
@@ -39,6 +43,7 @@
     "eslint-config-next": "14.2.5",
     "typescript": "5.4.5",
     "husky": "^9.1.6",
-    "prettier": "^3.3.3"
+    "prettier": "^3.3.3",
+    "vitest": "^2.0.0"
   }
 }
