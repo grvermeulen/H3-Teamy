@@ -84,7 +84,8 @@ h1, h2, h3 {
 }
 
 /* Attendance tier badges */
-.badge-rookie { background: color-mix(in oklab, #f59e0b 18%, transparent); color: #ffd89e; border: 1px solid color-mix(in oklab, #f59e0b 35%, transparent); }
+.badge-rookie { background: color-mix(in oklab, #ef4444 18%, transparent); color: #ffd7d7; border: 1px solid color-mix(in oklab, #ef4444 35%, transparent); }
+.badge-reliable-reserve { background: color-mix(in oklab, #f97316 18%, transparent); color: #ffe2c7; border: 1px solid color-mix(in oklab, #f97316 35%, transparent); }
 .badge-average { background: color-mix(in oklab, #22c55e 18%, transparent); color: #c9f7d1; border: 1px solid color-mix(in oklab, #22c55e 35%, transparent); }
 .badge-veteran { background: color-mix(in oklab, #3b82f6 18%, transparent); color: #cfe0ff; border: 1px solid color-mix(in oklab, #3b82f6 35%, transparent); }
 .badge-furniture { background: color-mix(in oklab, #a855f7 18%, transparent); color: #e5ccff; border: 1px solid color-mix(in oklab, #a855f7 35%, transparent); }
@@ -119,6 +120,9 @@ h1, h2, h3 {
   justify-content: center;
   z-index: 1000;
   padding: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modalContent {
@@ -130,6 +134,8 @@ h1, h2, h3 {
   width: 100%;
   max-height: 80vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   box-shadow: 0 10px 30px rgba(0,0,0,0.35);
   position: relative;
 }

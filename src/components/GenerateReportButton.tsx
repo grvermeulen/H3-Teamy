@@ -43,6 +43,18 @@ export default function GenerateReportButton({ eventId, opponent }: { eventId: s
           if (result?.date) payload.date = result.date;
           
           if (result?.events?.length) payload.events = result.events;
+          // Pass the full normalized result as well for server-side merging
+          if (result) payload.result = result;
+        }
+      }
+
+      // If no image was provided, ensure we have at least minimal structured input
+      if (!imageFile) {
+        const hasScores = typeof payload.homeScore === "number" && typeof payload.awayScore === "number";
+        const hasEvents = Array.isArray(payload.events) && payload.events.length > 0;
+        if (!hasScores || !hasEvents) {
+          alert("Ongeldige invoer: upload eerst een screenshot of zorg dat score en events zijn ingevuld.");
+          return;
         }
       }
       const res = await fetch("/api/report/generate", {
