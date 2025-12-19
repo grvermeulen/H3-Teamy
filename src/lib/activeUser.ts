@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "./db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "./authOptions";
+import { listAllAttendanceKeys, getAttendance } from "./kv";
 
 export type ActiveUserResult = {
   userId: string;
@@ -100,7 +101,19 @@ export async function getActiveUser(req: NextRequest): Promise<ActiveUserResult>
         const hasName = !!((cookieUser.firstName || "").trim() || (cookieUser.lastName || "").trim());
         const hasEmail = !!(cookieUser.email || "").trim();
         const rsvpCount = await prisma.rsvp.count({ where: { userId: cookieIdentity.userId } });
-        const isEmpty = !hasName && !hasEmail && rsvpCount === 0;
+        // Check if user has attendance data (don't delete users with attendance history)
+        let hasAttendance = false;
+        try {
+          const allKeys = await listAllAttendanceKeys();
+          for (const dateKey of allKeys) {
+            const att = await getAttendance(dateKey);
+            if (att.includes(cookieIdentity.userId)) {
+              hasAttendance = true;
+              break;
+            }
+          }
+        } catch {}
+        const isEmpty = !hasName && !hasEmail && rsvpCount === 0 && !hasAttendance;
         if (isEmpty) {
           // Silent adopt: repoint cookie identity and delete empty user
           await prisma.$transaction([

@@ -358,9 +358,19 @@ export async function getAttendance(dateYmd: string): Promise<string[]> {
     if (!raw) return [];
     try { return JSON.parse(raw) as string[]; } catch { return []; }
   }
+  // Try memoryJson first (correct storage), fallback to memoryStore for backward compatibility
+  const rawJson = memoryJson.get(key);
+  if (rawJson) {
+    try { return JSON.parse(rawJson) as string[]; } catch { return []; }
+  }
   const raw = memoryStore.get(key) as unknown as string | undefined;
   if (!raw) return [];
-  try { return JSON.parse(raw) as string[]; } catch { return []; }
+  try {
+    const parsed = JSON.parse(raw) as string[];
+    // Migrate to memoryJson for future reads
+    memoryJson.set(key, raw);
+    return parsed;
+  } catch { return []; }
 }
 
 export async function setAttendanceBatch(dateYmd: string, presentUserIds: string[], markedBy: string): Promise<void> {
@@ -368,6 +378,8 @@ export async function setAttendanceBatch(dateYmd: string, presentUserIds: string
   const redis = await getRedis();
   const payload = JSON.stringify(presentUserIds);
   if (redis) { await redis.set(key, payload); return; }
+  // Store in memoryJson (correct storage) and also in memoryStore for backward compatibility
+  memoryJson.set(key, payload);
   memoryStore.set(key, payload as any);
 }
 
@@ -386,11 +398,44 @@ export async function getAttendanceForDates(dates: string[]): Promise<Record<str
     return out;
   }
   for (const d of dates) {
-    const raw = memoryStore.get(`att:${d}`) as unknown as string | undefined;
+    const key = `att:${d}`;
+    // Try memoryJson first (correct storage), fallback to memoryStore for backward compatibility
+    const rawJson = memoryJson.get(key);
+    if (rawJson) {
+      try { out[d] = JSON.parse(rawJson) as string[]; } catch { out[d] = []; }
+      continue;
+    }
+    const raw = memoryStore.get(key) as unknown as string | undefined;
     if (!raw) { out[d] = []; continue; }
-    try { out[d] = JSON.parse(raw) as string[]; } catch { out[d] = []; }
+    try {
+      const parsed = JSON.parse(raw) as string[];
+      // Migrate to memoryJson for future reads
+      memoryJson.set(key, raw);
+      out[d] = parsed;
+    } catch { out[d] = []; }
   }
   return out;
+}
+
+// Helper to list all attendance keys (for debugging/migration)
+export async function listAllAttendanceKeys(): Promise<string[]> {
+  const redis = await getRedis();
+  if (redis) {
+    const keys: string[] = await redis.keys("att:*");
+    return keys.map((k) => k.replace("att:", ""));
+  }
+  const keys: string[] = [];
+  // Check memoryJson
+  for (const k of memoryJson.keys()) {
+    if (k.startsWith("att:")) keys.push(k.replace("att:", ""));
+  }
+  // Check memoryStore (backward compatibility)
+  for (const k of memoryStore.keys()) {
+    if (typeof k === "string" && k.startsWith("att:") && !keys.includes(k.replace("att:", ""))) {
+      keys.push(k.replace("att:", ""));
+    }
+  }
+  return keys.sort();
 }
 
 // Roles (admin/trainer/player) stored in KV/Redis for simplicity
