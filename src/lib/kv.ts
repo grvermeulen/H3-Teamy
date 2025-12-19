@@ -351,6 +351,15 @@ export async function setReport(eventId: string, report: MatchReport | null): Pr
 
 // Training Attendance
 export async function getAttendance(dateYmd: string): Promise<string[]> {
+  const p = await getPrisma();
+  if (p) {
+    // Primary: Database
+    const records = await p.attendance.findMany({ where: { date: dateYmd }, select: { userId: true } });
+    if (records.length > 0) {
+      return records.map((r) => r.userId);
+    }
+    // Fallback: Redis/KV for backward compatibility
+  }
   const key = `att:${dateYmd}`;
   const redis = await getRedis();
   if (redis) {
@@ -374,6 +383,30 @@ export async function getAttendance(dateYmd: string): Promise<string[]> {
 }
 
 export async function setAttendanceBatch(dateYmd: string, presentUserIds: string[], markedBy: string): Promise<void> {
+  const p = await getPrisma();
+  if (p) {
+    // Primary: Database
+    // Delete existing attendance for this date
+    await p.attendance.deleteMany({ where: { date: dateYmd } }).catch(() => {});
+    // Insert new attendance records
+    if (presentUserIds.length > 0) {
+      // Ensure users exist (satisfy FK constraint)
+      const userIds = new Set(presentUserIds);
+      for (const userId of userIds) {
+        await p.user.upsert({
+          where: { id: userId },
+          create: { id: userId, firstName: "", lastName: "" },
+          update: {},
+        }).catch(() => {});
+      }
+      // Insert attendance records
+      await p.attendance.createMany({
+        data: presentUserIds.map((userId) => ({ date: dateYmd, userId, markedBy })),
+        skipDuplicates: true,
+      });
+    }
+    // Also update Redis/KV for backward compatibility
+  }
   const key = `att:${dateYmd}`;
   const redis = await getRedis();
   const payload = JSON.stringify(presentUserIds);
@@ -385,9 +418,65 @@ export async function setAttendanceBatch(dateYmd: string, presentUserIds: string
 
 export async function getAttendanceForDates(dates: string[]): Promise<Record<string, string[]>> {
   const out: Record<string, string[]> = {};
+  if (dates.length === 0) return out;
+  
+  const p = await getPrisma();
+  if (p) {
+    // Primary: Database
+    const records = await p.attendance.findMany({
+      where: { date: { in: dates } },
+      select: { date: true, userId: true },
+    });
+    // Group by date
+    for (const d of dates) {
+      out[d] = [];
+    }
+    for (const record of records) {
+      if (!out[record.date]) out[record.date] = [];
+      out[record.date].push(record.userId);
+    }
+    // Fill in any missing dates from Redis/KV fallback
+    const missingDates = dates.filter((d) => !out[d] || out[d].length === 0);
+    if (missingDates.length > 0) {
+      const redis = await getRedis();
+      if (redis) {
+        const keys = missingDates.map((d) => `att:${d}`);
+        const vals = await redis.mget(keys);
+        for (let i = 0; i < missingDates.length; i++) {
+          const raw = vals[i] as string | null;
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw) as string[];
+              out[missingDates[i]] = parsed;
+            } catch {}
+          }
+        }
+      } else {
+        // Fallback to memory
+        for (const d of missingDates) {
+          const key = `att:${d}`;
+          const rawJson = memoryJson.get(key);
+          if (rawJson) {
+            try { out[d] = JSON.parse(rawJson) as string[]; } catch {}
+          } else {
+            const raw = memoryStore.get(key) as unknown as string | undefined;
+            if (raw) {
+              try {
+                const parsed = JSON.parse(raw) as string[];
+                memoryJson.set(key, raw);
+                out[d] = parsed;
+              } catch {}
+            }
+          }
+        }
+      }
+    }
+    return out;
+  }
+  
+  // Fallback: Redis/KV only
   const redis = await getRedis();
   if (redis) {
-    if (dates.length === 0) return out;
     const keys = dates.map((d) => `att:${d}`);
     const vals = await redis.mget(keys);
     for (let i = 0; i < dates.length; i++) {
@@ -399,7 +488,6 @@ export async function getAttendanceForDates(dates: string[]): Promise<Record<str
   }
   for (const d of dates) {
     const key = `att:${d}`;
-    // Try memoryJson first (correct storage), fallback to memoryStore for backward compatibility
     const rawJson = memoryJson.get(key);
     if (rawJson) {
       try { out[d] = JSON.parse(rawJson) as string[]; } catch { out[d] = []; }
@@ -409,7 +497,6 @@ export async function getAttendanceForDates(dates: string[]): Promise<Record<str
     if (!raw) { out[d] = []; continue; }
     try {
       const parsed = JSON.parse(raw) as string[];
-      // Migrate to memoryJson for future reads
       memoryJson.set(key, raw);
       out[d] = parsed;
     } catch { out[d] = []; }
