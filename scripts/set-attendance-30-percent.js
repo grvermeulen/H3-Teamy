@@ -3,7 +3,12 @@
   Usage: DATABASE_URL=... node scripts/set-attendance-30-percent.js [--dry-run]
 */
 
+// Load environment variables from .env if available
+require("dotenv").config();
+
 const { PrismaClient } = require("@prisma/client");
+const { PrismaPg } = require("@prisma/adapter-pg");
+const { Pool } = require("pg");
 
 function toYMD(d) {
   const y = d.getFullYear();
@@ -71,7 +76,38 @@ function generateTrainingDates(from, to) {
 
 async function main() {
   const dryRun = process.argv.includes("--dry-run");
-  const prisma = new PrismaClient();
+  
+  // Ensure DATABASE_URL is set from DIRECT_DATABASE_URL if needed
+  if (!process.env.DATABASE_URL && process.env.DIRECT_DATABASE_URL) {
+    process.env.DATABASE_URL = process.env.DIRECT_DATABASE_URL;
+  }
+  
+  // Prefer Accelerate URL if available (same as Prisma Studio uses)
+  let prisma;
+  const fs = require("fs");
+  let accelerateUrl = null;
+  try {
+    accelerateUrl = fs.readFileSync("prisma_url.txt", "utf-8").trim();
+  } catch (e) {
+    // prisma_url.txt not found, continue
+  }
+
+  if (accelerateUrl && accelerateUrl.startsWith('prisma://')) {
+    // Use Accelerate URL (same as Prisma Studio)
+    console.log("Using Prisma Accelerate connection...\n");
+    prisma = new PrismaClient({ accelerateUrl });
+  } else {
+    // Fall back to direct connection
+    const dbUrl = process.env.DATABASE_URL;
+    if (!dbUrl) {
+      console.error("❌ DATABASE_URL must be set in .env file or environment");
+      process.exit(1);
+    }
+    console.log("Using direct PostgreSQL connection...\n");
+    const pool = new Pool({ connectionString: dbUrl });
+    const adapter = new PrismaPg(pool);
+    prisma = new PrismaClient({ adapter });
+  }
 
   try {
     console.log("=== Set Everyone to 30% Attendance ===\n");

@@ -9,7 +9,16 @@ const prismaInstance =
   global.prisma ||
   (() => {
     const url = process.env.PRISMA_DATABASE_URL || process.env.DATABASE_URL;
-    return url ? new PrismaClient({ datasources: { db: { url } } }) : new PrismaClient();
+    if (!url) {
+      return new PrismaClient();
+    }
+    // Prisma Accelerate URL (prisma://...)
+    if (url.startsWith("prisma://")) {
+      return new PrismaClient({ accelerateUrl: url });
+    }
+    // Direct PostgreSQL connection - Prisma 7 reads DATABASE_URL from env automatically
+    // But we can also use adapter for explicit control if needed
+    return new PrismaClient();
   })();
 
 export const prisma = prismaInstance;

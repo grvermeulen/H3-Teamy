@@ -3,7 +3,12 @@
   Usage: DATABASE_URL=... REDIS_URL=... node scripts/migrate-attendance-to-db.js
 */
 
+// Load environment variables from .env if available
+require("dotenv").config();
+
 const { PrismaClient } = require("@prisma/client");
+const { PrismaPg } = require("@prisma/adapter-pg");
+const { Pool } = require("pg");
 
 async function getRedis() {
   const url = process.env.REDIS_URL;
@@ -39,7 +44,21 @@ async function getAttendance(redis, dateYmd) {
 }
 
 async function main() {
-  const prisma = new PrismaClient();
+  // Ensure DATABASE_URL is set from DIRECT_DATABASE_URL if needed
+  if (!process.env.DATABASE_URL && process.env.DIRECT_DATABASE_URL) {
+    process.env.DATABASE_URL = process.env.DIRECT_DATABASE_URL;
+  }
+  
+  // For migrations, we need to use direct connection (Accelerate doesn't support writes/schema changes)
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    console.error("❌ DATABASE_URL must be set in .env file or environment");
+    process.exit(1);
+  }
+  console.log("Using direct PostgreSQL connection for migration...\n");
+  const pool = new Pool({ connectionString: dbUrl });
+  const adapter = new PrismaPg(pool);
+  const prisma = new PrismaClient({ adapter });
   const redis = await getRedis();
 
   try {

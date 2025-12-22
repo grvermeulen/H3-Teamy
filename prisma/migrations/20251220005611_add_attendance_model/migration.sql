@@ -1,0 +1,2 @@
+-- This is an empty migration.
+-- The Attendance model was already created in the manual_add_attendance migration.
