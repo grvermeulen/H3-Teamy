@@ -1,4 +1,6 @@
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -16,9 +18,10 @@ const prismaInstance =
     if (url.startsWith("prisma://")) {
       return new PrismaClient({ accelerateUrl: url });
     }
-    // Direct PostgreSQL connection - Prisma 7 reads DATABASE_URL from env automatically
-    // But we can also use adapter for explicit control if needed
-    return new PrismaClient();
+    // Direct PostgreSQL connection - use adapter for Prisma v7
+    const pool = new Pool({ connectionString: url });
+    const adapter = new PrismaPg(pool);
+    return new PrismaClient({ adapter });
   })();
 
 export const prisma = prismaInstance;
