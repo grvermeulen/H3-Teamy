@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../lib/db";
 import { getUserRoles, setUserRoles, kvDelete } from "../../../../lib/kv";
 import { isAdminUser } from "../../../../lib/trainer";
+import { isPlaceholderUser } from "../../../../lib/userUtils";
 
 function norm(s: string) {
   return (s || "").toLowerCase().trim();
 }
 
-function displayName(u: { firstName: string; lastName: string; id: string; email?: string | null }) {
-  const full = `${(u.firstName || "").trim()} ${(u.lastName || "").trim()}`.trim();
+function displayName(u: {
+  firstName: string;
+  lastName: string;
+  id: string;
+  email?: string | null;
+}) {
+  const full =
+    `${(u.firstName || "").trim()} ${(u.lastName || "").trim()}`.trim();
   if (full) return full;
   const email = (u.email || "").trim();
   if (email) return email;
@@ -17,20 +24,37 @@ function displayName(u: { firstName: string; lastName: string; id: string; email
 
 export async function GET(req: NextRequest) {
   const { isAdmin } = await isAdminUser(req);
-  if (!isAdmin) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  if (!isAdmin)
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const adminFull = norm(process.env.ADMIN_FULL_NAME || "");
-  const trainerNames = (process.env.TRAINER_FULL_NAMES || "").split(",").map(norm).filter(Boolean);
+  const trainerNames = (process.env.TRAINER_FULL_NAMES || "")
+    .split(",")
+    .map(norm)
+    .filter(Boolean);
   let users: any[] = [];
   try {
-    users = await prisma.user.findMany({ select: { id: true, firstName: true, lastName: true, email: true } });
+    users = await prisma.user.findMany({
+      select: { id: true, firstName: true, lastName: true, email: true },
+    });
   } catch (e: any) {
-    return NextResponse.json({ error: "users_query_failed", message: e?.message || String(e) }, { status: 500 });
+    return NextResponse.json(
+      { error: "users_query_failed", message: e?.message || String(e) },
+      { status: 500 },
+    );
   }
-  const list = [] as { id: string; name: string; roles: { admin?: boolean; trainer?: boolean; player?: boolean } }[];
+  const list = [] as {
+    id: string;
+    name: string;
+    roles: { admin?: boolean; trainer?: boolean; player?: boolean };
+  }[];
   for (const u of users as any[]) {
+    // Skip placeholder users (empty firstName/lastName and no email)
+    if (isPlaceholderUser(u)) continue;
+
     const name = displayName(u);
-    const kv = await getUserRoles(u.id).catch(() => ({ player: true } as any));
-    const full = `${(u.firstName || "").trim()} ${(u.lastName || "").trim()}`.trim();
+    const kv = await getUserRoles(u.id).catch(() => ({ player: true }) as any);
+    const full =
+      `${(u.firstName || "").trim()} ${(u.lastName || "").trim()}`.trim();
     const envAdmin = adminFull && norm(full) === adminFull;
     const envTrainer = trainerNames.includes(norm(full));
     const merged = {
@@ -46,9 +70,15 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   const { isAdmin } = await isAdminUser(req);
-  if (!isAdmin) return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  const body = await req.json().catch(() => ({} as any));
-  const items = Array.isArray(body?.items) ? body.items as { id: string; roles: { admin?: boolean; trainer?: boolean; player?: boolean } }[] : [];
+  if (!isAdmin)
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const body = await req.json().catch(() => ({}) as any);
+  const items = Array.isArray(body?.items)
+    ? (body.items as {
+        id: string;
+        roles: { admin?: boolean; trainer?: boolean; player?: boolean };
+      }[])
+    : [];
   for (const it of items) {
     const roles = {
       admin: Boolean(it.roles?.admin),
@@ -61,5 +91,3 @@ export async function PUT(req: NextRequest) {
   await kvDelete("users:roster:v1");
   return NextResponse.json({ ok: true });
 }
-
-

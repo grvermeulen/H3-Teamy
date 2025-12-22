@@ -5,6 +5,7 @@ import {
   generateTrainingDates,
 } from "../../../../lib/training";
 import { getAttendanceForDates } from "../../../../lib/kv";
+import { isPlaceholderUser } from "../../../../lib/userUtils";
 
 export async function GET(req: NextRequest) {
   const window = defaultSeasonWindow();
@@ -20,15 +21,20 @@ export async function GET(req: NextRequest) {
     for (const uid of ids) counts.set(uid, (counts.get(uid) || 0) + 1);
   }
   const users = await prisma.user
-    .findMany({ select: { id: true, firstName: true, lastName: true } })
+    .findMany({
+      select: { id: true, firstName: true, lastName: true, email: true },
+    })
     .catch(() => [] as any[]);
-  const validUserIds = new Set(users.map((u: any) => u.id));
+
+  // Filter out placeholder users (empty firstName/lastName and no email)
+  const validUsers = users.filter((u: any) => !isPlaceholderUser(u));
+  const validUserIds = new Set(validUsers.map((u: any) => u.id));
   const mapName = new Map(
-    users.map((u: any) => [u.id, `${u.firstName} ${u.lastName}`.trim()]),
+    validUsers.map((u: any) => [u.id, `${u.firstName} ${u.lastName}`.trim()]),
   );
 
-  // Filter out orphaned user IDs (users that have been deleted)
-  // Only show attendance for users that currently exist in the database
+  // Filter out orphaned user IDs (users that have been deleted) and placeholder users
+  // Only show attendance for users that currently exist in the database and are not placeholders
   const list = Array.from(counts.entries())
     .filter(([userId]) => validUserIds.has(userId)) // Only include valid users
     .map(([userId, attended]) => {

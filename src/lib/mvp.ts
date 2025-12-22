@@ -1,6 +1,7 @@
 import { kvGetJson, kvSetJson, getAttendanceForDates } from "./kv";
 import { prisma } from "./db";
 import { defaultSeasonWindow, generateTrainingDates } from "./training";
+import { isPlaceholderUser } from "./userUtils";
 
 export type RosterEntry = { id: string; name: string };
 export type MvpVoteRecord = {
@@ -57,6 +58,7 @@ async function buildRosterFromAttendance(): Promise<RosterEntry[]> {
       })
       .catch(() => [] as any[]);
     return fallback
+      .filter((u: any) => !isPlaceholderUser(u)) // Filter out placeholder users
       .map((u: any) => ({ id: u.id, name: displayName(u) }))
       .filter((r) => r.name)
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -67,7 +69,9 @@ async function buildRosterFromAttendance(): Promise<RosterEntry[]> {
       select: { id: true, firstName: true, lastName: true, email: true },
     })
     .catch(() => [] as any[]);
-  const list = users.map((u: any) => ({ id: u.id, name: displayName(u) }));
+  const list = users
+    .filter((u: any) => !isPlaceholderUser(u)) // Filter out placeholder users
+    .map((u: any) => ({ id: u.id, name: displayName(u) }));
   list.sort((a, b) => a.name.localeCompare(b.name));
   return list;
 }

@@ -1,21 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserProfile, listEventRsvps, listUserRsvps } from "../../../../lib/kv";
+import {
+  getUserProfile,
+  listEventRsvps,
+  listUserRsvps,
+} from "../../../../lib/kv";
 import { getBadgeForAttendance } from "../../../../lib/badges";
+import { prisma } from "../../../../lib/db";
+import { isPlaceholderUser } from "../../../../lib/userUtils";
 
 export async function GET(req: NextRequest) {
   const eventId = req.nextUrl.searchParams.get("eventId");
-  if (!eventId) return NextResponse.json({ error: "eventId required" }, { status: 400 });
+  if (!eventId)
+    return NextResponse.json({ error: "eventId required" }, { status: 400 });
   const countsOnly = req.nextUrl.searchParams.get("countsOnly") === "1";
   let items: { userId: string; status: any }[] = [];
   try {
     items = await listEventRsvps(eventId);
   } catch (e: any) {
-    return NextResponse.json({ error: "list_failed", message: e?.message || String(e) }, { status: 500 });
+    return NextResponse.json(
+      { error: "list_failed", message: e?.message || String(e) },
+      { status: 500 },
+    );
   }
+  // Get all users to check for placeholders
+  const allUsers = await prisma.user
+    .findMany({
+      select: { id: true, firstName: true, lastName: true, email: true },
+    })
+    .catch(() => [] as any[]);
+  const placeholderUserIds = new Set(
+    allUsers.filter((u: any) => isPlaceholderUser(u)).map((u: any) => u.id),
+  );
+
   const yes: { id: string; name: string }[] = [];
   const no: { id: string; name: string }[] = [];
   const maybe: { id: string; name: string }[] = [];
   for (const { userId, status } of items) {
+    // Skip placeholder users
+    if (placeholderUserIds.has(userId)) continue;
+
     if (countsOnly) {
       if (status === "yes") yes.push({ id: userId, name: "" });
       else if (status === "no") no.push({ id: userId, name: "" });
@@ -23,7 +46,10 @@ export async function GET(req: NextRequest) {
       continue;
     }
     const profile = await getUserProfile(userId);
-    const name = profile && profile.firstName ? profile.firstName : `User ${userId.slice(0, 6)}`;
+    const name =
+      profile && profile.firstName
+        ? profile.firstName
+        : `User ${userId.slice(0, 6)}`;
     // Compute simple attendance percentage as Yes/(Yes+No+Maybe) across all events (kept for potential future use)
     try {
       const history = await listUserRsvps(userId);
@@ -40,5 +66,3 @@ export async function GET(req: NextRequest) {
     lists: countsOnly ? { yes: [], no: [], maybe: [] } : { yes, no, maybe },
   });
 }
-
-
