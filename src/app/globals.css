@@ -58,13 +58,47 @@ body {
 /* Snow animation */
 @keyframes snow {
   0% {
-    transform: translateY(0) translateX(0) rotate(0deg);
+    transform: translateY(-100px) translateX(0) rotate(0deg);
     opacity: 1;
   }
   100% {
-    transform: translateY(100vh) translateX(20px) rotate(360deg);
+    transform: translateY(calc(100vh + 100px)) translateX(var(--snow-drift))
+      rotate(360deg);
     opacity: 0;
   }
+}
+
+@keyframes snow-drift {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(20px);
+  }
+}
+
+/* Individual snowflake styling */
+.snowflake {
+  position: fixed;
+  top: -10px;
+  color: white;
+  user-select: none;
+  pointer-events: none;
+  z-index: 1000;
+  animation: snow linear infinite;
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
+  --snow-drift: 0px;
+}
+
+.snowflake:nth-child(odd) {
+  animation-name: snow, snow-drift;
+  animation-duration: var(--snow-duration, 3s), 3s;
+  --snow-drift: 50px;
+}
+
+.snowflake:nth-child(even) {
+  --snow-drift: -30px;
 }
 
 .christmas-theme body::before {
