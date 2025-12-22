@@ -2,10 +2,9 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { TeamEvent, RsvpStatus } from "../types";
-import Link from "next/link";
-import ReportLink from "./ReportLink";
 import GenerateReportButton from "./GenerateReportButton";
 import ReportPreview from "./ReportPreview";
+import MvpVoteButton from "./MvpVoteButton";
 
 type Props = { events: TeamEvent[] };
 
@@ -282,7 +281,20 @@ export default function EventList({ events }: Props) {
               ) : null}
             </div>
             {/* Match report controls (bottom-right) */}
-            {loggedIn ? <ReportPreview eventId={evt.id} /> : null}
+            {loggedIn ? (
+              <div
+                className="rsvp"
+                style={{
+                  justifyContent: "flex-end",
+                  marginTop: 8,
+                  gap: 8,
+                  flexWrap: "wrap",
+                }}
+              >
+                <ReportPreview eventId={evt.id} />
+                <MvpVoteButton eventId={evt.id} />
+              </div>
+            ) : null}
             {loggedIn ? (
               <GenerateReportButton eventId={evt.id} opponent={evt.title} />
             ) : null}
