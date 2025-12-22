@@ -18,6 +18,7 @@ model User {
   // Optional: link to sessions/devices in future
   rsvps     Rsvp[]
   identities Identity[]
+  attendances Attendance[]
 }
 
 model Rsvp {
@@ -54,4 +55,18 @@ model Identity {
   @@index([userId])
 }
 
+model Attendance {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  date      String // YYYY-MM-DD format
+  userId    String
+  markedBy  String // User ID who marked the attendance
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([date, userId])
+  @@index([date])
+  @@index([userId])
+}
 
