@@ -2,6 +2,20 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 function getDatabaseUrl(): string {
+  // Check if we're running a migration command
+  // prisma.config.ts is only used for migrations in Prisma 7
+  const isMigration = process.argv.some(arg => 
+    arg.includes('migrate') || arg.includes('db push') || arg.includes('db pull')
+  );
+  
+  // For non-migration commands (like prisma generate), allow Accelerate URLs
+  // Prisma will use DATABASE_URL from environment or schema.prisma
+  if (!isMigration) {
+    // Return DATABASE_URL if available, otherwise empty string
+    // Prisma generate doesn't need a database connection
+    return process.env.DATABASE_URL || process.env.PRISMA_DATABASE_URL || '';
+  }
+  
   // For migrations, prefer DIRECT_DATABASE_URL (direct PostgreSQL connection)
   // Accelerate URLs don't work with migrations
   if (process.env.DIRECT_DATABASE_URL) {
@@ -11,7 +25,7 @@ function getDatabaseUrl(): string {
   // Try DATABASE_URL environment variable
   if (process.env.DATABASE_URL) {
     const url = process.env.DATABASE_URL;
-    // Check if it's an Accelerate URL
+    // Check if it's an Accelerate URL (only during migrations)
     if (url.startsWith('prisma://')) {
       throw new Error(
         'Prisma Accelerate URLs are not supported for migrations.\n' +
@@ -23,7 +37,7 @@ function getDatabaseUrl(): string {
     return url;
   }
   
-  // Fallback to prisma_url.txt file
+  // Fallback to prisma_url.txt file (only during migrations)
   try {
     const urlPath = join(process.cwd(), 'prisma_url.txt');
     const url = readFileSync(urlPath, 'utf-8').trim();
@@ -41,7 +55,11 @@ function getDatabaseUrl(): string {
     if (error instanceof Error && error.message.includes('Accelerate')) {
       throw error;
     }
-    throw new Error('DATABASE_URL or DIRECT_DATABASE_URL environment variable is not set and prisma_url.txt file not found');
+    // If file doesn't exist and we're in a migration, throw error
+    if (isMigration) {
+      throw new Error('DATABASE_URL or DIRECT_DATABASE_URL environment variable is not set and prisma_url.txt file not found');
+    }
+    return '';
   }
 }
 

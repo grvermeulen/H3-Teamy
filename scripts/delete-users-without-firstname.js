@@ -15,6 +15,7 @@ async function main() {
   
   // Prefer Accelerate URL if available (same as Prisma Studio uses)
   let prisma;
+  let pool = null; // Track pool for cleanup if we create it
   let accelerateUrl = null;
   try {
     accelerateUrl = fs.readFileSync("prisma_url.txt", "utf-8").trim();
@@ -34,7 +35,7 @@ async function main() {
       process.exit(1);
     }
     console.log("Using direct PostgreSQL connection...\n");
-    const pool = new Pool({ connectionString: dbUrl });
+    pool = new Pool({ connectionString: dbUrl });
     const adapter = new PrismaPg(pool);
     prisma = new PrismaClient({ adapter });
   }
@@ -132,9 +133,11 @@ async function main() {
     console.error("❌ Error:", error.message);
     console.error(error);
   } finally {
+    // Properly disconnect Prisma (handles all cleanup)
     await prisma.$disconnect();
-    if (prisma._engine && prisma._engine.adapter && prisma._engine.adapter.pool) {
-      await prisma._engine.adapter.pool.end();
+    // If we created a pool separately, close it using the public API
+    if (pool) {
+      await pool.end();
     }
   }
 }
