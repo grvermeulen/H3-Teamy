@@ -1,14 +1,36 @@
 /*
-  Set everyone to 30% attendance for the current season
-  Usage: DATABASE_URL=... node scripts/set-attendance-30-percent.js [--dry-run]
+  Clear all attendance, then set attendance for all users for the last 25 training sessions.
+  Usage: DATABASE_URL=... node scripts/set-last-25-sessions-attendance.js [--dry-run]
 */
 
-// Load environment variables from .env if available
 require("dotenv").config();
 
 const { PrismaClient } = require("@prisma/client");
 const { PrismaPg } = require("@prisma/adapter-pg");
 const { Pool } = require("pg");
+
+// Redis connection helper (same as migrate script)
+async function getRedis() {
+  const url = process.env.REDIS_URL;
+  if (!url) return null;
+  const IORedis = require("ioredis");
+  const redis = new IORedis(url, {
+    lazyConnect: true,
+    maxRetriesPerRequest: 2,
+  });
+  try {
+    await redis.connect();
+  } catch {}
+  return redis;
+}
+
+async function listAllAttendanceKeys(redis) {
+  if (redis) {
+    const keys = await redis.keys("att:*");
+    return keys.map((k) => k.replace("att:", "")).sort();
+  }
+  return [];
+}
 
 function toYMD(d) {
   const y = d.getFullYear();
@@ -100,7 +122,7 @@ async function main() {
     process.env.DATABASE_URL = process.env.DIRECT_DATABASE_URL;
   }
 
-  // Prefer Accelerate URL if available (same as Prisma Studio uses)
+  // Prefer Accelerate URL if available
   let prisma;
   const fs = require("fs");
   let accelerateUrl = null;
@@ -111,11 +133,9 @@ async function main() {
   }
 
   if (accelerateUrl && accelerateUrl.startsWith("prisma://")) {
-    // Use Accelerate URL (same as Prisma Studio)
     console.log("Using Prisma Accelerate connection...\n");
     prisma = new PrismaClient({ accelerateUrl });
   } else {
-    // Fall back to direct connection
     const dbUrl = process.env.DATABASE_URL;
     if (!dbUrl) {
       console.error("❌ DATABASE_URL must be set in .env file or environment");
@@ -128,7 +148,7 @@ async function main() {
   }
 
   try {
-    console.log("=== Set Everyone to 30% Attendance ===\n");
+    console.log("=== Set Last 25 Training Sessions Attendance ===\n");
     if (dryRun) {
       console.log("🔍 DRY RUN MODE - No changes will be made\n");
     }
@@ -136,18 +156,7 @@ async function main() {
     // Get season window
     const window = defaultSeasonWindow();
 
-    // Generate ALL training dates for the season (past and future)
-    const allSeasonDates = [];
-    const start = new Date(window.from);
-    const end = new Date(window.to);
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const weekday = d.getDay();
-      if (weekday === 3 || weekday === 5) {
-        allSeasonDates.push(toYMD(new Date(d)));
-      }
-    }
-
-    // Generate only PAST training dates (for assignment)
+    // Generate only PAST training dates
     const pastDates = generateTrainingDates(
       new Date(window.from),
       new Date(window.to),
@@ -156,30 +165,18 @@ async function main() {
 
     console.log(`Season: ${window.from} to ${window.to}`);
     console.log(`Today: ${today}`);
-    console.log(`Total season sessions: ${allSeasonDates.length}`);
     console.log(`Past training sessions: ${pastDates.length}\n`);
 
-    // Calculate 30% of TOTAL season sessions (use calculated total, not hardcoded)
-    const totalSeasonSessions = allSeasonDates.length;
-    const targetCount = Math.round(totalSeasonSessions * 0.3); // 30% of total
-    console.log(
-      `Target attendance: ${targetCount} out of ${totalSeasonSessions} total season sessions (30%)\n`,
-    );
-    console.log(
-      `Note: Using only past sessions (${pastDates.length} available) to assign these ${targetCount} sessions.\n`,
-    );
-
     if (pastDates.length === 0) {
-      console.log("⚠️  No past training sessions found in the season window!");
+      console.log("⚠️  No past training sessions found!");
       return;
     }
 
-    if (pastDates.length < targetCount) {
-      console.log(
-        `⚠️  Warning: Only ${pastDates.length} past sessions available, but need ${targetCount} for 30% of season total.`,
-      );
-      console.log(`   Will assign all ${pastDates.length} past sessions.\n`);
-    }
+    // Get the last 25 training sessions (most recent)
+    const last25Sessions = pastDates.slice(-25).sort(); // Sort chronologically
+    console.log(`Last 25 training sessions:`);
+    console.log(`  From: ${last25Sessions[0]}`);
+    console.log(`  To: ${last25Sessions[last25Sessions.length - 1]}\n`);
 
     // Get all users
     const users = await prisma.user.findMany({
@@ -192,60 +189,95 @@ async function main() {
       return;
     }
 
-    // For each user, randomly select 30% of dates
-    let totalCreated = 0;
-    const markedBy = users[0]?.id || "system";
-
-    for (const user of users) {
-      // Shuffle past dates and take up to targetCount (30% of total season)
-      const shuffled = [...pastDates].sort(() => Math.random() - 0.5);
-      const selectedDates = shuffled.slice(
-        0,
-        Math.min(targetCount, pastDates.length),
+    if (!dryRun) {
+      // Step 1: Clear ALL attendance records from database
+      console.log("Clearing all attendance records from database...");
+      const deleteResult = await prisma.attendance.deleteMany({});
+      console.log(
+        `✅ Deleted ${deleteResult.count} attendance records from database\n`,
       );
 
-      if (!dryRun) {
-        // Delete existing attendance for this user in season (all dates, not just past)
-        await prisma.attendance.deleteMany({
-          where: {
-            userId: user.id,
-            date: { in: allSeasonDates },
-          },
-        });
-
-        // Create new attendance records
-        if (selectedDates.length > 0) {
-          await prisma.attendance.createMany({
-            data: selectedDates.map((date) => ({
-              date,
-              userId: user.id,
-              markedBy,
-            })),
-            skipDuplicates: true,
-          });
+      // Step 1b: Clear ALL attendance records from Redis/KV
+      console.log("Clearing all attendance records from Redis/KV...");
+      const redis = await getRedis();
+      if (redis) {
+        try {
+          const keys = await listAllAttendanceKeys(redis);
+          if (keys.length > 0) {
+            // Delete all attendance keys
+            const redisKeys = keys.map((k) => `att:${k}`);
+            await redis.del(...redisKeys);
+            console.log(
+              `✅ Deleted ${keys.length} attendance keys from Redis/KV\n`,
+            );
+          } else {
+            console.log(`✅ No attendance keys found in Redis/KV\n`);
+          }
+        } catch (error) {
+          console.log(`⚠️  Could not clear Redis/KV: ${error.message}\n`);
         }
-        totalCreated += selectedDates.length;
+      } else {
+        console.log(
+          `⚠️  No Redis/KV connection available, skipping Redis cleanup\n`,
+        );
       }
 
-      const name =
-        `${user.firstName} ${user.lastName}`.trim() || user.id.slice(0, 6);
-      console.log(
-        `${dryRun ? "[DRY RUN] " : ""}${name}: ${selectedDates.length} dates`,
-      );
-    }
+      // Step 2: Create attendance for all users for the last 25 sessions
+      console.log(`Creating attendance for all users for last 25 sessions...`);
+      const markedBy = users[0]?.id || "system";
+      let totalCreated = 0;
+      const userIds = users.map((u) => u.id);
 
-    console.log(`\n=== Complete ===`);
-    if (!dryRun) {
+      // Create attendance records in database
+      for (const date of last25Sessions) {
+        await prisma.attendance.createMany({
+          data: userIds.map((userId) => ({
+            date,
+            userId,
+            markedBy,
+          })),
+          skipDuplicates: true,
+        });
+      }
+
+      // Also update Redis/KV for backward compatibility
+      if (redis) {
+        console.log(`Updating Redis/KV with new attendance data...`);
+        for (const date of last25Sessions) {
+          try {
+            await redis.set(`att:${date}`, JSON.stringify(userIds));
+          } catch (error) {
+            console.log(
+              `⚠️  Could not update Redis for ${date}: ${error.message}`,
+            );
+          }
+        }
+        console.log(`✅ Updated Redis/KV for ${last25Sessions.length} dates\n`);
+      }
+
+      totalCreated = users.length * last25Sessions.length;
+      console.log(`\n=== Complete ===`);
       console.log(`Created ${totalCreated} attendance records`);
-    } else {
       console.log(
-        `Would create ${users.length * targetCount} attendance records`,
+        `(${users.length} users × ${last25Sessions.length} sessions)`,
+      );
+      console.log(`Updated database and Redis/KV`);
+    } else {
+      console.log(`[DRY RUN] Would:`);
+      console.log(`  1. Delete all existing attendance records`);
+      console.log(
+        `  2. Create attendance for ${users.length} users × ${last25Sessions.length} sessions = ${users.length * last25Sessions.length} records`,
       );
     }
   } catch (error) {
-    console.error("Error:", error);
+    console.error("❌ Error:", error.message);
+    console.error(error);
   } finally {
     await prisma.$disconnect();
+    const redis = await getRedis();
+    if (redis && redis.quit) {
+      await redis.quit();
+    }
   }
 }
 

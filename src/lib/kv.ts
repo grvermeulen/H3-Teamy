@@ -613,44 +613,9 @@ export async function getAttendanceForDates(
       if (!out[record.date]) out[record.date] = [];
       out[record.date].push(record.userId);
     }
-    // Fill in any missing dates from Redis/KV fallback
-    const missingDates = dates.filter((d) => !out[d] || out[d].length === 0);
-    if (missingDates.length > 0) {
-      const redis = await getRedis();
-      if (redis) {
-        const keys = missingDates.map((d) => `att:${d}`);
-        const vals = await redis.mget(keys);
-        for (let i = 0; i < missingDates.length; i++) {
-          const raw = vals[i] as string | null;
-          if (raw) {
-            try {
-              const parsed = JSON.parse(raw) as string[];
-              out[missingDates[i]] = parsed;
-            } catch {}
-          }
-        }
-      } else {
-        // Fallback to memory
-        for (const d of missingDates) {
-          const key = `att:${d}`;
-          const rawJson = memoryJson.get(key);
-          if (rawJson) {
-            try {
-              out[d] = JSON.parse(rawJson) as string[];
-            } catch {}
-          } else {
-            const raw = memoryStore.get(key) as unknown as string | undefined;
-            if (raw) {
-              try {
-                const parsed = JSON.parse(raw) as string[];
-                memoryJson.set(key, raw);
-                out[d] = parsed;
-              } catch {}
-            }
-          }
-        }
-      }
-    }
+    // Don't use Redis/KV fallback when database is available
+    // This prevents old Redis data from adding extra sessions
+    // Database is now the source of truth for attendance
     return out;
   }
 

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../lib/db";
-import { defaultSeasonWindow, generateTrainingDates } from "../../../../lib/training";
+import {
+  defaultSeasonWindow,
+  generateTrainingDates,
+} from "../../../../lib/training";
 import { getAttendanceForDates } from "../../../../lib/kv";
 
 export async function GET(req: NextRequest) {
@@ -16,20 +19,38 @@ export async function GET(req: NextRequest) {
     const ids = map[d] || [];
     for (const uid of ids) counts.set(uid, (counts.get(uid) || 0) + 1);
   }
-  const users = await prisma.user.findMany({ select: { id: true, firstName: true, lastName: true } }).catch(() => [] as any[]);
+  const users = await prisma.user
+    .findMany({ select: { id: true, firstName: true, lastName: true } })
+    .catch(() => [] as any[]);
   const validUserIds = new Set(users.map((u: any) => u.id));
-  const mapName = new Map(users.map((u: any) => [u.id, `${u.firstName} ${u.lastName}`.trim()]));
-  
-  // Include all attendance data, even for orphaned user IDs (users that may have been deleted)
-  // This ensures we don't lose historical data
-  const list = Array.from(counts.entries()).map(([userId, attended]) => {
-    const isOrphaned = !validUserIds.has(userId);
-    const name = mapName.get(userId) || (isOrphaned ? `[Deleted User] ${userId.slice(0,6)}` : `User ${userId.slice(0,6)}`);
-    return { userId, name, attended, total, pct: total ? Math.round((attended / total) * 100) : 0, isOrphaned };
+  const mapName = new Map(
+    users.map((u: any) => [u.id, `${u.firstName} ${u.lastName}`.trim()]),
+  );
+
+  // Filter out orphaned user IDs (users that have been deleted)
+  // Only show attendance for users that currently exist in the database
+  const list = Array.from(counts.entries())
+    .filter(([userId]) => validUserIds.has(userId)) // Only include valid users
+    .map(([userId, attended]) => {
+      const name = mapName.get(userId) || `User ${userId.slice(0, 6)}`;
+      return {
+        userId,
+        name,
+        attended,
+        total,
+        pct: total ? Math.round((attended / total) * 100) : 0,
+      };
+    });
+
+  return NextResponse.json({
+    from,
+    to,
+    total,
+    list,
+    debug: {
+      datesChecked: dates.length,
+      datesWithData: Object.keys(map).filter((d) => (map[d] || []).length > 0)
+        .length,
+    },
   });
-  
-  const orphanedCount = list.filter((item) => item.isOrphaned).length;
-  return NextResponse.json({ from, to, total, list, orphanedCount, debug: { datesChecked: dates.length, datesWithData: Object.keys(map).filter((d) => (map[d] || []).length > 0).length } });
 }
-
-
