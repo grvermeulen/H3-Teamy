@@ -1,6 +1,5 @@
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -8,45 +7,63 @@ generator client {
 }
 
 model User {
-  id        String  @id @default(cuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  firstName String
-  lastName  String
-  email     String? @unique
+  id           String       @id @default(cuid())
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  firstName    String
+  lastName     String
+  email        String?      @unique
   passwordHash String?
   // Optional: link to sessions/devices in future
-  rsvps     Rsvp[]
-  identities Identity[]
+  rsvps        Rsvp[]
+  identities   Identity[]
+  attendances  Attendance[]
+}
+
+model Event {
+  id          String    @id // eventId from calendar
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  title       String?
+  description String?
+  startDate   DateTime?
+  endDate     DateTime?
+
+  rsvps    Rsvp[]
+  report   MatchReport?
+  mvpVotes MvpVote[]
+
+  @@index([startDate])
 }
 
 model Rsvp {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   userId    String
   eventId   String
-  status    String  // "yes" | "no" | "maybe"
+  status    String // "yes" | "no" | "maybe"
 
-  user User @relation(fields: [userId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@unique([userId, eventId])
   @@index([eventId])
 }
 
 model LinkCode {
-  code      String  @id
+  code      String   @id
   userId    String
   createdAt DateTime @default(now())
   // Expiry handled at app layer (TTL); can be pruned later
 }
 
 model Identity {
-  id              String  @id @default(cuid())
-  createdAt       DateTime @default(now())
-  userId          String
-  provider        String   // "cookie" | "email" | other providers
-  providerUserId  String
+  id             String   @id @default(cuid())
+  createdAt      DateTime @default(now())
+  userId         String
+  provider       String // "cookie" | "email" | other providers
+  providerUserId String
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -54,4 +71,45 @@ model Identity {
   @@index([userId])
 }
 
+model Attendance {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  date      String // YYYY-MM-DD format
+  userId    String
+  markedBy  String // User ID who marked the attendance
 
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([date, userId])
+  @@index([date])
+  @@index([userId])
+}
+
+model MatchReport {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  eventId   String   @unique
+  content   String
+  authorId  String?
+  mvpResult Json? // { name: string, percent: number, votes: number, totalVotes: number, decidedAt: string }
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+
+model MvpVote {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  eventId       String
+  voterId       String
+  candidateId   String
+  candidateName String
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, voterId])
+  @@index([eventId])
+  @@index([voterId])
+  @@index([candidateId])
+}
