@@ -3,6 +3,7 @@ import "./globals.css";
 import Providers from "../components/Providers";
 import dynamic from "next/dynamic";
 import BottomNav from "../components/BottomNav";
+import ChristmasTheme from "../components/ChristmasTheme";
 
 export const metadata: Metadata = {
   title: "De Rijn H3 Teamy MVP",
@@ -20,7 +21,10 @@ export default function RootLayout({
   const SessionStatus = dynamic(() => import("../components/SessionStatus"), {
     ssr: false,
   });
-  const isChristmasTheme = process.env.christmas_event === "TRUE";
+  // Check both server-side and client-side environment variables
+  const isChristmasTheme =
+    process.env.christmas_event === "TRUE" ||
+    process.env.NEXT_PUBLIC_christmas_event === "TRUE";
   return (
     <html
       lang="en"
@@ -48,6 +52,7 @@ export default function RootLayout({
         />
       </head>
       <body>
+        <ChristmasTheme />
         <header
           className="container"
           style={{
