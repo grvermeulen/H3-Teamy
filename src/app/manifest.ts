@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
+  const isChristmasTheme = process.env.christmas_event === "TRUE";
   return {
     name: "De Rijn H3 — Waterpolo",
     short_name: "De Rijn H3",
@@ -9,13 +10,16 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/",
     scope: "/",
     display: "standalone",
-    background_color: "#0B1220",
-    theme_color: "#0B1220",
+    background_color: isChristmasTheme ? "#1a0f1a" : "#0B1220",
+    theme_color: isChristmasTheme ? "#1a0f1a" : "#0B1220",
     icons: [
       { src: "/logo.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
-      { src: "/logo.svg", sizes: "any", type: "image/svg+xml", purpose: "maskable" },
+      {
+        src: "/logo.svg",
+        sizes: "any",
+        type: "image/svg+xml",
+        purpose: "maskable",
+      },
     ],
   };
 }
-
-
