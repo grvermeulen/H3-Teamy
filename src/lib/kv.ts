@@ -356,7 +356,7 @@ export async function getAttendance(dateYmd: string): Promise<string[]> {
     // Primary: Database
     const records = await p.attendance.findMany({ where: { date: dateYmd }, select: { userId: true } });
     if (records.length > 0) {
-      return records.map((r) => r.userId);
+      return records.map((r: { userId: string }) => r.userId);
     }
     // Fallback: Redis/KV for backward compatibility
   }
