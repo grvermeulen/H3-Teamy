@@ -25,7 +25,7 @@ export default function ChristmasTheme() {
         snowflake.style.setProperty("--snow-duration", duration + "s");
         snowflake.style.animationDuration = duration + "s";
         snowflake.style.animationDelay = Math.random() * 2 + "s";
-        snowflake.style.opacity = Math.random() * 0.6 + 0.4;
+        snowflake.style.opacity = String(Math.random() * 0.6 + 0.4);
         const size = Math.random() * 15 + 12; // 12-27px
         snowflake.style.fontSize = size + "px";
         // Use different snowflake characters for variety
