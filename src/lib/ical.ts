@@ -3,7 +3,7 @@ import { TeamEvent } from "../types";
 import { canonicalEventId } from "./eventId";
 import { kvGetJson, kvSetJson } from "./kv";
 
-type ParsedEvent = TeamEvent & { baseId: string };
+type ParsedEvent = TeamEvent & { baseId: string; preferredId?: string };
 
 function formatUtcTimeId(startIso: string): string {
   const d = new Date(startIso);
@@ -25,6 +25,11 @@ function makeUniqueId(baseId: string, startIso: string, used: Set<string>): stri
 }
 
 function ensureUniqueEventIds(parsed: ParsedEvent[], cached: TeamEvent[]): TeamEvent[] {
+  const cachedByUid = new Map<string, TeamEvent>();
+  for (const evt of cached) {
+    if (evt.uid && !cachedByUid.has(evt.uid)) cachedByUid.set(evt.uid, evt);
+  }
+
   const cachedByBase = new Map<string, TeamEvent[]>();
   for (const evt of cached) {
     const baseId = canonicalEventId(evt.title, evt.start);
@@ -34,14 +39,27 @@ function ensureUniqueEventIds(parsed: ParsedEvent[], cached: TeamEvent[]): TeamE
   }
 
   const grouped = new Map<string, ParsedEvent[]>();
-  for (const evt of parsed) {
+  const withPreferred = parsed.map((evt) => {
+    const cachedMatch = evt.uid ? cachedByUid.get(evt.uid) : undefined;
+    if (!cachedMatch) return { ...evt };
+    return { ...evt, preferredId: cachedMatch.id };
+  });
+  const usedIds = new Set<string>();
+  const assigned = new Map<ParsedEvent, string>();
+
+  for (const evt of withPreferred) {
+    if (evt.preferredId && !usedIds.has(evt.preferredId)) {
+      usedIds.add(evt.preferredId);
+      assigned.set(evt, evt.preferredId);
+    }
+  }
+
+  for (const evt of withPreferred) {
+    if (assigned.has(evt)) continue;
     const group = grouped.get(evt.baseId) || [];
     group.push(evt);
     grouped.set(evt.baseId, group);
   }
-
-  const usedIds = new Set<string>();
-  const out: TeamEvent[] = [];
 
   for (const [baseId, events] of grouped) {
     events.sort((a, b) => {
@@ -67,20 +85,22 @@ function ensureUniqueEventIds(parsed: ParsedEvent[], cached: TeamEvent[]): TeamE
     if (!baseEvent) baseEvent = events[0];
 
     for (const evt of events) {
-      if (evt === baseEvent) {
-        if (!usedIds.has(baseId)) {
-          usedIds.add(baseId);
-          out.push({ ...evt, id: baseId });
-          continue;
-        }
+      if (evt === baseEvent && !usedIds.has(baseId)) {
+        usedIds.add(baseId);
+        assigned.set(evt, baseId);
+        continue;
       }
       const id = makeUniqueId(baseId, evt.start, usedIds);
       usedIds.add(id);
-      out.push({ ...evt, id });
+      assigned.set(evt, id);
     }
   }
 
-  return out;
+  return withPreferred.map((evt) => {
+    const id = assigned.get(evt) || evt.id;
+    const { baseId: _baseId, preferredId: _preferredId, ...rest } = evt;
+    return { ...rest, id };
+  });
 }
 
 export async function fetchTeamEvents(): Promise<TeamEvent[]> {
@@ -99,6 +119,10 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
       const data = ical.parseICS(text);
       const raw = Object.values(data)
         .filter((c): c is CalendarComponent & { type: "VEVENT" } => c?.type === "VEVENT")
+        .filter((evt) => {
+          const status = (evt as any).status;
+          return String(status || "").toUpperCase() !== "CANCELLED";
+        })
         .map((evt) => {
           const title = (evt.summary || "Match").toString();
           const startIso = evt.start instanceof Date ? evt.start.toISOString() : new Date(evt.start as any).toISOString();
