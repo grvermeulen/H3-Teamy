@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { lockBodyForModal } from "../lib/modalLock";
 
 export default function ReportPreview({ eventId }: { eventId: string }) {
   const [content, setContent] = useState<string | null>(null);
@@ -35,20 +36,7 @@ export default function ReportPreview({ eventId }: { eventId: string }) {
 
   useEffect(() => {
     if (!open) return;
-    const { body } = document;
-    const previousOverflow = body.style.overflow;
-    const previousTouchAction = body.style.touchAction;
-    const hadModalClass = body.classList.contains("modal-open");
-    body.style.overflow = "hidden";
-    body.style.touchAction = "none";
-    body.classList.add("modal-open");
-    return () => {
-      body.style.overflow = previousOverflow;
-      body.style.touchAction = previousTouchAction;
-      if (!hadModalClass) {
-        body.classList.remove("modal-open");
-      }
-    };
+    return lockBodyForModal();
   }, [open]);
 
   return (

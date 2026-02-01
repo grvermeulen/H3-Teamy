@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import NextDynamic from "next/dynamic";
+import { lockBodyForModal } from "../lib/modalLock";
 
 const MvpVotingPanel = NextDynamic(() => import("./MvpVotingPanel"), {
   ssr: false,
@@ -65,20 +66,7 @@ export default function MvpVoteButton({ eventId }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    const { body } = document;
-    const previousOverflow = body.style.overflow;
-    const previousTouchAction = body.style.touchAction;
-    const hadModalClass = body.classList.contains("modal-open");
-    body.style.overflow = "hidden";
-    body.style.touchAction = "none";
-    body.classList.add("modal-open");
-    return () => {
-      body.style.overflow = previousOverflow;
-      body.style.touchAction = previousTouchAction;
-      if (!hadModalClass) {
-        body.classList.remove("modal-open");
-      }
-    };
+    return lockBodyForModal();
   }, [open]);
 
   async function handleClose() {
@@ -149,11 +137,7 @@ export default function MvpVoteButton({ eventId }: Props) {
       ) : null}
       {open ? (
         <div className="modalOverlay" onClick={() => setOpen(false)}>
-          <div
-            className="modalContent"
-            style={{ maxWidth: 560, width: "90%" }}
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="modalContent" onClick={(e) => e.stopPropagation()}>
             <div className="modalHeader">
               <h3 className="modalTitle">MVP stemmen</h3>
               <button
