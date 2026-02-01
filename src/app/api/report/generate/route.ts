@@ -29,7 +29,13 @@ type NarrativeInput = {
   sourceTeams: { homeTeam?: string; awayTeam?: string };
 };
 
-const OUR_TEAM_KEYWORDS = ["de rijn", "rijn h3", "rijn heren 3", "de rijn heren 3", "drh3"];
+const OUR_TEAM_KEYWORDS = [
+  "de rijn",
+  "rijn h3",
+  "rijn heren 3",
+  "de rijn heren 3",
+  "drh3",
+];
 
 function normalizeName(value: string): string {
   return value
@@ -78,7 +84,8 @@ function similarity(a: string, b: string): number {
 
 async function getRosterNames(): Promise<string[]> {
   try {
-    const cached = await kvGetJson<{ id: string; name: string }[]>("users:roster:v1");
+    const cached =
+      await kvGetJson<{ id: string; name: string }[]>("users:roster:v2");
     if (Array.isArray(cached) && cached.length) {
       return cached.map((u) => u.name).filter(Boolean);
     }
@@ -86,7 +93,10 @@ async function getRosterNames(): Promise<string[]> {
   return [];
 }
 
-function canonicalizePlayer(name: string | undefined, roster: string[]): string | null {
+function canonicalizePlayer(
+  name: string | undefined,
+  roster: string[],
+): string | null {
   const raw = (name || "").trim();
   if (!raw) return null;
   const norm = normalizeName(raw);
@@ -103,8 +113,12 @@ function canonicalizePlayer(name: string | undefined, roster: string[]): string 
   return bestScore >= 0.72 ? bestName : null;
 }
 
-function guessPerspectiveFromEvents(events: RawEvent[] | undefined, roster: string[]): boolean | null {
-  if (!Array.isArray(events) || events.length === 0 || roster.length === 0) return null;
+function guessPerspectiveFromEvents(
+  events: RawEvent[] | undefined,
+  roster: string[],
+): boolean | null {
+  if (!Array.isArray(events) || events.length === 0 || roster.length === 0)
+    return null;
   let homeHits = 0;
   let awayHits = 0;
   for (const evt of events) {
@@ -186,7 +200,11 @@ function prepareNarrativeInput(
   if (titleTeams) {
     if (weAreHome && titleTeams.away && !isOurTeamName(titleTeams.away)) {
       opponentTeam = titleTeams.away;
-    } else if (!weAreHome && titleTeams.home && !isOurTeamName(titleTeams.home)) {
+    } else if (
+      !weAreHome &&
+      titleTeams.home &&
+      !isOurTeamName(titleTeams.home)
+    ) {
       opponentTeam = titleTeams.home;
     }
   }
@@ -199,20 +217,35 @@ function prepareNarrativeInput(
   if (!opponentTeam) {
     opponentTeam = weAreHome ? awayTeam : homeTeam;
   }
-  const ourScore = weAreHome ? Number(input.homeScore) : Number(input.awayScore);
-  const opponentScore = weAreHome ? Number(input.awayScore) : Number(input.homeScore);
+  const ourScore = weAreHome
+    ? Number(input.homeScore)
+    : Number(input.awayScore);
+  const opponentScore = weAreHome
+    ? Number(input.awayScore)
+    : Number(input.homeScore);
   const preparedEvents: PreparedEvent[] = Array.isArray(input.events)
-    ? input.events.map((evt) => {
-        const perspective = weAreHome ? (evt.team === "home" ? "us" : "opponent") : (evt.team === "away" ? "us" : "opponent");
-        const matchedPlayer = perspective === "us" ? canonicalizePlayer(evt.player, rosterNames) : null;
-        return {
-          quarter: evt.quarter,
-          time: evt.time || "",
-          team: perspective as "us" | "opponent",
-          type: evt.type,
-          player: matchedPlayer ?? undefined,
-        };
-      }).filter((evt) => Boolean(evt.time))
+    ? input.events
+        .map((evt) => {
+          const perspective = weAreHome
+            ? evt.team === "home"
+              ? "us"
+              : "opponent"
+            : evt.team === "away"
+              ? "us"
+              : "opponent";
+          const matchedPlayer =
+            perspective === "us"
+              ? canonicalizePlayer(evt.player, rosterNames)
+              : null;
+          return {
+            quarter: evt.quarter,
+            time: evt.time || "",
+            team: perspective as "us" | "opponent",
+            type: evt.type,
+            player: matchedPlayer ?? undefined,
+          };
+        })
+        .filter((evt) => Boolean(evt.time))
     : [];
   return {
     ourTeam: "De Rijn Heren 3",
@@ -229,40 +262,68 @@ function prepareNarrativeInput(
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({} as any));
+    const body = await req.json().catch(() => ({}) as any);
     const eventId = body?.eventId as string | undefined;
-    const source = (body && typeof body.result === "object" && body.result) || {};
+    const source =
+      (body && typeof body.result === "object" && body.result) || {};
     const input = {
-      homeTeam: body?.homeTeam ?? (source as any)?.homeTeam ?? "De Rijn Heren 3",
-      awayTeam: body?.awayTeam ?? body?.opponent ?? (source as any)?.awayTeam ?? "Onbekende tegenstander",
-      homeScore: body?.homeScore ?? body?.scoreHome ?? (source as any)?.homeScore,
-      awayScore: body?.awayScore ?? body?.scoreAway ?? (source as any)?.awayScore,
+      homeTeam:
+        body?.homeTeam ?? (source as any)?.homeTeam ?? "De Rijn Heren 3",
+      awayTeam:
+        body?.awayTeam ??
+        body?.opponent ??
+        (source as any)?.awayTeam ??
+        "Onbekende tegenstander",
+      homeScore:
+        body?.homeScore ?? body?.scoreHome ?? (source as any)?.homeScore,
+      awayScore:
+        body?.awayScore ?? body?.scoreAway ?? (source as any)?.awayScore,
       date: body?.date ?? (source as any)?.date,
       events: Array.isArray(body?.events)
         ? body.events
-        : (Array.isArray((source as any)?.events) ? (source as any).events : undefined),
+        : Array.isArray((source as any)?.events)
+          ? (source as any).events
+          : undefined,
     } as {
       homeTeam?: string;
       awayTeam?: string;
       homeScore?: number;
       awayScore?: number;
       date?: string;
-      events?: Array<{ quarter: 1 | 2 | 3 | 4; time?: string; team: "home" | "away"; type: "goal" | "personal_foul"; player?: string }>;
+      events?: Array<{
+        quarter: 1 | 2 | 3 | 4;
+        time?: string;
+        team: "home" | "away";
+        type: "goal" | "personal_foul";
+        player?: string;
+      }>;
     };
-    if (!eventId) return NextResponse.json({ error: "eventId required" }, { status: 400 });
+    if (!eventId)
+      return NextResponse.json({ error: "eventId required" }, { status: 400 });
 
     // Always (re)generate a fresh report on request
 
     const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) return NextResponse.json({ error: "OPENAI_API_KEY not configured" }, { status: 500 });
+    if (!apiKey)
+      return NextResponse.json(
+        { error: "OPENAI_API_KEY not configured" },
+        { status: 500 },
+      );
 
     // Validate that we actually have meaningful JSON for the model
-    const hasScores = typeof input.homeScore === "number" && typeof input.awayScore === "number";
-    const hasEvents = Array.isArray(input.events) && (input.events as any[]).length > 0;
+    const hasScores =
+      typeof input.homeScore === "number" &&
+      typeof input.awayScore === "number";
+    const hasEvents =
+      Array.isArray(input.events) && (input.events as any[]).length > 0;
     if (!hasScores || !hasEvents) {
       return NextResponse.json(
-        { error: "report_input_incomplete", message: "Missing scores or events in JSON", received: input },
-        { status: 422 }
+        {
+          error: "report_input_incomplete",
+          message: "Missing scores or events in JSON",
+          received: input,
+        },
+        { status: 422 },
       );
     }
     const rosterNames = await getRosterNames();
@@ -312,34 +373,59 @@ Regels:
         input: [
           {
             role: "system",
-            content: [ { type: "input_text", text: "You are an enthusiastic, pro–De Rijn Heren 3 reporter. Write energetic, respectful Dutch match reports using only the provided JSON." } ],
+            content: [
+              {
+                type: "input_text",
+                text: "You are an enthusiastic, pro–De Rijn Heren 3 reporter. Write energetic, respectful Dutch match reports using only the provided JSON.",
+              },
+            ],
           },
           {
             role: "user",
-            content: [ { type: "input_text", text: prompt } ],
+            content: [{ type: "input_text", text: prompt }],
           },
           {
             role: "user",
-            content: [ { type: "input_text", text: `JSON:\n${JSON.stringify(narrativeInput)}` } ],
+            content: [
+              {
+                type: "input_text",
+                text: `JSON:\n${JSON.stringify(narrativeInput)}`,
+              },
+            ],
           },
         ],
       }),
     });
     if (!resp.ok) {
       const text = await resp.text();
-      return NextResponse.json({ error: "openai_failed", info: text }, { status: 502 });
+      return NextResponse.json(
+        { error: "openai_failed", info: text },
+        { status: 502 },
+      );
     }
     const data = await resp.json();
-    const content = (data?.output_text || data?.output?.[0]?.content?.[0]?.text || "").trim?.() || "";
-    if (!content) return NextResponse.json({ error: "no_content" }, { status: 500 });
+    const content =
+      (
+        data?.output_text ||
+        data?.output?.[0]?.content?.[0]?.text ||
+        ""
+      ).trim?.() || "";
+    if (!content)
+      return NextResponse.json({ error: "no_content" }, { status: 500 });
 
     const previous = await getReport(eventId);
-    const report = { content, createdAt: new Date().toISOString(), authorId: previous?.authorId, mvpResult: previous?.mvpResult };
+    const report = {
+      content,
+      createdAt: new Date().toISOString(),
+      authorId: previous?.authorId,
+      mvpResult: previous?.mvpResult,
+    };
     await setReport(eventId, report);
     return NextResponse.json({ ok: true, report });
   } catch (e: any) {
-    return NextResponse.json({ error: "failed", message: e?.message || String(e) }, { status: 500 });
+    return NextResponse.json(
+      { error: "failed", message: e?.message || String(e) },
+      { status: 500 },
+    );
   }
 }
-
-

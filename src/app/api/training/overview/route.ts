@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../lib/db";
-import { defaultSeasonWindow, generateTrainingDates } from "../../../../lib/training";
+import {
+  defaultSeasonWindow,
+  generateTrainingDates,
+} from "../../../../lib/training";
 import { getAttendanceForDates } from "../../../../lib/kv";
+import { hasUserIdentity } from "../../../../lib/userUtils";
 
 export async function GET(req: NextRequest) {
   const window = defaultSeasonWindow();
@@ -16,10 +20,29 @@ export async function GET(req: NextRequest) {
     const ids = map[d] || [];
     for (const uid of ids) counts.set(uid, (counts.get(uid) || 0) + 1);
   }
-  const users = await prisma.user.findMany({ select: { id: true, firstName: true, lastName: true } }).catch(() => [] as any[]);
-  const mapName = new Map(users.map((u: any) => [u.id, `${u.firstName} ${u.lastName}`.trim()]));
-  const list = Array.from(counts.entries()).map(([userId, attended]) => ({ userId, name: mapName.get(userId) || `User ${userId.slice(0,6)}`, attended, total, pct: total ? Math.round((attended / total) * 100) : 0 }));
+  const users = await prisma.user
+    .findMany({
+      select: { id: true, firstName: true, lastName: true, email: true },
+    })
+    .catch(() => [] as any[]);
+  const mapName = new Map(
+    users
+      .filter((u: any) => hasUserIdentity(u))
+      .map((u: any) => [
+        u.id,
+        `${(u.firstName || "").trim()} ${(u.lastName || "").trim()}`.trim() ||
+          (u.email || "").trim(),
+      ]),
+  );
+  const list = Array.from(counts.entries())
+    .filter(([userId]) => mapName.has(userId))
+    .map(([userId, attended]) => ({
+      userId,
+      name: mapName.get(userId) || "",
+      attended,
+      total,
+      pct: total ? Math.round((attended / total) * 100) : 0,
+    }))
+    .filter((row) => row.name);
   return NextResponse.json({ from, to, total, list });
 }
-
-
