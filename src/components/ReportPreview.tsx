@@ -9,7 +9,12 @@ export default function ReportPreview({ eventId }: { eventId: string }) {
   useEffect(() => {
     let mounted = true;
     async function load() {
-      const rep = await fetch(`/api/report?eventId=${encodeURIComponent(eventId)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => ({ report: null }));
+      const rep = await fetch(
+        `/api/report?eventId=${encodeURIComponent(eventId)}`,
+        { cache: "no-store" },
+      )
+        .then((r) => r.json())
+        .catch(() => ({ report: null }));
       if (!mounted) return;
       const text = rep?.report?.content ? String(rep.report.content) : null;
       setContent(text);
@@ -21,7 +26,10 @@ export default function ReportPreview({ eventId }: { eventId: string }) {
       }
     }
     window.addEventListener("report:updated", onUpdated as any);
-    return () => { mounted = false; window.removeEventListener("report:updated", onUpdated as any); };
+    return () => {
+      mounted = false;
+      window.removeEventListener("report:updated", onUpdated as any);
+    };
   }, [eventId]);
   const hasReport = Boolean(content && content.trim());
 
@@ -46,10 +54,15 @@ export default function ReportPreview({ eventId }: { eventId: string }) {
           onClick={async () => {
             setOpen(true);
             // Refresh content when opening overlay
-            const rep = await fetch(`/api/report?eventId=${encodeURIComponent(eventId)}`, { cache: "no-store" })
+            const rep = await fetch(
+              `/api/report?eventId=${encodeURIComponent(eventId)}`,
+              { cache: "no-store" },
+            )
               .then((r) => r.json())
               .catch(() => ({ report: null }));
-            const text = rep?.report?.content ? String(rep.report.content) : null;
+            const text = rep?.report?.content
+              ? String(rep.report.content)
+              : null;
             setContent(text);
           }}
         >
@@ -59,16 +72,25 @@ export default function ReportPreview({ eventId }: { eventId: string }) {
       {open ? (
         <div className="modalOverlay" onClick={() => setOpen(false)}>
           <div className="modalContent" onClick={(e) => e.stopPropagation()}>
-            <button className="modalCloseBtn" onClick={() => setOpen(false)} aria-label="Close" type="button">
-              ×
-            </button>
-            <h3 style={{ marginTop: 0, marginBottom: 10 }}>Wedstrijd verslag</h3>
-            <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{content || "Er is nog geen verslag beschikbaar."}</div>
+            <div className="modalHeader">
+              <h3 className="modalTitle">Wedstrijd verslag</h3>
+              <button
+                className="modalCloseBtn"
+                onClick={() => setOpen(false)}
+                aria-label="Close"
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <div className="modalBody">
+              <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
+                {content || "Er is nog geen verslag beschikbaar."}
+              </div>
+            </div>
           </div>
         </div>
       ) : null}
     </>
   );
 }
-
-
