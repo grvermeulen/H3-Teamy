@@ -23,11 +23,12 @@ export async function GET(req: NextRequest) {
   const yes: { id: string; name: string }[] = [];
   const no: { id: string; name: string }[] = [];
   const maybe: { id: string; name: string }[] = [];
+  const counts = { yes: 0, no: 0, maybe: 0 };
   for (const { userId, status } of items) {
+    if (status === "yes") counts.yes += 1;
+    else if (status === "no") counts.no += 1;
+    else if (status === "maybe") counts.maybe += 1;
     if (countsOnly) {
-      if (status === "yes") yes.push({ id: userId, name: "" });
-      else if (status === "no") no.push({ id: userId, name: "" });
-      else if (status === "maybe") maybe.push({ id: userId, name: "" });
       continue;
     }
     const profile = await getUserProfile(userId);
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
     else if (status === "maybe") maybe.push({ id: userId, name });
   }
   return NextResponse.json({
-    counts: { yes: yes.length, no: no.length, maybe: maybe.length },
+    counts,
     lists: countsOnly ? { yes: [], no: [], maybe: [] } : { yes, no, maybe },
   });
 }
