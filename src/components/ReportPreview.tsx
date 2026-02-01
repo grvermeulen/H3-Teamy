@@ -38,11 +38,16 @@ export default function ReportPreview({ eventId }: { eventId: string }) {
     const { body } = document;
     const previousOverflow = body.style.overflow;
     const previousTouchAction = body.style.touchAction;
+    const hadModalClass = body.classList.contains("modal-open");
     body.style.overflow = "hidden";
     body.style.touchAction = "none";
+    body.classList.add("modal-open");
     return () => {
       body.style.overflow = previousOverflow;
       body.style.touchAction = previousTouchAction;
+      if (!hadModalClass) {
+        body.classList.remove("modal-open");
+      }
     };
   }, [open]);
 

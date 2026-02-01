@@ -585,6 +585,10 @@ h3 {
   flex: 0 0 auto;
 }
 
+body.modal-open .card {
+  transform: none !important;
+}
+
 @media (max-width: 480px) {
   .container {
     padding: 16px 12px 56px;
