@@ -35,7 +35,8 @@ export async function GET(req: NextRequest) {
     const first = (profile?.firstName || "").trim();
     const last = (profile?.lastName || "").trim();
     const name = `${first} ${last}`.trim();
-    if (!name) {
+    const displayName = name || (profile?.email || "").trim();
+    if (!displayName) {
       continue;
     }
     // Compute simple attendance percentage as Yes/(Yes+No+Maybe) across all events (kept for potential future use)
@@ -45,9 +46,9 @@ export async function GET(req: NextRequest) {
       const yesCount = history.filter((h) => h.status === "yes").length;
       void getBadgeForAttendance(total > 0 ? (yesCount / total) * 100 : 0);
     } catch {}
-    if (status === "yes") yes.push({ id: userId, name });
-    else if (status === "no") no.push({ id: userId, name });
-    else if (status === "maybe") maybe.push({ id: userId, name });
+    if (status === "yes") yes.push({ id: userId, name: displayName });
+    else if (status === "no") no.push({ id: userId, name: displayName });
+    else if (status === "maybe") maybe.push({ id: userId, name: displayName });
   }
   return NextResponse.json({
     counts,

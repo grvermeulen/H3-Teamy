@@ -11,6 +11,29 @@ type RawEvent = {
   player?: string;
 };
 
+type ReportBody = {
+  eventId?: unknown;
+  homeTeam?: unknown;
+  awayTeam?: unknown;
+  opponent?: unknown;
+  homeScore?: unknown;
+  scoreHome?: unknown;
+  awayScore?: unknown;
+  scoreAway?: unknown;
+  date?: unknown;
+  events?: unknown;
+  result?: unknown;
+};
+
+type ResultBody = {
+  homeTeam?: unknown;
+  awayTeam?: unknown;
+  homeScore?: unknown;
+  awayScore?: unknown;
+  date?: unknown;
+  events?: unknown;
+};
+
 type PreparedEvent = {
   quarter: 1 | 2 | 3 | 4;
   time: string;
@@ -36,6 +59,41 @@ const OUR_TEAM_KEYWORDS = [
   "de rijn heren 3",
   "drh3",
 ];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function toStringValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function toNumberValue(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
+function isRawEvent(value: unknown): value is RawEvent {
+  if (!isRecord(value)) return false;
+  const quarter = value.quarter;
+  const team = value.team;
+  const type = value.type;
+  if (quarter !== 1 && quarter !== 2 && quarter !== 3 && quarter !== 4)
+    return false;
+  if (team !== "home" && team !== "away") return false;
+  if (type !== "goal" && type !== "personal_foul") return false;
+  if (value.time !== undefined && typeof value.time !== "string") return false;
+  if (value.player !== undefined && typeof value.player !== "string")
+    return false;
+  return true;
+}
+
+function toRawEvents(value: unknown): RawEvent[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const events = value.filter(isRawEvent);
+  return events.length ? events : undefined;
+}
 
 function normalizeName(value: string): string {
   return value
@@ -262,28 +320,39 @@ function prepareNarrativeInput(
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json().catch(() => ({}) as any);
-    const eventId = body?.eventId as string | undefined;
-    const source =
-      (body && typeof body.result === "object" && body.result) || {};
+    let body: ReportBody;
+    try {
+      body = (await req.json()) as ReportBody;
+    } catch (error: unknown) {
+      return NextResponse.json(
+        { error: "invalid_json", message: "Invalid JSON payload." },
+        { status: 400 },
+      );
+    }
+    const eventId = toStringValue(body?.eventId);
+    const source: ResultBody = isRecord(body.result)
+      ? (body.result as ResultBody)
+      : {};
     const input = {
       homeTeam:
-        body?.homeTeam ?? (source as any)?.homeTeam ?? "De Rijn Heren 3",
+        toStringValue(body.homeTeam) ??
+        toStringValue(source.homeTeam) ??
+        "De Rijn Heren 3",
       awayTeam:
-        body?.awayTeam ??
-        body?.opponent ??
-        (source as any)?.awayTeam ??
+        toStringValue(body.awayTeam) ??
+        toStringValue(body.opponent) ??
+        toStringValue(source.awayTeam) ??
         "Onbekende tegenstander",
       homeScore:
-        body?.homeScore ?? body?.scoreHome ?? (source as any)?.homeScore,
+        toNumberValue(body.homeScore) ??
+        toNumberValue(body.scoreHome) ??
+        toNumberValue(source.homeScore),
       awayScore:
-        body?.awayScore ?? body?.scoreAway ?? (source as any)?.awayScore,
-      date: body?.date ?? (source as any)?.date,
-      events: Array.isArray(body?.events)
-        ? body.events
-        : Array.isArray((source as any)?.events)
-          ? (source as any).events
-          : undefined,
+        toNumberValue(body.awayScore) ??
+        toNumberValue(body.scoreAway) ??
+        toNumberValue(source.awayScore),
+      date: toStringValue(body.date) ?? toStringValue(source.date),
+      events: toRawEvents(body.events) ?? toRawEvents(source.events),
     } as {
       homeTeam?: string;
       awayTeam?: string;
@@ -314,8 +383,7 @@ export async function POST(req: NextRequest) {
     const hasScores =
       typeof input.homeScore === "number" &&
       typeof input.awayScore === "number";
-    const hasEvents =
-      Array.isArray(input.events) && (input.events as any[]).length > 0;
+    const hasEvents = Array.isArray(input.events) && input.events.length > 0;
     if (!hasScores || !hasEvents) {
       return NextResponse.json(
         {

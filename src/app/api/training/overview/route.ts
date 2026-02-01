@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { prisma } from "../../../../lib/db";
 import {
   defaultSeasonWindow,
@@ -20,11 +21,23 @@ export async function GET(req: NextRequest) {
     const ids = map[d] || [];
     for (const uid of ids) counts.set(uid, (counts.get(uid) || 0) + 1);
   }
-  const users = await prisma.user
-    .findMany({
+  let users: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string | null;
+  }[] = [];
+  try {
+    users = await prisma.user.findMany({
       select: { id: true, firstName: true, lastName: true, email: true },
-    })
-    .catch(() => [] as any[]);
+    });
+  } catch (error: unknown) {
+    Sentry.captureException(error);
+    return NextResponse.json(
+      { error: "users_query_failed", message: "Failed to load users." },
+      { status: 500 },
+    );
+  }
   const mapName = new Map(
     users
       .filter((u: any) => hasUserIdentity(u))

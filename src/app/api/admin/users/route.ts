@@ -2,24 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../lib/db";
 import { getUserRoles, setUserRoles, kvDelete } from "../../../../lib/kv";
 import { isAdminUser } from "../../../../lib/trainer";
-import { hasUserIdentity } from "../../../../lib/userUtils";
+import { displayName, hasUserIdentity } from "../../../../lib/userUtils";
 
 function norm(s: string) {
   return (s || "").toLowerCase().trim();
-}
-
-function displayName(u: {
-  firstName: string;
-  lastName: string;
-  id: string;
-  email?: string | null;
-}) {
-  const full =
-    `${(u.firstName || "").trim()} ${(u.lastName || "").trim()}`.trim();
-  if (full) return full;
-  const email = (u.email || "").trim();
-  if (email) return email;
-  return "";
 }
 
 export async function GET(req: NextRequest) {
@@ -71,9 +57,21 @@ export async function PUT(req: NextRequest) {
   const { isAdmin } = await isAdminUser(req);
   if (!isAdmin)
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  const body = await req.json().catch(() => ({}) as any);
-  const items = Array.isArray(body?.items)
-    ? (body.items as {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { error: "invalid_json", message: "Invalid JSON payload." },
+      { status: 400 },
+    );
+  }
+  const parsed =
+    typeof body === "object" && body !== null
+      ? (body as { items?: unknown })
+      : {};
+  const items = Array.isArray(parsed.items)
+    ? (parsed.items as {
         id: string;
         roles: { admin?: boolean; trainer?: boolean; player?: boolean };
       }[])

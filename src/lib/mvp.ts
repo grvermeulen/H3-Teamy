@@ -1,7 +1,8 @@
+import * as Sentry from "@sentry/nextjs";
 import { kvGetJson, kvSetJson, getAttendanceForDates } from "./kv";
 import { prisma } from "./db";
 import { defaultSeasonWindow, generateTrainingDates } from "./training";
-import { hasUserIdentity } from "./userUtils";
+import { displayName, hasUserIdentity } from "./userUtils";
 
 export type RosterEntry = { id: string; name: string };
 export type MvpVoteRecord = {
@@ -24,20 +25,12 @@ const ROSTER_CACHE_KEY = "mvp:roster:v2";
 const ROSTER_TTL_MS = 15 * 60 * 1000;
 
 type CachedRoster = { fetchedAt: string; list: RosterEntry[] };
-
-function displayName(user: {
-  firstName: string;
-  lastName: string;
-  email?: string | null;
+type UserRow = {
   id: string;
-}): string {
-  const full =
-    `${(user.firstName || "").trim()} ${(user.lastName || "").trim()}`.trim();
-  if (full) return full;
-  const email = (user.email || "").trim();
-  if (email) return email;
-  return "";
-}
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+};
 
 async function buildRosterFromAttendance(): Promise<RosterEntry[]> {
   const { from, to } = defaultSeasonWindow();
@@ -52,25 +45,33 @@ async function buildRosterFromAttendance(): Promise<RosterEntry[]> {
   }
   const rosterIds = Array.from(ids);
   if (!rosterIds.length) {
-    const fallback = await prisma.user
-      .findMany({
+    let fallback: UserRow[] = [];
+    try {
+      fallback = await prisma.user.findMany({
         select: { id: true, firstName: true, lastName: true, email: true },
-      })
-      .catch(() => [] as any[]);
+      });
+    } catch (error: unknown) {
+      Sentry.captureException(error);
+      return [];
+    }
     return fallback
-      .map((u: any) => ({ id: u.id, name: displayName(u) }))
+      .map((u) => ({ id: u.id, name: displayName(u) }))
       .filter((r) => r.name)
       .sort((a, b) => a.name.localeCompare(b.name));
   }
-  const users = await prisma.user
-    .findMany({
+  let users: UserRow[] = [];
+  try {
+    users = await prisma.user.findMany({
       where: { id: { in: rosterIds } },
       select: { id: true, firstName: true, lastName: true, email: true },
-    })
-    .catch(() => [] as any[]);
+    });
+  } catch (error: unknown) {
+    Sentry.captureException(error);
+    return [];
+  }
   const list = users
-    .filter((u: any) => hasUserIdentity(u))
-    .map((u: any) => ({ id: u.id, name: displayName(u) }))
+    .filter((u) => hasUserIdentity(u))
+    .map((u) => ({ id: u.id, name: displayName(u) }))
     .filter((entry) => entry.name);
   list.sort((a, b) => a.name.localeCompare(b.name));
   return list;
