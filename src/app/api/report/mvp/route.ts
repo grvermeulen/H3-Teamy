@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminUser } from "../../../../lib/trainer";
-import { getAttendanceRoster, getMvpState, saveMvpState, summarizeVotes, RosterEntry, VoteBreakdown } from "../../../../lib/mvp";
+import {
+  getAttendanceRoster,
+  getMvpState,
+  saveMvpState,
+  summarizeVotes,
+  RosterEntry,
+  VoteBreakdown,
+} from "../../../../lib/mvp";
 
 type Payload = {
   eventId: string;
@@ -26,7 +33,8 @@ function buildPayload(params: {
   const { eventId, state, roster, userId, isAdmin } = params;
   const summary = summarizeVotes(state, roster);
   const myVote = state.votes.find((v) => v.voterId === userId) || null;
-  const winner = state.status === "closed" ? summary.breakdown[0] || null : null;
+  const winner =
+    state.status === "closed" ? summary.breakdown[0] || null : null;
   return {
     eventId,
     status: state.status,
@@ -34,9 +42,13 @@ function buildPayload(params: {
     totalVotes: summary.totalVotes,
     breakdown: summary.breakdown,
     hasVoted: Boolean(myVote),
-    votedFor: myVote ? { id: myVote.candidateId, name: myVote.candidateName } : null,
+    votedFor: myVote
+      ? { id: myVote.candidateId, name: myVote.candidateName }
+      : null,
     winner,
-    canClose: Boolean(isAdmin && state.status === "open" && summary.totalVotes > 0),
+    canClose: Boolean(
+      isAdmin && state.status === "open" && summary.totalVotes > 0,
+    ),
     canReopen: Boolean(isAdmin && state.status === "closed"),
     closedAt: state.closedAt || null,
   };
@@ -50,12 +62,18 @@ export async function GET(req: NextRequest) {
   const adminInfo = await isAdminUser(req);
   const roster = await getAttendanceRoster();
   const state = await getMvpState(eventId);
-  const payload = buildPayload({ eventId, state, roster, userId: adminInfo.me.id, isAdmin: adminInfo.isAdmin });
+  const payload = buildPayload({
+    eventId,
+    state,
+    roster,
+    userId: adminInfo.me.id,
+    isAdmin: adminInfo.isAdmin,
+  });
   return NextResponse.json(payload);
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => ({} as any));
+  const body = await req.json().catch(() => ({}) as any);
   const eventId = (body?.eventId as string | undefined)?.trim();
   const candidateId = (body?.candidateId as string | undefined)?.trim();
   if (!eventId || !candidateId) {
@@ -81,7 +99,12 @@ export async function POST(req: NextRequest) {
     createdAt: new Date().toISOString(),
   });
   await saveMvpState(eventId, state);
-  const payload = buildPayload({ eventId, state, roster, userId: adminInfo.me.id, isAdmin: adminInfo.isAdmin });
+  const payload = buildPayload({
+    eventId,
+    state,
+    roster,
+    userId: adminInfo.me.id,
+    isAdmin: adminInfo.isAdmin,
+  });
   return NextResponse.json(payload);
 }
-

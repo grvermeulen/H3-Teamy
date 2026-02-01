@@ -6,14 +6,23 @@ export async function POST(req: NextRequest) {
   try {
     const form = await req.formData();
     const file = form.get("image") as File | null;
-    if (!file) return NextResponse.json({ error: "image_required" }, { status: 400 });
+    if (!file)
+      return NextResponse.json({ error: "image_required" }, { status: 400 });
 
     const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) return NextResponse.json({ error: "openai_key_missing" }, { status: 500 });
+    if (!apiKey)
+      return NextResponse.json(
+        { error: "openai_key_missing" },
+        { status: 500 },
+      );
 
     const workerUrl = process.env.OCR_WORKER_URL;
     const workerToken = process.env.OCR_WORKER_TOKEN;
-    if (!workerUrl || !workerToken) return NextResponse.json({ error: "ocr_worker_not_configured" }, { status: 500 });
+    if (!workerUrl || !workerToken)
+      return NextResponse.json(
+        { error: "ocr_worker_not_configured" },
+        { status: 500 },
+      );
 
     // 1) Call OCR Worker (EasyOCR) to get raw text
     const fd = new FormData();
@@ -27,7 +36,7 @@ export async function POST(req: NextRequest) {
       const info = await ocrResp.text().catch(() => "");
       return NextResponse.json({ error: "ocr_failed", info }, { status: 502 });
     }
-    const ocrJson: any = await ocrResp.json().catch(() => ({} as any));
+    const ocrJson: any = await ocrResp.json().catch(() => ({}) as any);
     const ocrText: string = (ocrJson?.raw_text as string | undefined) || "";
 
     const prompt = `Lees de wedstrijdgegevens en geef ALLEEN geldig JSON terug in exact dit schema:
@@ -60,8 +69,15 @@ Regels:
       model: "gpt-4o-2024-11-20",
       temperature: 0.1,
       messages: [
-        { role: "system", content: "Je bent een nauwkeurige parser die alleen geldige JSON terugstuurt." },
-        { role: "user", content: `${prompt}\n\nTekst uit OCR:\n\n\u3010BEGIN\u3011\n${ocrText}\n\u3010EINDE\u3011` },
+        {
+          role: "system",
+          content:
+            "Je bent een nauwkeurige parser die alleen geldige JSON terugstuurt.",
+        },
+        {
+          role: "user",
+          content: `${prompt}\n\nTekst uit OCR:\n\n\u3010BEGIN\u3011\n${ocrText}\n\u3010EINDE\u3011`,
+        },
       ],
       response_format: { type: "json_object" },
     } as const;
@@ -76,7 +92,10 @@ Regels:
     });
     if (!resp.ok) {
       const info = await resp.text();
-      return NextResponse.json({ error: "openai_failed", info }, { status: 502 });
+      return NextResponse.json(
+        { error: "openai_failed", info },
+        { status: 502 },
+      );
     }
     const data = await resp.json();
     let parsed: any = {};
@@ -86,8 +105,9 @@ Regels:
     } catch {}
     return NextResponse.json({ result: parsed, raw_text: ocrText });
   } catch (e: any) {
-    return NextResponse.json({ error: "failed", message: e?.message || String(e) }, { status: 500 });
+    return NextResponse.json(
+      { error: "failed", message: e?.message || String(e) },
+      { status: 500 },
+    );
   }
 }
-
-

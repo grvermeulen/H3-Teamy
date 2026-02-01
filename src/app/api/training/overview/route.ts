@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../lib/db";
-import { defaultSeasonWindow, generateTrainingDates } from "../../../../lib/training";
+import {
+  defaultSeasonWindow,
+  generateTrainingDates,
+} from "../../../../lib/training";
 import { getAttendanceForDates } from "../../../../lib/kv";
+import { isPlaceholderUser } from "../../../../lib/userUtils";
 
 export async function GET(req: NextRequest) {
   const window = defaultSeasonWindow();
@@ -16,10 +20,43 @@ export async function GET(req: NextRequest) {
     const ids = map[d] || [];
     for (const uid of ids) counts.set(uid, (counts.get(uid) || 0) + 1);
   }
-  const users = await prisma.user.findMany({ select: { id: true, firstName: true, lastName: true } }).catch(() => [] as any[]);
-  const mapName = new Map(users.map((u: any) => [u.id, `${u.firstName} ${u.lastName}`.trim()]));
-  const list = Array.from(counts.entries()).map(([userId, attended]) => ({ userId, name: mapName.get(userId) || `User ${userId.slice(0,6)}`, attended, total, pct: total ? Math.round((attended / total) * 100) : 0 }));
-  return NextResponse.json({ from, to, total, list });
+  const users = await prisma.user
+    .findMany({
+      select: { id: true, firstName: true, lastName: true, email: true },
+    })
+    .catch(() => [] as any[]);
+
+  // Filter out placeholder users (empty firstName/lastName and no email)
+  const validUsers = users.filter((u: any) => !isPlaceholderUser(u));
+  const validUserIds = new Set(validUsers.map((u: any) => u.id));
+  const mapName = new Map(
+    validUsers.map((u: any) => [u.id, `${u.firstName} ${u.lastName}`.trim()]),
+  );
+
+  // Filter out orphaned user IDs (users that have been deleted) and placeholder users
+  // Only show attendance for users that currently exist in the database and are not placeholders
+  const list = Array.from(counts.entries())
+    .filter(([userId]) => validUserIds.has(userId)) // Only include valid users
+    .map(([userId, attended]) => {
+      const name = mapName.get(userId) || `User ${userId.slice(0, 6)}`;
+      return {
+        userId,
+        name,
+        attended,
+        total,
+        pct: total ? Math.round((attended / total) * 100) : 0,
+      };
+    });
+
+  return NextResponse.json({
+    from,
+    to,
+    total,
+    list,
+    debug: {
+      datesChecked: dates.length,
+      datesWithData: Object.keys(map).filter((d) => (map[d] || []).length > 0)
+        .length,
+    },
+  });
 }
-
-

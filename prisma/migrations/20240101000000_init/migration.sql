@@ -1,0 +1,1 @@
+-- Empty migration: baseline already applied

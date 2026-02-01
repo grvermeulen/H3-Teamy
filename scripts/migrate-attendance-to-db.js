@@ -1,4 +1,4 @@
-﻿/*
+/*
   Migrate attendance data from Redis/KV to database
   Usage: DATABASE_URL=... REDIS_URL=... node scripts/migrate-attendance-to-db.js
 */
@@ -51,11 +51,10 @@ async function main() {
   if (!process.env.DATABASE_URL && process.env.DIRECT_DATABASE_URL) {
     process.env.DATABASE_URL = process.env.DIRECT_DATABASE_URL;
   }
-
   // For migrations, we need to use direct connection (Accelerate doesn't support writes/schema changes)
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) {
-    console.error("ÔØî DATABASE_URL must be set in .env file or environment");
+    console.error("DATABASE_URL must be set in .env file or environment");
     process.exit(1);
   }
   console.log("Using direct PostgreSQL connection for migration...\n");
@@ -69,7 +68,7 @@ async function main() {
 
     if (!redis) {
       console.log(
-        "ÔÜá´©Å  No Redis connection found. Only migrating existing database records.",
+        "No Redis connection found. Only migrating existing database records.",
       );
     }
 
@@ -126,10 +125,10 @@ async function main() {
         });
 
         migrated += toMigrate.length;
-        console.log(`Ô£ô ${dateKey}: Migrated ${toMigrate.length} records`);
+        console.log(`${dateKey}: Migrated ${toMigrate.length} records`);
       } catch (error) {
         errors++;
-        console.error(`Ô£ù ${dateKey}: Error - ${error.message}`);
+        console.error(`${dateKey}: Error - ${error.message}`);
       }
     }
 

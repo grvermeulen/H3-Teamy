@@ -69,4 +69,3 @@ model Attendance {
   @@index([date])
   @@index([userId])
 }
-

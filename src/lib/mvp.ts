@@ -1,9 +1,15 @@
 import { kvGetJson, kvSetJson, getAttendanceForDates } from "./kv";
 import { prisma } from "./db";
 import { defaultSeasonWindow, generateTrainingDates } from "./training";
+import { isPlaceholderUser } from "./userUtils";
 
 export type RosterEntry = { id: string; name: string };
-export type MvpVoteRecord = { voterId: string; candidateId: string; candidateName: string; createdAt: string };
+export type MvpVoteRecord = {
+  voterId: string;
+  candidateId: string;
+  candidateName: string;
+  createdAt: string;
+};
 export type MvpVotingState = {
   eventId: string;
   status: "open" | "closed";
@@ -19,8 +25,14 @@ const ROSTER_TTL_MS = 15 * 60 * 1000;
 
 type CachedRoster = { fetchedAt: string; list: RosterEntry[] };
 
-function displayName(user: { firstName: string; lastName: string; email?: string | null; id: string }): string {
-  const full = `${(user.firstName || "").trim()} ${(user.lastName || "").trim()}`.trim();
+function displayName(user: {
+  firstName: string;
+  lastName: string;
+  email?: string | null;
+  id: string;
+}): string {
+  const full =
+    `${(user.firstName || "").trim()} ${(user.lastName || "").trim()}`.trim();
   if (full) return full;
   const email = (user.email || "").trim();
   if (email) return email;
@@ -40,19 +52,33 @@ async function buildRosterFromAttendance(): Promise<RosterEntry[]> {
   }
   const rosterIds = Array.from(ids);
   if (!rosterIds.length) {
-    const fallback = await prisma.user.findMany({ select: { id: true, firstName: true, lastName: true, email: true } }).catch(() => [] as any[]);
-    return fallback.map((u: any) => ({ id: u.id, name: displayName(u) })).filter((r) => r.name).sort((a, b) => a.name.localeCompare(b.name));
+    const fallback = await prisma.user
+      .findMany({
+        select: { id: true, firstName: true, lastName: true, email: true },
+      })
+      .catch(() => [] as any[]);
+    return fallback
+      .filter((u: any) => !isPlaceholderUser(u)) // Filter out placeholder users
+      .map((u: any) => ({ id: u.id, name: displayName(u) }))
+      .filter((r) => r.name)
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
-  const users = await prisma.user.findMany({
-    where: { id: { in: rosterIds } },
-    select: { id: true, firstName: true, lastName: true, email: true },
-  }).catch(() => [] as any[]);
-  const list = users.map((u: any) => ({ id: u.id, name: displayName(u) }));
+  const users = await prisma.user
+    .findMany({
+      where: { id: { in: rosterIds } },
+      select: { id: true, firstName: true, lastName: true, email: true },
+    })
+    .catch(() => [] as any[]);
+  const list = users
+    .filter((u: any) => !isPlaceholderUser(u)) // Filter out placeholder users
+    .map((u: any) => ({ id: u.id, name: displayName(u) }));
   list.sort((a, b) => a.name.localeCompare(b.name));
   return list;
 }
 
-export async function getAttendanceRoster(forceRefresh = false): Promise<RosterEntry[]> {
+export async function getAttendanceRoster(
+  forceRefresh = false,
+): Promise<RosterEntry[]> {
   if (!forceRefresh) {
     const cached = await kvGetJson<CachedRoster>(ROSTER_CACHE_KEY);
     if (cached?.list) {
@@ -63,36 +89,143 @@ export async function getAttendanceRoster(forceRefresh = false): Promise<RosterE
     }
   }
   const list = await buildRosterFromAttendance();
-  await kvSetJson(ROSTER_CACHE_KEY, { fetchedAt: new Date().toISOString(), list });
+  await kvSetJson(ROSTER_CACHE_KEY, {
+    fetchedAt: new Date().toISOString(),
+    list,
+  });
   return list;
 }
 
 export async function getMvpState(eventId: string): Promise<MvpVotingState> {
+  const p = await prisma;
+  if (p) {
+    // Primary: Database
+    const votes = await p.mvpVote.findMany({
+      where: { eventId },
+      orderBy: { createdAt: "asc" },
+    });
+
+    // Check if voting is closed (has a closedAt timestamp in the report)
+    const report = await p.matchReport.findUnique({
+      where: { eventId },
+      select: { mvpResult: true },
+    });
+
+    const isClosed =
+      report?.mvpResult &&
+      typeof report.mvpResult === "object" &&
+      "decidedAt" in report.mvpResult;
+
+    const createdAt =
+      votes[0]?.createdAt.toISOString() || new Date().toISOString();
+
+    return {
+      eventId,
+      status: isClosed ? "closed" : "open",
+      votes: votes.map((v) => ({
+        voterId: v.voterId,
+        candidateId: v.candidateId,
+        candidateName: v.candidateName,
+        createdAt: v.createdAt.toISOString(),
+      })),
+      createdAt,
+      closedAt:
+        isClosed &&
+        report.mvpResult &&
+        typeof report.mvpResult === "object" &&
+        "decidedAt" in report.mvpResult
+          ? (report.mvpResult.decidedAt as string)
+          : undefined,
+    };
+  }
+
+  // Fallback: KV/Redis
   const existing = await kvGetJson<MvpVotingState>(MVP_STATE_KEY(eventId));
   if (existing && Array.isArray(existing.votes)) {
     return existing;
   }
-  const fresh: MvpVotingState = { eventId, status: "open", votes: [], createdAt: new Date().toISOString() };
+  const fresh: MvpVotingState = {
+    eventId,
+    status: "open",
+    votes: [],
+    createdAt: new Date().toISOString(),
+  };
   await kvSetJson(MVP_STATE_KEY(eventId), fresh);
   return fresh;
 }
 
-export async function saveMvpState(eventId: string, state: MvpVotingState): Promise<void> {
+export async function saveMvpState(
+  eventId: string,
+  state: MvpVotingState,
+): Promise<void> {
+  const p = await prisma;
+  if (p) {
+    // Primary: Database
+    // Ensure event exists
+    await p.event.upsert({
+      where: { id: eventId },
+      create: { id: eventId },
+      update: {},
+    });
+
+    // Delete existing votes for this event
+    await p.mvpVote.deleteMany({ where: { eventId } });
+
+    // Insert new votes
+    if (state.votes.length > 0) {
+      await p.mvpVote.createMany({
+        data: state.votes.map((vote) => ({
+          eventId,
+          voterId: vote.voterId,
+          candidateId: vote.candidateId,
+          candidateName: vote.candidateName,
+        })),
+      });
+    }
+
+    // If voting is closed, update the report's mvpResult
+    if (state.status === "closed" && state.closedAt) {
+      // The mvpResult will be set when closing the vote via the close endpoint
+      // This is just to ensure the state is saved
+    }
+
+    // Also save to KV for backward compatibility
+  }
+
+  // Fallback: KV/Redis
   await kvSetJson(MVP_STATE_KEY(eventId), state);
 }
 
-export type VoteBreakdown = { candidateId: string; name: string; votes: number; percent: number };
+export type VoteBreakdown = {
+  candidateId: string;
+  name: string;
+  votes: number;
+  percent: number;
+};
 
-export function summarizeVotes(state: MvpVotingState, roster: RosterEntry[]): { totalVotes: number; breakdown: VoteBreakdown[] } {
+export function summarizeVotes(
+  state: MvpVotingState,
+  roster: RosterEntry[],
+): { totalVotes: number; breakdown: VoteBreakdown[] } {
   const totalVotes = state.votes.length;
   const nameMap = new Map<string, string>();
   for (const entry of roster) {
     nameMap.set(entry.id, entry.name);
   }
-  const counts = new Map<string, { candidateId: string; name: string; votes: number }>();
+  const counts = new Map<
+    string,
+    { candidateId: string; name: string; votes: number }
+  >();
   for (const vote of state.votes) {
-    const name = nameMap.get(vote.candidateId) || vote.candidateName || `Speler ${vote.candidateId.slice(0, 6)}`;
-    const current = counts.get(vote.candidateId) || { candidateId: vote.candidateId, name, votes: 0 };
+    const name =
+      nameMap.get(vote.candidateId) ||
+      vote.candidateName ||
+      `Speler ${vote.candidateId.slice(0, 6)}`;
+    const current = counts.get(vote.candidateId) || {
+      candidateId: vote.candidateId,
+      name,
+      votes: 0,
+    };
     current.votes += 1;
     current.name = name; // ensure updated if roster name changed
     counts.set(vote.candidateId, current);
@@ -109,4 +242,3 @@ export function summarizeVotes(state: MvpVotingState, roster: RosterEntry[]): { 
   });
   return { totalVotes, breakdown };
 }
-

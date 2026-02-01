@@ -39,13 +39,19 @@ export default function MvpVoteButton({ eventId }: Props) {
   const refreshMeta = useCallback(async () => {
     setMetaLoading(true);
     try {
-      const res = await fetch(`/api/report/mvp?eventId=${encodeURIComponent(eventId)}`, { cache: "no-store" });
+      const res = await fetch(
+        `/api/report/mvp?eventId=${encodeURIComponent(eventId)}`,
+        { cache: "no-store" },
+      );
       if (!res.ok) {
         setMeta(null);
         return;
       }
       const data = await res.json();
-      setMeta({ canClose: Boolean(data?.canClose), canReopen: Boolean(data?.canReopen) });
+      setMeta({
+        canClose: Boolean(data?.canClose),
+        canReopen: Boolean(data?.canReopen),
+      });
     } catch {
       setMeta(null);
     } finally {
@@ -113,17 +119,29 @@ export default function MvpVoteButton({ eventId }: Props) {
           Stem op MVP
         </button>
         {!metaLoading && meta?.canClose ? (
-          <button type="button" onClick={handleClose} disabled={action === "close"}>
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={action === "close"}
+          >
             {action === "close" ? "Sluiten…" : "Sluit MVP-stemming"}
           </button>
         ) : null}
         {!metaLoading && meta?.canReopen ? (
-          <button type="button" onClick={handleReopen} disabled={action === "reopen"}>
+          <button
+            type="button"
+            onClick={handleReopen}
+            disabled={action === "reopen"}
+          >
             {action === "reopen" ? "Heropenen…" : "Heropen MVP-stemming"}
           </button>
         ) : null}
       </div>
-      {error ? <div className="muted" style={{ marginTop: 4, color: "#ff7b72" }}>{error}</div> : null}
+      {error ? (
+        <div className="muted" style={{ marginTop: 4, color: "#ff7b72" }}>
+          {error}
+        </div>
+      ) : null}
       {open ? (
         <div className="modalOverlay" onClick={() => setOpen(false)}>
           <div
@@ -147,7 +165,11 @@ export default function MvpVoteButton({ eventId }: Props) {
                 marginTop: 8,
               }}
             >
-              <MvpVotingPanel eventId={eventId} variant="inline" onStatusChange={refreshMeta} />
+              <MvpVotingPanel
+                eventId={eventId}
+                variant="inline"
+                onStatusChange={refreshMeta}
+              />
             </div>
           </div>
         </div>
@@ -155,5 +177,3 @@ export default function MvpVoteButton({ eventId }: Props) {
     </>
   );
 }
-
-

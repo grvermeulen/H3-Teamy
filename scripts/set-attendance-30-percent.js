@@ -1,4 +1,4 @@
-﻿/*
+/*
   Set everyone to 30% attendance for the current season
   Usage: DATABASE_URL=... node scripts/set-attendance-30-percent.js [--dry-run]
 */
@@ -118,7 +118,7 @@ async function main() {
     // Fall back to direct connection
     const dbUrl = process.env.DATABASE_URL;
     if (!dbUrl) {
-      console.error("ÔØî DATABASE_URL must be set in .env file or environment");
+      console.error("DATABASE_URL must be set in .env file or environment");
       process.exit(1);
     }
     console.log("Using direct PostgreSQL connection...\n");
@@ -130,7 +130,7 @@ async function main() {
   try {
     console.log("=== Set Everyone to 30% Attendance ===\n");
     if (dryRun) {
-      console.log("­ƒöì DRY RUN MODE - No changes will be made\n");
+      console.log("DRY RUN MODE - No changes will be made\n");
     }
 
     // Get season window
@@ -170,15 +170,13 @@ async function main() {
     );
 
     if (pastDates.length === 0) {
-      console.log(
-        "ÔÜá´©Å  No past training sessions found in the season window!",
-      );
+      console.log("No past training sessions found in the season window!");
       return;
     }
 
     if (pastDates.length < targetCount) {
       console.log(
-        `ÔÜá´©Å  Warning: Only ${pastDates.length} past sessions available, but need ${targetCount} for 30% of season total.`,
+        `Warning: Only ${pastDates.length} past sessions available, but need ${targetCount} for 30% of season total.`,
       );
       console.log(`   Will assign all ${pastDates.length} past sessions.\n`);
     }

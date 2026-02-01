@@ -126,6 +126,12 @@ export async function setRsvp(
         create: { id: userId, firstName: "", lastName: "" },
         update: {},
       });
+      // Ensure event exists
+      await p.event.upsert({
+        where: { id: eventId },
+        create: { id: eventId },
+        update: {},
+      });
       await p.rsvp.upsert({
         where: { userId_eventId: { userId, eventId } },
         create: { userId, eventId, status },
@@ -429,6 +435,24 @@ type MatchReport = {
 };
 
 export async function getReport(eventId: string): Promise<MatchReport | null> {
+  const p = await getPrisma();
+  if (p) {
+    // Primary: Database
+    const report = await p.matchReport.findUnique({
+      where: { eventId },
+    });
+    if (report) {
+      return {
+        content: report.content,
+        createdAt: report.createdAt.toISOString(),
+        authorId: report.authorId || undefined,
+        mvpResult: report.mvpResult ? (report.mvpResult as any) : undefined,
+      };
+    }
+    // Fallback to KV for backward compatibility
+  }
+
+  // Fallback: KV/Redis
   const key = `report:${eventId}`;
   if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
     const redis = await getRedis();
@@ -471,6 +495,38 @@ export async function setReport(
   eventId: string,
   report: MatchReport | null,
 ): Promise<void> {
+  const p = await getPrisma();
+  if (p) {
+    // Primary: Database
+    if (report === null) {
+      await p.matchReport.delete({ where: { eventId } }).catch(() => {});
+    } else {
+      // Ensure event exists
+      await p.event.upsert({
+        where: { id: eventId },
+        create: { id: eventId },
+        update: {},
+      });
+
+      await p.matchReport.upsert({
+        where: { eventId },
+        create: {
+          eventId,
+          content: report.content,
+          authorId: report.authorId || null,
+          mvpResult: report.mvpResult ? (report.mvpResult as any) : null,
+        },
+        update: {
+          content: report.content,
+          authorId: report.authorId || null,
+          mvpResult: report.mvpResult ? (report.mvpResult as any) : null,
+        },
+      });
+    }
+    // Also update KV for backward compatibility
+  }
+
+  // Fallback: KV/Redis
   const key = `report:${eventId}`;
   if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
     const redis = await getRedis();
