@@ -1,5 +1,9 @@
 type RsvpStatus = "yes" | "no" | "maybe" | null;
-type UserProfile = { firstName: string; lastName: string };
+type UserProfile = {
+  firstName: string;
+  lastName: string;
+  email?: string | null;
+};
 let prismaLoaded = false as boolean;
 let prisma: any = null as any;
 async function getPrisma() {
@@ -323,9 +327,16 @@ export async function getUserProfile(
 ): Promise<UserProfile | null> {
   const p = await getPrisma();
   if (p) {
-    const u = await p.user.findUnique({ where: { id: userId } });
+    const u = await p.user.findUnique({
+      where: { id: userId },
+      select: { firstName: true, lastName: true, email: true },
+    });
     if (!u) return null;
-    return { firstName: u.firstName, lastName: u.lastName };
+    return {
+      firstName: u.firstName,
+      lastName: u.lastName,
+      email: u.email ?? undefined,
+    };
   }
   const key = `user:${userId}`;
   const redis = await getRedis();
