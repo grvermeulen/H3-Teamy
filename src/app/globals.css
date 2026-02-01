@@ -512,7 +512,7 @@ h3 {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 2000;
   padding: 16px;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -586,6 +586,7 @@ h3 {
 }
 
 body.modal-open .card {
+  z-index: auto;
   transform: none !important;
 }
 
