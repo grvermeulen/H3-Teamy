@@ -7,13 +7,13 @@ const MODAL_COUNT_KEY = "modalCount";
 const MODAL_OVERFLOW_KEY = "modalOverflow";
 const MODAL_TOUCH_KEY = "modalTouchAction";
 
-function readCount(body: HTMLBodyElement): number {
+function readCount(body: HTMLElement): number {
   const raw = body.dataset[MODAL_COUNT_KEY];
   const parsed = raw ? Number(raw) : 0;
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
-function writeCount(body: HTMLBodyElement, count: number) {
+function writeCount(body: HTMLElement, count: number) {
   if (count > 0) {
     body.dataset[MODAL_COUNT_KEY] = String(count);
   } else {
@@ -21,16 +21,16 @@ function writeCount(body: HTMLBodyElement, count: number) {
   }
 }
 
-function captureStyles(body: HTMLBodyElement): BodyStyleSnapshot {
+function captureStyles(body: HTMLElement): BodyStyleSnapshot {
   return { overflow: body.style.overflow, touchAction: body.style.touchAction };
 }
 
-function storeStyles(body: HTMLBodyElement, snapshot: BodyStyleSnapshot) {
+function storeStyles(body: HTMLElement, snapshot: BodyStyleSnapshot) {
   body.dataset[MODAL_OVERFLOW_KEY] = snapshot.overflow;
   body.dataset[MODAL_TOUCH_KEY] = snapshot.touchAction;
 }
 
-function restoreStyles(body: HTMLBodyElement) {
+function restoreStyles(body: HTMLElement) {
   body.style.overflow = body.dataset[MODAL_OVERFLOW_KEY] ?? "";
   body.style.touchAction = body.dataset[MODAL_TOUCH_KEY] ?? "";
   delete body.dataset[MODAL_OVERFLOW_KEY];
