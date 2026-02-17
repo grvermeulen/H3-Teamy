@@ -79,6 +79,15 @@ describe("trainer permissions", () => {
       const result = await isTrainer(mockReq);
       expect(result.isTrainer).toBe(false);
     });
+
+    it("returns false if DB query fails", async () => {
+      (getActiveUser as any).mockResolvedValue({ userId: "5" });
+      (prisma.user.findUnique as any).mockRejectedValue(new Error("DB Error"));
+
+      const result = await isTrainer(mockReq);
+      expect(result.isTrainer).toBe(false);
+      expect(result.me.name).toBe("");
+    });
   });
 
   describe("isAdminUser", () => {
@@ -116,6 +125,15 @@ describe("trainer permissions", () => {
 
       const result = await isAdminUser(mockReq);
       expect(result.isAdmin).toBe(false);
+    });
+
+    it("returns false if DB query fails", async () => {
+      (getActiveUser as any).mockResolvedValue({ userId: "5" });
+      (prisma.user.findUnique as any).mockRejectedValue(new Error("DB Error"));
+
+      const result = await isAdminUser(mockReq);
+      expect(result.isAdmin).toBe(false);
+      expect(result.me.name).toBe("");
     });
   });
 });

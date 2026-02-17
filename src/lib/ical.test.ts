@@ -104,4 +104,19 @@ describe("fetchTeamEvents", () => {
     // Verify sorting (oldest first)
     expect(events[0].title).toBe("Old Match");
   });
+
+  it("handles invalid ical data gracefully", async () => {
+    // Mock fetch with bad data
+    global.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        text: () => Promise.resolve("INVALID ICAL DATA"),
+      } as Response),
+    );
+
+    // Should return empty array or cache if parsing fails
+    (kvGetJson as any).mockResolvedValue([]);
+    const events = await fetchTeamEvents();
+    expect(events).toHaveLength(0);
+  });
 });
