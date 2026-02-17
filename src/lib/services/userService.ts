@@ -46,7 +46,13 @@ export async function getActiveUsers(refresh = false) {
   }
 
   list.sort((a, b) => a.name.localeCompare(b.name));
-  await kvSetJson(cacheKey, list);
+
+  try {
+    await kvSetJson(cacheKey, list);
+  } catch (err) {
+    console.error("Failed to update user cache:", err);
+    Sentry.captureException(err);
+  }
 
   return list;
 }
