@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import "@testing-library/jest-dom";
 import ReportPreview from "./ReportPreview";
 
@@ -13,12 +13,14 @@ describe("ReportPreview", () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("renders nothing if no report content", async () => {
-    global.fetch = vi.fn(() =>
-      Promise.resolve({
-        json: () => Promise.resolve({ report: null }),
-      } as Response),
-    );
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      json: () => Promise.resolve({ report: null }),
+    } as Response);
 
     render(<ReportPreview eventId="123" />);
 
@@ -30,11 +32,9 @@ describe("ReportPreview", () => {
   });
 
   it("renders button if report exists", async () => {
-    global.fetch = vi.fn(() =>
-      Promise.resolve({
-        json: () => Promise.resolve({ report: { content: "Test Report" } }),
-      } as Response),
-    );
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      json: () => Promise.resolve({ report: { content: "Test Report" } }),
+    } as Response);
 
     render(<ReportPreview eventId="123" />);
 
@@ -44,12 +44,10 @@ describe("ReportPreview", () => {
   });
 
   it("opens modal and shows content when clicked", async () => {
-    global.fetch = vi.fn(() =>
-      Promise.resolve({
-        json: () =>
-          Promise.resolve({ report: { content: "Detailed Match Report" } }),
-      } as Response),
-    );
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      json: () =>
+        Promise.resolve({ report: { content: "Detailed Match Report" } }),
+    } as Response);
 
     render(<ReportPreview eventId="123" />);
 
@@ -69,11 +67,9 @@ describe("ReportPreview", () => {
   });
 
   it("closes modal when close button clicked", async () => {
-    global.fetch = vi.fn(() =>
-      Promise.resolve({
-        json: () => Promise.resolve({ report: { content: "Test" } }),
-      } as Response),
-    );
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      json: () => Promise.resolve({ report: { content: "Test" } }),
+    } as Response);
 
     render(<ReportPreview eventId="123" />);
     await waitFor(() =>
@@ -90,8 +86,8 @@ describe("ReportPreview", () => {
 
   it("refreshes content on report:updated event", async () => {
     // First fetch returns nothing
-    global.fetch = vi
-      .fn()
+    const fetchSpy = vi.spyOn(global, "fetch");
+    fetchSpy
       .mockResolvedValueOnce({
         json: () => Promise.resolve({ report: null }),
       } as Response)
@@ -114,5 +110,50 @@ describe("ReportPreview", () => {
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
     expect(screen.getByText("Bekijk wedstrijd verslag")).toBeInTheDocument();
+  });
+
+  it("handles fetch errors gracefully", async () => {
+    vi.spyOn(global, "fetch").mockRejectedValue("Network Error");
+
+    render(<ReportPreview eventId="123" />);
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    expect(
+      screen.queryByText("Bekijk wedstrijd verslag"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("closes modal when clicking overlay", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      json: () => Promise.resolve({ report: { content: "Test" } }),
+    } as Response);
+
+    render(<ReportPreview eventId="123" />);
+    await waitFor(() =>
+      fireEvent.click(screen.getByText("Bekijk wedstrijd verslag")),
+    );
+
+    // Find overlay and click it
+    const overlay = document.querySelector(".modalOverlay");
+    if (overlay) fireEvent.click(overlay);
+
+    expect(screen.queryByText("Wedstrijd verslag")).not.toBeInTheDocument();
+  });
+
+  it("prevents click propagation from modal content", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      json: () => Promise.resolve({ report: { content: "Test" } }),
+    } as Response);
+
+    render(<ReportPreview eventId="123" />);
+    await waitFor(() =>
+      fireEvent.click(screen.getByText("Bekijk wedstrijd verslag")),
+    );
+
+    const content = document.querySelector(".modalContent");
+    if (content) fireEvent.click(content);
+
+    // Should still be open
+    expect(screen.getByText("Wedstrijd verslag")).toBeInTheDocument();
   });
 });
