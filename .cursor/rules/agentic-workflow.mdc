@@ -1,0 +1,32 @@
+---
+description: Standards for Agentic Coding (Cursor + Opencode)
+globs: **/*.ts, **/*.tsx
+---
+# Agentic Standards
+
+This file defines the strict coding standards for all AI agents (Cursor, Opencode) working on this repository.
+
+## 1. Testing Strategy (Mandatory)
+- **Unit Tests**: ALL new business logic (functions, hooks, utilities) MUST have a corresponding `.test.ts` or `.test.tsx` file using Vitest.
+- **Component Tests**: Complex UI components must have a `.test.tsx` file using `@testing-library/react`.
+- **Run Tests**: Verify changes with `npm test` (or `npx vitest run`) before completing a task.
+
+## 2. Architecture & File Structure
+- **Service Layer**: Business logic belongs in `src/lib/services/`, NOT in API routes or Components.
+  - *Bad*: `src/app/api/users/route.ts` containing DB queries.
+  - *Good*: `src/app/api/users/route.ts` calls `UserService.getUsers()`.
+- **API Routes**: Keep them thin. They should only handle request parsing, auth checks, and response formatting.
+- **Components**: Use functional components with strict TypeScript interfaces for props.
+
+## 3. Tech Stack & Styling
+- **Styling**: Use Tailwind CSS utility classes exclusively. Avoid CSS modules unless absolutely necessary for complex animations.
+- **State Management**: Prefer React Server Components for data fetching. Use `useState`/`useReducer` for local interaction state.
+- **Type Safety**: Use Zod for all schema validation (API inputs, form data, env vars).
+
+## 4. Git & Workflow
+- **Commits**: Follow Conventional Commits (feat:, fix:, chore:, refactor:).
+- **Hooks**: Pre-commit hooks enforce Lint, Typecheck, and Tests. Do not bypass them (`--no-verify`) unless instructed.
+
+## 5. Agent Behavior
+- **Refactoring**: When refactoring, always run tests BEFORE and AFTER changes to ensure no regression.
+- **Planning**: For complex tasks, create a `PLAN.md` or use the `todo` tool to track progress.
