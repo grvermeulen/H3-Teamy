@@ -6,6 +6,7 @@ export function slugifyTitle(title: string): string {
   return (title || "")
     .toLowerCase()
     .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "") // Remove combining diacritical marks
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
@@ -19,5 +20,3 @@ export function canonicalEventId(title: string, start: Date | string): string {
   const slug = slugifyTitle(title);
   return `${y}${m}${day}--${slug}`;
 }
-
-
