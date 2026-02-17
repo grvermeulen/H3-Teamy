@@ -22,12 +22,13 @@ describe("eventId", () => {
 
   describe("canonicalEventId", () => {
     it("generates ID from Date object", () => {
-      const date = new Date("2023-10-05T10:00:00Z");
+      // Use explicit timestamp with T00:00:00 to avoid UTC midnight rolling back in negative timezones
+      const date = new Date("2023-10-05T12:00:00");
       expect(canonicalEventId("My Event", date)).toBe("20231005--my-event");
     });
 
     it("generates ID from date string", () => {
-      expect(canonicalEventId("Training", "2023-01-01")).toBe(
+      expect(canonicalEventId("Training", "2023-01-01T12:00:00")).toBe(
         "20230101--training",
       );
     });
@@ -37,7 +38,7 @@ describe("eventId", () => {
       // Let's see what it does. Implementation: `${y}${m}${day}--${slug}`
       // slugify("") -> ""
       // Expect: "20230101--"
-      expect(canonicalEventId("", "2023-01-01")).toBe("20230101--");
+      expect(canonicalEventId("", "2023-01-01T12:00:00")).toBe("20230101--");
     });
   });
 });

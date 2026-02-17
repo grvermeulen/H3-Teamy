@@ -72,9 +72,14 @@ describe("ReportPreview", () => {
     } as Response);
 
     render(<ReportPreview eventId="123" />);
+
+    // First wait for the button to appear
     await waitFor(() =>
-      fireEvent.click(screen.getByText("Bekijk wedstrijd verslag")),
+      expect(screen.getByText("Bekijk wedstrijd verslag")).toBeInTheDocument(),
     );
+
+    // Then click it once
+    fireEvent.click(screen.getByText("Bekijk wedstrijd verslag"));
 
     expect(screen.getByText("Wedstrijd verslag")).toBeInTheDocument();
 
