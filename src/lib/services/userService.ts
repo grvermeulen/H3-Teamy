@@ -6,6 +6,13 @@ import * as Sentry from "@sentry/nextjs";
 
 type UserRow = Pick<User, "id" | "firstName" | "lastName" | "email">;
 
+/**
+ * Retrieves the list of active users for the roster.
+ *
+ * @param refresh - If true, bypasses the cache and fetches fresh data from the DB.
+ * @returns A promise resolving to a sorted list of users with IDs and display names.
+ * @throws Will throw if the DB query fails.
+ */
 export async function getActiveUsers(refresh = false) {
   const cacheKey = "users:roster:v2";
 

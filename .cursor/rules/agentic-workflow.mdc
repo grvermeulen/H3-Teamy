@@ -29,4 +29,15 @@ This file defines the strict coding standards for all AI agents (Cursor, Opencod
 
 ## 5. Agent Behavior
 - **Refactoring**: When refactoring, always run tests BEFORE and AFTER changes to ensure no regression.
-- **Planning**: For complex tasks, create a `PLAN.md` or use the `todo` tool to track progress.
+## 6. Documentation (CodeRabbit)
+- **Docstrings**: ALL exported functions, classes, and components MUST have JSDoc comments (`/** ... */`).
+- **Coverage**: Maintain at least 80% docstring coverage to satisfy CodeRabbit checks.
+- **Format**:
+  ```ts
+  /**
+   * Calculates the attendance badge based on percentage.
+   * @param percent - The attendance percentage (0-100).
+   * @returns The corresponding badge object.
+   */
+  export function getBadge(percent: number) { ... }
+  ```
