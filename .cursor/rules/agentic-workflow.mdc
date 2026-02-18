@@ -7,37 +7,115 @@ globs: **/*.ts, **/*.tsx
 This file defines the strict coding standards for all AI agents (Cursor, Opencode) working on this repository.
 
 ## 1. Testing Strategy (Mandatory)
+
 - **Unit Tests**: ALL new business logic (functions, hooks, utilities) MUST have a corresponding `.test.ts` or `.test.tsx` file using Vitest.
 - **Component Tests**: Complex UI components must have a `.test.tsx` file using `@testing-library/react`.
 - **Run Tests**: Verify changes with `npm test` (or `npx vitest run`) before completing a task.
 
+### 1.1 Mock hygiene (enforced)
+
+- Always use `vi.mocked(fn).mockResolvedValue(...)` — never `(fn as any).mockResolvedValue(...)`.
+- Add `beforeEach(() => { vi.clearAllMocks(); })` to every describe block that uses mocks.
+- Add `afterEach(() => { vi.restoreAllMocks(); })` when using `vi.spyOn`.
+- Use `vi.spyOn(global, "fetch")` instead of assigning `global.fetch` directly.
+- Use `vi.stubEnv("VAR", "value")` for env vars; add `afterEach(() => { vi.unstubAllEnvs(); })`.
+- Never assign `process.env.X = "..."` in tests without restoring it afterwards.
+
+### 1.2 Testing Library patterns (enforced)
+
+- Never call `fireEvent` or `userEvent` inside a `waitFor` callback — wait first, then act.
+- Add `afterEach(() => { cleanup(); })` to component test suites.
+- Use precise assertions: `toHaveBeenCalledTimes(1)` and `toHaveBeenCalledWith(...)` over `toHaveBeenCalled()`.
+- Mock `fetch` responses as complete Response-like objects (`ok`, `status`, `headers`) — never cast incomplete objects with `as Response`.
+
+### 1.3 Test coverage requirements
+
+- Tests for async functions MUST include at least one error/rejection path.
+- When a function calls Sentry, add `expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(expect.any(Error))` in the error-path test.
+- Do not use implementation-tracing comments in tests (e.g. `// Implementation: ${y}${m}${day}`); the assertion is the specification.
+
+### 1.4 Timezone safety
+
+- Never use bare date-only strings (`"2023-01-01"`) in tests — they parse as UTC midnight and fail in western-timezone CI.
+- Use `"YYYY-MM-DDT12:00:00"` (noon local) or explicit UTC strings.
+- In production code, use `getUTCFullYear` / `getUTCMonth` / `getUTCDate` when building date-based identifiers.
+
 ## 2. Architecture & File Structure
+
 - **Service Layer**: Business logic belongs in `src/lib/services/`, NOT in API routes or Components.
   - *Bad*: `src/app/api/users/route.ts` containing DB queries.
   - *Good*: `src/app/api/users/route.ts` calls `UserService.getUsers()`.
 - **API Routes**: Keep them thin. They should only handle request parsing, auth checks, and response formatting.
 - **Components**: Use functional components with strict TypeScript interfaces for props.
+- **No duplicate utilities**: Before writing a new helper, check `src/lib/` for an existing one. Import and reuse; never copy-paste.
+  - Example: use `displayName` from `@/lib/userUtils` everywhere — do not redeclare it in API routes or components.
+  - Shared one-liners (e.g. `parseError`) belong in `src/lib/` and must be imported, not duplicated per component.
 
 ## 3. Tech Stack & Styling
-- **Styling**: Use Tailwind CSS utility classes exclusively. Avoid CSS modules unless absolutely necessary for complex animations.
+
+- **Styling**: Use Tailwind CSS utility classes exclusively. No inline `style` props, no CSS modules, unless documented as an exception.
+  - Next.js error boundary components (`error.tsx`) may use Tailwind; there is no justification for inline styles.
 - **State Management**: Prefer React Server Components for data fetching. Use `useState`/`useReducer` for local interaction state.
 - **Type Safety**: Use Zod for all schema validation (API inputs, form data, env vars).
 
 ## 4. Git & Workflow
-- **Commits**: Follow Conventional Commits (feat:, fix:, chore:, refactor:).
+
+- **Commits**: Follow Conventional Commits (feat:, fix:, chore:, refactor:, ci:, test:, docs:).
 - **Hooks**: Pre-commit hooks enforce Lint, Typecheck, and Tests. Do not bypass them (`--no-verify`) unless instructed.
+- **No debug artifacts**: Never commit development comments like `// CI: trigger AI review` into source files.
+
+## 5. CI Configuration
+
+- **Node version**: Always use Node 20 or 22. Node 18 is EOL and incompatible with vitest v4 / vite v7.
+- **Concurrency**: Add a concurrency group to workflows that trigger on both `push` and `pull_request` to avoid duplicate runs:
+  ```yaml
+  concurrency:
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
+  ```
+- **Least-privilege tokens**: Every workflow job must declare an explicit `permissions` block. Default to `contents: read`.
+- **Pre-commit hooks**: Do not run the full test suite on `pre-commit`. Move full test runs to `pre-push`, or scope to changed files with `npx vitest run --changed`.
 
 ## 5. Agent Behavior
+
 - **Refactoring**: When refactoring, always run tests BEFORE and AFTER changes to ensure no regression.
+- **No dead code**: If a setup file is created (e.g. `vitest.setup.ts`), it MUST be registered in `vitest.config.ts` under `setupFiles`. Dead setup files are forbidden.
+
 ## 6. Documentation (CodeRabbit)
+
 - **Docstrings**: ALL exported functions, classes, and components MUST have JSDoc comments (`/** ... */`).
 - **Coverage**: Maintain at least 80% docstring coverage to satisfy CodeRabbit checks.
+- **Accuracy**: JSDoc `@param` descriptions must match the actual behaviour including edge cases (e.g., clamping, fallbacks).
 - **Format**:
   ```ts
   /**
    * Calculates the attendance badge based on percentage.
-   * @param percent - The attendance percentage (0-100).
+   * @param percent - The attendance percentage (0-100). Values outside this range are clamped; NaN/Infinity treated as 0.
    * @returns The corresponding badge object.
    */
   export function getBadge(percent: number) { ... }
   ```
+
+## 7. TypeScript Type Safety
+
+- Never use `as any` casts. Use `unknown` and narrow with `instanceof` or type guards.
+- Declare array types explicitly: `const list: Foo[] = []` — not `const list = [] as Foo[]`.
+- All exported functions must have an explicit return type annotation.
+- `catch` blocks must use `unknown`: `catch (err: unknown)` — not `catch (err: any)`.
+- Avoid `as any` in `catch` fallbacks: use proper types or `Roles` from the source module.
+
+## 8. Error Handling & Sentry
+
+- Every `catch` block in production code must either:
+  1. Call `Sentry.captureException(error)`, or
+  2. Re-throw the error.
+  - Silent `catch (() => {})` is forbidden.
+- Error boundaries (`error.tsx`) must call `Sentry.captureException(error)` inside `useEffect`.
+- Cache writes (KV store) must be wrapped in try/catch; a cache failure must never cause a request failure — log with Sentry and continue.
+- Silent `.catch(() => {})` on promises is forbidden; use `.catch((error) => { Sentry.captureException(error); })`.
+- Component names must not shadow global constructors: name error boundary components `ErrorPage` or `GlobalError`, not `Error`.
+
+## 9. Localisation
+
+- All user-facing strings must be in Dutch (NL), consistent with the rest of the application.
+- English UI strings (`"Something went wrong"`, `"Try again"`) are not acceptable.
