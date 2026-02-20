@@ -3,6 +3,13 @@
 import { useEffect, useState } from "react";
 import { lockBodyForModal } from "../lib/modalLock";
 
+/**
+ * Displays a "View Match Report" button if a report exists for the event.
+ * Clicking the button opens a modal with the report content.
+ * Listens for "report:updated" window events to refresh data.
+ *
+ * @param props.eventId - The ID of the event to fetch the report for.
+ */
 export default function ReportPreview({ eventId }: { eventId: string }) {
   const [content, setContent] = useState<string | null>(null);
   const [open, setOpen] = useState(false);

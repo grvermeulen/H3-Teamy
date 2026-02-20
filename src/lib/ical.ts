@@ -3,6 +3,12 @@ import { TeamEvent } from "../types";
 import { canonicalEventId } from "./eventId";
 import { kvGetJson, kvSetJson } from "./kv";
 
+/**
+ * Fetches, parses, and caches team events from the external iCal feed.
+ * Merges new data with existing cached data to preserve history.
+ *
+ * @returns A list of {@link TeamEvent} objects sorted by date.
+ */
 export async function fetchTeamEvents(): Promise<TeamEvent[]> {
   const url = process.env.SPORTLINK_ICAL_URL;
 
@@ -16,17 +22,27 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
       const text = await res.text();
       const data = ical.parseICS(text);
       parsed = Object.values(data)
-        .filter((c): c is CalendarComponent & { type: "VEVENT" } => c?.type === "VEVENT")
+        .filter(
+          (c): c is CalendarComponent & { type: "VEVENT" } =>
+            c?.type === "VEVENT",
+        )
         .map((evt) => {
           const title = (evt.summary || "Match").toString();
-          const startIso = evt.start instanceof Date ? evt.start.toISOString() : new Date(evt.start as any).toISOString();
+          const startIso =
+            evt.start instanceof Date
+              ? evt.start.toISOString()
+              : new Date(evt.start as any).toISOString();
           const id = canonicalEventId(title, startIso);
           return {
             id,
             uid: evt.uid?.toString(),
             title,
             start: startIso,
-            end: evt.end ? (evt.end instanceof Date ? evt.end.toISOString() : new Date(evt.end as any).toISOString()) : undefined,
+            end: evt.end
+              ? evt.end instanceof Date
+                ? evt.end.toISOString()
+                : new Date(evt.end as any).toISOString()
+              : undefined,
             location: evt.location?.toString(),
             description: evt.description?.toString(),
           } satisfies TeamEvent;
@@ -44,12 +60,16 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
   if (parsed) {
     for (const e of parsed) map.set(e.id, e);
   }
-  let merged = Array.from(map.values()).sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
+  let merged = Array.from(map.values()).sort(
+    (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+  );
 
   // Prune to a reasonable window (keep one year back and one year ahead) to avoid unbounded growth
   const now = Date.now();
   const windowMs = 365 * 24 * 60 * 60 * 1000;
-  merged = merged.filter((e) => Math.abs(new Date(e.start).getTime() - now) <= windowMs);
+  merged = merged.filter(
+    (e) => Math.abs(new Date(e.start).getTime() - now) <= windowMs,
+  );
 
   // Update cache if we had a successful parse; otherwise return cached as-is
   if (parsed) {
@@ -60,5 +80,3 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
 
   return merged;
 }
-
-

@@ -7,6 +7,13 @@ function norm(s: string) {
   return (s || "").toLowerCase().trim();
 }
 
+/**
+ * Checks if the current request is from a Trainer or Admin.
+ * Verifies against Env variables (ADMIN_FULL_NAME, TRAINER_FULL_NAMES) and DB roles.
+ *
+ * @param req - The incoming Next.js request.
+ * @returns An object containing `isTrainer` boolean and the user's identity `me`.
+ */
 export async function isTrainer(
   req: NextRequest,
 ): Promise<{ isTrainer: boolean; me: { id: string; name: string } }> {
@@ -34,6 +41,13 @@ export async function isTrainer(
   }
 }
 
+/**
+ * Checks if the current request is from an Admin.
+ * Verifies against Env variables (ADMIN_FULL_NAME) and DB roles.
+ *
+ * @param req - The incoming Next.js request.
+ * @returns An object containing `isAdmin` boolean and the user's identity `me`.
+ */
 export async function isAdminUser(
   req: NextRequest,
 ): Promise<{ isAdmin: boolean; me: { id: string; name: string } }> {

@@ -12,6 +12,13 @@ type Props = { eventId: string };
 
 type Meta = { canClose: boolean; canReopen: boolean };
 
+/**
+ * Attempts to parse an error message from a fetch response.
+ * Handles JSON errors, plain text, or status text.
+ *
+ * @param res - The response object.
+ * @returns A promise resolving to the error string.
+ */
 async function parseError(res: Response): Promise<string> {
   try {
     const data = await res.clone().json();
@@ -30,6 +37,12 @@ async function parseError(res: Response): Promise<string> {
   return res.statusText || "Onbekende fout";
 }
 
+/**
+ * A button that opens a modal for MVP voting.
+ * Also handles admin actions to Close or Reopen the voting session.
+ *
+ * @param props.eventId - The ID of the event to vote on.
+ */
 export default function MvpVoteButton({ eventId }: Props) {
   const [open, setOpen] = useState(false);
   const [meta, setMeta] = useState<Meta | null>(null);
