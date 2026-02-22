@@ -492,12 +492,14 @@ Regels:
     };
     await setReport(eventId, report);
 
-    // Notification failures are non-blocking: report generation must still succeed.
-    await sendMatchReportToWhatsAppGroup({
+    // Fire-and-forget so report generation response is never blocked.
+    sendMatchReportToWhatsAppGroup({
       eventId,
       opponentTeam: narrativeInput.opponentTeam,
       ourScore: narrativeInput.ourScore,
       opponentScore: narrativeInput.opponentScore,
+    }).catch((error: unknown) => {
+      Sentry.captureException(error);
     });
 
     return NextResponse.json({ ok: true, report });

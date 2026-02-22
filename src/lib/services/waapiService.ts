@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { z } from "zod";
 
 type MatchReportNotificationInput = {
   eventId: string;
@@ -28,25 +29,25 @@ type WaapiConfig = {
   appUrl: string;
 };
 
-function getWaapiConfig(): WaapiConfig | null {
-  const baseUrl = (
-    process.env.WAAPI_BASE_URL || "https://waapi.app/api/v1"
-  ).trim();
-  const instanceId = (process.env.WAAPI_INSTANCE_ID || "").trim();
-  const apiToken = (process.env.WAAPI_API_TOKEN || "").trim();
-  const groupChatId = (process.env.WAAPI_GROUP_CHAT_ID || "").trim();
-  const appUrl = (process.env.APP_URL || "").trim().replace(/\/$/, "");
-  const enabled = process.env.WAAPI_NOTIFICATIONS_ENABLED === "true";
+const WaapiConfigSchema = z.object({
+  WAAPI_BASE_URL: z.string().trim().url().default("https://waapi.app/api/v1"),
+  WAAPI_INSTANCE_ID: z.string().trim().min(1),
+  WAAPI_API_TOKEN: z.string().trim().min(1),
+  WAAPI_GROUP_CHAT_ID: z.string().trim().min(1),
+  APP_URL: z.string().trim().url(),
+});
 
-  if (!enabled) return null;
-  if (!instanceId || !apiToken || !groupChatId || !appUrl) return null;
+function getWaapiConfig(): WaapiConfig | null {
+  const parsed = WaapiConfigSchema.safeParse(process.env);
+  if (!parsed.success) return null;
+  const env = parsed.data;
 
   return {
-    baseUrl: baseUrl.replace(/\/$/, ""),
-    instanceId,
-    apiToken,
-    groupChatId,
-    appUrl,
+    baseUrl: env.WAAPI_BASE_URL.replace(/\/$/, ""),
+    instanceId: env.WAAPI_INSTANCE_ID,
+    apiToken: env.WAAPI_API_TOKEN,
+    groupChatId: env.WAAPI_GROUP_CHAT_ID,
+    appUrl: env.APP_URL.replace(/\/$/, ""),
   };
 }
 
@@ -66,7 +67,7 @@ function buildMessage(
 /**
  * Sends a WhatsApp notification to the configured team group when a match report is generated.
  *
- * @param input - Match metadata used to build a user-friendly WhatsApp message and report deep link.
+ * @param input - Match metadata used to build a user-friendly WhatsApp message and report deep link. `input.eventId` must be a non-empty non-blank string; otherwise the function immediately returns `{ sent: false, reason: "invalid_event_id" }` and does not send a message.
  * @returns A structured result indicating whether the message was sent or skipped/failed.
  */
 export async function sendMatchReportToWhatsAppGroup(
@@ -89,6 +90,8 @@ export async function sendMatchReportToWhatsAppGroup(
   const reportUrl = `${config.appUrl}/report/${encodeURIComponent(input.eventId)}`;
   const message = buildMessage(input, reportUrl);
   const endpoint = `${config.baseUrl}/instances/${encodeURIComponent(config.instanceId)}/client/action/send-message`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10_000);
 
   try {
     const response = await fetch(endpoint, {
@@ -101,7 +104,9 @@ export async function sendMatchReportToWhatsAppGroup(
         chatId: config.groupChatId,
         message,
       }),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const details = await response.text();
@@ -113,6 +118,16 @@ export async function sendMatchReportToWhatsAppGroup(
 
     return { sent: true };
   } catch (error: unknown) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === "AbortError") {
+      const timeoutError = new Error("WaAPI request timed out after 10s");
+      Sentry.captureException(timeoutError);
+      return {
+        sent: false,
+        reason: "request_failed",
+        details: "timeout",
+      };
+    }
     Sentry.captureException(error);
     return { sent: false, reason: "request_failed" };
   }

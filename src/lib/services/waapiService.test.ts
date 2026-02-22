@@ -69,6 +69,26 @@ describe("waapiService", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(0);
   });
 
+  it("returns disabled when WAAPI notifications are disabled", async () => {
+    vi.stubEnv("WAAPI_NOTIFICATIONS_ENABLED", "false");
+
+    const fetchSpy = vi.spyOn(global, "fetch");
+    const result = await sendMatchReportToWhatsAppGroup({ eventId: "evt-1" });
+
+    expect(result).toEqual({ sent: false, reason: "disabled" });
+    expect(fetchSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it("returns invalid_event_id for blank eventId", async () => {
+    vi.stubEnv("WAAPI_NOTIFICATIONS_ENABLED", "true");
+
+    const fetchSpy = vi.spyOn(global, "fetch");
+    const result = await sendMatchReportToWhatsAppGroup({ eventId: "   " });
+
+    expect(result).toEqual({ sent: false, reason: "invalid_event_id" });
+    expect(fetchSpy).toHaveBeenCalledTimes(0);
+  });
+
   it("returns upstream_error when WaAPI responds with non-ok", async () => {
     vi.stubEnv("WAAPI_NOTIFICATIONS_ENABLED", "true");
     vi.stubEnv("WAAPI_INSTANCE_ID", "instance-123");
@@ -88,6 +108,9 @@ describe("waapiService", () => {
       details: "Bad Request",
     });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+    );
   });
 
   it("captures exception when fetch throws", async () => {

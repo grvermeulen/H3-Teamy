@@ -18,7 +18,7 @@ Required environment variables:
 - `WAAPI_NOTIFICATIONS_ENABLED=true`
 - `WAAPI_INSTANCE_ID=<your_instance_id>`
 - `WAAPI_API_TOKEN=<your_waapi_api_token>`
-- `WAAPI_GROUP_CHAT_ID=1467733237@g.us`
+- `WAAPI_GROUP_CHAT_ID=<your_group_chat_id>` (e.g. `1234567890@g.us`)
 - `APP_URL=https://<your-domain>`
 
 Optional:
