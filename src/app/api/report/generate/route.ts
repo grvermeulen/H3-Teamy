@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { getReport, setReport, kvGetJson } from "../../../../lib/kv";
 import { MVP_PLACEHOLDER } from "../../../../lib/mvpNarrative";
+import { sendMatchReportToWhatsAppGroup } from "../../../../lib/services/waapiService";
 import type { TeamEvent } from "../../../../types";
 
 type RawEvent = {
@@ -489,11 +491,19 @@ Regels:
       mvpResult: previous?.mvpResult,
     };
     await setReport(eventId, report);
+
+    // Notification failures are non-blocking: report generation must still succeed.
+    await sendMatchReportToWhatsAppGroup({
+      eventId,
+      opponentTeam: narrativeInput.opponentTeam,
+      ourScore: narrativeInput.ourScore,
+      opponentScore: narrativeInput.opponentScore,
+    });
+
     return NextResponse.json({ ok: true, report });
-  } catch (e: any) {
-    return NextResponse.json(
-      { error: "failed", message: e?.message || String(e) },
-      { status: 500 },
-    );
+  } catch (error: unknown) {
+    Sentry.captureException(error);
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: "failed", message }, { status: 500 });
   }
 }
