@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import Providers from "../components/Providers";
-import dynamic from "next/dynamic";
 import BottomNav from "../components/BottomNav";
 import ChristmasTheme from "../components/ChristmasTheme";
+import SessionStatus from "../components/SessionStatus";
 
 export const metadata: Metadata = {
   title: "De Rijn H3 Teamy MVP",
@@ -18,9 +18,6 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const SessionStatus = dynamic(() => import("../components/SessionStatus"), {
-    ssr: false,
-  });
   // Check both server-side and client-side environment variables
   const isChristmasTheme =
     process.env.christmas_event === "TRUE" ||
