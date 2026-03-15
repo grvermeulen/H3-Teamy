@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@prisma/client": "5.19.1",
-    "@sentry/nextjs": "^8.26.0",
+    "@sentry/nextjs": "^10.43.0",
     "bcryptjs": "^2.4.3",
     "ical": "^0.8.0",
     "ioredis": "^5.4.1",
