@@ -1,0 +1,45 @@
+{
+  "screenshotLabel": "zaterdag_15_maart_1818_hfc_helmond_vs_de_rijn_h3",
+  "homeTeam": "HFC Helmond",
+  "awayTeam": "De Rijn H3",
+  "homeScore": 10,
+  "awayScore": 7,
+  "date": "2026-03-15T18:18:00",
+  "events": [
+    {
+      "quarter": 1,
+      "time": "01:22",
+      "team": "home",
+      "type": "goal",
+      "player": "Stefan van der Kaar"
+    },
+    {
+      "quarter": 1,
+      "time": "03:31",
+      "team": "away",
+      "type": "goal",
+      "player": "Arjan Verhoeven"
+    },
+    {
+      "quarter": 2,
+      "time": "03:11",
+      "team": "home",
+      "type": "goal",
+      "player": "Ferry Lekkerkerks"
+    },
+    {
+      "quarter": 3,
+      "time": "06:53",
+      "team": "away",
+      "type": "goal",
+      "player": "Frank Veldbrug"
+    },
+    {
+      "quarter": 4,
+      "time": "03:51",
+      "team": "home",
+      "type": "goal",
+      "player": "Niels Vroon"
+    }
+  ]
+}
