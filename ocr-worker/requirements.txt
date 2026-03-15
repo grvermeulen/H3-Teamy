@@ -9,6 +9,6 @@ torchaudio==2.2.2+cpu
 
 easyocr==1.7.2
 opencv-python-headless==4.10.0.84
-numpy==1.26.4
+numpy==2.4.3
 python-multipart==0.0.22
 
