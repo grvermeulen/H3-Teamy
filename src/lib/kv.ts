@@ -354,6 +354,66 @@ export async function getUserProfile(
   }
 }
 
+export async function getUserProfiles(
+  userIds: string[],
+): Promise<Record<string, UserProfile>> {
+  const out: Record<string, UserProfile> = {};
+  const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+  if (uniqueIds.length === 0) return out;
+
+  const p = await getPrisma();
+  if (p) {
+    const rows = await p.user.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, firstName: true, lastName: true, email: true },
+    });
+    for (const row of rows as any[]) {
+      out[row.id] = {
+        firstName: row.firstName,
+        lastName: row.lastName,
+        email: row.email ?? undefined,
+      };
+    }
+    return out;
+  }
+
+  const redis = await getRedis();
+  if (redis) {
+    const entries = await Promise.all(
+      uniqueIds.map(async (userId) => {
+        const key = `user:${userId}`;
+        const res = await redis.hgetall(key);
+        if (!res || (!res.firstName && !res.lastName && !res.email))
+          return null;
+        return [
+          userId,
+          {
+            firstName: res.firstName || "",
+            lastName: res.lastName || "",
+            email: res.email || undefined,
+          } as UserProfile,
+        ] as const;
+      }),
+    );
+    for (const item of entries) {
+      if (!item) continue;
+      out[item[0]] = item[1];
+    }
+    return out;
+  }
+
+  for (const userId of uniqueIds) {
+    const key = `user:${userId}`;
+    const raw = memoryStore.get(key) as unknown as string | undefined;
+    if (!raw) continue;
+    try {
+      const parsed = JSON.parse(raw) as UserProfile;
+      out[userId] = parsed;
+    } catch {}
+  }
+  return out;
+}
+
 export async function listEventRsvps(
   eventId: string,
 ): Promise<{ userId: string; status: RsvpStatus }[]> {
@@ -420,6 +480,41 @@ export async function listUserRsvps(
       const status = (v as RsvpStatus) ?? null;
       out.push({ eventId, status });
     }
+  }
+  return out;
+}
+
+export async function getUserRsvpStats(
+  userIds: string[],
+): Promise<Record<string, { total: number; yes: number }>> {
+  const out: Record<string, { total: number; yes: number }> = {};
+  const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+  if (uniqueIds.length === 0) return out;
+
+  const p = await getPrisma();
+  if (p) {
+    const rows = await p.rsvp.findMany({
+      where: { userId: { in: uniqueIds } },
+      select: { userId: true, status: true },
+    });
+    for (const userId of uniqueIds) {
+      out[userId] = { total: 0, yes: 0 };
+    }
+    for (const row of rows as any[]) {
+      const current = out[row.userId] || { total: 0, yes: 0 };
+      current.total += 1;
+      if (row.status === "yes") current.yes += 1;
+      out[row.userId] = current;
+    }
+    return out;
+  }
+
+  for (const userId of uniqueIds) {
+    const history = await listUserRsvps(userId).catch(() => []);
+    out[userId] = {
+      total: history.length,
+      yes: history.filter((h) => h.status === "yes").length,
+    };
   }
   return out;
 }
@@ -568,16 +663,44 @@ export async function setAttendanceBatch(
     await p.attendance.deleteMany({ where: { date: dateYmd } }).catch(() => {});
     // Insert new attendance records
     if (presentUserIds.length > 0) {
-      // Ensure users exist (satisfy FK constraint)
-      const userIds = new Set(presentUserIds);
-      for (const userId of userIds) {
-        await p.user
-          .upsert({
-            where: { id: userId },
-            create: { id: userId, firstName: "", lastName: "" },
-            update: {},
-          })
-          .catch(() => {});
+      // Ensure users exist (satisfy FK constraint) with batched queries.
+      const userIds = Array.from(new Set(presentUserIds.filter(Boolean)));
+      if (userIds.length > 0) {
+        try {
+          const existing = await p.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true },
+          });
+          const existingIds = new Set(
+            existing.map((u: { id: string }) => u.id),
+          );
+          const missingIds = userIds.filter(
+            (userId) => !existingIds.has(userId),
+          );
+          if (missingIds.length > 0) {
+            await p.user
+              .createMany({
+                data: missingIds.map((id) => ({
+                  id,
+                  firstName: "",
+                  lastName: "",
+                })),
+                skipDuplicates: true,
+              })
+              .catch(() => {});
+          }
+        } catch {
+          // Keep legacy fallback behavior to avoid blocking attendance writes.
+          for (const userId of userIds) {
+            await p.user
+              .upsert({
+                where: { id: userId },
+                create: { id: userId, firstName: "", lastName: "" },
+                update: {},
+              })
+              .catch(() => {});
+          }
+        }
       }
       // Insert attendance records
       await p.attendance.createMany({
@@ -723,6 +846,49 @@ export async function getUserRoles(userId: string): Promise<Roles> {
   } catch {
     return { player: true };
   }
+}
+
+export async function getUserRolesBatch(
+  userIds: string[],
+): Promise<Record<string, Roles>> {
+  const out: Record<string, Roles> = {};
+  const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+  if (uniqueIds.length === 0) return out;
+
+  const redis = await getRedis();
+  if (redis) {
+    const keys = uniqueIds.map((id) => `roles:${id}`);
+    const vals = (await redis.mget(keys)) as Array<string | null>;
+    for (let i = 0; i < uniqueIds.length; i++) {
+      const raw = vals[i];
+      if (!raw) {
+        out[uniqueIds[i]] = { player: true };
+        continue;
+      }
+      try {
+        out[uniqueIds[i]] = JSON.parse(raw) as Roles;
+      } catch {
+        out[uniqueIds[i]] = { player: true };
+      }
+    }
+    return out;
+  }
+
+  for (const userId of uniqueIds) {
+    const raw = memoryStore.get(`roles:${userId}`) as unknown as
+      | string
+      | undefined;
+    if (!raw) {
+      out[userId] = { player: true };
+      continue;
+    }
+    try {
+      out[userId] = JSON.parse(raw) as Roles;
+    } catch {
+      out[userId] = { player: true };
+    }
+  }
+  return out;
 }
 
 export async function setUserRoles(
