@@ -1,11 +1,19 @@
-export const MVP_PLACEHOLDER = "De MVP-stemming staat nog open via de knop hieronder!";
+export const MVP_PLACEHOLDER =
+  "De MVP-stemming staat nog open via de knop hieronder!";
 const MVP_RESULT_PREFIX = "Onze MVP:";
 
-export function formatMvpResultLine(name: string, percent: number, totalVotes: number): string {
+export function formatMvpResultLine(
+  name: string,
+  percent: number,
+  totalVotes: number,
+): string {
   return `${MVP_RESULT_PREFIX} ${name} (${percent}% van ${totalVotes} stemmen).`;
 }
 
-export function applyMvpResultLine(content: string | undefined, resultLine: string): string {
+export function applyMvpResultLine(
+  content: string | undefined,
+  resultLine: string,
+): string {
   const base = (content || "").trim();
   if (!base) return resultLine;
   if (base.includes(MVP_PLACEHOLDER)) {
@@ -24,4 +32,3 @@ export function reinstateMvpPlaceholder(content: string | undefined): string {
   }
   return `${base}\n\n${MVP_PLACEHOLDER}`;
 }
-
