@@ -46,7 +46,7 @@ jobs:
 
       - name: Install deps
         if: steps.risk.outputs.risk == 'true'
-        run: npm install --no-audit --no-fund --legacy-peer-deps
+        run: npm install --no-audit --no-fund --legacy-peer-deps --ignore-scripts
 
       - name: AI Review
         if: steps.risk.outputs.risk == 'true'

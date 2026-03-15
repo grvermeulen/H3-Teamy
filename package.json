@@ -22,7 +22,7 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@prisma/client": "7.5.0",
+    "@prisma/client": "5.19.1",
     "@sentry/nextjs": "^10.43.0",
     "bcryptjs": "^3.0.3",
     "ical": "^0.8.0",
@@ -32,7 +32,7 @@
     "node-ical": "^0.20.1",
     "prisma": "5.19.1",
     "react": "18.3.1",
-    "react-dom": "19.2.4",
+    "react-dom": "18.3.1",
     "resend": "^6.9.2",
     "sharp": "^0.33.4",
     "zod": "^3.25.76"
@@ -45,10 +45,10 @@
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "25.5.0",
     "@types/react": "18.2.66",
-    "@types/react-dom": "19.2.3",
+    "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^5.1.4",
     "@vitest/coverage-v8": "^4.1.0",
-    "eslint": "^10.0.3",
+    "eslint": "^9.39.4",
     "eslint-config-next": "16.1.6",
     "husky": "^9.1.6",
     "jsdom": "^28.1.0",
