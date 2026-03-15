@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import {
   getUserProfiles,
   getUserRsvpStats,
@@ -13,12 +14,15 @@ export async function GET(req: NextRequest) {
     if (!eventId)
       return NextResponse.json({ error: "eventId required" }, { status: 400 });
     const countsOnly = req.nextUrl.searchParams.get("countsOnly") === "1";
-    let items: { userId: string; status: any }[] = [];
+    type RsvpStatus = "yes" | "no" | "maybe" | null;
+    let items: { userId: string; status: RsvpStatus }[] = [];
     try {
       items = await listEventRsvps(eventId);
-    } catch (e: any) {
+    } catch (e: unknown) {
+      Sentry.captureException(e);
+      const message = e instanceof Error ? e.message : String(e);
       return NextResponse.json(
-        { error: "list_failed", message: e?.message || String(e) },
+        { error: "list_failed", message },
         { status: 500 },
       );
     }
@@ -50,7 +54,9 @@ export async function GET(req: NextRequest) {
         const total = stats.total;
         const yesCount = stats.yes;
         void getBadgeForAttendance(total > 0 ? (yesCount / total) * 100 : 0);
-      } catch {}
+      } catch (error: unknown) {
+        Sentry.captureException(error);
+      }
       if (status === "yes") yes.push({ id: userId, name: displayName });
       else if (status === "no") no.push({ id: userId, name: displayName });
       else if (status === "maybe")

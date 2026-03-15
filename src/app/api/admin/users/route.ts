@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { prisma } from "../../../../lib/db";
 import { getUserRolesBatch, setUserRoles, kvDelete } from "../../../../lib/kv";
 import { isAdminUser } from "../../../../lib/trainer";
@@ -19,14 +20,21 @@ export async function GET(req: NextRequest) {
       .split(",")
       .map(norm)
       .filter(Boolean);
-    let users: any[] = [];
+    let users: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string | null;
+    }[] = [];
     try {
       users = await prisma.user.findMany({
         select: { id: true, firstName: true, lastName: true, email: true },
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
+      Sentry.captureException(e);
+      const message = e instanceof Error ? e.message : String(e);
       return NextResponse.json(
-        { error: "users_query_failed", message: e?.message || String(e) },
+        { error: "users_query_failed", message },
         { status: 500 },
       );
     }
@@ -35,14 +43,20 @@ export async function GET(req: NextRequest) {
       name: string;
       roles: { admin?: boolean; trainer?: boolean; player?: boolean };
     }[];
-    const rolesByUserId = await getUserRolesBatch(
-      users.map((u: any) => u.id),
-    ).catch(() => ({}) as Record<string, any>);
-    for (const u of users as any[]) {
+    const rolesByUserId: Record<
+      string,
+      { admin?: boolean; trainer?: boolean; player?: boolean }
+    > = await getUserRolesBatch(users.map((u) => u.id)).catch(
+      (error: unknown) => {
+        Sentry.captureException(error);
+        return {};
+      },
+    );
+    for (const u of users) {
       if (!hasUserIdentity(u)) continue;
       const name = displayName(u);
       if (!name) continue;
-      const kv = rolesByUserId[u.id] || ({ player: true } as any);
+      const kv = rolesByUserId[u.id] || { player: true };
       const full =
         `${(u.firstName || "").trim()} ${(u.lastName || "").trim()}`.trim();
       const envAdmin = adminFull && norm(full) === adminFull;

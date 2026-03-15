@@ -11,7 +11,8 @@ const { PrismaPg } = require("@prisma/adapter-pg");
 const { Pool } = require("pg");
 
 function normalizeName(name) {
-  return (name || "").trim().toLowerCase();
+  const normalized = (name || "").trim().toLowerCase();
+  return normalized || null;
 }
 
 async function main() {
@@ -60,6 +61,9 @@ async function main() {
     for (const user of allUsers) {
       const normalizedFirstName = normalizeName(user.firstName);
       const normalizedLastName = normalizeName(user.lastName);
+      if (!normalizedFirstName || !normalizedLastName) {
+        continue;
+      }
       const nameKey = `${normalizedFirstName}|${normalizedLastName}`;
 
       if (!nameGroups.has(nameKey)) {
@@ -244,12 +248,11 @@ async function main() {
 
           for (const identity of duplicateIdentities) {
             // Check if primary already has this identity
-            const existing = await prisma.identity.findUnique({
+            const existing = await prisma.identity.findFirst({
               where: {
-                provider_providerUserId: {
-                  provider: identity.provider,
-                  providerUserId: identity.providerUserId,
-                },
+                provider: identity.provider,
+                providerUserId: identity.providerUserId,
+                userId: primary.id,
               },
             });
 

@@ -33,10 +33,19 @@ async function listAllAttendanceKeys(redis) {
 }
 
 function toYMD(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+function parseYmdUtc(input) {
+  const match = String(input || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  return new Date(Date.UTC(year, month - 1, day));
 }
 
 function parseDdMmYyyy(input) {
@@ -47,11 +56,11 @@ function parseDdMmYyyy(input) {
   const dd = Number(m[1]);
   const mm = Number(m[2]);
   const yyyy = Number(m[3]);
-  const date = new Date(yyyy, mm - 1, dd);
+  const date = new Date(Date.UTC(yyyy, mm - 1, dd));
   if (
-    date.getFullYear() !== yyyy ||
-    date.getMonth() !== mm - 1 ||
-    date.getDate() !== dd
+    date.getUTCFullYear() !== yyyy ||
+    date.getUTCMonth() !== mm - 1 ||
+    date.getUTCDate() !== dd
   )
     return null;
   return date;
@@ -59,7 +68,7 @@ function parseDdMmYyyy(input) {
 
 function addYears(date, years) {
   const d = new Date(date);
-  d.setFullYear(d.getFullYear() + years);
+  d.setUTCFullYear(d.getUTCFullYear() + years);
   return d;
 }
 
@@ -81,30 +90,34 @@ function defaultSeasonWindow() {
 
   // Fallback: Season runs July 1st to July 1st next year
   const now = new Date();
-  const year = now.getFullYear();
-  const isBeforeJuly = now.getMonth() < 6;
+  const year = now.getUTCFullYear();
+  const isBeforeJuly = now.getUTCMonth() < 6;
   const seasonStart = isBeforeJuly
-    ? new Date(year - 1, 6, 1)
-    : new Date(year, 6, 1);
+    ? new Date(Date.UTC(year - 1, 6, 1))
+    : new Date(Date.UTC(year, 6, 1));
   const seasonEnd = isBeforeJuly
-    ? new Date(year, 6, 1)
-    : new Date(year + 1, 6, 1);
+    ? new Date(Date.UTC(year, 6, 1))
+    : new Date(Date.UTC(year + 1, 6, 1));
   return { from: toYMD(seasonStart), to: toYMD(seasonEnd) };
 }
 
 function generateTrainingDates(from, to) {
   const dates = [];
-  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
-  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+  const start = new Date(
+    Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()),
+  );
+  const end = new Date(
+    Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate()),
+  );
   const today = new Date();
-  today.setHours(0, 0, 0, 0); // Reset time to start of day for comparison
+  today.setUTCHours(0, 0, 0, 0); // Reset time to start of day for comparison
 
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const weekday = d.getDay();
+  for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    const weekday = d.getUTCDay();
     if (weekday === 3 || weekday === 5) {
       const dateStr = toYMD(new Date(d));
       const dateObj = new Date(d);
-      dateObj.setHours(0, 0, 0, 0);
+      dateObj.setUTCHours(0, 0, 0, 0);
       // Only include dates in the past (before today)
       if (dateObj < today) {
         dates.push(dateStr);
@@ -157,10 +170,12 @@ async function main() {
     const window = defaultSeasonWindow();
 
     // Generate only PAST training dates
-    const pastDates = generateTrainingDates(
-      new Date(window.from),
-      new Date(window.to),
-    );
+    const fromDate = parseYmdUtc(window.from);
+    const toDate = parseYmdUtc(window.to);
+    if (!fromDate || !toDate) {
+      throw new Error("Invalid season window date format; expected YYYY-MM-DD");
+    }
+    const pastDates = generateTrainingDates(fromDate, toDate);
     const today = new Date().toISOString().split("T")[0];
 
     console.log(`Season: ${window.from} to ${window.to}`);
@@ -214,7 +229,9 @@ async function main() {
             console.log(`✅ No attendance keys found in Redis/KV\n`);
           }
         } catch (error) {
-          console.log(`⚠️  Could not clear Redis/KV: ${error.message}\n`);
+          const message =
+            error instanceof Error ? error.message : String(error);
+          console.log(`⚠️  Could not clear Redis/KV: ${message}\n`);
         }
       } else {
         console.log(
@@ -247,9 +264,9 @@ async function main() {
           try {
             await redis.set(`att:${date}`, JSON.stringify(userIds));
           } catch (error) {
-            console.log(
-              `⚠️  Could not update Redis for ${date}: ${error.message}`,
-            );
+            const message =
+              error instanceof Error ? error.message : String(error);
+            console.log(`⚠️  Could not update Redis for ${date}: ${message}`);
           }
         }
         console.log(`✅ Updated Redis/KV for ${last25Sessions.length} dates\n`);
@@ -270,7 +287,8 @@ async function main() {
       );
     }
   } catch (error) {
-    console.error("❌ Error:", error.message);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("❌ Error:", message);
     console.error(error);
   } finally {
     await prisma.$disconnect();

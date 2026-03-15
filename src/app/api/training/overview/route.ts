@@ -47,8 +47,8 @@ export async function GET(req: NextRequest) {
     }
     const mapName = new Map(
       users
-        .filter((u: any) => hasUserIdentity(u))
-        .map((u: any) => [
+        .filter((u) => hasUserIdentity(u))
+        .map((u) => [
           u.id,
           `${(u.firstName || "").trim()} ${(u.lastName || "").trim()}`.trim() ||
             (u.email || "").trim(),

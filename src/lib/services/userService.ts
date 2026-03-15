@@ -10,7 +10,7 @@ const DEFAULT_ACTIVE_USERS_MAX = 1000;
 function getActiveUsersLimit(): number {
   const raw = Number(process.env.ACTIVE_USERS_MAX || DEFAULT_ACTIVE_USERS_MAX);
   if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_ACTIVE_USERS_MAX;
-  return Math.min(Math.floor(raw), 5000);
+  return Math.max(1, Math.min(Math.floor(raw), 5000));
 }
 
 /**

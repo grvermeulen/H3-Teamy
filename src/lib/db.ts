@@ -21,9 +21,9 @@ const prismaInstance =
 export const prisma = prismaInstance;
 if (isDbMetricsEnabled() && !global.prismaQueryMetricsAttached) {
   // Global listener captures Prisma query events and attributes them to request context.
-  prisma.$on("query" as never, (event: any) => {
-    const duration = typeof event?.duration === "number" ? event.duration : 0;
-    const query = typeof event?.query === "string" ? event.query : "";
+  prisma.$on("query" as never, (event: Prisma.QueryEvent) => {
+    const duration = typeof event.duration === "number" ? event.duration : 0;
+    const query = typeof event.query === "string" ? event.query : "";
     recordPrismaQuery(duration, query);
   });
   global.prismaQueryMetricsAttached = true;

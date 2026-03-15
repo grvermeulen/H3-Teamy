@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { prisma } from "./db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "./authOptions";
@@ -8,6 +9,12 @@ export type ActiveUserResult = {
   needsLink: boolean;
 };
 
+/**
+ * Resolves the active user for a request in authenticated and anonymous flows.
+ *
+ * @param req - Incoming request carrying auth session and anon cookie.
+ * @returns Resolved user identifier and whether explicit account linking is required.
+ */
 export async function getActiveUser(
   req: NextRequest,
 ): Promise<ActiveUserResult> {
@@ -25,8 +32,13 @@ export async function getActiveUser(
         },
       });
       return created.userId;
-    } catch (e: any) {
-      if (e?.code === "P2002") {
+    } catch (e: unknown) {
+      if (
+        typeof e === "object" &&
+        e !== null &&
+        "code" in e &&
+        (e as { code?: unknown }).code === "P2002"
+      ) {
         const exist = await prisma.identity.findUnique({
           where: {
             provider_providerUserId: {
@@ -185,7 +197,12 @@ export async function getActiveUser(
             }),
             prisma.user
               .delete({ where: { id: cookieIdentity.userId } })
-              .catch(() => null as any),
+              .catch((error: unknown) => {
+                Sentry.captureException(error, {
+                  extra: { context: "silent_adopt_delete_empty_cookie_user" },
+                });
+                return null;
+              }),
           ] as any);
         } else {
           needsLink = true;

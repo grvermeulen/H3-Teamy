@@ -42,17 +42,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const normalizedEmail = email.toLowerCase().trim();
+  const existing = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+  });
+  if (existing) {
+    return NextResponse.json(
+      { error: "account bestaat al, gebruik wachtwoord vergeten" },
+      { status: 409 },
+    );
+  }
+
   const hash = await bcrypt.hash(trimmedPassword, 10);
-  // If a user exists with this email, update password; else create new
-  const user = await prisma.user.upsert({
-    where: { email: email.toLowerCase().trim() },
-    update: {
-      passwordHash: hash,
-      firstName: trimmedFirstName,
-      lastName: trimmedLastName,
-    },
-    create: {
-      email: email.toLowerCase().trim(),
+  const user = await prisma.user.create({
+    data: {
+      email: normalizedEmail,
       passwordHash: hash,
       firstName: trimmedFirstName,
       lastName: trimmedLastName,

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { isAdminUser } from "../../../../lib/trainer";
 import {
   getAttendanceRoster,
@@ -77,9 +78,20 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   return withDbRequestMetrics("api/report/mvp.POST", async () => {
-    const body = await req.json().catch(() => ({}) as any);
-    const eventId = (body?.eventId as string | undefined)?.trim();
-    const candidateId = (body?.candidateId as string | undefined)?.trim();
+    let body: unknown = {};
+    try {
+      body = await req.json();
+    } catch (error: unknown) {
+      Sentry.captureException(error);
+    }
+    const parsed =
+      typeof body === "object" && body !== null
+        ? (body as { eventId?: unknown; candidateId?: unknown })
+        : {};
+    const eventId =
+      typeof parsed.eventId === "string" ? parsed.eventId.trim() : "";
+    const candidateId =
+      typeof parsed.candidateId === "string" ? parsed.candidateId.trim() : "";
     if (!eventId || !candidateId) {
       return NextResponse.json({ error: "invalid_request" }, { status: 400 });
     }

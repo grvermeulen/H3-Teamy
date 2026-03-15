@@ -133,11 +133,13 @@ async function main() {
 
     console.log("\n🗑️  Deleting users...");
 
-    // Delete users (related records will be deleted due to CASCADE)
-    const result = await prisma.user.deleteMany({
-      where: {
-        firstName: "",
-      },
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.rsvp.deleteMany({
+        where: { userId: { in: userIds } },
+      });
+      return tx.user.deleteMany({
+        where: { id: { in: userIds } },
+      });
     });
 
     console.log(`\n✅ Deleted ${result.count} users`);
@@ -145,7 +147,8 @@ async function main() {
       `   (Also deleted ${attendanceCount} attendance records, ${rsvpCount} RSVP records, ${identityCount} identity records due to CASCADE)`,
     );
   } catch (error) {
-    console.error("❌ Error:", error.message);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("❌ Error:", message);
     console.error(error);
   } finally {
     // Properly disconnect Prisma (handles all cleanup)

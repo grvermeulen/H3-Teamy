@@ -1,3 +1,5 @@
+import * as Sentry from "@sentry/nextjs";
+
 type RsvpStatus = "yes" | "no" | "maybe" | null;
 type UserProfile = {
   firstName: string;
@@ -102,7 +104,6 @@ export async function getRsvp(
   if (p) {
     const rec = await (p as any).rsvp.findUnique({
       where: { userId_eventId: { userId, eventId } },
-      cacheStrategy: { ttl: 60, swr: 60 },
     });
     const val = (rec?.status as RsvpStatus) ?? null;
     if (val !== "yes" && val !== "no" && val !== "maybe") return null;
@@ -354,6 +355,12 @@ export async function getUserProfile(
   }
 }
 
+/**
+ * Retrieves profiles for multiple users in one batched lookup.
+ *
+ * @param userIds - User IDs to load profile information for.
+ * @returns Mapping from user ID to profile fields for users that were found.
+ */
 export async function getUserProfiles(
   userIds: string[],
 ): Promise<Record<string, UserProfile>> {
@@ -409,7 +416,11 @@ export async function getUserProfiles(
     try {
       const parsed = JSON.parse(raw) as UserProfile;
       out[userId] = parsed;
-    } catch {}
+    } catch (error: unknown) {
+      Sentry.captureException(error, {
+        extra: { userId, context: "getUserProfiles_memory_parse" },
+      });
+    }
   }
   return out;
 }
@@ -484,6 +495,12 @@ export async function listUserRsvps(
   return out;
 }
 
+/**
+ * Retrieves RSVP totals and yes-counts for multiple users.
+ *
+ * @param userIds - User IDs to aggregate RSVP stats for.
+ * @returns Mapping from user ID to RSVP totals and yes counts.
+ */
 export async function getUserRsvpStats(
   userIds: string[],
 ): Promise<Record<string, { total: number; yes: number }>> {
@@ -510,7 +527,12 @@ export async function getUserRsvpStats(
   }
 
   for (const userId of uniqueIds) {
-    const history = await listUserRsvps(userId).catch(() => []);
+    const history = await listUserRsvps(userId).catch((error: unknown) => {
+      Sentry.captureException(error, {
+        extra: { userId, context: "getUserRsvpStats_listUserRsvps" },
+      });
+      return [];
+    });
     out[userId] = {
       total: history.length,
       yes: history.filter((h) => h.status === "yes").length,
@@ -660,7 +682,13 @@ export async function setAttendanceBatch(
   if (p) {
     // Primary: Database
     // Delete existing attendance for this date
-    await p.attendance.deleteMany({ where: { date: dateYmd } }).catch(() => {});
+    await p.attendance
+      .deleteMany({ where: { date: dateYmd } })
+      .catch((error: unknown) => {
+        Sentry.captureException(error, {
+          extra: { dateYmd, context: "setAttendanceBatch_deleteMany" },
+        });
+      });
     // Insert new attendance records
     if (presentUserIds.length > 0) {
       // Ensure users exist (satisfy FK constraint) with batched queries.
@@ -687,9 +715,19 @@ export async function setAttendanceBatch(
                 })),
                 skipDuplicates: true,
               })
-              .catch(() => {});
+              .catch((error: unknown) => {
+                Sentry.captureException(error, {
+                  extra: {
+                    missingIds,
+                    context: "setAttendanceBatch_createMany",
+                  },
+                });
+              });
           }
-        } catch {
+        } catch (error: unknown) {
+          Sentry.captureException(error, {
+            extra: { userIds, context: "setAttendanceBatch_batchEnsureUsers" },
+          });
           // Keep legacy fallback behavior to avoid blocking attendance writes.
           for (const userId of userIds) {
             await p.user
@@ -698,7 +736,14 @@ export async function setAttendanceBatch(
                 create: { id: userId, firstName: "", lastName: "" },
                 update: {},
               })
-              .catch(() => {});
+              .catch((upsertError: unknown) => {
+                Sentry.captureException(upsertError, {
+                  extra: {
+                    userId,
+                    context: "setAttendanceBatch_upsertFallback",
+                  },
+                });
+              });
           }
         }
       }
@@ -848,6 +893,12 @@ export async function getUserRoles(userId: string): Promise<Roles> {
   }
 }
 
+/**
+ * Retrieves role assignments for multiple users in one batched lookup.
+ *
+ * @param userIds - User IDs to load roles for.
+ * @returns Mapping from user ID to role flags with default player role for missing entries.
+ */
 export async function getUserRolesBatch(
   userIds: string[],
 ): Promise<Record<string, Roles>> {

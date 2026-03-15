@@ -72,34 +72,27 @@ async function main() {
       return;
     }
 
-    // 1. Migrate RSVPs (already in database, but ensure events exist)
-    console.log("1. Ensuring events exist for all RSVPs...");
+    // 1. Scan RSVPs to discover existing event IDs (informational)
+    console.log("1. Scanning event IDs from RSVPs...");
     const rsvps = await prisma.rsvp.findMany({
       select: { eventId: true },
       distinct: ["eventId"],
     });
     const eventIds = new Set(rsvps.map((r) => r.eventId));
-    console.log(`   Found ${eventIds.size} unique event IDs from RSVPs`);
-
-    if (!dryRun) {
-      for (const eventId of eventIds) {
-        await prisma.event.upsert({
-          where: { id: eventId },
-          create: { id: eventId },
-          update: {},
-        });
-      }
-      console.log(`   ✅ Created/updated ${eventIds.size} events\n`);
-    } else {
-      console.log(`   [DRY RUN] Would create/update ${eventIds.size} events\n`);
-    }
+    console.log(`   Found ${eventIds.size} unique event IDs from RSVPs\n`);
 
     // 2. Migrate match reports from KV
     console.log("2. Migrating match reports from KV...");
     const reportKeys = await redis.keys("report:*");
     console.log(`   Found ${reportKeys.length} report keys in KV`);
 
+    const hasMatchReportModel = Boolean(prisma.matchReport);
     let reportsMigrated = 0;
+    if (!hasMatchReportModel) {
+      console.log(
+        "   ⚠️  Skipping report migration: MatchReport model not available in Prisma schema.\n",
+      );
+    }
     for (const key of reportKeys) {
       const eventId = key.replace("report:", "");
       const raw = await redis.get(key);
@@ -109,14 +102,7 @@ async function main() {
         const report = JSON.parse(raw);
         if (!report.content) continue;
 
-        if (!dryRun) {
-          // Ensure event exists
-          await prisma.event.upsert({
-            where: { id: eventId },
-            create: { id: eventId },
-            update: {},
-          });
-
+        if (!dryRun && hasMatchReportModel) {
           await prisma.matchReport.upsert({
             where: { eventId },
             create: {
@@ -131,8 +117,10 @@ async function main() {
               mvpResult: report.mvpResult ? report.mvpResult : null,
             },
           });
+          reportsMigrated++;
+        } else if (dryRun && hasMatchReportModel) {
+          reportsMigrated++;
         }
-        reportsMigrated++;
       } catch (error) {
         console.log(
           `   ⚠️  Failed to migrate report for ${eventId}: ${error.message}`,
@@ -153,8 +141,14 @@ async function main() {
     const mvpKeys = await redis.keys("mvp:*");
     console.log(`   Found ${mvpKeys.length} MVP state keys in KV`);
 
+    const hasMvpVoteModel = Boolean(prisma.mvpVote);
     let votesMigrated = 0;
     let eventsWithVotes = 0;
+    if (!hasMvpVoteModel) {
+      console.log(
+        "   ⚠️  Skipping MVP vote migration: MvpVote model not available in Prisma schema.\n",
+      );
+    }
     for (const key of mvpKeys) {
       const eventId = key.replace("mvp:", "");
       const raw = await redis.get(key);
@@ -164,14 +158,7 @@ async function main() {
         const state = JSON.parse(raw);
         if (!state.votes || !Array.isArray(state.votes)) continue;
 
-        if (!dryRun) {
-          // Ensure event exists
-          await prisma.event.upsert({
-            where: { id: eventId },
-            create: { id: eventId },
-            update: {},
-          });
-
+        if (!dryRun && hasMvpVoteModel) {
           // Delete existing votes for this event
           await prisma.mvpVote.deleteMany({ where: { eventId } });
 
@@ -188,7 +175,7 @@ async function main() {
             votesMigrated += state.votes.length;
             eventsWithVotes++;
           }
-        } else {
+        } else if (dryRun && hasMvpVoteModel) {
           votesMigrated += state.votes.length;
           eventsWithVotes++;
         }
@@ -216,7 +203,8 @@ async function main() {
     console.log(`MVP Votes: ${votesMigrated} (from ${eventsWithVotes} events)`);
     console.log("\n✅ Migration complete!");
   } catch (error) {
-    console.error("❌ Error:", error.message);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("❌ Error:", message);
     console.error(error);
   } finally {
     await prisma.$disconnect();
