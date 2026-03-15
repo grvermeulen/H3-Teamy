@@ -3,6 +3,7 @@
 - Every API route must include either Zod schemas or a docblock describing request/response.
 - Update the relevant `docs/tech/.../README.md` when changing a feature.
 - Run `npm run docs:generate` before merging.
+- For Cursor Cloud and local development setup notes, see `docs/cursor-cloud-setup.md`.
 
 ## Optional: Generate ERD locally
 
