@@ -2,14 +2,20 @@ name: Agentic CI
 
 on:
   push:
-    branches: ["main", "master", "feat/*", "fix/*"]
+    branches: ["main", "master", "image", "feat/**", "fix/**", "dependabot/**"]
   pull_request:
-    branches: ["main", "master"]
+    branches: ["main", "master", "image"]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify:
-    name: Verify (Lint, Typecheck, Test)
+    name: Verify (Lint, Typecheck, Build, Test)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout code
@@ -29,6 +35,9 @@ jobs:
 
       - name: Typecheck
         run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
 
       - name: Run Tests
         run: npx vitest run
