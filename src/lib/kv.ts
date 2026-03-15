@@ -1,12 +1,16 @@
+import * as Sentry from "@sentry/nextjs";
+import type { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
+
 type RsvpStatus = "yes" | "no" | "maybe" | null;
 type UserProfile = {
   firstName: string;
   lastName: string;
   email?: string | null;
 };
-let prismaLoaded = false as boolean;
-let prisma: any = null as any;
-async function getPrisma() {
+let prismaLoaded = false;
+let prisma: PrismaClient | null = null;
+async function getPrisma(): Promise<PrismaClient | null> {
   if (prismaLoaded) return prisma;
   if (!process.env.DATABASE_URL) {
     prismaLoaded = true;
@@ -14,7 +18,7 @@ async function getPrisma() {
     return null;
   }
   const mod = await import("./db");
-  prisma = (mod as any).prisma;
+  prisma = mod.prisma;
   prismaLoaded = true;
   return prisma;
 }
@@ -100,9 +104,8 @@ export async function getRsvp(
 ): Promise<RsvpStatus> {
   const p = await getPrisma();
   if (p) {
-    const rec = await (p as any).rsvp.findUnique({
+    const rec = await p.rsvp.findUnique({
       where: { userId_eventId: { userId, eventId } },
-      cacheStrategy: { ttl: 60, swr: 60 },
     });
     const val = (rec?.status as RsvpStatus) ?? null;
     if (val !== "yes" && val !== "no" && val !== "maybe") return null;
@@ -226,9 +229,6 @@ export async function kvDelete(key: string): Promise<void> {
     headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` },
   }).catch(() => {});
 }
-
-// Password reset token helpers
-import bcrypt from "bcryptjs";
 
 function makeToken(): string {
   // short code for dev; can switch to uuid if preferred
@@ -565,19 +565,53 @@ export async function setAttendanceBatch(
   if (p) {
     // Primary: Database
     // Delete existing attendance for this date
-    await p.attendance.deleteMany({ where: { date: dateYmd } }).catch(() => {});
+    await p.attendance.deleteMany({ where: { date: dateYmd } });
     // Insert new attendance records
     if (presentUserIds.length > 0) {
       // Ensure users exist (satisfy FK constraint)
-      const userIds = new Set(presentUserIds);
-      for (const userId of userIds) {
-        await p.user
-          .upsert({
-            where: { id: userId },
-            create: { id: userId, firstName: "", lastName: "" },
-            update: {},
-          })
-          .catch(() => {});
+      const userIds = Array.from(new Set(presentUserIds));
+      const existingUsers = await p.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true },
+      });
+      const existingIds = new Set(existingUsers.map((user) => user.id));
+      const missingIds = userIds.filter((id) => !existingIds.has(id));
+      if (missingIds.length > 0) {
+        try {
+          await p.user.createMany({
+            data: missingIds.map((id) => ({
+              id,
+              firstName: "",
+              lastName: "",
+            })),
+            skipDuplicates: true,
+          });
+        } catch (error: unknown) {
+          Sentry.captureException(error, {
+            extra: {
+              missingIds,
+              context: "setAttendanceBatch_createMany",
+            },
+          });
+          for (const userId of missingIds) {
+            try {
+              await p.user.upsert({
+                where: { id: userId },
+                create: { id: userId, firstName: "", lastName: "" },
+                update: {},
+              });
+            } catch (upsertError: unknown) {
+              Sentry.captureException(upsertError, {
+                extra: {
+                  userId,
+                  dateYmd,
+                  context: "setAttendanceBatch_user_upsert_fallback",
+                },
+              });
+              throw upsertError;
+            }
+          }
+        }
       }
       // Insert attendance records
       await p.attendance.createMany({
