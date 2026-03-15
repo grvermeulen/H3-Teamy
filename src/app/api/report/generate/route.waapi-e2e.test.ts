@@ -214,6 +214,10 @@ describe("POST /api/report/generate WAAPI e2e", () => {
     );
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+    );
+    const firstCallArg = vi.mocked(Sentry.captureException).mock.calls[0]?.[0];
+    expect(firstCallArg).toEqual(
       expect.objectContaining({
         message: expect.stringContaining(
           "WaAPI notification not sent: disabled",

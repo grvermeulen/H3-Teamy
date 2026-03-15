@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
+import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { getServerSession } from "next-auth";
 import { authOptions } from "./authOptions";
@@ -19,7 +20,7 @@ export async function getActiveUser(
   req: NextRequest,
 ): Promise<ActiveUserResult> {
   const cookieId = req.cookies.get("anon_id")?.value || null;
-  const session: any = await getServerSession(authOptions as any);
+  const session = await getServerSession(authOptions);
 
   async function ensureCookieIdentityUser(cookie: string): Promise<string> {
     // Create identity and user atomically; handle races by falling back to existing identity
@@ -32,12 +33,10 @@ export async function getActiveUser(
         },
       });
       return created.userId;
-    } catch (e: unknown) {
+    } catch (error: unknown) {
       if (
-        typeof e === "object" &&
-        e !== null &&
-        "code" in e &&
-        (e as { code?: unknown }).code === "P2002"
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
       ) {
         const exist = await prisma.identity.findUnique({
           where: {
@@ -50,21 +49,13 @@ export async function getActiveUser(
         });
         if (exist) return exist.userId;
       }
-      // Fallback: create bare user and upsert identity
-      const u = await prisma.user.create({
-        data: { firstName: "", lastName: "" },
-      });
-      await prisma.identity.upsert({
-        where: {
-          provider_providerUserId: {
-            provider: "cookie",
-            providerUserId: cookie,
-          },
+      Sentry.captureException(error, {
+        extra: {
+          context: "ensureCookieIdentityUser_create",
+          provider: "cookie",
         },
-        create: { provider: "cookie", providerUserId: cookie, userId: u.id },
-        update: {},
       });
-      return u.id;
+      throw error;
     }
   }
 
@@ -85,16 +76,21 @@ export async function getActiveUser(
   if (session?.user) {
     const sessionEmail = (session.user.email || "").toLowerCase();
     const provider = sessionEmail ? "email" : "auth"; // collapse credentials/google by email when present
-    const providerUserId =
-      sessionEmail ||
-      (typeof (session.user as { id?: string }).id === "string"
-        ? (session.user as { id: string }).id
-        : session.user.name || "");
+    const sessionUserId =
+      typeof (session.user as { id?: unknown }).id === "string"
+        ? ((session.user as { id: string }).id || "").trim()
+        : "";
+    const providerUserId = sessionEmail || sessionUserId;
     if (!providerUserId) {
       const err = new Error(
-        "getActiveUser: session missing stable provider id (email/id/name)",
+        "getActiveUser: session missing stable provider id (email/id)",
       );
-      Sentry.captureException(err, { extra: { sessionUser: session.user } });
+      Sentry.captureException(err, {
+        extra: {
+          context: "getActiveUser_providerUserId_missing",
+          sessionUser: session.user,
+        },
+      });
       throw err;
     }
     let cookieIdentityFromAuthLookup: { userId: string } | null = null;
@@ -226,7 +222,11 @@ export async function getActiveUser(
 
     // Hydrate missing fields from session
     const current = await prisma.user.findUnique({ where: { id: authUserId } });
-    const updates: any = {};
+    const updates: {
+      email?: string;
+      firstName?: string;
+      lastName?: string;
+    } = {};
     if (!current?.email && sessionEmail) {
       // Only set email if it's not used by another user already
       const other = await prisma.user.findUnique({

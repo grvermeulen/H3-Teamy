@@ -1,4 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
+import type { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 type RsvpStatus = "yes" | "no" | "maybe" | null;
 type UserProfile = {
@@ -6,9 +8,9 @@ type UserProfile = {
   lastName: string;
   email?: string | null;
 };
-let prismaLoaded = false as boolean;
-let prisma: any = null as any;
-async function getPrisma() {
+let prismaLoaded = false;
+let prisma: PrismaClient | null = null;
+async function getPrisma(): Promise<PrismaClient | null> {
   if (prismaLoaded) return prisma;
   if (!process.env.DATABASE_URL) {
     prismaLoaded = true;
@@ -16,7 +18,7 @@ async function getPrisma() {
     return null;
   }
   const mod = await import("./db");
-  prisma = (mod as any).prisma;
+  prisma = mod.prisma;
   prismaLoaded = true;
   return prisma;
 }
@@ -102,7 +104,7 @@ export async function getRsvp(
 ): Promise<RsvpStatus> {
   const p = await getPrisma();
   if (p) {
-    const rec = await (p as any).rsvp.findUnique({
+    const rec = await p.rsvp.findUnique({
       where: { userId_eventId: { userId, eventId } },
     });
     const val = (rec?.status as RsvpStatus) ?? null;
@@ -227,9 +229,6 @@ export async function kvDelete(key: string): Promise<void> {
     headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` },
   }).catch(() => {});
 }
-
-// Password reset token helpers
-import bcrypt from "bcryptjs";
 
 function makeToken(): string {
   // short code for dev; can switch to uuid if preferred
@@ -374,7 +373,7 @@ export async function getUserProfiles(
       where: { id: { in: uniqueIds } },
       select: { id: true, firstName: true, lastName: true, email: true },
     });
-    for (const row of rows as any[]) {
+    for (const row of rows) {
       out[row.id] = {
         firstName: row.firstName,
         lastName: row.lastName,
@@ -517,7 +516,7 @@ export async function getUserRsvpStats(
     for (const userId of uniqueIds) {
       out[userId] = { total: 0, yes: 0 };
     }
-    for (const row of rows as any[]) {
+    for (const row of rows) {
       const current = out[row.userId] || { total: 0, yes: 0 };
       current.total += 1;
       if (row.status === "yes") current.yes += 1;
@@ -682,68 +681,59 @@ export async function setAttendanceBatch(
   if (p) {
     // Primary: Database
     // Delete existing attendance for this date
-    await p.attendance
-      .deleteMany({ where: { date: dateYmd } })
-      .catch((error: unknown) => {
-        Sentry.captureException(error, {
-          extra: { dateYmd, context: "setAttendanceBatch_deleteMany" },
-        });
+    try {
+      await p.attendance.deleteMany({ where: { date: dateYmd } });
+    } catch (error: unknown) {
+      Sentry.captureException(error, {
+        extra: { dateYmd, context: "setAttendanceBatch_deleteMany" },
       });
+      throw error;
+    }
     // Insert new attendance records
     if (presentUserIds.length > 0) {
       // Ensure users exist (satisfy FK constraint) with batched queries.
       const userIds = Array.from(new Set(presentUserIds.filter(Boolean)));
       if (userIds.length > 0) {
-        try {
-          const existing = await p.user.findMany({
-            where: { id: { in: userIds } },
-            select: { id: true },
-          });
-          const existingIds = new Set(
-            existing.map((u: { id: string }) => u.id),
-          );
-          const missingIds = userIds.filter(
-            (userId) => !existingIds.has(userId),
-          );
-          if (missingIds.length > 0) {
-            await p.user
-              .createMany({
-                data: missingIds.map((id) => ({
-                  id,
-                  firstName: "",
-                  lastName: "",
-                })),
-                skipDuplicates: true,
-              })
-              .catch((error: unknown) => {
-                Sentry.captureException(error, {
-                  extra: {
-                    missingIds,
-                    context: "setAttendanceBatch_createMany",
-                  },
+        const existing = await p.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true },
+        });
+        const existingIds = new Set(existing.map((u) => u.id));
+        const missingIds = userIds.filter((userId) => !existingIds.has(userId));
+        if (missingIds.length > 0) {
+          try {
+            await p.user.createMany({
+              data: missingIds.map((id) => ({
+                id,
+                firstName: "",
+                lastName: "",
+              })),
+              skipDuplicates: true,
+            });
+          } catch (error: unknown) {
+            Sentry.captureException(error, {
+              extra: {
+                missingIds,
+                context: "setAttendanceBatch_createMany",
+              },
+            });
+            for (const userId of missingIds) {
+              try {
+                await p.user.upsert({
+                  where: { id: userId },
+                  create: { id: userId, firstName: "", lastName: "" },
+                  update: {},
                 });
-              });
-          }
-        } catch (error: unknown) {
-          Sentry.captureException(error, {
-            extra: { userIds, context: "setAttendanceBatch_batchEnsureUsers" },
-          });
-          // Keep legacy fallback behavior to avoid blocking attendance writes.
-          for (const userId of userIds) {
-            await p.user
-              .upsert({
-                where: { id: userId },
-                create: { id: userId, firstName: "", lastName: "" },
-                update: {},
-              })
-              .catch((upsertError: unknown) => {
+              } catch (upsertError: unknown) {
                 Sentry.captureException(upsertError, {
                   extra: {
                     userId,
                     context: "setAttendanceBatch_upsertFallback",
                   },
                 });
-              });
+                throw upsertError;
+              }
+            }
           }
         }
       }

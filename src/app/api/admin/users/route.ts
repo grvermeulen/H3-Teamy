@@ -1,16 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
+import { z } from "zod";
 import { prisma } from "../../../../lib/db";
 import { getUserRolesBatch, setUserRoles, kvDelete } from "../../../../lib/kv";
 import { isAdminUser } from "../../../../lib/trainer";
 import { displayName, hasUserIdentity } from "../../../../lib/userUtils";
 import { withDbRequestMetrics } from "../../../../lib/dbMetrics";
 
-function norm(s: string) {
+type RoleFlags = { admin?: boolean; trainer?: boolean; player?: boolean };
+
+const UserRolesUpdateSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.string().min(1),
+      roles: z
+        .object({
+          admin: z.boolean().optional(),
+          trainer: z.boolean().optional(),
+          player: z.boolean().optional(),
+        })
+        .optional(),
+    }),
+  ),
+});
+
+function norm(s: string): string {
   return (s || "").toLowerCase().trim();
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(req: NextRequest): Promise<NextResponse> {
   return withDbRequestMetrics("api/admin/users.GET", async () => {
     const { isAdmin } = await isAdminUser(req);
     if (!isAdmin)
@@ -31,27 +49,31 @@ export async function GET(req: NextRequest) {
         select: { id: true, firstName: true, lastName: true, email: true },
       });
     } catch (e: unknown) {
-      Sentry.captureException(e);
-      const message = e instanceof Error ? e.message : String(e);
+      const eventId = Sentry.captureException(e, {
+        extra: { context: "admin_users_get_query" },
+      });
       return NextResponse.json(
-        { error: "users_query_failed", message },
+        {
+          error: "users_query_failed",
+          message: "Er is een fout opgetreden bij het ophalen van gebruikers.",
+          eventId,
+        },
         { status: 500 },
       );
     }
-    const list = [] as {
+    const list: {
       id: string;
       name: string;
-      roles: { admin?: boolean; trainer?: boolean; player?: boolean };
-    }[];
-    const rolesByUserId: Record<
-      string,
-      { admin?: boolean; trainer?: boolean; player?: boolean }
-    > = await getUserRolesBatch(users.map((u) => u.id)).catch(
-      (error: unknown) => {
-        Sentry.captureException(error);
-        return {};
-      },
-    );
+      roles: RoleFlags;
+    }[] = [];
+    const rolesByUserId: Record<string, RoleFlags> = await getUserRolesBatch(
+      users.map((u) => u.id),
+    ).catch((error: unknown) => {
+      Sentry.captureException(error, {
+        extra: { context: "admin_users_get_roles_batch" },
+      });
+      return {};
+    });
     for (const u of users) {
       if (!hasUserIdentity(u)) continue;
       const name = displayName(u);
@@ -73,7 +95,7 @@ export async function GET(req: NextRequest) {
   });
 }
 
-export async function PUT(req: NextRequest) {
+export async function PUT(req: NextRequest): Promise<NextResponse> {
   return withDbRequestMetrics("api/admin/users.PUT", async () => {
     const { isAdmin } = await isAdminUser(req);
     if (!isAdmin)
@@ -86,21 +108,20 @@ export async function PUT(req: NextRequest) {
         extra: { context: "admin/users PUT json parse" },
       });
       return NextResponse.json(
-        { error: "invalid_json", message: "Invalid JSON payload." },
+        { error: "invalid_json", message: "Ongeldige JSON-invoer." },
         { status: 400 },
       );
     }
-    const parsed =
-      typeof body === "object" && body !== null
-        ? (body as { items?: unknown })
-        : {};
-    const items = Array.isArray(parsed.items)
-      ? (parsed.items as {
-          id: string;
-          roles: { admin?: boolean; trainer?: boolean; player?: boolean };
-        }[])
-      : [];
-    for (const it of items) {
+
+    const parsed = UserRolesUpdateSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "invalid_payload", message: "Ongeldige invoer voor rollen." },
+        { status: 400 },
+      );
+    }
+
+    for (const it of parsed.data.items) {
       const roles = {
         admin: Boolean(it.roles?.admin),
         trainer: Boolean(it.roles?.trainer),

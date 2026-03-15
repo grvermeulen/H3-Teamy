@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../../../lib/db";
 import bcrypt from "bcryptjs";
 import { validateRegisterInput } from "../../../../lib/validateRegisterInput";
@@ -15,7 +17,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     body = await req.json();
   } catch {
     return NextResponse.json(
-      { error: "ongeldige JSON in het verzoek" },
+      { error: "invalid_json", message: "Ongeldige JSON-invoer." },
       { status: 400 },
     );
   }
@@ -50,25 +52,43 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const normalizedEmail = email.toLowerCase().trim();
-  const existing = await prisma.user.findUnique({
-    where: { email: normalizedEmail },
-  });
-  if (existing) {
+  try {
+    return await Sentry.startSpan(
+      { op: "db.query", name: "POST /api/auth/register create user" },
+      async () => {
+        const hash = await bcrypt.hash(trimmedPassword, 10);
+        const user = await prisma.user.create({
+          data: {
+            email: normalizedEmail,
+            passwordHash: hash,
+            firstName: trimmedFirstName,
+            lastName: trimmedLastName,
+            id: crypto.randomUUID(),
+          },
+        });
+        return NextResponse.json({ ok: true, id: user.id });
+      },
+    );
+  } catch (error: unknown) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return NextResponse.json(
+        { error: "account bestaat al, gebruik wachtwoord vergeten" },
+        { status: 409 },
+      );
+    }
+    const eventId = Sentry.captureException(error, {
+      extra: { context: "auth_register_post" },
+    });
     return NextResponse.json(
-      { error: "account bestaat al, gebruik wachtwoord vergeten" },
-      { status: 409 },
+      {
+        error: "registratie_mislukt",
+        message: "Registreren is mislukt. Probeer het opnieuw.",
+        eventId,
+      },
+      { status: 500 },
     );
   }
-
-  const hash = await bcrypt.hash(trimmedPassword, 10);
-  const user = await prisma.user.create({
-    data: {
-      email: normalizedEmail,
-      passwordHash: hash,
-      firstName: trimmedFirstName,
-      lastName: trimmedLastName,
-      id: crypto.randomUUID(),
-    },
-  });
-  return NextResponse.json({ ok: true, id: user.id });
 }
