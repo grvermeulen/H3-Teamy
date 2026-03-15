@@ -1,4 +1,17 @@
 {
   "iterateOnLints": true,
-  "telemetry": { "allow": true }
+  "telemetry": {
+    "allow": true
+  },
+  "plugins": {
+    "vercel": {
+      "enabled": true
+    },
+    "prisma": {
+      "enabled": true
+    },
+    "continual-learning": {
+      "enabled": true
+    }
+  }
 }

@@ -61,7 +61,7 @@ This file defines the strict coding standards for all AI agents (Cursor, Opencod
 ## 4. Git & Workflow
 
 - **Commits**: Follow Conventional Commits (feat:, fix:, chore:, refactor:, ci:, test:, docs:).
-- **Hooks**: Pre-commit hooks enforce Lint, Typecheck, and Tests. Do not bypass them (`--no-verify`) unless instructed.
+- **Hooks**: Pre-commit hooks enforce Lint, Typecheck. Do not bypass them (`--no-verify`) unless instructed.
 - **No debug artifacts**: Never commit development comments like `// CI: trigger AI review` into source files.
 
 ## 5. CI Configuration
@@ -119,3 +119,32 @@ This file defines the strict coding standards for all AI agents (Cursor, Opencod
 
 - All user-facing strings must be in Dutch (NL), consistent with the rest of the application.
 - English UI strings (`"Something went wrong"`, `"Try again"`) are not acceptable.
+
+## 10. Continual Learning
+
+- Use the `continual-learning` skill to keep `AGENTS.md` up to date incrementally from transcript deltas, not full-history rescans.
+- Read existing `AGENTS.md` first, then process only new/changed transcripts using `.cursor/hooks/state/continual-learning-index.json`.
+- Retain only durable, reusable memory:
+  - recurring user preferences/corrections
+  - stable workspace facts
+- `AGENTS.md` must contain only:
+  - `## Learned User Preferences`
+  - `## Learned Workspace Facts`
+  - plain bullet points only
+- Exclude secrets, one-off instructions, and transient task details.
+- After processing, update the incremental index with latest transcript mtimes and remove entries for deleted transcripts.
+
+## 11. CI Looping (loop-on-ci)
+
+- When asked to monitor/repair CI, use the `loop-on-ci` skill and run a tight loop until checks are green:
+  1. Identify current branch and latest run.
+  2. Wait for completion (`gh run watch --exit-status`).
+  3. If failed, inspect failed logs, apply a focused fix, commit, and push.
+  4. Repeat until required checks pass.
+- Keep each fix scoped to a single failure cause whenever possible.
+- Never bypass hooks (no `--no-verify`) to force progress.
+- If a failure appears flaky, retry once and report flake evidence.
+- Always report:
+  - current CI status
+  - failure summary and applied fixes
+  - PR URL once checks are green
