@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
-import { Prisma } from "@prisma/client";
 import { prisma } from "../../../../lib/db";
 import bcrypt from "bcryptjs";
 import { validateRegisterInput } from "../../../../lib/validateRegisterInput";
@@ -70,10 +69,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       },
     );
   } catch (error: unknown) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
+    const isP2002 =
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as { code?: unknown }).code === "P2002";
+    if (isP2002) {
       return NextResponse.json(
         { error: "account bestaat al, gebruik wachtwoord vergeten" },
         { status: 409 },

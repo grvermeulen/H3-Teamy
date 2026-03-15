@@ -3,14 +3,19 @@ import { NextRequest } from "next/server";
 import { POST } from "@/app/api/auth/register/route";
 import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
+import * as Sentry from "@sentry/nextjs";
 
 vi.mock("@/lib/db", () => ({
   prisma: {
     user: {
-      findUnique: vi.fn(),
       create: vi.fn(),
     },
   },
+}));
+
+vi.mock("@sentry/nextjs", () => ({
+  startSpan: vi.fn((_ctx, cb) => cb()),
+  captureException: vi.fn(),
 }));
 
 vi.mock("bcryptjs", () => ({
@@ -62,7 +67,10 @@ describe("POST /api/auth/register", () => {
     const res = await POST(req);
     expect(res.status).toBe(400);
     const data = await res.json();
-    expect(data).toEqual({ error: "ongeldige JSON in het verzoek" });
+    expect(data).toEqual({
+      error: "invalid_json",
+      message: "Ongeldige JSON-invoer.",
+    });
   });
 
   it("returns 400 when required fields are missing", async () => {
@@ -92,7 +100,6 @@ describe("POST /api/auth/register", () => {
   });
 
   it("returns 403 and error for invalid invitation code", async () => {
-    vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
     const res = await POST(
       makeRequest({ ...validBody, invitationCode: "wrong-code" }),
     );
@@ -103,16 +110,8 @@ describe("POST /api/auth/register", () => {
   });
 
   it("returns 409 when email already exists", async () => {
-    vi.mocked(prisma.user.findUnique).mockResolvedValue({
-      id: "existing-id",
-      email: "new@example.com",
-      firstName: "Existing",
-      lastName: "User",
-      passwordHash: "hash",
-      emailVerified: null,
-      image: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+    vi.mocked(prisma.user.create).mockRejectedValue({
+      code: "P2002",
     } as never);
     const res = await POST(makeRequest(validBody));
     expect(res.status).toBe(409);
@@ -120,11 +119,10 @@ describe("POST /api/auth/register", () => {
     expect(data).toEqual({
       error: "account bestaat al, gebruik wachtwoord vergeten",
     });
-    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(prisma.user.create).toHaveBeenCalledTimes(1);
   });
 
   it("returns 200 and user id on successful registration", async () => {
-    vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
     const uuid = "fixed-uuid-1234";
     vi.spyOn(crypto, "randomUUID").mockReturnValue(uuid);
 
@@ -133,9 +131,7 @@ describe("POST /api/auth/register", () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data).toEqual({ ok: true, id: "created-user-id" });
-    expect(vi.mocked(prisma.user.findUnique)).toHaveBeenCalledWith({
-      where: { email: "new@example.com" },
-    });
+    expect(vi.mocked(Sentry.startSpan)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(bcrypt.hash)).toHaveBeenCalledWith("password123", 10);
     expect(vi.mocked(prisma.user.create)).toHaveBeenCalledWith({
       data: {
