@@ -54,6 +54,16 @@ type NarrativeInput = {
   sourceTeams: { homeTeam?: string; awayTeam?: string };
 };
 
+function reportNotificationOutcome(
+  result: Awaited<ReturnType<typeof sendMatchReportToWhatsAppGroup>>,
+): void {
+  if (result.sent) return;
+  const details = result.details ? ` (${result.details})` : "";
+  Sentry.captureException(
+    new Error(`WaAPI notification not sent: ${result.reason}${details}`),
+  );
+}
+
 const OUR_TEAM_KEYWORDS = [
   "de rijn",
   "rijn h3",
@@ -492,15 +502,13 @@ Regels:
     };
     await setReport(eventId, report);
 
-    // Fire-and-forget so report generation response is never blocked.
-    sendMatchReportToWhatsAppGroup({
+    const notificationResult = await sendMatchReportToWhatsAppGroup({
       eventId,
       opponentTeam: narrativeInput.opponentTeam,
       ourScore: narrativeInput.ourScore,
       opponentScore: narrativeInput.opponentScore,
-    }).catch((error: unknown) => {
-      Sentry.captureException(error);
     });
+    reportNotificationOutcome(notificationResult);
 
     return NextResponse.json({ ok: true, report });
   } catch (error: unknown) {
