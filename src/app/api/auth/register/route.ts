@@ -1,24 +1,71 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "../../../../lib/db";
 import bcrypt from "bcryptjs";
 
-export async function POST(req: NextRequest) {
-  const { email, password, firstName, lastName, invitationCode } =
-    await req.json();
+const registerBodySchema = z.object({
+  email: z.string().min(1, "e-mail is verplicht"),
+  password: z.string().min(1, "wachtwoord is verplicht"),
+  firstName: z
+    .string()
+    .min(1, "voornaam is verplicht")
+    .refine(
+      (s) => s.trim().length > 0,
+      "voornaam mag niet alleen uit spaties bestaan",
+    ),
+  lastName: z
+    .string()
+    .min(1, "achternaam is verplicht")
+    .refine(
+      (s) => s.trim().length > 0,
+      "achternaam mag niet alleen uit spaties bestaan",
+    ),
+  invitationCode: z.string().min(1, "uitnodigingscode is verplicht"),
+});
 
-  // Validate required fields
-  if (!email || !password || !firstName || !lastName) {
-    return NextResponse.json({ error: "missing" }, { status: 400 });
+/**
+ * Registreert een gebruiker met validatie van uitnodigingscode en invoervelden.
+ *
+ * @param req - Inkomend registratieverzoek.
+ * @returns JSON-respons met status en gebruikers-id.
+ */
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { error: "ongeldige JSON in het verzoek" },
+      { status: 400 },
+    );
   }
 
-  // Validate non-empty strings (trimmed)
-  const trimmedFirstName = firstName.trim();
-  const trimmedLastName = lastName.trim();
-  const trimmedPassword = password.trim();
+  const parsed = registerBodySchema.safeParse(body);
+  if (!parsed.success) {
+    const first = parsed.error.flatten().fieldErrors;
+    const msg =
+      (first.email?.[0] ||
+        first.password?.[0] ||
+        first.firstName?.[0] ||
+        first.lastName?.[0] ||
+        first.invitationCode?.[0]) ??
+      "verplichte velden ontbreken of ongeldig";
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
 
-  if (!trimmedFirstName || !trimmedLastName || !trimmedPassword) {
+  const {
+    email,
+    password,
+    firstName: rawFirstName,
+    lastName: rawLastName,
+    invitationCode,
+  } = parsed.data;
+  const trimmedFirstName = rawFirstName.trim();
+  const trimmedLastName = rawLastName.trim();
+  const trimmedPassword = password.trim();
+  if (!trimmedPassword) {
     return NextResponse.json(
-      { error: "firstName, lastName, and password cannot be empty" },
+      { error: "wachtwoord mag niet alleen uit spaties bestaan" },
       { status: 400 },
     );
   }
@@ -27,17 +74,14 @@ export async function POST(req: NextRequest) {
   const expectedInvitationCode = process.env.INVITATION_CODE;
   if (!expectedInvitationCode) {
     return NextResponse.json(
-      { error: "invitation code not configured" },
+      { error: "uitnodigingscode is niet geconfigureerd" },
       { status: 500 },
     );
   }
 
-  if (
-    !invitationCode ||
-    invitationCode.trim() !== expectedInvitationCode.trim()
-  ) {
+  if (invitationCode.trim() !== expectedInvitationCode.trim()) {
     return NextResponse.json(
-      { error: "invalid invitation code" },
+      { error: "ongeldige uitnodigingscode" },
       { status: 403 },
     );
   }

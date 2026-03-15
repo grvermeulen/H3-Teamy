@@ -918,7 +918,13 @@ export async function getUserRolesBatch(
       }
       try {
         out[uniqueIds[i]] = JSON.parse(raw) as Roles;
-      } catch {
+      } catch (err: unknown) {
+        Sentry.captureException(err, {
+          extra: {
+            userId: uniqueIds[i],
+            context: "getUserRolesBatch_redis_parse",
+          },
+        });
         out[uniqueIds[i]] = { player: true };
       }
     }
@@ -935,7 +941,10 @@ export async function getUserRolesBatch(
     }
     try {
       out[userId] = JSON.parse(raw) as Roles;
-    } catch {
+    } catch (err: unknown) {
+      Sentry.captureException(err, {
+        extra: { userId, context: "getUserRolesBatch_memory_parse" },
+      });
       out[userId] = { player: true };
     }
   }

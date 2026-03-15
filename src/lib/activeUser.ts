@@ -85,7 +85,18 @@ export async function getActiveUser(
   if (session?.user) {
     const sessionEmail = (session.user.email || "").toLowerCase();
     const provider = sessionEmail ? "email" : "auth"; // collapse credentials/google by email when present
-    const providerUserId = sessionEmail || session.user.name || "";
+    const providerUserId =
+      sessionEmail ||
+      (typeof (session.user as { id?: string }).id === "string"
+        ? (session.user as { id: string }).id
+        : session.user.name || "");
+    if (!providerUserId) {
+      const err = new Error(
+        "getActiveUser: session missing stable provider id (email/id/name)",
+      );
+      Sentry.captureException(err, { extra: { sessionUser: session.user } });
+      throw err;
+    }
     let cookieIdentityFromAuthLookup: { userId: string } | null = null;
 
     // Find existing identity for auth
@@ -180,8 +191,8 @@ export async function getActiveUser(
         const isEmpty = !hasName && !hasEmail && rsvpCount === 0;
         if (isEmpty) {
           // Silent adopt: repoint cookie identity and delete empty user
-          await prisma.$transaction([
-            prisma.identity.upsert({
+          await prisma.$transaction(async (tx) => {
+            await tx.identity.upsert({
               where: {
                 provider_providerUserId: {
                   provider: "cookie",
@@ -194,16 +205,19 @@ export async function getActiveUser(
                 userId: authUserId,
               },
               update: { userId: authUserId },
-            }),
-            prisma.user
-              .delete({ where: { id: cookieIdentity.userId } })
-              .catch((error: unknown) => {
-                Sentry.captureException(error, {
-                  extra: { context: "silent_adopt_delete_empty_cookie_user" },
-                });
-                return null;
-              }),
-          ] as any);
+            });
+            try {
+              await tx.user.delete({
+                where: { id: cookieIdentity.userId },
+              });
+            } catch (error: unknown) {
+              Sentry.captureException(error, {
+                extra: {
+                  context: "silent_adopt_delete_empty_cookie_user",
+                },
+              });
+            }
+          });
         } else {
           needsLink = true;
         }
