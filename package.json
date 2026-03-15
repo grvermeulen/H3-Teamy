@@ -12,7 +12,7 @@
     "format:fix": "prettier --write .",
     "prisma:generate": "prisma generate",
     "prebuild": "node scripts/generate-icons.js",
-    "postinstall": "prisma generate --accelerate",
+    "postinstall": "prisma generate",
     "prepare": "husky install",
     "docs:scan": "tsx scripts/docs/scan-routes.ts",
     "docs:openapi": "tsx scripts/docs/openapi.ts",
