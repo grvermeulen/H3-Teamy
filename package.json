@@ -2,6 +2,9 @@
   "name": "h3-teamy",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "20"
+  },
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build",
@@ -12,7 +15,7 @@
     "format:fix": "prettier --write .",
     "prisma:generate": "prisma generate",
     "prebuild": "node scripts/generate-icons.js",
-    "postinstall": "prisma generate --accelerate",
+    "postinstall": "prisma generate",
     "prepare": "husky install",
     "docs:scan": "tsx scripts/docs/scan-routes.ts",
     "docs:openapi": "tsx scripts/docs/openapi.ts",
@@ -22,7 +25,8 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@prisma/client": "^5.19.1",
+    "@prisma/adapter-pg": "5.19.1",
+    "@prisma/client": "5.19.1",
     "@sentry/nextjs": "^10.43.0",
     "bcryptjs": "^3.0.3",
     "ical": "^0.8.0",
@@ -30,9 +34,10 @@
     "next": "16.1.6",
     "next-auth": "^4.24.12",
     "node-ical": "^0.20.1",
-    "prisma": "^5.19.1",
+    "pg": "^8.16.3",
+    "prisma": "5.19.1",
     "react": "18.3.1",
-    "react-dom": "^18.3.1",
+    "react-dom": "18.3.1",
     "resend": "^6.9.2",
     "sharp": "^0.33.4",
     "zod": "^3.25.76"

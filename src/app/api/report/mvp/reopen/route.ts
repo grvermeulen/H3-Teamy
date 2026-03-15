@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   if (!adminInfo.isAdmin) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  const body = await req.json().catch(() => ({} as any));
+  const body = await req.json().catch(() => ({}) as any);
   const eventId = (body?.eventId as string | undefined)?.trim();
   if (!eventId) {
     return NextResponse.json({ error: "eventId required" }, { status: 400 });
@@ -35,4 +35,3 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true, status: state.status });
 }
-

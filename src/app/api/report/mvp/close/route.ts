@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminUser } from "../../../../../lib/trainer";
-import { getAttendanceRoster, getMvpState, saveMvpState, summarizeVotes } from "../../../../../lib/mvp";
+import {
+  getAttendanceRoster,
+  getMvpState,
+  saveMvpState,
+  summarizeVotes,
+} from "../../../../../lib/mvp";
 import { getReport, setReport } from "../../../../../lib/kv";
-import { applyMvpResultLine, formatMvpResultLine } from "../../../../../lib/mvpNarrative";
+import {
+  applyMvpResultLine,
+  formatMvpResultLine,
+} from "../../../../../lib/mvpNarrative";
 
 export async function POST(req: NextRequest) {
   const adminInfo = await isAdminUser(req);
   if (!adminInfo.isAdmin) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  const body = await req.json().catch(() => ({} as any));
+  const body = await req.json().catch(() => ({}) as any);
   const eventId = (body?.eventId as string | undefined)?.trim();
   if (!eventId) {
     return NextResponse.json({ error: "eventId required" }, { status: 400 });
@@ -39,13 +47,23 @@ export async function POST(req: NextRequest) {
   await saveMvpState(eventId, state);
 
   const report = await getReport(eventId);
-  const resultLine = formatMvpResultLine(winner.name, winner.percent, summary.totalVotes);
+  const resultLine = formatMvpResultLine(
+    winner.name,
+    winner.percent,
+    summary.totalVotes,
+  );
   const updatedContent = applyMvpResultLine(report?.content, resultLine);
   const updatedReport = {
     content: updatedContent,
     createdAt: report?.createdAt || closedAt,
     authorId: report?.authorId,
-    mvpResult: { name: winner.name, percent: winner.percent, votes: winner.votes, totalVotes: summary.totalVotes, decidedAt: closedAt },
+    mvpResult: {
+      name: winner.name,
+      percent: winner.percent,
+      votes: winner.votes,
+      totalVotes: summary.totalVotes,
+      decidedAt: closedAt,
+    },
   };
   await setReport(eventId, updatedReport);
 
@@ -57,4 +75,3 @@ export async function POST(req: NextRequest) {
     closedAt,
   });
 }
-

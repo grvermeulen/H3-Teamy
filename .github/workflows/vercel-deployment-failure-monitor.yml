@@ -27,6 +27,13 @@ jobs:
           echo "- Environment: \`${{ github.event.deployment.environment }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Deployment URL: ${{ github.event.deployment_status.target_url }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Logs URL: ${{ github.event.deployment_status.log_url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Common causes (check Vercel build logs above)" >> "$GITHUB_STEP_SUMMARY"
+          echo "1. **DATABASE_URL missing for Build** – Set in Vercel → Project Settings → Environment Variables for Build (Production + Preview). Required for \`prisma generate\` in postinstall." >> "$GITHUB_STEP_SUMMARY"
+          echo "2. **package-lock.json out of sync** – Run \`npm install\` locally and commit the updated lockfile." >> "$GITHUB_STEP_SUMMARY"
+          echo "3. **Node version** – Ensure Project Settings or \`vercel.json\` matches required Node (e.g. 20)." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "See [docs/cursor-automation-vercel-failures.md](https://github.com/${{ github.repository }}/blob/main/docs/cursor-automation-vercel-failures.md) for full setup and automation." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fail the workflow to notify maintainers
         run: |

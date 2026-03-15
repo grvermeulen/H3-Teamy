@@ -178,22 +178,24 @@ describe("POST /api/report/generate WAAPI e2e", () => {
   it("captures a Sentry signal when notification is not sent", async () => {
     vi.stubEnv("WAAPI_NOTIFICATIONS_ENABLED", "false");
 
-    const fetchSpy = vi.spyOn(global, "fetch").mockImplementation(async (input) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url === "https://api.openai.com/v1/responses") {
-        return new Response(
-          JSON.stringify({
-            output_text:
-              "Verslag zonder WAAPI-send.\nDe MVP-stemming staat nog open via de knop hieronder!",
-          }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          },
-        );
-      }
-      throw new Error(`Unexpected fetch URL in e2e test: ${url}`);
-    });
+    const fetchSpy = vi
+      .spyOn(global, "fetch")
+      .mockImplementation(async (input) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (url === "https://api.openai.com/v1/responses") {
+          return new Response(
+            JSON.stringify({
+              output_text:
+                "Verslag zonder WAAPI-send.\nDe MVP-stemming staat nog open via de knop hieronder!",
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        }
+        throw new Error(`Unexpected fetch URL in e2e test: ${url}`);
+      });
 
     const testCase = screenshotCases[0];
     const req = new Request("http://localhost/api/report/generate", {
@@ -212,8 +214,14 @@ describe("POST /api/report/generate WAAPI e2e", () => {
     );
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+    );
+    const firstCallArg = vi.mocked(Sentry.captureException).mock.calls[0]?.[0];
+    expect(firstCallArg).toEqual(
       expect.objectContaining({
-        message: expect.stringContaining("WaAPI notification not sent: disabled"),
+        message: expect.stringContaining(
+          "WaAPI notification not sent: disabled",
+        ),
       }),
     );
   });

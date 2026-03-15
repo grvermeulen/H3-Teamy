@@ -3,6 +3,7 @@ import { kvGetJson, kvSetJson, getAttendanceForDates } from "./kv";
 import { prisma } from "./db";
 import { defaultSeasonWindow, generateTrainingDates } from "./training";
 import { displayName, hasUserIdentity } from "./userUtils";
+import { getActiveUsers } from "./services/userService";
 
 export type RosterEntry = { id: string; name: string };
 export type MvpVoteRecord = {
@@ -45,11 +46,12 @@ async function buildRosterFromAttendance(): Promise<RosterEntry[]> {
   }
   const rosterIds = Array.from(ids);
   if (!rosterIds.length) {
-    let fallback: UserRow[] = [];
     try {
-      fallback = await prisma.user.findMany({
-        select: { id: true, firstName: true, lastName: true, email: true },
-      });
+      const fallback = await getActiveUsers();
+      return fallback
+        .map((u) => ({ id: u.id, name: u.name }))
+        .filter((r) => r.name)
+        .sort((a, b) => a.name.localeCompare(b.name));
     } catch (error: unknown) {
       Sentry.captureException(error, {
         tags: { module: "mvp", operation: "buildRosterFromAttendance" },
@@ -57,10 +59,6 @@ async function buildRosterFromAttendance(): Promise<RosterEntry[]> {
       });
       return [];
     }
-    return fallback
-      .map((u) => ({ id: u.id, name: displayName(u) }))
-      .filter((r) => r.name)
-      .sort((a, b) => a.name.localeCompare(b.name));
   }
   let users: UserRow[] = [];
   try {

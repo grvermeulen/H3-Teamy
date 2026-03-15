@@ -1,4 +1,4 @@
-﻿/*
+/*
   Set everyone to 30% attendance for the current season
   Usage: DATABASE_URL=... node scripts/set-attendance-30-percent.js [--dry-run]
 */
@@ -11,9 +11,9 @@ const { PrismaPg } = require("@prisma/adapter-pg");
 const { Pool } = require("pg");
 
 function toYMD(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
@@ -25,19 +25,38 @@ function parseDdMmYyyy(input) {
   const dd = Number(m[1]);
   const mm = Number(m[2]);
   const yyyy = Number(m[3]);
-  const date = new Date(yyyy, mm - 1, dd);
+  const date = new Date(Date.UTC(yyyy, mm - 1, dd));
   if (
-    date.getFullYear() !== yyyy ||
-    date.getMonth() !== mm - 1 ||
-    date.getDate() !== dd
+    date.getUTCFullYear() !== yyyy ||
+    date.getUTCMonth() !== mm - 1 ||
+    date.getUTCDate() !== dd
   )
     return null;
   return date;
 }
 
+function parseYmdUtc(input) {
+  const m = String(input)
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const parsed = new Date(Date.UTC(y, mo - 1, d));
+  if (
+    parsed.getUTCFullYear() !== y ||
+    parsed.getUTCMonth() !== mo - 1 ||
+    parsed.getUTCDate() !== d
+  ) {
+    return null;
+  }
+  return parsed;
+}
+
 function addYears(date, years) {
   const d = new Date(date);
-  d.setFullYear(d.getFullYear() + years);
+  d.setUTCFullYear(d.getUTCFullYear() + years);
   return d;
 }
 
@@ -59,30 +78,34 @@ function defaultSeasonWindow() {
 
   // Fallback: Season runs July 1st to July 1st next year
   const now = new Date();
-  const year = now.getFullYear();
-  const isBeforeJuly = now.getMonth() < 6;
+  const year = now.getUTCFullYear();
+  const isBeforeJuly = now.getUTCMonth() < 6;
   const seasonStart = isBeforeJuly
-    ? new Date(year - 1, 6, 1)
-    : new Date(year, 6, 1);
+    ? new Date(Date.UTC(year - 1, 6, 1))
+    : new Date(Date.UTC(year, 6, 1));
   const seasonEnd = isBeforeJuly
-    ? new Date(year, 6, 1)
-    : new Date(year + 1, 6, 1);
+    ? new Date(Date.UTC(year, 6, 1))
+    : new Date(Date.UTC(year + 1, 6, 1));
   return { from: toYMD(seasonStart), to: toYMD(seasonEnd) };
 }
 
 function generateTrainingDates(from, to) {
   const dates = [];
-  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
-  const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
+  const start = new Date(
+    Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()),
+  );
+  const end = new Date(
+    Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate()),
+  );
   const today = new Date();
-  today.setHours(0, 0, 0, 0); // Reset time to start of day for comparison
+  today.setUTCHours(0, 0, 0, 0); // Reset time to start of day for comparison
 
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const weekday = d.getDay();
+  for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    const weekday = d.getUTCDay();
     if (weekday === 3 || weekday === 5) {
       const dateStr = toYMD(new Date(d));
       const dateObj = new Date(d);
-      dateObj.setHours(0, 0, 0, 0);
+      dateObj.setUTCHours(0, 0, 0, 0);
       // Only include dates in the past (before today)
       if (dateObj < today) {
         dates.push(dateStr);
@@ -138,21 +161,21 @@ async function main() {
 
     // Generate ALL training dates for the season (past and future)
     const allSeasonDates = [];
-    const start = new Date(window.from);
-    const end = new Date(window.to);
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const weekday = d.getDay();
+    const start = parseYmdUtc(window.from);
+    const end = parseYmdUtc(window.to);
+    if (!start || !end) {
+      throw new Error("Kon seizoensdatums niet parsen.");
+    }
+    for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+      const weekday = d.getUTCDay();
       if (weekday === 3 || weekday === 5) {
         allSeasonDates.push(toYMD(new Date(d)));
       }
     }
 
     // Generate only PAST training dates (for assignment)
-    const pastDates = generateTrainingDates(
-      new Date(window.from),
-      new Date(window.to),
-    );
-    const today = new Date().toISOString().split("T")[0];
+    const pastDates = generateTrainingDates(start, end);
+    const today = toYMD(new Date());
 
     console.log(`Season: ${window.from} to ${window.to}`);
     console.log(`Today: ${today}`);

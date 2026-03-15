@@ -48,6 +48,7 @@ These rules are always attached to the model context for this repo.
 - All PRs must pass lint and type checks.
 - High-risk changes should include test updates and Sentry instrumentation when applicable.
 - AI review must run and pass before merge when the status check is required.
+- When a CodeRabbit review comment is fixed in code, resolve that review thread immediately.
 - All user-facing strings must be in Dutch (NL) — no English UI copy.
 - No inline `style` props — use Tailwind utility classes exclusively.
 - Component names must not shadow global constructors (`Error`, `Promise`, etc.).

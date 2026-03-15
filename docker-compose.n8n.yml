@@ -17,6 +17,3 @@ services:
 volumes:
   n8n_data:
     name: n8n_data
-
-
-

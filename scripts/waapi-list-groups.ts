@@ -36,7 +36,8 @@ function parseArgs(argv: string[]): CliOptions {
   const rawLimit = Number(values.get("--limit") || "200");
   return {
     filter: (values.get("--filter") || "").trim().toLowerCase(),
-    limit: Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : 200,
+    limit:
+      Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : 200,
   };
 }
 
@@ -100,9 +101,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  process.stdout.write(
-    `Found ${filtered.length} group chat(s):\n`,
-  );
+  process.stdout.write(`Found ${filtered.length} group chat(s):\n`);
   for (const group of filtered) {
     process.stdout.write(
       `${group.id || "(missing-id)"}\t${displayName(group) || "(no-name)"}\n`,

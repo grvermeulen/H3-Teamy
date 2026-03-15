@@ -5,6 +5,13 @@ import { displayName } from "../userUtils";
 import * as Sentry from "@sentry/nextjs";
 
 type UserRow = Pick<User, "id" | "firstName" | "lastName" | "email">;
+const DEFAULT_ACTIVE_USERS_MAX = 1000;
+
+function getActiveUsersLimit(): number {
+  const raw = Number(process.env.ACTIVE_USERS_MAX || DEFAULT_ACTIVE_USERS_MAX);
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_ACTIVE_USERS_MAX;
+  return Math.max(1, Math.min(Math.floor(raw), 5000));
+}
 
 /**
  * Retrieves the list of active users for the roster.
@@ -15,6 +22,7 @@ type UserRow = Pick<User, "id" | "firstName" | "lastName" | "email">;
  */
 export async function getActiveUsers(refresh = false) {
   const cacheKey = "users:roster:v2";
+  const maxUsers = getActiveUsersLimit();
 
   if (!refresh) {
     const cached = await kvGetJson<{ id: string; name: string }[]>(cacheKey);
@@ -27,6 +35,8 @@ export async function getActiveUsers(refresh = false) {
   try {
     users = await prisma.user.findMany({
       select: { id: true, firstName: true, lastName: true, email: true },
+      take: maxUsers,
+      orderBy: { updatedAt: "desc" },
     });
   } catch (error: unknown) {
     Sentry.captureException(error);

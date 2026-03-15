@@ -1,12 +1,16 @@
+import * as Sentry from "@sentry/nextjs";
+import type { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
+
 type RsvpStatus = "yes" | "no" | "maybe" | null;
 type UserProfile = {
   firstName: string;
   lastName: string;
   email?: string | null;
 };
-let prismaLoaded = false as boolean;
-let prisma: any = null as any;
-async function getPrisma() {
+let prismaLoaded = false;
+let prisma: PrismaClient | null = null;
+async function getPrisma(): Promise<PrismaClient | null> {
   if (prismaLoaded) return prisma;
   if (!process.env.DATABASE_URL) {
     prismaLoaded = true;
@@ -14,7 +18,7 @@ async function getPrisma() {
     return null;
   }
   const mod = await import("./db");
-  prisma = (mod as any).prisma;
+  prisma = mod.prisma;
   prismaLoaded = true;
   return prisma;
 }
@@ -100,9 +104,8 @@ export async function getRsvp(
 ): Promise<RsvpStatus> {
   const p = await getPrisma();
   if (p) {
-    const rec = await (p as any).rsvp.findUnique({
+    const rec = await p.rsvp.findUnique({
       where: { userId_eventId: { userId, eventId } },
-      cacheStrategy: { ttl: 60, swr: 60 },
     });
     const val = (rec?.status as RsvpStatus) ?? null;
     if (val !== "yes" && val !== "no" && val !== "maybe") return null;
@@ -226,9 +229,6 @@ export async function kvDelete(key: string): Promise<void> {
     headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` },
   }).catch(() => {});
 }
-
-// Password reset token helpers
-import bcrypt from "bcryptjs";
 
 function makeToken(): string {
   // short code for dev; can switch to uuid if preferred
@@ -354,6 +354,76 @@ export async function getUserProfile(
   }
 }
 
+/**
+ * Retrieves profiles for multiple users in one batched lookup.
+ *
+ * @param userIds - User IDs to load profile information for.
+ * @returns Mapping from user ID to profile fields for users that were found.
+ */
+export async function getUserProfiles(
+  userIds: string[],
+): Promise<Record<string, UserProfile>> {
+  const out: Record<string, UserProfile> = {};
+  const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+  if (uniqueIds.length === 0) return out;
+
+  const p = await getPrisma();
+  if (p) {
+    const rows = await p.user.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, firstName: true, lastName: true, email: true },
+    });
+    for (const row of rows) {
+      out[row.id] = {
+        firstName: row.firstName,
+        lastName: row.lastName,
+        email: row.email ?? undefined,
+      };
+    }
+    return out;
+  }
+
+  const redis = await getRedis();
+  if (redis) {
+    const entries = await Promise.all(
+      uniqueIds.map(async (userId) => {
+        const key = `user:${userId}`;
+        const res = await redis.hgetall(key);
+        if (!res || (!res.firstName && !res.lastName && !res.email))
+          return null;
+        return [
+          userId,
+          {
+            firstName: res.firstName || "",
+            lastName: res.lastName || "",
+            email: res.email || undefined,
+          } as UserProfile,
+        ] as const;
+      }),
+    );
+    for (const item of entries) {
+      if (!item) continue;
+      out[item[0]] = item[1];
+    }
+    return out;
+  }
+
+  for (const userId of uniqueIds) {
+    const key = `user:${userId}`;
+    const raw = memoryStore.get(key) as unknown as string | undefined;
+    if (!raw) continue;
+    try {
+      const parsed = JSON.parse(raw) as UserProfile;
+      out[userId] = parsed;
+    } catch (error: unknown) {
+      Sentry.captureException(error, {
+        extra: { userId, context: "getUserProfiles_memory_parse" },
+      });
+    }
+  }
+  return out;
+}
+
 export async function listEventRsvps(
   eventId: string,
 ): Promise<{ userId: string; status: RsvpStatus }[]> {
@@ -420,6 +490,52 @@ export async function listUserRsvps(
       const status = (v as RsvpStatus) ?? null;
       out.push({ eventId, status });
     }
+  }
+  return out;
+}
+
+/**
+ * Retrieves RSVP totals and yes-counts for multiple users.
+ *
+ * @param userIds - User IDs to aggregate RSVP stats for.
+ * @returns Mapping from user ID to RSVP totals and yes counts.
+ */
+export async function getUserRsvpStats(
+  userIds: string[],
+): Promise<Record<string, { total: number; yes: number }>> {
+  const out: Record<string, { total: number; yes: number }> = {};
+  const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+  if (uniqueIds.length === 0) return out;
+
+  const p = await getPrisma();
+  if (p) {
+    const rows = await p.rsvp.findMany({
+      where: { userId: { in: uniqueIds } },
+      select: { userId: true, status: true },
+    });
+    for (const userId of uniqueIds) {
+      out[userId] = { total: 0, yes: 0 };
+    }
+    for (const row of rows) {
+      const current = out[row.userId] || { total: 0, yes: 0 };
+      current.total += 1;
+      if (row.status === "yes") current.yes += 1;
+      out[row.userId] = current;
+    }
+    return out;
+  }
+
+  for (const userId of uniqueIds) {
+    const history = await listUserRsvps(userId).catch((error: unknown) => {
+      Sentry.captureException(error, {
+        extra: { userId, context: "getUserRsvpStats_listUserRsvps" },
+      });
+      return [];
+    });
+    out[userId] = {
+      total: history.length,
+      yes: history.filter((h) => h.status === "yes").length,
+    };
   }
   return out;
 }
@@ -565,19 +681,61 @@ export async function setAttendanceBatch(
   if (p) {
     // Primary: Database
     // Delete existing attendance for this date
-    await p.attendance.deleteMany({ where: { date: dateYmd } }).catch(() => {});
+    try {
+      await p.attendance.deleteMany({ where: { date: dateYmd } });
+    } catch (error: unknown) {
+      Sentry.captureException(error, {
+        extra: { dateYmd, context: "setAttendanceBatch_deleteMany" },
+      });
+      throw error;
+    }
     // Insert new attendance records
     if (presentUserIds.length > 0) {
-      // Ensure users exist (satisfy FK constraint)
-      const userIds = new Set(presentUserIds);
-      for (const userId of userIds) {
-        await p.user
-          .upsert({
-            where: { id: userId },
-            create: { id: userId, firstName: "", lastName: "" },
-            update: {},
-          })
-          .catch(() => {});
+      // Ensure users exist (satisfy FK constraint) with batched queries.
+      const userIds = Array.from(new Set(presentUserIds.filter(Boolean)));
+      if (userIds.length > 0) {
+        const existing = await p.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true },
+        });
+        const existingIds = new Set(existing.map((u) => u.id));
+        const missingIds = userIds.filter((userId) => !existingIds.has(userId));
+        if (missingIds.length > 0) {
+          try {
+            await p.user.createMany({
+              data: missingIds.map((id) => ({
+                id,
+                firstName: "",
+                lastName: "",
+              })),
+              skipDuplicates: true,
+            });
+          } catch (error: unknown) {
+            Sentry.captureException(error, {
+              extra: {
+                missingIds,
+                context: "setAttendanceBatch_createMany",
+              },
+            });
+            for (const userId of missingIds) {
+              try {
+                await p.user.upsert({
+                  where: { id: userId },
+                  create: { id: userId, firstName: "", lastName: "" },
+                  update: {},
+                });
+              } catch (upsertError: unknown) {
+                Sentry.captureException(upsertError, {
+                  extra: {
+                    userId,
+                    context: "setAttendanceBatch_upsertFallback",
+                  },
+                });
+                throw upsertError;
+              }
+            }
+          }
+        }
       }
       // Insert attendance records
       await p.attendance.createMany({
@@ -723,6 +881,64 @@ export async function getUserRoles(userId: string): Promise<Roles> {
   } catch {
     return { player: true };
   }
+}
+
+/**
+ * Retrieves role assignments for multiple users in one batched lookup.
+ *
+ * @param userIds - User IDs to load roles for.
+ * @returns Mapping from user ID to role flags with default player role for missing entries.
+ */
+export async function getUserRolesBatch(
+  userIds: string[],
+): Promise<Record<string, Roles>> {
+  const out: Record<string, Roles> = {};
+  const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+  if (uniqueIds.length === 0) return out;
+
+  const redis = await getRedis();
+  if (redis) {
+    const keys = uniqueIds.map((id) => `roles:${id}`);
+    const vals = (await redis.mget(keys)) as Array<string | null>;
+    for (let i = 0; i < uniqueIds.length; i++) {
+      const raw = vals[i];
+      if (!raw) {
+        out[uniqueIds[i]] = { player: true };
+        continue;
+      }
+      try {
+        out[uniqueIds[i]] = JSON.parse(raw) as Roles;
+      } catch (err: unknown) {
+        Sentry.captureException(err, {
+          extra: {
+            userId: uniqueIds[i],
+            context: "getUserRolesBatch_redis_parse",
+          },
+        });
+        out[uniqueIds[i]] = { player: true };
+      }
+    }
+    return out;
+  }
+
+  for (const userId of uniqueIds) {
+    const raw = memoryStore.get(`roles:${userId}`) as unknown as
+      | string
+      | undefined;
+    if (!raw) {
+      out[userId] = { player: true };
+      continue;
+    }
+    try {
+      out[userId] = JSON.parse(raw) as Roles;
+    } catch (err: unknown) {
+      Sentry.captureException(err, {
+        extra: { userId, context: "getUserRolesBatch_memory_parse" },
+      });
+      out[userId] = { player: true };
+    }
+  }
+  return out;
 }
 
 export async function setUserRoles(
