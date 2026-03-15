@@ -27,6 +27,7 @@ export default function EventList({ events }: Props) {
   >({});
   const [loadedLists, setLoadedLists] = useState<Record<string, boolean>>({});
   const [mounted, setMounted] = useState(false);
+  const [nowTs, setNowTs] = useState<number>(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
@@ -119,6 +120,10 @@ export default function EventList({ events }: Props) {
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    setNowTs(Date.now());
+  }, []);
+
   async function setRsvp(id: string, status: RsvpStatus) {
     const prev = rsvpMap[id] || null;
     setRsvpMap((p) => ({ ...p, [id]: status }));
@@ -134,7 +139,7 @@ export default function EventList({ events }: Props) {
         const message =
           "Please complete your profile (first and last name) before RSVP-ing.";
         alert(message);
-        window.location.href = "/profile";
+        window.location.assign("/profile");
       }
       return;
     }
@@ -166,7 +171,7 @@ export default function EventList({ events }: Props) {
   }
 
   const grouped = useMemo(() => {
-    const now = Date.now();
+    const now = nowTs || 0;
     const allSorted = events
       .slice()
       .sort(
@@ -179,7 +184,7 @@ export default function EventList({ events }: Props) {
     // If there are no past items at all yet (first ever match hasn't been played), just return future
     // But once the very first match has been played, ensure at least that single past match remains visible
     return [...past, ...future];
-  }, [events]);
+  }, [events, nowTs]);
 
   // Don't render anything until authentication is checked
   if (!authChecked) {
