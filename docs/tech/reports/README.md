@@ -55,3 +55,23 @@ Required environment variables:
 Optional:
 
 - `WAAPI_BASE_URL=https://waapi.app/api/v1` (defaults to this value)
+
+### Why notifications previously looked "successful" but were not delivered
+
+The old implementation dispatched the WAAPI send call in fire-and-forget style from `report/generate`.
+In serverless runtimes this can be interrupted when the request closes, and non-send outcomes (`disabled`, `missing_config`, `upstream_error`) were not surfaced in the API response.
+
+Current behavior awaits the send result and reports non-delivery reasons to Sentry while still returning a successful report response.
+
+## WAAPI end-to-end test (safe mode)
+
+Run:
+
+`npx vitest run src/app/api/report/generate/route.waapi-e2e.test.ts`
+
+Safety guarantees in this e2e test:
+
+- Uses 3 screenshot-derived fixtures in `src/app/api/report/generate/__fixtures__/waapi-e2e-screenshot-*.json`.
+- Mocks KV storage (`getReport`/`setReport`) so no real report keys are written.
+- Mocks WAAPI and OpenAI HTTP calls so no production WhatsApp messages are sent.
+- Uses `e2e-waapi-*` event IDs only, to prevent accidental overlap with real match event IDs.
