@@ -1,0 +1,45 @@
+{
+  "screenshotLabel": "zondag_16_februari_1800_mierlo_hout_vs_de_rijn_h3",
+  "homeTeam": "Mierlo-Hout H1",
+  "awayTeam": "De Rijn H3",
+  "homeScore": 7,
+  "awayScore": 13,
+  "date": "2026-02-16T18:00:00",
+  "events": [
+    {
+      "quarter": 1,
+      "time": "00:22",
+      "team": "away",
+      "type": "goal",
+      "player": "Arjan Verhoeven"
+    },
+    {
+      "quarter": 1,
+      "time": "01:16",
+      "team": "home",
+      "type": "goal",
+      "player": "Jules de Groot"
+    },
+    {
+      "quarter": 2,
+      "time": "02:40",
+      "team": "away",
+      "type": "goal",
+      "player": "Kevin van den Elzen"
+    },
+    {
+      "quarter": 3,
+      "time": "03:53",
+      "team": "away",
+      "type": "goal",
+      "player": "Jeroen Dekkers"
+    },
+    {
+      "quarter": 4,
+      "time": "06:26",
+      "team": "home",
+      "type": "goal",
+      "player": "Frank Verbergh"
+    }
+  ]
+}
