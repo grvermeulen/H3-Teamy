@@ -51,7 +51,10 @@ async function buildRosterFromAttendance(): Promise<RosterEntry[]> {
         select: { id: true, firstName: true, lastName: true, email: true },
       });
     } catch (error: unknown) {
-      Sentry.captureException(error);
+      Sentry.captureException(error, {
+        tags: { module: "mvp", operation: "buildRosterFromAttendance" },
+        extra: { stage: "fallback_users_query", rosterIdsCount: 0 },
+      });
       return [];
     }
     return fallback
@@ -66,7 +69,10 @@ async function buildRosterFromAttendance(): Promise<RosterEntry[]> {
       select: { id: true, firstName: true, lastName: true, email: true },
     });
   } catch (error: unknown) {
-    Sentry.captureException(error);
+    Sentry.captureException(error, {
+      tags: { module: "mvp", operation: "buildRosterFromAttendance" },
+      extra: { stage: "roster_users_query", rosterIdsCount: rosterIds.length },
+    });
     return [];
   }
   const list = users
