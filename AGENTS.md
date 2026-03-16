@@ -1,8 +1,7 @@
 ## Learned User Preferences
 
 - Use GitHub CLI for GitHub actions (PRs, checks, comments, merges) when possible.
-- Use the `loop-on-ci` workflow when asked: watch CI, inspect failures, apply focused fixes, and iterate until green.
-- Resolve CodeRabbit review comments once the underlying fix is implemented.
+- Use the `loop-on-ci` workflow when asked: watch CI, inspect failures, apply focused fixes, and iterate until green. Also check for unresolved review comments (CodeRabbit, Cursor bot) and address them before considering the loop complete.
 - When syncing Vercel environment configuration, treat remote settings as source of truth and sync local values from remote.
 - Use the GitHub CLI when GitHub information is needed.
 - Follow the provided Sentry instrumentation patterns for Next.js projects.
