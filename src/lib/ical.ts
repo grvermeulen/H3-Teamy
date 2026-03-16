@@ -1,7 +1,16 @@
-import ical, { CalendarComponent } from "node-ical";
 import { TeamEvent } from "../types";
 import { canonicalEventId } from "./eventId";
 import { kvGetJson, kvSetJson } from "./kv";
+
+type ParsedVEvent = {
+  type?: string;
+  summary?: string;
+  start?: Date | string | number;
+  end?: Date | string | number;
+  uid?: string;
+  location?: string;
+  description?: string;
+};
 
 /**
  * Fetches, parses, and caches team events from the external iCal feed.
@@ -20,12 +29,10 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) throw new Error(`Failed to fetch iCal: ${res.status}`);
       const text = await res.text();
-      const data = ical.parseICS(text);
+      const ical = await import("node-ical");
+      const data = ical.parseICS(text) as Record<string, ParsedVEvent>;
       parsed = Object.values(data)
-        .filter(
-          (c): c is CalendarComponent & { type: "VEVENT" } =>
-            c?.type === "VEVENT",
-        )
+        .filter((c): c is ParsedVEvent => c?.type === "VEVENT")
         .map((evt) => {
           const title = (evt.summary || "Match").toString();
           const startIso =
