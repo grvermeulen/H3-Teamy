@@ -1,0 +1,102 @@
+---
+description: Prisma migration safety checklist and zero-downtime patterns
+globs: "prisma/**/*.prisma, prisma/migrations/**/*.sql"
+alwaysApply: false
+---
+
+# Database Migration Safety
+
+## Migration Workflow
+
+```bash
+# 1. Edit prisma/schema.prisma
+# 2. Create migration (generates SQL, applies to dev DB)
+npx prisma migrate dev --name descriptive_name
+
+# 3. Generate client types
+npx prisma generate
+
+# 4. Apply in production (CI/CD)
+npx prisma migrate deploy
+```
+
+## Safety Checklist
+
+Before applying any migration:
+
+- [ ] New columns are nullable or have a `@default()` — never add `NOT NULL` without a default on existing tables
+- [ ] Index creation uses `CREATE INDEX CONCURRENTLY` for large tables (edit the generated SQL manually)
+- [ ] Schema changes and data backfills are in separate migrations
+- [ ] Migration has been tested against a copy of production data
+- [ ] No migration that has already run in production has been edited
+- [ ] Application code handles both old and new schema during rollout (expand-contract)
+
+## Common Patterns
+
+### Adding a Column Safely
+
+```prisma
+// GOOD: Nullable, no lock on existing data
+model User {
+  avatarUrl String? @map("avatar_url")
+}
+
+// GOOD: With default, instant in PostgreSQL 11+
+model User {
+  isActive Boolean @default(true) @map("is_active")
+}
+```
+
+### Renaming a Column (Zero-Downtime)
+
+Never rename directly. Use expand-contract:
+
+1. **Migration 1**: Add new column (nullable)
+2. **Data migration**: Backfill from old column
+3. **Deploy**: App writes to both old and new columns
+4. **Migration 2**: Drop old column after verification
+
+### Custom SQL in Migrations
+
+For operations Prisma cannot express:
+
+```bash
+npx prisma migrate dev --create-only --name add_concurrent_index
+```
+
+Then edit the generated SQL:
+
+```sql
+-- Prisma cannot generate CONCURRENTLY
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_users_email ON "User" (email);
+```
+
+### Data Backfill (Separate Migration)
+
+```bash
+npx prisma migrate dev --create-only --name backfill_display_names
+```
+
+```sql
+UPDATE "User"
+SET display_name = name
+WHERE display_name IS NULL;
+```
+
+## Anti-Patterns
+
+| Anti-Pattern | Why It Fails | Fix |
+|---|---|---|
+| Manual SQL in production | No audit trail | Always use migration files |
+| Editing deployed migrations | Causes drift between environments | Create new migration |
+| NOT NULL without default on existing table | Locks table, rewrites all rows | Add nullable first, then constrain |
+| Schema + data in one migration | Hard to rollback, long transactions | Separate migrations |
+| Dropping column before removing code | App errors on missing column | Remove code first, drop column next deploy |
+
+## Prisma Schema Conventions
+
+- Use `@map("snake_case")` for column names when the Prisma field is camelCase
+- Use `@@map("table_name")` for table names
+- Add `@@index` for columns used in `where` clauses on large tables
+- Use `@updatedAt` for automatic timestamp tracking
+- Define `@unique` constraints in schema, not just in application logic

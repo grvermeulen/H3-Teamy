@@ -1,0 +1,96 @@
+---
+description: AI-generated code cleanup — remove common AI slop patterns after implementation
+globs:
+alwaysApply: false
+---
+
+# De-Slop Pass
+
+After AI-assisted implementation, run a focused cleanup to remove common AI-generated code artifacts. This is a separate pass from implementation — do not constrain generation, clean up afterwards.
+
+## What to Remove
+
+### Unnecessary Comments
+
+```typescript
+// BAD: Narrating what the code does
+// Get the user from the database
+const user = await prisma.user.findUnique({ where: { id } });
+// Check if user exists
+if (!user) {
+  // Return 404 if not found
+  return NextResponse.json({ error: "Niet gevonden" }, { status: 404 });
+}
+
+// GOOD: Code speaks for itself, comment only explains non-obvious intent
+const user = await prisma.user.findUnique({ where: { id } });
+if (!user) {
+  return NextResponse.json({ error: "Niet gevonden" }, { status: 404 });
+}
+```
+
+### Defensive Checks on Trusted Paths
+
+```typescript
+// BAD: TypeScript already guarantees this
+if (typeof userId === "string" && userId.length > 0) {
+  const user = await getUser(userId);
+  if (user !== null && user !== undefined) {
+    // ...
+  }
+}
+
+// GOOD: Trust the type system
+const user = await getUser(userId);
+if (!user) return null;
+```
+
+### Tests That Test the Language/Framework
+
+```typescript
+// BAD: Testing that TypeScript types work
+it("should accept a string parameter", () => {
+  const result = formatName("test");
+  expect(typeof result).toBe("string");
+});
+
+// BAD: Testing that arrays work
+it("should return an array", () => {
+  const result = getUsers();
+  expect(Array.isArray(result)).toBe(true);
+});
+
+// GOOD: Test business logic and behavior
+it("should format name as 'Voornaam A.' for display", () => {
+  expect(formatName("Jan", "Jansen")).toBe("Jan J.");
+});
+```
+
+### Over-Engineered Abstractions
+
+- Factory patterns for a single implementation
+- Abstract classes with only one concrete subclass
+- Wrapper functions that just forward all arguments
+- Configuration objects for something used exactly once
+
+### Other Slop
+
+- `console.log` statements (use Sentry logger)
+- Commented-out code blocks
+- Unused imports
+- English strings in user-facing code (must be Dutch)
+- Overly verbose error handling that obscures the actual logic
+- `any` type casts added "to make it work"
+
+## How to Run
+
+After implementing a feature with AI assistance:
+
+1. Review the diff: `git diff --stat`
+2. For each changed file, scan for the patterns above
+3. Remove slop while keeping all behavior-preserving logic
+4. Run tests after cleanup to ensure nothing broke
+
+## Key Principle
+
+> Rather than adding negative instructions which constrain generation quality, add a separate de-slop pass. Two focused steps outperform one constrained step.

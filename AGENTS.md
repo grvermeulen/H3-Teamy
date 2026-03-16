@@ -7,11 +7,23 @@
 - Use the GitHub CLI when GitHub information is needed.
 - Follow the provided Sentry instrumentation patterns for Next.js projects.
 - For test coverage analysis, use only tests listed in `enabled_tests.txt` and format reports like `coverage_report.md`.
+- Run a de-slop pass after AI-assisted implementation to remove narration comments, defensive checks the type system already covers, and tests that test the language rather than business logic.
+- Research existing solutions in `src/lib/` and npm before writing new utilities or helpers.
+- Run the verification loop (build, typecheck, lint, test, security scan, diff review) before creating or updating PRs.
 
 ## Learned Workspace Facts
 
-- This repository is `H3-Teamy`.
+- This repository is `H3-Teamy`, hosted at `grvermeulen/H3-Teamy`.
+- The project is a Next.js 16 TypeScript app with Prisma (PostgreSQL), NextAuth, Tailwind CSS, Sentry, and Vitest.
+- CI includes an "Agentic CI" verify pipeline (lint, typecheck, build, test) and Vercel deployment checks.
 - Technical documentation is organized under `docs/tech/*`.
 - Pull request #54 requires `AGENTS.md` to only contain learned preferences and learned workspace facts.
-- The project is a Next.js TypeScript app with Prisma and Vitest-based testing.
-- CI includes an "Agentic CI" verify pipeline (lint, typecheck, build, test) and Vercel deployment checks.
+- All user-facing strings must be in Dutch (NL).
+- Business logic belongs in `src/lib/services/` and `src/lib/*.ts`, not in API routes or components.
+- API routes should be thin handlers: parse request, check auth via `getServerSession(authOptions)`, validate with Zod, delegate to service, return response.
+- Shared utilities live in `src/lib/` — `userUtils.ts` (display names), `badges.ts` (attendance badges), `kv.ts` (Redis cache), `eventId.ts` (date-based IDs), `training.ts` (training logic).
+- Validation schemas live in `src/lib/schemas/`.
+- External services: OpenAI (report generation/vision), WaAPI (WhatsApp), Resend (email), Sportlink (iCal events), OCR worker (FastAPI/EasyOCR).
+- Cache (ioredis) failures must never propagate to the caller — wrap in try/catch, log with Sentry, continue.
+- Pre-commit hooks run Prettier, ESLint, `tsc --noEmit`, and `vitest run`.
+- The `.cursor/rules/` directory contains agent-agnostic coding rules adapted from ECC (everything-claude-code) covering: security, API design, frontend/backend patterns, database migrations, verification loops, search-first workflow, code review, and de-slop cleanup.

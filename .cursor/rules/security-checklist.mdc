@@ -1,0 +1,49 @@
+---
+description: Security review checklist for API routes, auth, user input, and sensitive data handling
+globs: "src/app/api/**/*.ts, src/lib/services/**/*.ts, src/lib/authOptions.ts, middleware.ts"
+alwaysApply: false
+---
+
+# Security Checklist
+
+Apply before committing code that handles user input, authentication, API endpoints, or sensitive data.
+
+## Pre-Commit Checks
+
+- [ ] No hardcoded secrets (API keys, passwords, tokens, connection strings) in source
+- [ ] All user input validated with Zod schemas at system boundaries
+- [ ] Database queries use Prisma (parameterized) — never raw string interpolation
+- [ ] Auth checked on every protected API route (use `getServerSession(authOptions)`)
+- [ ] Error responses do not leak internal details (stack traces, SQL errors, file paths)
+- [ ] Rate-sensitive endpoints have throttling or abuse prevention
+- [ ] No `console.log` of sensitive data (tokens, passwords, PII, session objects)
+
+## OWASP Patterns for Next.js + Prisma
+
+| Threat | Prevention |
+|---|---|
+| Injection | Prisma parameterizes queries by default; never use `$queryRawUnsafe` with user input |
+| Broken Auth | Validate session server-side via `getServerSession(authOptions)`; never trust client cookies alone |
+| Sensitive Data Exposure | Keep `NEXTAUTH_SECRET`, `DATABASE_URL`, API keys in env vars only; use `NEXT_PUBLIC_` prefix only for truly public values |
+| XSS | React escapes by default; never use `dangerouslySetInnerHTML` with user content without DOMPurify |
+| CSRF | Next.js API routes + NextAuth CSRF tokens; verify origin on state-changing endpoints |
+| Broken Access Control | Check user ownership before returning/modifying resources (e.g., `where: { userId: session.user.id }`) |
+
+## Secret Detection Patterns
+
+Flag immediately if found in source files:
+
+```
+sk-...          (OpenAI keys)
+ghp_...         (GitHub tokens)
+AKIA...         (AWS keys)
+password = "..."
+token = "..."
+apiKey = "..."
+```
+
+## Prisma-Specific
+
+- Always use `select` to return only needed fields — never return password hashes or internal IDs to clients
+- Use `prisma.$transaction()` for multi-table operations that must be atomic
+- Add `@unique` constraints in the schema before relying on uniqueness in application code

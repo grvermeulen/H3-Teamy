@@ -1,0 +1,102 @@
+---
+description: REST API design conventions for Next.js App Router API routes
+globs: "src/app/api/**/*.ts"
+alwaysApply: false
+---
+
+# API Design Conventions
+
+## Route Structure
+
+Next.js App Router API routes follow resource-based naming:
+
+```
+src/app/api/
+├── users/route.ts          GET (list), POST (create)
+├── users/[id]/route.ts     GET (single), PATCH (update), DELETE
+├── events/route.ts         GET (list)
+├── rsvp/route.ts           POST (create/update)
+├── report/route.ts         POST (create)
+└── admin/route.ts          Protected admin endpoints
+```
+
+## Request/Response Pattern
+
+Every API route handler follows this pattern:
+
+```typescript
+import { getServerSession } from "next-auth";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import * as Sentry from "@sentry/nextjs";
+import { authOptions } from "@/lib/authOptions";
+
+const requestSchema = z.object({
+  name: z.string().min(1).max(100),
+});
+
+export async function POST(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) {
+      return NextResponse.json({ error: "Niet ingelogd" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const parsed = requestSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Ongeldige invoer", details: parsed.error.issues },
+        { status: 400 },
+      );
+    }
+
+    const result = await SomeService.create(parsed.data);
+    return NextResponse.json({ data: result }, { status: 201 });
+  } catch (error) {
+    Sentry.captureException(error);
+    return NextResponse.json(
+      { error: "Er ging iets mis" },
+      { status: 500 },
+    );
+  }
+}
+```
+
+## Status Codes
+
+| Code | When |
+|---|---|
+| 200 | Successful GET, PATCH |
+| 201 | Successful POST (resource created) |
+| 204 | Successful DELETE (no body) |
+| 400 | Validation failure (Zod) |
+| 401 | Not authenticated |
+| 403 | Authenticated but not authorized |
+| 404 | Resource not found |
+| 409 | Conflict (duplicate) |
+| 429 | Rate limit exceeded |
+| 500 | Unexpected server error (log to Sentry, never expose internals) |
+
+## Error Response Format
+
+```typescript
+// Client errors — include actionable message in Dutch
+{ error: "E-mailadres is al in gebruik" }
+
+// Validation errors — include field details
+{ error: "Ongeldige invoer", details: zodError.issues }
+
+// Server errors — generic message, details go to Sentry
+{ error: "Er ging iets mis" }
+```
+
+## Rules
+
+- Keep route handlers thin — delegate to `src/lib/services/`
+- Always validate input with Zod before passing to services
+- Always check auth with `getServerSession(authOptions)` on protected routes
+- Always wrap in try/catch with `Sentry.captureException(error)`
+- Return Dutch error messages for user-facing errors
+- Use `select` in Prisma queries to return only needed fields
+- Add `take` (limit) to list queries to prevent unbounded results
