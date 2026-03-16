@@ -11,35 +11,27 @@ alwaysApply: false
 Business logic belongs in `src/lib/services/` or `src/lib/*.ts`, not in API routes.
 
 ```typescript
-// src/lib/services/eventService.ts
+// src/lib/services/userService.ts
 import { prisma } from "@/lib/db";
-import type { Event } from "@prisma/client";
+import type { User } from "@prisma/client";
 
-export const EventService = {
-  async getUpcoming(): Promise<Event[]> {
-    return prisma.event.findMany({
-      where: { date: { gte: new Date() } },
-      orderBy: { date: "asc" },
-      take: 50,
-    });
-  },
-
-  async getById(id: string): Promise<Event | null> {
-    return prisma.event.findUnique({
-      where: { id },
-      select: { id: true, title: true, date: true, location: true },
-    });
-  },
-};
+export async function getActiveUsers(refresh = false): Promise<User[]> {
+  const users = await prisma.user.findMany({
+    select: { id: true, firstName: true, lastName: true, email: true },
+    take: 100,
+    orderBy: { updatedAt: "desc" },
+  });
+  return users;
+}
 ```
 
 ```typescript
-// src/app/api/events/route.ts — thin handler
-import { EventService } from "@/lib/services/eventService";
+// src/app/api/users/route.ts — thin handler
+import { getActiveUsers } from "@/lib/services/userService";
 
 export async function GET() {
-  const events = await EventService.getUpcoming();
-  return NextResponse.json({ data: events });
+  const users = await getActiveUsers();
+  return NextResponse.json({ data: users });
 }
 ```
 
@@ -106,29 +98,30 @@ const events = await prisma.event.findMany({
 
 ## Redis/KV Caching
 
-The project uses ioredis via `src/lib/kv.ts`. Cache failures must never break the request:
+The project uses ioredis via `src/lib/kv.ts`. Exports `kvGetJson` and `kvSetJson` for generic caching. Cache failures must never break the request:
 
 ```typescript
 import * as Sentry from "@sentry/nextjs";
-import { kv } from "@/lib/kv";
+import { kvGetJson, kvSetJson } from "@/lib/kv";
+import { getActiveUsers } from "@/lib/services/userService";
 
-async function getEventsWithCache(): Promise<Event[]> {
+async function getUsersWithCache(): Promise<User[]> {
   try {
-    const cached = await kv.get("events:upcoming");
-    if (cached) return JSON.parse(cached);
+    const cached = await kvGetJson<User[]>("users:roster");
+    if (cached?.length) return cached;
   } catch (error) {
     Sentry.captureException(error);
   }
 
-  const events = await EventService.getUpcoming();
+  const users = await getActiveUsers();
 
   try {
-    await kv.setex("events:upcoming", 300, JSON.stringify(events));
+    await kvSetJson("users:roster", users);
   } catch (error) {
     Sentry.captureException(error);
   }
 
-  return events;
+  return users;
 }
 ```
 

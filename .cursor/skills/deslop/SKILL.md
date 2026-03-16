@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # De-Slop Pass
 
-After AI-assisted implementation, run a focused cleanup to remove common AI-generated code artifacts. This is a separate pass from implementation — do not constrain generation, clean up afterwards.
+After AI-assisted implementation, run a focused cleanup to remove common AI-generated code artifacts. This is a separate pass from implementation — do not constrain generation, clean up afterward.
 
 ## Your Task
 

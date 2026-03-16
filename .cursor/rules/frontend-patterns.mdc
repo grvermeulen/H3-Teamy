@@ -39,12 +39,18 @@ When props pass through 3+ levels, use composition or context:
   <Layout user={user}>
     <Header user={user}>
       <Avatar user={user} />
+    </Header>
+  </Layout>
+</Page>
 
 // Use composition:
 <Page>
   <Layout>
     <Header>
       <Avatar />  {/* reads user from context or server session */}
+    </Header>
+  </Layout>
+</Page>
 ```
 
 ## Custom Hooks

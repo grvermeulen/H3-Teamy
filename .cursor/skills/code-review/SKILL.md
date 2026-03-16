@@ -79,7 +79,7 @@ Use this checklist when reviewing code — either your own before a PR, or someo
 
 For each finding:
 
-```
+```text
 [CRITICAL] Description
 File: src/path/to/file.ts:42
 Issue: What's wrong and why it matters
@@ -88,7 +88,7 @@ Fix: How to fix it
 
 End with:
 
-```
+```text
 | Severity | Count | Status |
 |----------|-------|--------|
 | CRITICAL | 0     | pass   |
