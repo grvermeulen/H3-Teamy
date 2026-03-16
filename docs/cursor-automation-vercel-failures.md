@@ -16,7 +16,7 @@ For the Next.js app to build on Vercel:
 
 1. **DATABASE_URL not set for Build** – See above. Fix: add the variable in Vercel dashboard for Build (all environments).
 2. **Lockfile out of sync** – If `package-lock.json` is out of sync with `package.json`, `npm install` (or `npm ci` if configured) can fail. Fix: run `npm install` locally and commit the updated lockfile.
-3. **Node version** – Vercel uses Node 18/20 by default for Next.js. If the app requires a different version, set it in Project Settings or a root `vercel.json` with `"engines": { "node": "20" }`.
+3. **Node version** – Vercel defaults may vary by project/runtime; this repo targets Node 22. If needed, set it in Project Settings or a root `vercel.json` with `"engines": { "node": "22" }`.
 4. **Build memory/time** – Large Prisma schemas or heavy build steps can hit limits. Consider reducing build-time work or upgrading plan.
 
 Use Cursor Automations to react to that failure automatically:

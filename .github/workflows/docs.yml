@@ -6,17 +6,23 @@ on:
   pull_request:
     branches: [image]
 
+concurrency:
+  group: docs-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   build-docs:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
       - run: npm install --no-audit --no-fund --legacy-peer-deps --ignore-scripts
       - run: npx prisma generate
       - run: npm run docs:generate

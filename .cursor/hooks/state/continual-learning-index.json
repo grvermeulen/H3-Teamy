@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "transcripts": {
+    "agent-transcripts/57eae715-7ff3-4f03-b5a5-7348ab7ba72f.jsonl": {
+      "mtimeMs": 1773607349625,
+      "lastProcessedAt": "2026-03-16T22:03:36.1453163+01:00"
+    },
+    "agent-transcripts/6c306604-8e7a-4607-b98b-5d07ebd91248.jsonl": {
+      "mtimeMs": 1773580163953,
+      "lastProcessedAt": "2026-03-16T22:03:36.1453163+01:00"
+    },
+    "agent-transcripts/7970b7cd-f632-437f-b8d5-873e2d9fca96.jsonl": {
+      "mtimeMs": 1773606879411,
+      "lastProcessedAt": "2026-03-16T22:03:36.1453163+01:00"
+    },
+    "agent-transcripts/91621e36-e7e2-4a19-a879-35f58e1ed6d1.jsonl": {
+      "mtimeMs": 1773696114586,
+      "lastProcessedAt": "2026-03-16T22:26:07.3797281+01:00"
+    },
+    "agent-transcripts/a09b44d1-349b-4c48-a4be-5661afa6ed90.jsonl": {
+      "mtimeMs": 1773581392482,
+      "lastProcessedAt": "2026-03-16T22:03:36.1453163+01:00"
+    },
+    "agent-transcripts/f470fcb3-d5b6-4b04-b4d2-346c886c0a8e.jsonl": {
+      "mtimeMs": 1771596921592,
+      "lastProcessedAt": "2026-03-16T22:03:36.1453163+01:00"
+    }
+  }
+}
