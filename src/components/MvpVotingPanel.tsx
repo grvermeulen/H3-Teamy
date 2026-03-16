@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { JSX } from "react";
 
 type RosterEntry = { id: string; name: string };
 type VoteBreakdown = {
@@ -195,21 +196,23 @@ export default function MvpVotingPanel({
   }
 
   const isInline = variant === "inline";
-  const Container: keyof JSX.IntrinsicElements = isInline ? "div" : "section";
+  const ContainerTag: keyof JSX.IntrinsicElements = isInline
+    ? "div"
+    : "section";
   const containerClassName = isInline ? undefined : "card";
   const containerStyle = isInline ? undefined : { marginTop: 24 };
 
   if (loading && !data) {
     return (
-      <Container className={containerClassName} style={containerStyle}>
+      <ContainerTag className={containerClassName} style={containerStyle}>
         <h2 style={{ marginTop: 0 }}>Man of the Match</h2>
         <div className="muted">Laden…</div>
-      </Container>
+      </ContainerTag>
     );
   }
 
   return (
-    <Container className={containerClassName} style={containerStyle}>
+    <ContainerTag className={containerClassName} style={containerStyle}>
       <h2 style={{ marginTop: 0 }}>Man of the Match</h2>
       <p className="muted" style={{ marginTop: -4, marginBottom: 12 }}>
         {statusText}
@@ -322,6 +325,6 @@ export default function MvpVotingPanel({
           ) : null}
         </>
       )}
-    </Container>
+    </ContainerTag>
   );
 }
