@@ -30,7 +30,7 @@
     "@sentry/nextjs": "^10.43.0",
     "bcryptjs": "^3.0.3",
     "ical": "^0.8.0",
-    "ioredis": "^5.4.1",
+    "ioredis": "^5.10.0",
     "next": "16.1.6",
     "next-auth": "^4.24.12",
     "node-ical": "^0.20.1",
