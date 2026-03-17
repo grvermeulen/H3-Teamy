@@ -72,6 +72,12 @@ Review each changed file for:
 - Missing Sentry instrumentation in new catch blocks
 - Dutch strings for all user-facing messages
 
+## Phase 7: Doc update
+
+```bash
+npm run docs:generate
+```
+
 ## Report Format
 
 After running all phases, produce:
