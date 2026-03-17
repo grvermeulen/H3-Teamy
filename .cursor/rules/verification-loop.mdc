@@ -37,7 +37,7 @@ Fix errors; warnings are acceptable if pre-existing.
 ### Phase 4: Tests
 
 ```bash
-npx vitest run
+npm test
 ```
 
 All tests must pass. If a test fails:
@@ -53,6 +53,12 @@ Quick checks on changed files:
 - No `console.log` of sensitive data
 - Auth checks present on protected API routes
 - Prisma queries use parameterized inputs (default with Prisma ORM)
+
+**Automation gaps:** This phase is manual. Automated secret scanning and security linting are not configured. To strengthen it:
+
+- Add security-focused ESLint plugins (e.g. `eslint-plugin-security`, `eslint-plugin-no-secrets`) in `eslint.config.mjs`
+- Enable a pre-commit hook (e.g. husky) for secret scanning
+- Add a CI job for secret scanning (e.g. Gitleaks, TruffleHog)
 
 ### Phase 6: Diff Review
 

@@ -8,47 +8,14 @@ alwaysApply: false
 
 Before writing a new utility, helper, abstraction, or integration, search for existing solutions.
 
-## Decision Flow
+**Canonical content:** The full decision flow, matrix, and project-specific search locations live in `.cursor/skills/search-first/SKILL.md`. Use that as the single source of truth. This rule is a brief pointer; when applying Search First, read the skill file for the complete workflow.
 
-```
-1. Does it already exist in this repo?
-   → Search src/lib/, src/components/ with Grep/Glob
-   → Reuse and import — never duplicate
+## Summary
 
-2. Is this a common problem with a well-maintained npm package?
-   → Check npm for packages with good maintenance signals
-   → Prefer packages with: >1K weekly downloads, recent commits, TypeScript types
-
-3. Is there a pattern in the project that handles this?
-   → Check existing services, hooks, utilities for similar patterns
-   → Follow the established pattern rather than inventing a new one
-
-4. Nothing found?
-   → Write custom code, but informed by research
-   → Place it in the appropriate shared location (src/lib/ or src/components/)
-```
-
-## Decision Matrix
-
-| Signal | Action |
-|---|---|
-| Exact match in repo | **Reuse** — import the existing module |
-| Well-maintained npm package, MIT/Apache | **Adopt** — install and use directly |
-| Partial match, good foundation | **Extend** — install + write thin wrapper |
-| Nothing suitable | **Build** — write custom, place in src/lib/ |
-
-## Project-Specific Search Locations
-
-| Need | Check First |
-|---|---|
-| Date/time formatting | `src/lib/eventId.ts`, existing date utilities |
-| User display info | `src/lib/userUtils.ts` (`displayName`, etc.) |
-| Database queries | `src/lib/services/` for existing service methods |
-| Validation schemas | `src/lib/schemas/` for existing Zod schemas |
-| Auth utilities | `src/lib/authOptions.ts`, `src/lib/activeUser.ts` |
-| Badge/attendance logic | `src/lib/badges.ts`, `src/lib/training.ts` |
-| Cache operations | `src/lib/kv.ts` for Redis patterns |
-| Report generation | `src/lib/mvpNarrative.ts`, `src/lib/reportExtractProvider.ts` |
+1. Search `src/lib/`, `src/components/` with Grep/Glob — reuse, never duplicate
+2. Check npm for well-maintained packages (>1K weekly downloads, TypeScript types)
+3. Follow existing project patterns in services, hooks, utilities
+4. Only write custom code if nothing suitable exists; place in `src/lib/` or `src/components/`
 
 ## Anti-Patterns
 
