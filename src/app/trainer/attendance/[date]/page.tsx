@@ -2,12 +2,23 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 
-type Params = { params: { date: string } };
 type User = { id: string; name: string };
 
-export default function SessionChecklist({ params }: Params) {
-  const date = params.date;
+/**
+ * Resolves a single date segment value from route params.
+ * @param dateParam - Route date segment value from Next.js params.
+ * @returns The first date segment or an empty string if unavailable.
+ */
+export function resolveDateParam(dateParam: string | string[] | undefined): string {
+  if (Array.isArray(dateParam)) return dateParam[0] || "";
+  return dateParam || "";
+}
+
+export default function SessionChecklist() {
+  const params = useParams<{ date?: string | string[] }>();
+  const date = resolveDateParam(params?.date);
   const [roster, setRoster] = useState<User[]>([]);
   const [present, setPresent] = useState<Set<string>>(new Set());
   const [dirty, setDirty] = useState(false);
@@ -25,6 +36,11 @@ export default function SessionChecklist({ params }: Params) {
       const list: User[] = Array.isArray(users?.users) ? users.users : [];
       if (!mounted) return;
       setRoster(list);
+      if (!date) {
+        setPresent(new Set());
+        setDirty(false);
+        return;
+      }
       const att = await fetch(`/api/training/attendance?date=${encodeURIComponent(date)}`, { cache: "no-store" }).then((r) => r.json()).catch(() => ({ presentUserIds: [] }));
       if (!mounted) return;
       setPresent(new Set((att?.presentUserIds || []) as string[]));
@@ -45,6 +61,10 @@ export default function SessionChecklist({ params }: Params) {
   }
 
   async function onSave() {
+    if (!date) {
+      alert("Save failed: invalid date");
+      return;
+    }
     setSaving(true);
     try {
       const ids = Array.from(present);
