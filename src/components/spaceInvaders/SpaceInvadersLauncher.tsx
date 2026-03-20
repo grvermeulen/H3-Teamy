@@ -47,8 +47,9 @@ export default function SpaceInvadersLauncher() {
           <div className="grow">
             <div style={{ fontWeight: 600 }}>Space Invader</div>
             <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-              Klassiek schietspel — golven, wapen-upgrades en topscores op dit
-              apparaat. Pauzeer, sla op en sluit wanneer je wilt.
+              Golven, willekeurige power-ups uit de lucht, schilden, explosies
+              en wapenlevels tot Storm — alles lokaal op dit apparaat. Pauzeer,
+              sla op en sluit wanneer je wilt.
             </div>
           </div>
           <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>

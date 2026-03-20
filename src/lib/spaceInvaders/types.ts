@@ -1,15 +1,50 @@
 export type GameStatus = "playing" | "paused" | "gameover" | "wave_clear";
 
-export type PlayerBullet = { x: number; y: number };
+/** Player shots; optional vx for spread / fan fire */
+export type PlayerBullet = {
+  x: number;
+  y: number;
+  vx?: number;
+  vy?: number;
+};
 export type AlienBullet = { x: number; y: number };
+
+export type LootKind = "weapon" | "shield" | "burst";
+
+/** Falling power-up */
+export type LootDrop = {
+  x: number;
+  y: number;
+  vy: number;
+  kind: LootKind;
+  phase: number;
+};
+
+/** Short-lived visual particle */
+export type Particle = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  hue: number;
+  size: number;
+};
 
 export type GameState = {
   status: GameStatus;
   wave: number;
   lives: number;
   score: number;
-  /** 0 = single, 1 = double spread, 2 = triple + faster (see FIRE_INTERVAL) */
+  /** 0–4 — fan fire at high tiers; floor from wave + pickups (see FIRE_INTERVAL) */
   weaponLevel: number;
+  /** Extra hits absorbed (alien bullets) before life loss */
+  shieldCharges: number;
+  lootDrops: LootDrop[];
+  particles: Particle[];
+  /** Seconds until a random bonus crate may spawn from the sky */
+  lootSpawnTimer: number;
   playerX: number;
   /** alive[r][c] */
   alienGrid: boolean[][];
@@ -35,7 +70,7 @@ export type GameInput = {
 };
 
 export type SerializedGameV1 = {
-  v: 1;
+  v: 1 | 2;
   wave: number;
   lives: number;
   score: number;
@@ -54,6 +89,9 @@ export type SerializedGameV1 = {
   alienFireEvery: number;
   status: "playing" | "paused" | "wave_clear";
   waveClearRemaining?: number;
+  shieldCharges?: number;
+  lootDrops?: LootDrop[];
+  lootSpawnTimer?: number;
 };
 
 export type HighScoreEntry = {

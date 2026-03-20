@@ -25,8 +25,20 @@ export const ALIEN_SCORE_BASE = 10;
 /** Brief pause before the next wave spawns (seconds) */
 export const WAVE_CLEAR_DURATION = 1.55;
 
-/** Seconds between player shots at weapon level 0 / 1 / 2 */
-export const FIRE_INTERVAL: [number, number, number] = [0.42, 0.32, 0.22];
+/** Max weapon tier (0 = single … 4 = wide fan) */
+export const MAX_WEAPON_LEVEL = 4;
+/** Max shield charges stackable from pickups */
+export const MAX_SHIELD_CHARGES = 4;
+/** Falling power-up speed (px/s) */
+export const LOOT_FALL_SPEED = 55;
+/** Seconds between random sky bonus drops (re-randomized after each) */
+export const LOOT_SPAWN_MIN = 4.5;
+export const LOOT_SPAWN_MAX = 11;
+
+/** Seconds between player shots per weapon level */
+export const FIRE_INTERVAL: [number, number, number, number, number] = [
+  0.44, 0.34, 0.26, 0.19, 0.14,
+];
 
 /** Base alien horizontal step (px) per move */
 export const ALIEN_STEP_X = 8;

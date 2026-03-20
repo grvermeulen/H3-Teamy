@@ -13,7 +13,7 @@ export function loadSave(): GameState | null {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw) as SerializedGameV1;
-    if (data?.v !== 1) return null;
+    if (data?.v !== 1 && data?.v !== 2) return null;
     return deserializeGame(data);
   } catch {
     return null;

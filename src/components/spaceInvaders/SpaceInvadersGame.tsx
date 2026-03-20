@@ -27,8 +27,13 @@ type Props = {
   onClose: () => void;
 };
 
-const weaponLabel = (lvl: number) =>
-  lvl <= 0 ? "Basis" : lvl === 1 ? "Dubbel" : "Triple";
+const weaponLabel = (lvl: number) => {
+  if (lvl <= 0) return "Basis";
+  if (lvl === 1) return "Dubbel";
+  if (lvl === 2) return "Triple";
+  if (lvl === 3) return "Salvo";
+  return "Storm";
+};
 
 export default function SpaceInvadersGame({ initialState, onClose }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -45,6 +50,7 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
     wave: initialState.wave,
     lives: initialState.lives,
     weaponLevel: initialState.weaponLevel,
+    shieldCharges: initialState.shieldCharges,
     status: initialState.status,
   });
   const hudSnapRef = useRef({
@@ -52,8 +58,10 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
     wave: initialState.wave,
     lives: initialState.lives,
     weaponLevel: initialState.weaponLevel,
+    shieldCharges: initialState.shieldCharges,
     status: initialState.status,
   });
+  const drawTimeRef = useRef(0);
   const [mounted, setMounted] = useState(false);
   /** Mobile-first: show thumb controls unless wide + fine pointer */
   const [showTouchBar, setShowTouchBar] = useState(true);
@@ -95,6 +103,7 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
       prev.wave === s.wave &&
       prev.lives === s.lives &&
       prev.weaponLevel === s.weaponLevel &&
+      prev.shieldCharges === s.shieldCharges &&
       prev.status === s.status
     ) {
       return;
@@ -104,6 +113,7 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
       wave: s.wave,
       lives: s.lives,
       weaponLevel: s.weaponLevel,
+      shieldCharges: s.shieldCharges,
       status: s.status,
     };
     hudSnapRef.current = next;
@@ -135,7 +145,7 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.translate(ox, oy);
     ctx.scale(scale, scale);
-    drawGame(ctx, stateRef.current);
+    drawGame(ctx, stateRef.current, drawTimeRef.current);
   }, []);
 
   useLayoutEffect(() => {
@@ -160,6 +170,7 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
     const loop = (ts: number) => {
       const last = lastTsRef.current;
       lastTsRef.current = ts;
+      drawTimeRef.current = ts / 1000;
       if (last != null) {
         const dt = Math.min((ts - last) / 1000, 0.064);
         const cur = stateRef.current;
@@ -275,13 +286,13 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 200,
+        zIndex: 3200,
         minHeight: "100dvh",
         background: "#010409",
         display: "flex",
         flexDirection: "column",
         paddingTop: "env(safe-area-inset-top)",
-        paddingBottom: "env(safe-area-inset-bottom)",
+        paddingBottom: "calc(76px + env(safe-area-inset-bottom, 0px))",
         paddingLeft: "env(safe-area-inset-left)",
         paddingRight: "env(safe-area-inset-right)",
         touchAction: "none",
@@ -312,6 +323,7 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
           <span>Golf {hud.wave}</span>
           <span>Levens {hud.lives}</span>
           <span>Wapen {weaponLabel(hud.weaponLevel)}</span>
+          <span>Schild {hud.shieldCharges}</span>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <button
@@ -375,8 +387,8 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
           }}
         >
           <p style={{ margin: "0 0 8px", fontSize: 14, color: "#c9d1d9" }}>
-            Sleepstand: gebruik de knoppen onderaan om te bewegen en te
-            schieten.
+            Sleepstand: gebruik de grote knoppen hieronder (boven de menubalk)
+            om te bewegen en te schieten.
           </p>
           <button type="button" onClick={dismissTouchTip}>
             OK
@@ -388,19 +400,22 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
         <div
           style={{
             flexShrink: 0,
-            padding: "10px 12px",
+            padding: "14px 14px 10px",
             display: "grid",
             gridTemplateColumns: "1fr 1fr 1fr",
-            gap: 10,
-            borderTop: "1px solid #21262d",
+            gap: 14,
+            borderTop: "1px solid #30363d",
+            background: "linear-gradient(180deg, #0d1117 0%, #010409 100%)",
           }}
         >
           <button
             type="button"
             style={{
-              minHeight: 48,
+              minHeight: 58,
               touchAction: "manipulation",
-              fontSize: 16,
+              fontSize: 18,
+              fontWeight: 600,
+              borderRadius: 10,
             }}
             onPointerDown={(e) => {
               e.preventDefault();
@@ -415,9 +430,11 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
           <button
             type="button"
             style={{
-              minHeight: 48,
+              minHeight: 58,
               touchAction: "manipulation",
-              fontSize: 16,
+              fontSize: 18,
+              fontWeight: 600,
+              borderRadius: 10,
             }}
             onPointerDown={(e) => {
               e.preventDefault();
@@ -432,9 +449,11 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
           <button
             type="button"
             style={{
-              minHeight: 48,
+              minHeight: 58,
               touchAction: "manipulation",
-              fontSize: 16,
+              fontSize: 18,
+              fontWeight: 600,
+              borderRadius: 10,
             }}
             onPointerDown={(e) => {
               e.preventDefault();

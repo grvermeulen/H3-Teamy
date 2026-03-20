@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   alienFireEveryForWave,
   alienMoveEveryForWave,
+  createBurst,
   createInitialState,
   spawnWave,
   tick,
@@ -74,15 +75,34 @@ describe("wave_clear interstitial", () => {
 });
 
 describe("spawnWave", () => {
-  it("resets grid and matches weapon to wave", () => {
+  it("resets grid and preserves weapon above wave floor", () => {
     const cleared = {
       ...createInitialState(),
       wave: 4,
       score: 999,
+      weaponLevel: 3,
     };
     const next = spawnWave(cleared);
     expect(next.wave).toBe(4);
-    expect(next.weaponLevel).toBe(weaponLevelForWave(4));
+    expect(next.weaponLevel).toBe(3);
     expect(next.alienGrid.flat().every(Boolean)).toBe(true);
+  });
+
+  it("bumps weapon to at least wave floor when behind", () => {
+    const cleared = {
+      ...createInitialState(),
+      wave: 5,
+      weaponLevel: 0,
+    };
+    const next = spawnWave(cleared);
+    expect(next.weaponLevel).toBe(weaponLevelForWave(5));
+  });
+});
+
+describe("createBurst", () => {
+  it("returns the requested particle count", () => {
+    const p = createBurst(100, 200, 7, 120);
+    expect(p.length).toBe(7);
+    expect(p[0]!.life).toBeGreaterThan(0);
   });
 });
