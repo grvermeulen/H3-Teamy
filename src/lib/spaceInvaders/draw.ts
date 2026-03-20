@@ -63,6 +63,18 @@ export function drawGame(
     ctx.fillRect(b.x - BULLET_W / 2, b.y, BULLET_W, BULLET_H);
   }
 
+  if (state.status === "wave_clear") {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+    ctx.fillRect(0, 0, GAME_W, GAME_H);
+    ctx.fillStyle = "#f0f6fc";
+    ctx.font = "bold 24px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`Golf ${state.wave}`, GAME_W / 2, GAME_H / 2 - 12);
+    ctx.font = "15px system-ui, sans-serif";
+    ctx.fillStyle = "#8b949e";
+    ctx.fillText("Volgende golf…", GAME_W / 2, GAME_H / 2 + 16);
+  }
+
   if (state.status === "paused") {
     ctx.fillStyle = "rgba(0,0,0,0.55)";
     ctx.fillRect(0, 0, GAME_W, GAME_H);

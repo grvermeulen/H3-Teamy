@@ -22,6 +22,9 @@ export const ALIEN_BULLET_SPEED = 140;
 export const INITIAL_LIVES = 3;
 export const ALIEN_SCORE_BASE = 10;
 
+/** Brief pause before the next wave spawns (seconds) */
+export const WAVE_CLEAR_DURATION = 1.55;
+
 /** Seconds between player shots at weapon level 0 / 1 / 2 */
 export const FIRE_INTERVAL: [number, number, number] = [0.42, 0.32, 0.22];
 

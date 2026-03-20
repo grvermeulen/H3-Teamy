@@ -15,6 +15,7 @@ import {
   GAME_H,
   GAME_W,
   INITIAL_LIVES,
+  WAVE_CLEAR_DURATION,
   PLAYER_BULLET_SPEED,
   PLAYER_H,
   PLAYER_SPEED,
@@ -63,6 +64,7 @@ export function createInitialState(): GameState {
     playerFireCooldown: 0,
     alienFireAcc: 0,
     alienFireEvery: alienFireEveryForWave(wave),
+    waveClearRemaining: 0,
   };
 }
 
@@ -81,6 +83,7 @@ export function spawnWave(state: GameState): GameState {
     playerBullets: [],
     alienBullets: [],
     status: "playing",
+    waveClearRemaining: 0,
   };
 }
 
@@ -165,6 +168,18 @@ export function tick(
   dt: number,
   input: GameInput,
 ): GameState {
+  if (state.status === "wave_clear") {
+    const t = state.waveClearRemaining - dt;
+    if (t <= 0) {
+      return spawnWave({
+        ...state,
+        status: "playing",
+        waveClearRemaining: 0,
+      });
+    }
+    return { ...state, waveClearRemaining: t };
+  }
+
   if (state.status !== "playing") return state;
 
   let next: GameState = { ...state };
@@ -284,12 +299,17 @@ export function tick(
   // All aliens dead -> next wave
   const aliveCount = grid.flat().filter(Boolean).length;
   if (aliveCount === 0) {
-    next = {
+    return {
       ...next,
+      status: "wave_clear",
       wave: next.wave + 1,
+      waveClearRemaining: WAVE_CLEAR_DURATION,
+      alienGrid: emptyGrid(),
+      playerBullets: [],
+      alienBullets: [],
+      alienMoveAcc: 0,
+      alienFireAcc: 0,
     };
-    next = spawnWave(next);
-    return next;
   }
 
   // Alien bullets vs player
@@ -339,6 +359,12 @@ export function tick(
 
 export function serializeGame(state: GameState): SerializedGameV1 | null {
   if (state.status === "gameover") return null;
+  const status: SerializedGameV1["status"] =
+    state.status === "paused"
+      ? "paused"
+      : state.status === "wave_clear"
+        ? "wave_clear"
+        : "playing";
   return {
     v: 1,
     wave: state.wave,
@@ -357,13 +383,21 @@ export function serializeGame(state: GameState): SerializedGameV1 | null {
     playerFireCooldown: state.playerFireCooldown,
     alienFireAcc: state.alienFireAcc,
     alienFireEvery: state.alienFireEvery,
-    status: state.status === "paused" ? "paused" : "playing",
+    status,
+    waveClearRemaining:
+      state.status === "wave_clear" ? state.waveClearRemaining : undefined,
   };
 }
 
 export function deserializeGame(data: SerializedGameV1): GameState {
+  const status: GameState["status"] =
+    data.status === "paused"
+      ? "paused"
+      : data.status === "wave_clear"
+        ? "wave_clear"
+        : "playing";
   return {
-    status: data.status === "paused" ? "paused" : "playing",
+    status,
     wave: data.wave,
     lives: data.lives,
     score: data.score,
@@ -380,5 +414,11 @@ export function deserializeGame(data: SerializedGameV1): GameState {
     playerFireCooldown: data.playerFireCooldown,
     alienFireAcc: data.alienFireAcc,
     alienFireEvery: data.alienFireEvery,
+    waveClearRemaining:
+      data.status === "wave_clear"
+        ? typeof data.waveClearRemaining === "number"
+          ? data.waveClearRemaining
+          : WAVE_CLEAR_DURATION
+        : 0,
   };
 }

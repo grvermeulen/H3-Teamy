@@ -1,4 +1,4 @@
-export type GameStatus = "playing" | "paused" | "gameover";
+export type GameStatus = "playing" | "paused" | "gameover" | "wave_clear";
 
 export type PlayerBullet = { x: number; y: number };
 export type AlienBullet = { x: number; y: number };
@@ -24,6 +24,8 @@ export type GameState = {
   playerFireCooldown: number;
   alienFireAcc: number;
   alienFireEvery: number;
+  /** Seconds remaining for wave-clear interstitial; 0 when not active */
+  waveClearRemaining: number;
 };
 
 export type GameInput = {
@@ -50,7 +52,8 @@ export type SerializedGameV1 = {
   playerFireCooldown: number;
   alienFireAcc: number;
   alienFireEvery: number;
-  status: "playing" | "paused";
+  status: "playing" | "paused" | "wave_clear";
+  waveClearRemaining?: number;
 };
 
 export type HighScoreEntry = {

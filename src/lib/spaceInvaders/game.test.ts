@@ -3,10 +3,12 @@ import {
   alienFireEveryForWave,
   alienMoveEveryForWave,
   createInitialState,
+  spawnWave,
   tick,
   weaponLevelForWave,
 } from "./game";
-import { GAME_W } from "./constants";
+import { ALIEN_COLS, ALIEN_ROWS, GAME_W } from "./constants";
+import type { GameState } from "./types";
 
 describe("weaponLevelForWave", () => {
   it("ramps with wave", () => {
@@ -46,5 +48,41 @@ describe("tick", () => {
     }
     expect(s.playerX).toBeGreaterThan(0);
     expect(s.playerX).toBeLessThanOrEqual(GAME_W / 2);
+  });
+});
+
+describe("wave_clear interstitial", () => {
+  it("counts down and spawns next wave", () => {
+    const emptyAliens = Array.from({ length: ALIEN_ROWS }, () =>
+      Array.from({ length: ALIEN_COLS }, () => false),
+    );
+    let s: GameState = {
+      ...createInitialState(),
+      status: "wave_clear",
+      wave: 2,
+      waveClearRemaining: 0.15,
+      alienGrid: emptyAliens,
+      playerBullets: [],
+      alienBullets: [],
+    };
+    s = tick(s, 0.2, { moveLeft: false, moveRight: false, fire: false });
+    expect(s.status).toBe("playing");
+    expect(s.wave).toBe(2);
+    const alive = s.alienGrid.flat().filter(Boolean).length;
+    expect(alive).toBeGreaterThan(0);
+  });
+});
+
+describe("spawnWave", () => {
+  it("resets grid and matches weapon to wave", () => {
+    const cleared = {
+      ...createInitialState(),
+      wave: 4,
+      score: 999,
+    };
+    const next = spawnWave(cleared);
+    expect(next.wave).toBe(4);
+    expect(next.weaponLevel).toBe(weaponLevelForWave(4));
+    expect(next.alienGrid.flat().every(Boolean)).toBe(true);
   });
 });

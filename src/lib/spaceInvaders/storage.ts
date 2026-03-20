@@ -3,6 +3,8 @@ import type { GameState, HighScoreEntry, SerializedGameV1 } from "./types";
 
 export const SAVE_KEY = "h3-space-invaders-save-v1";
 export const SCORES_KEY = "h3-space-invaders-scores-v1";
+/** First-run mobile touch hint (dismiss persists) */
+export const TOUCH_TIP_KEY = "h3-space-invaders-touch-tip-v1";
 export const MAX_HIGH_SCORES = 10;
 
 export function loadSave(): GameState | null {
@@ -52,10 +54,17 @@ export function loadHighScores(): HighScoreEntry[] {
   }
 }
 
+/** Pure merge for tests and deterministic ranking */
+export function mergeHighScores(
+  existing: HighScoreEntry[],
+  entry: HighScoreEntry,
+  max = MAX_HIGH_SCORES,
+): HighScoreEntry[] {
+  return [...existing, entry].sort((a, b) => b.score - a.score).slice(0, max);
+}
+
 export function addHighScore(entry: HighScoreEntry): HighScoreEntry[] {
-  const list = [...loadHighScores(), entry]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_HIGH_SCORES);
+  const list = mergeHighScores(loadHighScores(), entry);
   if (typeof window !== "undefined") {
     localStorage.setItem(SCORES_KEY, JSON.stringify(list));
   }
