@@ -1,0 +1,97 @@
+---
+description: Pre-PR verification loop — run before creating or updating pull requests
+globs:
+alwaysApply: false
+---
+
+# Verification Loop
+
+Run this checklist after completing a feature or significant change, before creating a PR.
+
+## Phases
+
+### Phase 1: Build
+
+```bash
+npm run build
+```
+
+If build fails, stop and fix before continuing.
+
+### Phase 2: Type Check
+
+```bash
+npx tsc --noEmit
+```
+
+Fix all type errors. Zero tolerance.
+
+### Phase 3: Lint
+
+```bash
+npm run lint
+```
+
+Fix errors; warnings are acceptable if pre-existing.
+
+### Phase 4: Tests
+
+```bash
+npm test
+```
+
+All tests must pass. If a test fails:
+1. Check if the failure is from your change or pre-existing
+2. Fix your change if it caused the failure
+3. Never delete or skip a test to make the suite pass
+
+### Phase 5: Security Scan
+
+Quick checks on changed files:
+
+- No hardcoded secrets (`sk-`, `ghp_`, `AKIA`, password literals)
+- No `console.log` of sensitive data
+- Auth checks present on protected API routes
+- Prisma queries use parameterized inputs (default with Prisma ORM)
+
+**Automation gaps:** This phase is manual. Automated secret scanning and security linting are not configured. To strengthen it:
+
+- Add security-focused ESLint plugins (e.g. `eslint-plugin-security`, `eslint-plugin-no-secrets`) in `eslint.config.mjs`
+- Enable a pre-commit hook (e.g. husky) for secret scanning
+- Add a CI job for secret scanning (e.g. Gitleaks, TruffleHog)
+
+### Phase 6: Diff Review
+
+```bash
+git diff --stat
+```
+
+Review each changed file for:
+- Unintended changes (formatting-only diffs, accidental file modifications)
+- Missing error handling in new code paths
+- Missing Sentry instrumentation in new catch blocks
+- Dutch strings for all user-facing messages
+
+## Report Format
+
+After running all phases:
+
+```
+VERIFICATION REPORT
+==================
+Build:     [PASS/FAIL]
+Types:     [PASS/FAIL] (X errors)
+Lint:      [PASS/FAIL] (X warnings)
+Tests:     [PASS/FAIL] (X/Y passed)
+Security:  [PASS/FAIL] (X issues)
+Diff:      X files changed
+
+Overall:   [READY/NOT READY] for PR
+```
+
+## When to Run
+
+- After completing a feature branch
+- Before opening or updating a PR
+- After resolving merge conflicts
+- After a major refactor

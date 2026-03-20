@@ -1,0 +1,141 @@
+---
+description: React and Next.js component patterns, hooks, and performance optimization
+globs: "src/components/**/*.tsx, src/app/**/*.tsx, src/app/**/page.tsx"
+alwaysApply: false
+---
+
+# Frontend Patterns
+
+## Component Architecture
+
+### Server Components by Default
+
+Use Server Components for pages and data-fetching. Only add `'use client'` when the component needs interactivity (useState, useEffect, event handlers, browser APIs).
+
+```typescript
+// Server Component (default) — fetches data directly
+export default async function EventsPage() {
+  const events = await EventService.getUpcoming();
+  return <EventList events={events} />;
+}
+```
+
+```typescript
+// Client Component — only when interactivity is needed
+'use client';
+export function RsvpButton({ eventId }: { eventId: string }) {
+  const [loading, setLoading] = useState(false);
+  // ...
+}
+```
+
+### Composition Over Props Drilling
+
+When props pass through 3+ levels, use composition or context:
+
+```typescript
+// Instead of drilling user through 4 components:
+<Page user={user}>
+  <Layout user={user}>
+    <Header user={user}>
+      <Avatar user={user} />
+    </Header>
+  </Layout>
+</Page>
+
+// Use composition:
+<Page>
+  <Layout>
+    <Header>
+      <Avatar />  {/* reads user from context or server session */}
+    </Header>
+  </Layout>
+</Page>
+```
+
+## Custom Hooks
+
+### useDebounce
+
+```typescript
+export function useDebounce<T>(value: T, delayMs: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delayMs);
+    return () => clearTimeout(handler);
+  }, [value, delayMs]);
+
+  return debouncedValue;
+}
+```
+
+### useToggle
+
+```typescript
+export function useToggle(initial = false): [boolean, () => void] {
+  const [value, setValue] = useState(initial);
+  const toggle = useCallback(() => setValue((v) => !v), []);
+  return [value, toggle];
+}
+```
+
+## Performance
+
+- Use `React.memo` for pure components rendered in lists
+- Use `useMemo` for expensive computations that depend on specific values
+- Use `useCallback` for functions passed as props to memoized children
+- Use `next/dynamic` with `{ ssr: false }` for heavy client-only components
+- Use `loading.tsx` files for Suspense boundaries in App Router
+- Avoid creating objects/arrays inline in JSX props (causes unnecessary re-renders)
+
+## React Pitfalls to Avoid
+
+- Missing dependency arrays in `useEffect`/`useMemo`/`useCallback`
+- Calling `setState` during render (infinite loop)
+- Using array index as `key` when items can reorder
+- Using `useState`/`useEffect` in Server Components
+- Not handling loading and error states for data fetching
+- Stale closures in event handlers capturing old state values
+
+## Error Boundaries
+
+Every page-level route should have an `error.tsx`:
+
+```typescript
+'use client';
+import { useEffect } from 'react';
+import * as Sentry from '@sentry/nextjs';
+
+export default function ErrorPage({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  useEffect(() => {
+    Sentry.captureException(error);
+  }, [error]);
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+      <h2 className="text-xl font-bold">Er ging iets mis</h2>
+      <button
+        onClick={reset}
+        className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+      >
+        Opnieuw proberen
+      </button>
+    </div>
+  );
+}
+```
+
+## Accessibility
+
+- Use semantic HTML (`button` for actions, `a` for navigation, `form` for submissions)
+- Add `aria-label` to icon-only buttons
+- Ensure keyboard navigation works (Tab, Enter, Escape for modals)
+- Use `role="dialog"` and `aria-modal="true"` for modals
+- Test with screen reader (or at minimum, check that labels are present)

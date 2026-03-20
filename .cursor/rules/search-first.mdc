@@ -1,0 +1,25 @@
+---
+description: Research before coding — search for existing solutions before writing custom code
+globs:
+alwaysApply: false
+---
+
+# Search First
+
+Before writing a new utility, helper, abstraction, or integration, search for existing solutions.
+
+**Canonical content:** The full decision flow, matrix, and project-specific search locations live in `.cursor/skills/search-first/SKILL.md`. Use that as the single source of truth. This rule is a brief pointer; when applying Search First, read the skill file for the complete workflow.
+
+## Summary
+
+1. Search `src/lib/`, `src/components/` with Grep/Glob — reuse, never duplicate
+2. Check npm for well-maintained packages (>1K weekly downloads, TypeScript types)
+3. Follow existing project patterns in services, hooks, utilities
+4. Only write custom code if nothing suitable exists; place in `src/lib/` or `src/components/`
+
+## Anti-Patterns
+
+- Writing a new helper without checking if one exists in `src/lib/`
+- Installing a massive package for one small feature
+- Wrapping a library so heavily it loses its benefits
+- Copy-pasting code between files instead of extracting to a shared module

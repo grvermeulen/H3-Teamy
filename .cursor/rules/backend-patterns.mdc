@@ -1,0 +1,189 @@
+---
+description: Backend architecture patterns for services, Prisma, caching, and middleware
+globs: "src/lib/**/*.ts, src/app/api/**/*.ts"
+alwaysApply: false
+---
+
+# Backend Patterns
+
+## Service Layer
+
+Business logic belongs in `src/lib/services/` or `src/lib/*.ts`, not in API routes.
+
+```typescript
+// src/lib/services/userService.ts
+import { prisma } from "@/lib/db";
+import type { User } from "@prisma/client";
+
+export async function getActiveUsers(refresh = false): Promise<User[]> {
+  const users = await prisma.user.findMany({
+    select: { id: true, firstName: true, lastName: true, email: true },
+    take: 100,
+    orderBy: { updatedAt: "desc" },
+  });
+  return users;
+}
+```
+
+```typescript
+// src/app/api/users/route.ts — thin handler
+import { getActiveUsers } from "@/lib/services/userService";
+
+export async function GET() {
+  const users = await getActiveUsers();
+  return NextResponse.json({ data: users });
+}
+```
+
+## Prisma Query Patterns
+
+### Always Select Specific Fields
+
+```typescript
+// Prefer explicit select over returning everything
+const user = await prisma.user.findUnique({
+  where: { id: userId },
+  select: { id: true, name: true, email: true, role: true },
+});
+```
+
+### Prevent N+1 Queries
+
+```typescript
+// BAD: N+1
+const users = await prisma.user.findMany();
+for (const user of users) {
+  user.rsvps = await prisma.rsvp.findMany({ where: { userId: user.id } });
+}
+
+// GOOD: Include relations
+const users = await prisma.user.findMany({
+  include: { rsvps: true },
+});
+
+// GOOD: Separate batch query
+const users = await prisma.user.findMany();
+const userIds = users.map((u) => u.id);
+const rsvps = await prisma.rsvp.findMany({
+  where: { userId: { in: userIds } },
+});
+```
+
+### Transactions for Atomicity
+
+```typescript
+await prisma.$transaction(async (tx) => {
+  const rsvp = await tx.rsvp.upsert({
+    where: { userId_eventId: { userId, eventId } },
+    create: { userId, eventId, status },
+    update: { status },
+  });
+  await tx.attendance.update({
+    where: { id: attendanceId },
+    data: { count: { increment: 1 } },
+  });
+  return rsvp;
+});
+```
+
+### Bounded List Queries
+
+```typescript
+// Always use `take` on list queries to prevent unbounded results
+const events = await prisma.event.findMany({
+  orderBy: { date: "desc" },
+  take: 100,
+});
+```
+
+## Redis/KV Caching
+
+The project uses ioredis via `src/lib/kv.ts`. Exports `kvGetJson` and `kvSetJson` for generic caching. Cache failures must never break the request:
+
+```typescript
+import * as Sentry from "@sentry/nextjs";
+import { kvGetJson, kvSetJson } from "@/lib/kv";
+import { getActiveUsers } from "@/lib/services/userService";
+
+async function getUsersWithCache(): Promise<User[]> {
+  try {
+    const cached = await kvGetJson<User[]>("users:roster");
+    if (cached?.length) return cached;
+  } catch (error) {
+    Sentry.captureException(error);
+  }
+
+  const users = await getActiveUsers();
+
+  try {
+    await kvSetJson("users:roster", users);
+  } catch (error) {
+    Sentry.captureException(error);
+  }
+
+  return users;
+}
+```
+
+## Error Handling
+
+```typescript
+import * as Sentry from "@sentry/nextjs";
+
+class AppError extends Error {
+  constructor(
+    public statusCode: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+function handleApiError(error: unknown): NextResponse {
+  if (error instanceof z.ZodError) {
+    return NextResponse.json(
+      { error: "Ongeldige invoer", details: error.issues },
+      { status: 400 },
+    );
+  }
+
+  if (error instanceof AppError) {
+    return NextResponse.json(
+      { error: error.message },
+      { status: error.statusCode },
+    );
+  }
+
+  Sentry.captureException(error);
+  return NextResponse.json(
+    { error: "Er ging iets mis" },
+    { status: 500 },
+  );
+}
+```
+
+## Retry with Backoff
+
+For external API calls (OpenAI, WaAPI, OCR worker, Sportlink):
+
+```typescript
+async function fetchWithRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+): Promise<T> {
+  let lastError: Error = new Error("No attempts made");
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt < maxRetries - 1) {
+        await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 1000));
+      }
+    }
+  }
+
+  throw lastError;
+}
+```
