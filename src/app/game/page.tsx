@@ -305,7 +305,7 @@ export default function SpaceInvadersGame() {
             "#00ffff",
           );
           setLives((l) => {
-            const newLives = l - 1;
+            const newLives = Math.max(0, l - 1);
             if (newLives <= 0) {
               setGameOver(true);
             }
