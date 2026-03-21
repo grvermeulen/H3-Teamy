@@ -47,6 +47,19 @@ jobs:
               return;
             }
 
+            const authorLogin = (pr.user?.login ?? "").toLowerCase();
+            const isDependabotPr =
+              authorLogin === "dependabot[bot]" ||
+              authorLogin === "app/dependabot" ||
+              authorLogin.includes("dependabot");
+
+            if (!isDependabotPr) {
+              core.info(
+                `PR #${prNumber} is niet door Dependabot aangemaakt (${pr.user?.login ?? "unknown"}), gate niet afdwingen.`,
+              );
+              return;
+            }
+
             const isCoderabbit = (login) =>
               typeof login === "string" && login.toLowerCase().startsWith("coderabbitai");
 
