@@ -56,6 +56,18 @@ Optional:
 
 - `WAAPI_BASE_URL=https://waapi.app/api/v1` (defaults to this value)
 
+### Finding the correct `WAAPI_INSTANCE_ID`
+
+The instance id in env must be the **API instance id** (used in URLs like `/instances/{id}/...`), not necessarily a small number shown elsewhere in the WaAPI UI.
+
+List all instances with **only** your API token:
+
+`npx tsx scripts/waapi-list-instances.ts`
+
+(Set `WAAPI_API_TOKEN` first, e.g. from `vercel env pull`.) Copy the **id** column of the instance that is logged in to WhatsApp for the team, then update `WAAPI_INSTANCE_ID` in Vercel (Preview + Production).
+
+WaAPI reference: [list instances](https://waapi.readme.io/reference/list-instances).
+
 ### Why notifications previously looked "successful" but were not delivered
 
 The old implementation dispatched the WAAPI send call in fire-and-forget style from `report/generate`.
