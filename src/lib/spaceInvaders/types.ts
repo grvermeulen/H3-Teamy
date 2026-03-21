@@ -50,6 +50,9 @@ export type Particle = {
   size: number;
 };
 
+/**
+ * Volledige simulatiestatus voor één Space Invaders-sessie (speler, aliens, kogels, golf, timers).
+ */
 export type GameState = {
   status: GameStatus;
   wave: number;
@@ -81,6 +84,7 @@ export type GameState = {
   waveClearRemaining: number;
 };
 
+/** Invoer voor één `tick`: beweging en vuur (keyboard/touch wordt upstream gezet). */
 export type GameInput = {
   moveLeft: boolean;
   moveRight: boolean;
@@ -112,6 +116,7 @@ export type SerializedGameV1 = {
   lootSpawnTimer?: number;
 };
 
+/** Highscore-regel; `at` is ISO-8601 UTC (`toISOString()`). */
 export type HighScoreEntry = {
   score: number;
   wave: number;

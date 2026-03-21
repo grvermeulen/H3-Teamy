@@ -1,5 +1,13 @@
 # Docs Contribution Guide
 
+## CodeRabbit & docstrings (min. 80%)
+
+- Het repository bevat [`.coderabbit.yaml`](../.coderabbit.yaml) met **pre-merge docstring coverage**: drempel **80%**, modus **warning** (zichtbaar in de PR-check totdat de dekking klopt).
+- **Geëxporteerde** functies, hooks, types en componenten in `src/**/*.{ts,tsx}`: voorzie van zinvolle JSDoc (`/** ... */`), liefst met `@param` / `@returns` waar dat helpt.
+- Ontbreekt er documentatie: gebruik in de PR walkthrough **Generate docstrings** of het commando `@coderabbitai generate docstrings` (zie [CodeRabbit docstrings](https://docs.coderabbit.ai/finishing-touches/docstrings/)).
+
+## API & feature docs
+
 - Every API route must include either Zod schemas or a docblock describing request/response.
 - Update the relevant `docs/tech/.../README.md` when changing a feature.
 - Run `npm run docs:generate` before merging.

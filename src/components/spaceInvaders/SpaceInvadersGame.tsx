@@ -1,7 +1,6 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
-import type { CSSProperties } from "react";
 import {
   useCallback,
   useEffect,
@@ -9,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { ReactPortal } from "react";
 import { createPortal } from "react-dom";
 import { GAME_H, GAME_W } from "@/lib/spaceInvaders/constants";
 import { drawGame } from "@/lib/spaceInvaders/draw";
@@ -28,27 +28,25 @@ type Props = {
   onClose: () => void;
 };
 
-/** Voorkomt tekstselectie / iOS callout bij lang indrukken op game-knoppen */
-const touchGameButtonStyle: CSSProperties = {
-  minHeight: 58,
-  touchAction: "manipulation",
-  fontSize: 18,
-  fontWeight: 600,
-  borderRadius: 10,
-  userSelect: "none",
-  WebkitUserSelect: "none",
-  WebkitTouchCallout: "none",
-};
+const touchGameButtonClass =
+  "min-h-[58px] touch-manipulation text-lg font-semibold rounded-[10px] select-none [-webkit-user-select:none] [-webkit-touch-callout:none]";
 
 const weaponLabel = (lvl: number) => {
   if (lvl <= 0) return "Basis";
   if (lvl === 1) return "Dubbel";
-  if (lvl === 2) return "Triple";
-  if (lvl === 3) return "Salvo";
+  if (lvl === 2) return "Drievoudig";
+  if (lvl === 3) return "Vijfschot";
   return "Storm";
 };
 
-export default function SpaceInvadersGame({ initialState, onClose }: Props) {
+/**
+ * Volledige Space Invaders-sessie in een modal overlay: canvas, HUD, touch- en toetsenbordbediening, opslag en highscores.
+ */
+export default function SpaceInvadersGame({
+  initialState,
+  onClose,
+}: Props): ReactPortal | null {
+  const dialogRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stateRef = useRef<GameState>(initialState);
   const inputRef = useRef<InputRef>({
@@ -86,6 +84,11 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
   }, []);
 
   useEffect(() => {
+    if (!mounted) return;
+    dialogRef.current?.focus();
+  }, [mounted]);
+
+  useEffect(() => {
     const q = window.matchMedia("(max-width: 768px), (pointer: coarse)");
     const apply = () => setShowTouchBar(q.matches);
     apply();
@@ -97,8 +100,8 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
     if (!showTouchBar) return;
     try {
       if (!localStorage.getItem(TOUCH_TIP_KEY)) setShowFirstTouchTip(true);
-    } catch {
-      /* ignore */
+    } catch (error: unknown) {
+      Sentry.captureException(error);
     }
   }, [showTouchBar]);
 
@@ -190,8 +193,8 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
         if (cur.status === "playing" || cur.status === "wave_clear") {
           try {
             stateRef.current = tick(cur, dt, inputRef.current);
-          } catch (e) {
-            Sentry.captureException(e);
+          } catch (error: unknown) {
+            Sentry.captureException(error);
           }
         }
         syncHud(stateRef.current);
@@ -208,8 +211,8 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
   const dismissTouchTip = useCallback(() => {
     try {
       localStorage.setItem(TOUCH_TIP_KEY, "1");
-    } catch {
-      /* ignore */
+    } catch (error: unknown) {
+      Sentry.captureException(error);
     }
     setShowFirstTouchTip(false);
   }, []);
@@ -296,49 +299,22 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
 
   const overlay = (
     <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 3200,
-        minHeight: "100dvh",
-        background: "#010409",
-        display: "flex",
-        flexDirection: "column",
-        paddingTop: "env(safe-area-inset-top)",
-        paddingBottom: "calc(76px + env(safe-area-inset-bottom, 0px))",
-        paddingLeft: "env(safe-area-inset-left)",
-        paddingRight: "env(safe-area-inset-right)",
-        touchAction: "none",
-      }}
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Space Invaders"
+      tabIndex={-1}
+      className="fixed inset-0 z-[3200] flex min-h-dvh flex-col touch-none bg-[#010409] pt-[env(safe-area-inset-top)] pb-[calc(76px+env(safe-area-inset-bottom,0px))] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
     >
-      <div
-        style={{
-          flexShrink: 0,
-          padding: "8px 12px",
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 8,
-          alignItems: "center",
-          justifyContent: "space-between",
-          borderBottom: "1px solid #21262d",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 10,
-            fontSize: 14,
-            color: "#c9d1d9",
-          }}
-        >
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#21262d] px-3 py-2">
+        <div className="flex flex-wrap gap-2.5 text-sm text-[#c9d1d9]">
           <span>Score {hud.score}</span>
           <span>Golf {hud.wave}</span>
           <span>Levens {hud.lives}</span>
           <span>Wapen {weaponLabel(hud.weaponLevel)}</span>
           <span>Schild {hud.shieldCharges}</span>
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={pauseToggle}
@@ -360,46 +336,24 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
         </div>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+      <div className="relative min-h-0 flex-1">
         <canvas
           ref={canvasRef}
-          style={{
-            display: "block",
-            width: "100%",
-            height: "100%",
-            touchAction: "none",
-          }}
+          className="block h-full w-full touch-none"
           aria-label="Space Invaders speelveld"
         />
       </div>
 
       {showTouchBar && lowViewport ? (
-        <p
-          className="muted"
-          style={{
-            textAlign: "center",
-            fontSize: 11,
-            margin: "4px 8px 0",
-            flexShrink: 0,
-          }}
-        >
+        <p className="muted mx-2 mt-1 mb-0 shrink-0 text-center text-[11px]">
           Laag scherm — draai eventueel voor meer ruimte; gebruik de knoppen
           onderaan.
         </p>
       ) : null}
 
       {showTouchBar && showFirstTouchTip ? (
-        <div
-          style={{
-            flexShrink: 0,
-            margin: "8px 12px 0",
-            padding: "10px 12px",
-            borderRadius: 8,
-            background: "#21262d",
-            border: "1px solid #30363d",
-          }}
-        >
-          <p style={{ margin: "0 0 8px", fontSize: 14, color: "#c9d1d9" }}>
+        <div className="mx-3 mt-2 shrink-0 rounded-lg border border-[#30363d] bg-[#21262d] px-3 py-2.5">
+          <p className="mb-2 text-sm text-[#c9d1d9]">
             Sleepstand: gebruik de grote knoppen hieronder (boven de menubalk)
             om te bewegen en te schieten.
           </p>
@@ -410,23 +364,10 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
       ) : null}
 
       {showTouchBar ? (
-        <div
-          style={{
-            flexShrink: 0,
-            padding: "14px 14px 10px",
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr",
-            gap: 14,
-            borderTop: "1px solid #30363d",
-            background: "linear-gradient(180deg, #0d1117 0%, #010409 100%)",
-            userSelect: "none",
-            WebkitUserSelect: "none",
-            WebkitTouchCallout: "none",
-          }}
-        >
+        <div className="grid shrink-0 grid-cols-3 gap-3.5 border-t border-[#30363d] bg-gradient-to-b from-[#0d1117] to-[#010409] px-3.5 pt-3.5 pb-2.5 select-none [-webkit-user-select:none] [-webkit-touch-callout:none]">
           <button
             type="button"
-            style={touchGameButtonStyle}
+            className={touchGameButtonClass}
             onPointerDown={(e) => {
               e.preventDefault();
               setMoveLeft(true);
@@ -440,7 +381,7 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
           </button>
           <button
             type="button"
-            style={touchGameButtonStyle}
+            className={touchGameButtonClass}
             onPointerDown={(e) => {
               e.preventDefault();
               setFire(true);
@@ -454,7 +395,7 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
           </button>
           <button
             type="button"
-            style={touchGameButtonStyle}
+            className={touchGameButtonClass}
             onPointerDown={(e) => {
               e.preventDefault();
               setMoveRight(true);
@@ -468,14 +409,7 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
           </button>
         </div>
       ) : null}
-      <p
-        className="muted"
-        style={{
-          textAlign: "center",
-          fontSize: 12,
-          margin: "0 8px 8px",
-        }}
-      >
+      <p className="muted mx-2 mb-2 mt-0 shrink-0 text-center text-xs">
         {showTouchBar
           ? "Ook: pijltoetsen of A/D, spatie schieten, P of Esc pauze."
           : "Toetsenbord: ← → of A D, spatie schieten, P of Esc pauze."}

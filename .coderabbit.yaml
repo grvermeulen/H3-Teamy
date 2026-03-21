@@ -1,0 +1,24 @@
+# CodeRabbit — zie https://docs.coderabbit.ai/reference/configuration
+# Docstring coverage: minimaal 80% (pre-merge check; zie docs/CONTRIBUTING.md)
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: nl-NL
+
+reviews:
+  profile: chill
+  pre_merge_checks:
+    docstrings:
+      mode: warning
+      threshold: 80
+  finishing_touches:
+    docstrings:
+      enabled: true
+
+code_generation:
+  docstrings:
+    language: nl-NL
+    path_instructions:
+      - path: "src/**/*.{ts,tsx}"
+        instructions: |
+          Gebruik JSDoc (`/** ... */`) op geëxporteerde functies, hooks, types en React-componenten.
+          Voeg @param en @returns toe waar dat de API verduidelijkt; noem korte edge cases (clamping, null).

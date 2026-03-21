@@ -1,5 +1,6 @@
 ## Learned User Preferences
 
+- CodeRabbit docstring coverage is configured in `.coderabbit.yaml` (threshold **80%**); add JSDoc on exported `src/**/*.ts(x)` symbols and use CodeRabbit “Generate docstrings” when needed.
 - Use GitHub CLI for GitHub actions (PRs, checks, comments, merges) when possible.
 - Use the `loop-on-ci` workflow when asked: watch CI, inspect failures, apply focused fixes, and iterate until green. Also check for unresolved review comments (CodeRabbit, Cursor bot) and address them before considering the loop complete.
 - When syncing Vercel environment configuration, treat remote settings as source of truth and sync local values from remote.

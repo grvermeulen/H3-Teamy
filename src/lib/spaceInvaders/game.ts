@@ -320,7 +320,9 @@ export function spawnWave(state: GameState): GameState {
       alienDir: 1,
       alienMoveAcc: 0,
       alienMoveEvery: alienMoveEveryForWave(wave),
+      alienFireAcc: 0,
       alienFireEvery: alienFireEveryForWave(wave),
+      playerFireCooldown: 0,
       weaponLevel: Math.max(
         weaponLevelForWave(wave),
         clampWeapon(state.weaponLevel),
@@ -422,41 +424,31 @@ function lootRect(d: LootDrop) {
   };
 }
 
-export function tick(
+function tickPlayerMovementFireAndBullets(
   state: GameState,
   dt: number,
   input: GameInput,
 ): GameState {
-  if (state.status === "wave_clear") {
-    const t = state.waveClearRemaining - dt;
-    let next: GameState = tickParticles(state, dt);
-    if (t <= 0) {
-      return spawnWave({
-        ...next,
-        status: "playing",
-        waveClearRemaining: 0,
-      });
-    }
-    return { ...next, waveClearRemaining: t };
-  }
-
-  if (state.status !== "playing") return state;
-
-  let next: GameState = { ...state };
-  next = tickParticles(next, dt);
-
+  let next = state;
   if (input.moveLeft) {
-    next.playerX = Math.max(PLAYER_W / 2 + 4, next.playerX - PLAYER_SPEED * dt);
+    next = {
+      ...next,
+      playerX: Math.max(PLAYER_W / 2 + 4, next.playerX - PLAYER_SPEED * dt),
+    };
   }
   if (input.moveRight) {
-    next.playerX = Math.min(
-      GAME_W - PLAYER_W / 2 - 4,
-      next.playerX + PLAYER_SPEED * dt,
-    );
+    next = {
+      ...next,
+      playerX: Math.min(
+        GAME_W - PLAYER_W / 2 - 4,
+        next.playerX + PLAYER_SPEED * dt,
+      ),
+    };
   }
-
-  next.playerFireCooldown = Math.max(0, next.playerFireCooldown - dt);
-
+  next = {
+    ...next,
+    playerFireCooldown: Math.max(0, next.playerFireCooldown - dt),
+  };
   const lvl = clampWeapon(next.weaponLevel);
   const fireInterval = FIRE_INTERVAL[lvl] ?? FIRE_INTERVAL[0];
   if (input.fire && next.playerFireCooldown <= 0) {
@@ -489,29 +481,39 @@ export function tick(
         shots.push({ x: px, y: py, vx });
       }
     }
-    next.playerBullets = [...next.playerBullets, ...shots];
-    next.playerFireCooldown = fireInterval;
+    next = {
+      ...next,
+      playerBullets: [...next.playerBullets, ...shots],
+      playerFireCooldown: fireInterval,
+    };
   }
+  return {
+    ...next,
+    playerBullets: next.playerBullets
+      .map((b) => ({
+        ...b,
+        x: b.x + (b.vx ?? 0) * dt,
+        y: b.y - (b.vy ?? PLAYER_BULLET_SPEED) * dt,
+      }))
+      .filter((b) => b.y > -BULLET_H && b.x > -12 && b.x < GAME_W + 12),
+  };
+}
 
-  next.playerBullets = next.playerBullets
-    .map((b) => ({
-      ...b,
-      x: b.x + (b.vx ?? 0) * dt,
-      y: b.y - (b.vy ?? PLAYER_BULLET_SPEED) * dt,
-    }))
-    .filter((b) => b.y > -BULLET_H && b.x > -12 && b.x < GAME_W + 12);
-
-  next.alienMoveAcc += dt;
+function tickAlienMotionFireAndAlienBullets(
+  state: GameState,
+  dt: number,
+): GameState {
+  let next = state;
+  next = { ...next, alienMoveAcc: next.alienMoveAcc + dt };
   let steps = 0;
   while (next.alienMoveAcc >= next.alienMoveEvery && steps < 4) {
-    next.alienMoveAcc -= next.alienMoveEvery;
+    next = { ...next, alienMoveAcc: next.alienMoveAcc - next.alienMoveEvery };
     next = stepAliens(next);
     steps += 1;
   }
-
-  next.alienFireAcc += dt;
+  next = { ...next, alienFireAcc: next.alienFireAcc + dt };
   if (next.alienFireAcc >= next.alienFireEvery) {
-    next.alienFireAcc = 0;
+    next = { ...next, alienFireAcc: 0 };
     const shooters: { row: number; col: number }[] = [];
     for (let c = 0; c < ALIEN_COLS; c++) {
       for (let r = ALIEN_ROWS - 1; r >= 0; r--) {
@@ -540,42 +542,51 @@ export function tick(
           );
         }
       }
-      next.alienBullets = [...next.alienBullets, ...spawned];
+      next = { ...next, alienBullets: [...next.alienBullets, ...spawned] };
     }
   }
+  return {
+    ...next,
+    alienBullets: next.alienBullets
+      .map((b) => ({
+        ...b,
+        x: b.x + b.vx * dt,
+        y: b.y + b.vy * dt,
+      }))
+      .filter((b) => b.y < GAME_H + 36 && b.x > -24 && b.x < GAME_W + 24),
+  };
+}
 
-  next.alienBullets = next.alienBullets
-    .map((b) => ({
-      ...b,
-      x: b.x + b.vx * dt,
-      y: b.y + b.vy * dt,
-    }))
-    .filter((b) => b.y < GAME_H + 36 && b.x > -24 && b.x < GAME_W + 24);
-
-  // Random bonus from the sky
-  next.lootSpawnTimer -= dt;
+function tickLootSpawnAndMove(state: GameState, dt: number): GameState {
+  let next = state;
+  next = { ...next, lootSpawnTimer: next.lootSpawnTimer - dt };
   if (next.lootSpawnTimer <= 0) {
-    next.lootSpawnTimer = newLootSpawnTimer();
+    next = { ...next, lootSpawnTimer: newLootSpawnTimer() };
     const lx = randomBetween(36, GAME_W - 36);
-    next.lootDrops = [
-      ...next.lootDrops,
-      spawnLootDrop(lx, -10, randomLootKind()),
-    ];
+    next = {
+      ...next,
+      lootDrops: [...next.lootDrops, spawnLootDrop(lx, -10, randomLootKind())],
+    };
     next = pushParticles(next, createBurst(lx, 8, 10, 280, 15, 45, 0.35, 0.55));
   }
+  return {
+    ...next,
+    lootDrops: next.lootDrops
+      .map((d) => ({
+        ...d,
+        y: d.y + d.vy * dt,
+        phase: d.phase + dt * 5,
+      }))
+      .filter((d) => d.y < GAME_H + 24),
+  };
+}
 
-  next.lootDrops = next.lootDrops
-    .map((d) => ({
-      ...d,
-      y: d.y + d.vy * dt,
-      phase: d.phase + dt * 5,
-    }))
-    .filter((d) => d.y < GAME_H + 24);
-
-  const grid = next.alienGrid.map((row) => [...row]);
-  let score = next.score;
-  const pBullets: typeof next.playerBullets = [];
-  for (const bullet of next.playerBullets) {
+function resolvePlayerBulletsVsAliens(state: GameState): GameState {
+  const grid = state.alienGrid.map((row) => [...row]);
+  let score = state.score;
+  let next = state;
+  const pBullets: PlayerBullet[] = [];
+  for (const bullet of state.playerBullets) {
     const br = {
       left: bullet.x - BULLET_W / 2,
       top: bullet.y - BULLET_H,
@@ -598,7 +609,7 @@ export function tick(
           );
           const drop = rollLootOnKill(cx, cy);
           if (drop) {
-            next.lootDrops = [...next.lootDrops, drop];
+            next = { ...next, lootDrops: [...next.lootDrops, drop] };
             next = pushParticles(
               next,
               createBurst(
@@ -617,28 +628,36 @@ export function tick(
     }
     if (!hit) pBullets.push(bullet);
   }
-  next = { ...next, alienGrid: grid, score, playerBullets: pBullets };
+  return {
+    ...next,
+    alienGrid: grid,
+    score,
+    playerBullets: pBullets,
+  };
+}
 
-  const aliveCount = grid.flat().filter(Boolean).length;
-  if (aliveCount === 0) {
-    return pushParticles(
-      {
-        ...next,
-        status: "wave_clear",
-        wave: next.wave + 1,
-        waveClearRemaining: WAVE_CLEAR_DURATION,
-        alienGrid: emptyGrid(),
-        playerBullets: [],
-        alienBullets: [],
-        lootDrops: [],
-        alienMoveAcc: 0,
-        alienFireAcc: 0,
-      },
-      createBurst(GAME_W / 2, GAME_H * 0.35, 40, 300, 60, 200),
-    );
-  }
+function waveClearIfAllAliensDead(state: GameState): GameState | null {
+  const aliveCount = state.alienGrid.flat().filter(Boolean).length;
+  if (aliveCount !== 0) return null;
+  return pushParticles(
+    {
+      ...state,
+      status: "wave_clear",
+      wave: state.wave + 1,
+      waveClearRemaining: WAVE_CLEAR_DURATION,
+      alienGrid: emptyGrid(),
+      playerBullets: [],
+      alienBullets: [],
+      lootDrops: [],
+      alienMoveAcc: 0,
+      alienFireAcc: 0,
+    },
+    createBurst(GAME_W / 2, GAME_H * 0.35, 40, 300, 60, 200),
+  );
+}
 
-  const pr = playerRect(next);
+function collectLootPickups(state: GameState): GameState {
+  const pr = playerRect(state);
   const pickupPad = 6;
   const prWide = {
     left: pr.left - pickupPad,
@@ -646,6 +665,8 @@ export function tick(
     right: pr.right + pickupPad,
     bottom: pr.bottom + pickupPad,
   };
+  let next = state;
+  let score = next.score;
   const keptLoot: LootDrop[] = [];
   for (const d of next.lootDrops) {
     if (overlap(lootRect(d), prWide)) {
@@ -653,33 +674,40 @@ export function tick(
       const cy = d.y;
       next = pushParticles(next, createBurst(cx, cy, 36, 52, 70, 220));
       if (d.kind === "weapon") {
-        next.weaponLevel = clampWeapon(next.weaponLevel + 1);
+        next = {
+          ...next,
+          weaponLevel: clampWeapon(next.weaponLevel + 1),
+        };
         next = pushParticles(
           next,
           createBurst(cx, cy, 24, 38, 80, 240, 0.2, 0.45),
         );
       } else if (d.kind === "shield") {
-        next.shieldCharges = Math.min(
-          MAX_SHIELD_CHARGES,
-          next.shieldCharges + 1,
-        );
+        next = {
+          ...next,
+          shieldCharges: Math.min(MAX_SHIELD_CHARGES, next.shieldCharges + 1),
+        };
         next = pushParticles(next, createBurst(cx, cy, 20, 200, 50, 160));
       } else {
         score += 65 + next.wave * 8;
         next = pushParticles(next, createBurst(cx, cy, 30, 45, 90, 260));
       }
-      next.score = score;
+      next = { ...next, score };
     } else {
       keptLoot.push(d);
     }
   }
-  next = { ...next, lootDrops: keptLoot, score };
+  return { ...next, lootDrops: keptLoot };
+}
 
-  const prevLives = next.lives;
+function resolveAlienBulletsAndEndgame(state: GameState): GameState {
+  const pr = playerRect(state);
+  const prevLives = state.lives;
+  let next = state;
   let lives = next.lives;
   let shieldCharges = next.shieldCharges;
   let tookHit = false;
-  const aBullets: typeof next.alienBullets = [];
+  const aBullets: AlienBullet[] = [];
   for (const bullet of next.alienBullets) {
     const br = alienBulletHitRect(bullet);
     if (overlap(br, pr)) {
@@ -735,6 +763,39 @@ export function tick(
     );
   }
 
+  return next;
+}
+
+export function tick(
+  state: GameState,
+  dt: number,
+  input: GameInput,
+): GameState {
+  if (state.status === "wave_clear") {
+    const t = state.waveClearRemaining - dt;
+    let next: GameState = tickParticles(state, dt);
+    if (t <= 0) {
+      return spawnWave({
+        ...next,
+        status: "playing",
+        waveClearRemaining: 0,
+      });
+    }
+    return { ...next, waveClearRemaining: t };
+  }
+
+  if (state.status !== "playing") return state;
+
+  let next: GameState = { ...state };
+  next = tickParticles(next, dt);
+  next = tickPlayerMovementFireAndBullets(next, dt, input);
+  next = tickAlienMotionFireAndAlienBullets(next, dt);
+  next = tickLootSpawnAndMove(next, dt);
+  next = resolvePlayerBulletsVsAliens(next);
+  const cleared = waveClearIfAllAliensDead(next);
+  if (cleared) return cleared;
+  next = collectLootPickups(next);
+  next = resolveAlienBulletsAndEndgame(next);
   return next;
 }
 

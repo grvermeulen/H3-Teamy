@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { deserializeGame, serializeGame } from "./game";
 import type { GameState, HighScoreEntry, SerializedGameV1 } from "./types";
 
@@ -15,21 +16,36 @@ export function loadSave(): GameState | null {
     const data = JSON.parse(raw) as SerializedGameV1;
     if (data?.v !== 1 && data?.v !== 2) return null;
     return deserializeGame(data);
-  } catch {
+  } catch (error: unknown) {
+    Sentry.captureException(error, {
+      tags: { area: "space-invaders-storage" },
+    });
     return null;
   }
 }
 
 export function saveGameToStorage(state: GameState): void {
   if (typeof window === "undefined") return;
-  const s = serializeGame(state);
-  if (s) localStorage.setItem(SAVE_KEY, JSON.stringify(s));
-  else localStorage.removeItem(SAVE_KEY);
+  try {
+    const s = serializeGame(state);
+    if (s) localStorage.setItem(SAVE_KEY, JSON.stringify(s));
+    else localStorage.removeItem(SAVE_KEY);
+  } catch (error: unknown) {
+    Sentry.captureException(error, {
+      tags: { area: "space-invaders-storage" },
+    });
+  }
 }
 
 export function clearSave(): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(SAVE_KEY);
+  try {
+    localStorage.removeItem(SAVE_KEY);
+  } catch (error: unknown) {
+    Sentry.captureException(error, {
+      tags: { area: "space-invaders-storage" },
+    });
+  }
 }
 
 export function loadHighScores(): HighScoreEntry[] {
@@ -49,7 +65,10 @@ export function loadHighScores(): HighScoreEntry[] {
       )
       .sort((a, b) => b.score - a.score)
       .slice(0, MAX_HIGH_SCORES);
-  } catch {
+  } catch (error: unknown) {
+    Sentry.captureException(error, {
+      tags: { area: "space-invaders-storage" },
+    });
     return [];
   }
 }
@@ -66,7 +85,13 @@ export function mergeHighScores(
 export function addHighScore(entry: HighScoreEntry): HighScoreEntry[] {
   const list = mergeHighScores(loadHighScores(), entry);
   if (typeof window !== "undefined") {
-    localStorage.setItem(SCORES_KEY, JSON.stringify(list));
+    try {
+      localStorage.setItem(SCORES_KEY, JSON.stringify(list));
+    } catch (error: unknown) {
+      Sentry.captureException(error, {
+        tags: { area: "space-invaders-storage" },
+      });
+    }
   }
   return list;
 }

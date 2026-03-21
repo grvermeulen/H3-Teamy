@@ -264,7 +264,7 @@ export function drawGame(
     ctx.textAlign = "center";
     ctx.shadowColor = "#f85149";
     ctx.shadowBlur = 20;
-    ctx.fillText("Game over", GAME_W / 2, GAME_H / 2 - 28);
+    ctx.fillText("Spel voorbij", GAME_W / 2, GAME_H / 2 - 28);
     ctx.shadowBlur = 0;
     ctx.fillStyle = "#f0f6fc";
     ctx.font = "16px system-ui, sans-serif";
