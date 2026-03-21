@@ -2,14 +2,31 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { createInitialState } from "@/lib/spaceInvaders/game";
 import { loadHighScores, loadSave } from "@/lib/spaceInvaders/storage";
+
+/** Zelfde full-screen laag als het spel, zodat de chunk-load niet inline in de pagina staat. */
+function SpaceInvadersChunkLoadingOverlay() {
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      className="fixed inset-0 z-[3200] flex flex-col items-center justify-center touch-none bg-[#010409] pt-safe pb-safe-bottom-bar pl-safe pr-safe"
+    >
+      <p className="muted p-4 text-center text-base">Spel laden…</p>
+    </div>,
+    document.body,
+  );
+}
 
 const SpaceInvadersGame = dynamic(
   () => import("./SpaceInvadersGame").then((m) => m.default),
   {
     ssr: false,
-    loading: () => <p className="muted p-4 text-center">Spel laden…</p>,
+    loading: () => <SpaceInvadersChunkLoadingOverlay />,
   },
 );
 

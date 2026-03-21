@@ -73,24 +73,17 @@ export default function SpaceInvadersGame({
     status: initialState.status,
   });
   const drawTimeRef = useRef(0);
-  const [mounted, setMounted] = useState(false);
   /** Mobile-first: show thumb controls unless wide + fine pointer */
   const [showTouchBar, setShowTouchBar] = useState(true);
   const [showFirstTouchTip, setShowFirstTouchTip] = useState(false);
   const [lowViewport, setLowViewport] = useState(false);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!mounted) return;
+  useLayoutEffect(() => {
     dialogRef.current?.focus();
-  }, [mounted]);
+  }, []);
 
   /** Focus binnen de dialog houden; Escape sluit de overlay; focus herstellen bij unmount. */
   useEffect(() => {
-    if (!mounted) return;
     const prevFocused = document.activeElement as HTMLElement | null;
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -123,7 +116,7 @@ export default function SpaceInvadersGame({
       document.removeEventListener("keydown", onKeyDown, true);
       prevFocused?.focus?.();
     };
-  }, [mounted, onClose]);
+  }, [onClose]);
 
   useEffect(() => {
     const q = window.matchMedia("(max-width: 768px), (pointer: coarse)");
@@ -461,6 +454,6 @@ export default function SpaceInvadersGame({
     </div>
   );
 
-  if (!mounted) return null;
+  if (typeof document === "undefined") return null;
   return createPortal(overlay, document.body);
 }
