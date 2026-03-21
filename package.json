@@ -25,7 +25,7 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "5.19.1",
+    "@prisma/adapter-pg": "7.5.0",
     "@prisma/client": "5.19.1",
     "@sentry/nextjs": "^10.43.0",
     "@tailwindcss/postcss": "^4.2.2",
