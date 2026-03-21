@@ -382,14 +382,14 @@ export default function SpaceInvadersGame({
       </div>
 
       {showTouchBar && lowViewport ? (
-        <p className="muted mx-2 mt-1 mb-0 shrink-0 text-center text-[11px]">
+        <p className="muted mx-2 mt-1 mb-0 shrink-0 select-none text-center text-[11px] [-webkit-user-select:none] [-webkit-touch-callout:none]">
           Laag scherm — draai eventueel voor meer ruimte; gebruik de knoppen
           onderaan.
         </p>
       ) : null}
 
       {showTouchBar && showFirstTouchTip ? (
-        <div className="mx-3 mt-2 shrink-0 rounded-lg border border-[#30363d] bg-[#21262d] px-3 py-2.5">
+        <div className="mx-3 mt-2 shrink-0 select-none rounded-lg border border-[#30363d] bg-[#21262d] px-3 py-2.5 [-webkit-user-select:none] [-webkit-touch-callout:none]">
           <p className="mb-2 text-sm text-[#c9d1d9]">
             Sleepstand: gebruik de grote knoppen hieronder (boven de menubalk)
             om te bewegen en te schieten.
@@ -446,7 +446,7 @@ export default function SpaceInvadersGame({
           </button>
         </div>
       ) : null}
-      <p className="muted mx-2 mb-2 mt-0 shrink-0 text-center text-xs">
+      <p className="muted mx-2 mb-2 mt-0 shrink-0 select-none text-center text-xs [-webkit-user-select:none] [-webkit-touch-callout:none]">
         {showTouchBar
           ? "Ook: pijltoetsen of A/D, spatie schieten, P pauze, Esc sluit."
           : "Toetsenbord: ← → of A D, spatie schieten, P pauze, Esc sluit."}
