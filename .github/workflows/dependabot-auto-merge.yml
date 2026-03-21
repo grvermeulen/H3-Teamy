@@ -1,0 +1,198 @@
+name: Dependabot Auto Merge
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: dependabot-auto-merge
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  process:
+    name: Sluit superseded en merge groene Dependabot PRs
+    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.user.login == 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verwerk open Dependabot PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const dependencyTitlePattern =
+              /^build\(deps(?:-dev)?\): bump (.+?) from .+ to .+(?: in .+)?$/i;
+
+            const parseDependencyName = (title) => {
+              const match = title.match(dependencyTitlePattern);
+              return match ? match[1].trim().toLowerCase() : null;
+            };
+
+            const openPrs = await github.paginate(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: "open",
+              per_page: 100,
+            });
+
+            const dependabotPrs = openPrs
+              .filter((pr) => pr.user?.login === "dependabot[bot]" && !pr.draft)
+              .sort((a, b) => a.number - b.number);
+
+            if (dependabotPrs.length === 0) {
+              core.info("Geen open, niet-draft Dependabot PRs gevonden.");
+              return;
+            }
+
+            core.info(`Open Dependabot PRs: ${dependabotPrs.map((pr) => `#${pr.number}`).join(", ")}`);
+
+            const groupedByDependency = new Map();
+            for (const pr of dependabotPrs) {
+              const dependencyName = parseDependencyName(pr.title);
+              if (!dependencyName) {
+                continue;
+              }
+
+              if (!groupedByDependency.has(dependencyName)) {
+                groupedByDependency.set(dependencyName, []);
+              }
+
+              groupedByDependency.get(dependencyName).push(pr);
+            }
+
+            const closedPrNumbers = new Set();
+            for (const [dependencyName, prs] of groupedByDependency.entries()) {
+              if (prs.length < 2) {
+                continue;
+              }
+
+              const sortedNewestFirst = [...prs].sort((a, b) => b.number - a.number);
+              const newestPr = sortedNewestFirst[0];
+              const supersededPrs = sortedNewestFirst.slice(1);
+
+              for (const supersededPr of supersededPrs) {
+                core.info(
+                  `Sluit superseded PR #${supersededPr.number} voor "${dependencyName}" ten gunste van #${newestPr.number}.`,
+                );
+
+                try {
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: supersededPr.number,
+                    body: `Automatisch gesloten: er staat al een nieuwere Dependabot update open voor \`${dependencyName}\` (#${newestPr.number}).`,
+                  });
+                } catch (error) {
+                  core.warning(
+                    `Kon geen comment plaatsen op #${supersededPr.number}: ${error.message}`,
+                  );
+                }
+
+                await github.rest.pulls.update({
+                  owner,
+                  repo,
+                  pull_number: supersededPr.number,
+                  state: "closed",
+                });
+
+                closedPrNumbers.add(supersededPr.number);
+              }
+            }
+
+            const repoInfo = await github.rest.repos.get({ owner, repo });
+            const mergeMethodPreference = [
+              repoInfo.data.allow_merge_commit ? "merge" : null,
+              repoInfo.data.allow_squash_merge ? "squash" : null,
+              repoInfo.data.allow_rebase_merge ? "rebase" : null,
+            ].filter(Boolean);
+
+            if (mergeMethodPreference.length === 0) {
+              core.warning("Geen toegestane merge methodes geconfigureerd op deze repository.");
+              return;
+            }
+
+            const mergeMethod = mergeMethodPreference[0];
+            core.info(`Geselecteerde merge methode: ${mergeMethod}`);
+
+            const statusQuery = `
+              query PullRequestStatus($owner: String!, $repo: String!, $number: Int!) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    number
+                    title
+                    reviewDecision
+                    mergeable
+                    commits(last: 1) {
+                      nodes {
+                        commit {
+                          statusCheckRollup {
+                            state
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+
+            const candidatePrs = dependabotPrs.filter((pr) => !closedPrNumbers.has(pr.number));
+            for (const pr of candidatePrs) {
+              const statusResult = await github.graphql(statusQuery, {
+                owner,
+                repo,
+                number: pr.number,
+              });
+
+              const pullRequest = statusResult.repository.pullRequest;
+              const checkState =
+                pullRequest?.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state ?? "PENDING";
+
+              if (checkState !== "SUCCESS") {
+                core.info(
+                  `PR #${pr.number} nog niet merge-klaar: statusCheckRollup=${checkState}.`,
+                );
+                continue;
+              }
+
+              if (pullRequest.mergeable === "CONFLICTING") {
+                core.info(`PR #${pr.number} heeft merge-conflicts, overslaan.`);
+                continue;
+              }
+
+              if (pullRequest.reviewDecision !== "APPROVED") {
+                try {
+                  await github.rest.pulls.createReview({
+                    owner,
+                    repo,
+                    pull_number: pr.number,
+                    event: "APPROVE",
+                    body: "Automatische goedkeuring voor Dependabot PR nadat checks geslaagd zijn.",
+                  });
+                } catch (error) {
+                  core.warning(`Auto-approval mislukt voor #${pr.number}: ${error.message}`);
+                }
+              }
+
+              try {
+                await github.rest.pulls.merge({
+                  owner,
+                  repo,
+                  pull_number: pr.number,
+                  merge_method: mergeMethod,
+                });
+                core.info(`PR #${pr.number} succesvol gemerged.`);
+              } catch (error) {
+                core.warning(`Auto-merge mislukt voor #${pr.number}: ${error.message}`);
+              }
+            }

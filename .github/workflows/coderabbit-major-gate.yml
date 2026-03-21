@@ -1,0 +1,145 @@
+name: CodeRabbit Major Gate
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+  pull_request_review_thread:
+    types: [resolved, unresolved]
+
+concurrency:
+  group: coderabbit-major-gate-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  major_gate:
+    name: CodeRabbit major opmerkingen opgelost
+    runs-on: ubuntu-latest
+    steps:
+      - name: Controleer openstaande CodeRabbit major comments
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.payload.pull_request?.number ?? context.payload.issue?.number;
+
+            if (!prNumber) {
+              core.info("Geen pull request context, check wordt overgeslagen.");
+              return;
+            }
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: prNumber,
+            });
+
+            if (pr.draft) {
+              core.info(`PR #${prNumber} is draft, major gate niet afdwingen.`);
+              return;
+            }
+
+            const authorLogin = (pr.user?.login ?? "").toLowerCase();
+            const isDependabotPr =
+              authorLogin === "dependabot[bot]" ||
+              authorLogin === "app/dependabot" ||
+              authorLogin.includes("dependabot");
+
+            if (!isDependabotPr) {
+              core.info(
+                `PR #${prNumber} is niet door Dependabot aangemaakt (${pr.user?.login ?? "unknown"}), gate niet afdwingen.`,
+              );
+              return;
+            }
+
+            const isCoderabbit = (login) =>
+              typeof login === "string" && login.toLowerCase().startsWith("coderabbitai");
+
+            const isMajorOrCritical = (body) => {
+              if (typeof body !== "string" || body.length === 0) return false;
+              const firstLine = body.split("\n")[0] ?? "";
+              return /(?:🟠\s*major|🔴\s*critical)/i.test(firstLine);
+            };
+
+            const query = `
+              query($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
+                repository(owner: $owner, name: $repo) {
+                  pullRequest(number: $number) {
+                    reviewThreads(first: 100, after: $cursor) {
+                      pageInfo {
+                        hasNextPage
+                        endCursor
+                      }
+                      nodes {
+                        isResolved
+                        comments(first: 20) {
+                          nodes {
+                            author {
+                              login
+                            }
+                            body
+                            url
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+
+            const unresolvedMajorComments = [];
+            let cursor = null;
+
+            while (true) {
+              const result = await github.graphql(query, {
+                owner,
+                repo,
+                number: prNumber,
+                cursor,
+              });
+
+              const threads = result.repository.pullRequest.reviewThreads;
+              for (const thread of threads.nodes) {
+                if (thread.isResolved) {
+                  continue;
+                }
+
+                const matchingComment = thread.comments.nodes.find(
+                  (comment) => isCoderabbit(comment.author?.login) && isMajorOrCritical(comment.body),
+                );
+
+                if (matchingComment) {
+                  unresolvedMajorComments.push(matchingComment);
+                }
+              }
+
+              if (!threads.pageInfo.hasNextPage) {
+                break;
+              }
+
+              cursor = threads.pageInfo.endCursor;
+            }
+
+            if (unresolvedMajorComments.length === 0) {
+              core.info(`Geen openstaande CodeRabbit major/critical opmerkingen op PR #${prNumber}.`);
+              return;
+            }
+
+            const commentLinks = unresolvedMajorComments
+              .slice(0, 10)
+              .map((comment) => `- ${comment.url}`)
+              .join("\n");
+
+            core.setFailed(
+              `${unresolvedMajorComments.length} openstaande CodeRabbit major/critical opmerking(en) gevonden.\n` +
+                `Los deze eerst op voordat je merge't.\n${commentLinks}`,
+            );
