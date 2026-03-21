@@ -850,3 +850,27 @@ body.modal-open .card {
   pointer-events: none;
   z-index: 1;
 }
+
+/* Space Invaders launcher — subtiele “radar”-pulse op het helden-icoon */
+@keyframes space-invader-launch-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.45));
+  }
+  50% {
+    opacity: 0.88;
+    filter: drop-shadow(0 0 14px rgba(167, 139, 250, 0.65));
+  }
+}
+
+.space-invader-launch-icon--hero {
+  animation: space-invader-launch-pulse 2.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .space-invader-launch-icon--hero {
+    animation: none;
+    filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.4));
+  }
+}
