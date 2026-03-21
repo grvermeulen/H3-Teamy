@@ -5,6 +5,7 @@ import type { TeamEvent, RsvpStatus } from "../types";
 import GenerateReportButton from "./GenerateReportButton";
 import ReportPreview from "./ReportPreview";
 import MvpVoteButton from "./MvpVoteButton";
+import SpaceInvadersLauncher from "./spaceInvaders/SpaceInvadersLauncher";
 
 type Props = { events: TeamEvent[] };
 
@@ -366,6 +367,7 @@ export default function EventList({ events }: Props) {
           </div>
         );
       })}
+      <SpaceInvadersLauncher />
       {grouped.length === 0 ? (
         <div className="muted">No recent or upcoming matches.</div>
       ) : null}

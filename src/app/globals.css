@@ -341,6 +341,21 @@ h3 {
 .grow {
   flex: 1;
 }
+
+/* Safe-area (PWA / notches) — gebruikt door Space Invaders overlay */
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+.pb-safe-bottom-bar {
+  padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+}
+.pl-safe {
+  padding-left: env(safe-area-inset-left);
+}
+.pr-safe {
+  padding-right: env(safe-area-inset-right);
+}
+
 .muted {
   color: var(--muted);
 }
