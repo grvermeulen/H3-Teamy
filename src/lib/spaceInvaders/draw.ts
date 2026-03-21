@@ -253,7 +253,11 @@ export function drawGame(
     ctx.fillText("Pauze", GAME_W / 2, GAME_H / 2 - 8);
     ctx.font = "14px system-ui, sans-serif";
     ctx.fillStyle = "#8b949e";
-    ctx.fillText("Druk op hervatten of P", GAME_W / 2, GAME_H / 2 + 18);
+    ctx.fillText(
+      "Druk op hervatten of P — Esc sluit",
+      GAME_W / 2,
+      GAME_H / 2 + 18,
+    );
   }
 
   if (state.status === "gameover") {
@@ -264,7 +268,7 @@ export function drawGame(
     ctx.textAlign = "center";
     ctx.shadowColor = "#f85149";
     ctx.shadowBlur = 20;
-    ctx.fillText("Spel voorbij", GAME_W / 2, GAME_H / 2 - 28);
+    ctx.fillText("Spel afgelopen", GAME_W / 2, GAME_H / 2 - 28);
     ctx.shadowBlur = 0;
     ctx.fillStyle = "#f0f6fc";
     ctx.font = "16px system-ui, sans-serif";

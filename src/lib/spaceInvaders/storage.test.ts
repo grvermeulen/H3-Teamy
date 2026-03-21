@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createInitialState } from "./game";
 import {
@@ -36,6 +37,7 @@ describe("localStorage persistence", () => {
   const store: Record<string, string> = {};
 
   beforeEach(() => {
+    vi.clearAllMocks();
     Object.keys(store).forEach((k) => delete store[k]);
     vi.stubGlobal("localStorage", {
       getItem: (k: string) => (k in store ? store[k]! : null),
@@ -64,8 +66,22 @@ describe("localStorage persistence", () => {
     expect(loadSave()).toBeNull();
   });
 
-  it("loadSave returns null for wrong version", () => {
+  it("loadSave returns null for wrong version (Zod)", () => {
     store[SAVE_KEY] = JSON.stringify({ v: 0, wave: 1 });
+    expect(loadSave()).toBeNull();
+  });
+
+  it("loadSave returns null when shape fails Zod", () => {
+    store[SAVE_KEY] = JSON.stringify({
+      v: 2,
+      wave: 1,
+      alienGrid: "not-a-grid",
+    });
+    expect(loadSave()).toBeNull();
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalled();
+  });
+
+  it("loadSave returns null when SAVE_KEY missing", () => {
     expect(loadSave()).toBeNull();
   });
 
@@ -78,6 +94,24 @@ describe("localStorage persistence", () => {
     expect(loaded!.score).toBe(s.score);
   });
 
+  it("saveGameToStorage removes key when serialize returns null (gameover)", () => {
+    store[SAVE_KEY] = "should-remove";
+    const dead = { ...createInitialState(), status: "gameover" as const };
+    saveGameToStorage(dead);
+    expect(store[SAVE_KEY]).toBeUndefined();
+  });
+
+  it("saveGameToStorage captures Sentry when setItem throws", () => {
+    const stub = globalThis.localStorage as {
+      setItem: (k: string, v: string) => void;
+    };
+    stub.setItem = () => {
+      throw new Error("quota");
+    };
+    saveGameToStorage(createInitialState());
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalled();
+  });
+
   it("clearSave removes key", () => {
     store[SAVE_KEY] = "{}";
     clearSave();
@@ -86,6 +120,11 @@ describe("localStorage persistence", () => {
 
   it("loadHighScores returns empty for invalid JSON", () => {
     store[SCORES_KEY] = "x";
+    expect(loadHighScores()).toEqual([]);
+  });
+
+  it("loadHighScores returns empty for non-array JSON", () => {
+    store[SCORES_KEY] = JSON.stringify({ not: "array" });
     expect(loadHighScores()).toEqual([]);
   });
 
@@ -103,5 +142,16 @@ describe("localStorage persistence", () => {
     expect(out[0]).toEqual({ score: 100, wave: 3, at: "t" });
     const raw = JSON.parse(store[SCORES_KEY]!);
     expect(raw[0].score).toBe(100);
+  });
+
+  it("addHighScore reports Sentry when setItem throws", () => {
+    const stub = globalThis.localStorage as {
+      setItem: (k: string, v: string) => void;
+    };
+    stub.setItem = () => {
+      throw new Error("quota");
+    };
+    addHighScore({ score: 1, wave: 1, at: "x" });
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalled();
   });
 });

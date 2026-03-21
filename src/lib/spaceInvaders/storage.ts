@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { deserializeGame, serializeGame } from "./game";
+import { HighScoreEntrySchema, SerializedGameV1Schema } from "./schemas";
 import type { GameState, HighScoreEntry, SerializedGameV1 } from "./types";
 
 export const SAVE_KEY = "h3-space-invaders-save-v1";
@@ -13,9 +14,15 @@ export function loadSave(): GameState | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
-    const data = JSON.parse(raw) as SerializedGameV1;
-    if (data?.v !== 1 && data?.v !== 2) return null;
-    return deserializeGame(data);
+    const parsed: unknown = JSON.parse(raw);
+    const result = SerializedGameV1Schema.safeParse(parsed);
+    if (!result.success) {
+      Sentry.captureException(result.error, {
+        tags: { area: "space-invaders-storage", kind: "save-invalid" },
+      });
+      return null;
+    }
+    return deserializeGame(result.data as SerializedGameV1);
   } catch (error: unknown) {
     Sentry.captureException(error, {
       tags: { area: "space-invaders-storage" },
@@ -53,18 +60,14 @@ export function loadHighScores(): HighScoreEntry[] {
   try {
     const raw = localStorage.getItem(SCORES_KEY);
     if (!raw) return [];
-    const arr = JSON.parse(raw) as HighScoreEntry[];
-    if (!Array.isArray(arr)) return [];
-    return arr
-      .filter(
-        (e) =>
-          e &&
-          typeof e.score === "number" &&
-          typeof e.wave === "number" &&
-          typeof e.at === "string",
-      )
-      .sort((a, b) => b.score - a.score)
-      .slice(0, MAX_HIGH_SCORES);
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const entries: HighScoreEntry[] = [];
+    for (const item of parsed) {
+      const row = HighScoreEntrySchema.safeParse(item);
+      if (row.success) entries.push(row.data);
+    }
+    return entries.sort((a, b) => b.score - a.score).slice(0, MAX_HIGH_SCORES);
   } catch (error: unknown) {
     Sentry.captureException(error, {
       tags: { area: "space-invaders-storage" },

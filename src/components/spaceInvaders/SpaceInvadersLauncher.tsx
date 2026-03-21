@@ -1,9 +1,17 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useState } from "react";
 import { createInitialState } from "@/lib/spaceInvaders/game";
 import { loadHighScores, loadSave } from "@/lib/spaceInvaders/storage";
-import SpaceInvadersGame from "./SpaceInvadersGame";
+
+const SpaceInvadersGame = dynamic(
+  () => import("./SpaceInvadersGame").then((m) => m.default),
+  {
+    ssr: false,
+    loading: () => <p className="muted p-4 text-center">Spel laden…</p>,
+  },
+);
 
 export default function SpaceInvadersLauncher() {
   const [open, setOpen] = useState(false);

@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "@testing-library/jest-dom";
 import { createInitialState } from "@/lib/spaceInvaders/game";
+import * as SpaceStorage from "@/lib/spaceInvaders/storage";
 import SpaceInvadersGame from "./SpaceInvadersGame";
 
 vi.mock("@sentry/nextjs", () => ({
@@ -10,11 +11,12 @@ vi.mock("@sentry/nextjs", () => ({
 
 describe("SpaceInvadersGame", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     Object.defineProperty(window, "matchMedia", {
       writable: true,
       configurable: true,
       value: vi.fn().mockImplementation((query: string) => ({
-        matches: false,
+        matches: true,
         media: query,
         onchange: null,
         addListener: vi.fn(),
@@ -120,5 +122,68 @@ describe("SpaceInvadersGame", () => {
     await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
     fireEvent.click(screen.getByText("Sluiten"));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onClose when Escape is pressed", async () => {
+    const onClose = vi.fn();
+    render(
+      <SpaceInvadersGame
+        initialState={createInitialState()}
+        onClose={onClose}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+    fireEvent.keyDown(document, { code: "Escape", key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls saveGameToStorage and onClose when Opslaan en sluiten", async () => {
+    const saveSpy = vi
+      .spyOn(SpaceStorage, "saveGameToStorage")
+      .mockImplementation(() => {});
+    const onClose = vi.fn();
+    render(
+      <SpaceInvadersGame
+        initialState={createInitialState()}
+        onClose={onClose}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Opslaan en sluiten"));
+    expect(saveSpy).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("touch left button sets move input via pointer handlers", async () => {
+    render(
+      <SpaceInvadersGame
+        initialState={createInitialState()}
+        onClose={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+    const left = screen.getByText("← Links");
+    fireEvent.pointerDown(left);
+    fireEvent.pointerUp(left);
+  });
+
+  it("registers gameover score once via addHighScore", async () => {
+    const addSpy = vi.spyOn(SpaceStorage, "addHighScore").mockReturnValue([]);
+    const clearSpy = vi
+      .spyOn(SpaceStorage, "clearSave")
+      .mockImplementation(() => {});
+    const gameOver = {
+      ...createInitialState(),
+      status: "gameover" as const,
+      lives: 0,
+      score: 42,
+      wave: 3,
+    };
+    render(<SpaceInvadersGame initialState={gameOver} onClose={vi.fn()} />);
+    await waitFor(() => expect(addSpy).toHaveBeenCalled());
+    expect(addSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ score: 42, wave: 3 }),
+    );
+    expect(clearSpy).toHaveBeenCalled();
   });
 });

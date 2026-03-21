@@ -88,6 +88,43 @@ export default function SpaceInvadersGame({
     dialogRef.current?.focus();
   }, [mounted]);
 
+  /** Focus binnen de dialog houden; Escape sluit de overlay; focus herstellen bij unmount. */
+  useEffect(() => {
+    if (!mounted) return;
+    const prevFocused = document.activeElement as HTMLElement | null;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !dialogRef.current) return;
+      const root = dialogRef.current;
+      const sel =
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+      const nodes = [...root.querySelectorAll<HTMLElement>(sel)].filter((el) =>
+        root.contains(el),
+      );
+      if (nodes.length === 0) return;
+      const first = nodes[0]!;
+      const last = nodes[nodes.length - 1]!;
+      if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      } else if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true);
+      prevFocused?.focus?.();
+    };
+  }, [mounted, onClose]);
+
   useEffect(() => {
     const q = window.matchMedia("(max-width: 768px), (pointer: coarse)");
     const apply = () => setShowTouchBar(q.matches);
@@ -195,6 +232,13 @@ export default function SpaceInvadersGame({
             stateRef.current = tick(cur, dt, inputRef.current);
           } catch (error: unknown) {
             Sentry.captureException(error);
+            stateRef.current = { ...cur, status: "paused" };
+            inputRef.current = {
+              moveLeft: false,
+              moveRight: false,
+              fire: false,
+            };
+            syncHud(stateRef.current);
           }
         }
         syncHud(stateRef.current);
@@ -267,7 +311,7 @@ export default function SpaceInvadersGame({
         inputRef.current.fire = true;
         e.preventDefault();
       }
-      if (e.code === "Escape" || e.code === "KeyP") {
+      if (e.code === "KeyP") {
         pauseToggle();
         e.preventDefault();
       }
@@ -304,7 +348,7 @@ export default function SpaceInvadersGame({
       aria-modal="true"
       aria-label="Space Invaders"
       tabIndex={-1}
-      className="fixed inset-0 z-[3200] flex min-h-dvh flex-col touch-none bg-[#010409] pt-[env(safe-area-inset-top)] pb-[calc(76px+env(safe-area-inset-bottom,0px))] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]"
+      className="fixed inset-0 z-[3200] flex min-h-dvh flex-col touch-none bg-[#010409] pt-safe pb-safe-bottom-bar pl-safe pr-safe"
     >
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#21262d] px-3 py-2">
         <div className="flex flex-wrap gap-2.5 text-sm text-[#c9d1d9]">
@@ -411,8 +455,8 @@ export default function SpaceInvadersGame({
       ) : null}
       <p className="muted mx-2 mb-2 mt-0 shrink-0 text-center text-xs">
         {showTouchBar
-          ? "Ook: pijltoetsen of A/D, spatie schieten, P of Esc pauze."
-          : "Toetsenbord: ← → of A D, spatie schieten, P of Esc pauze."}
+          ? "Ook: pijltoetsen of A/D, spatie schieten, P pauze, Esc sluit."
+          : "Toetsenbord: ← → of A D, spatie schieten, P pauze, Esc sluit."}
       </p>
     </div>
   );

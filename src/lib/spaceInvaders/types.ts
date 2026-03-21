@@ -51,7 +51,20 @@ export type Particle = {
 };
 
 /**
- * Volledige simulatiestatus voor één Space Invaders-sessie (speler, aliens, kogels, golf, timers).
+ * Volledige runtime-state van één Space Invaders-sessie.
+ *
+ * **Levenscyclus:** ontstaat bij `createInitialState` / hervatten uit save; elke frame bij `tick`;
+ * bij golf leeg → `wave_clear` → `spawnWave`; bij levens op of invasie → `gameover` (niet opgeslagen).
+ *
+ * - **status** — `playing` | `paused` | `gameover` | `wave_clear`
+ * - **wave / lives / score** — voortgang en punten
+ * - **weaponLevel** — 0 = enkel schot, hoger = meer spreiding (zie `FIRE_INTERVAL`)
+ * - **playerX** — horizontale positie schip
+ * - **alienGrid** — `alive[row][col]`
+ * - **alienOriginX/Y, alienDir** — blokpositie en richting (1 rechts, -1 links)
+ * - **alienMoveAcc / alienMoveEvery** — accumulator t.o.v. staptempo
+ * - **playerBullets / alienBullets** — actieve projectielen
+ * - **playerFireCooldown, alienFireAcc / alienFireEvery** — vuurtiming
  */
 export type GameState = {
   status: GameStatus;
@@ -84,13 +97,31 @@ export type GameState = {
   waveClearRemaining: number;
 };
 
-/** Invoer voor één `tick`: beweging en vuur (keyboard/touch wordt upstream gezet). */
+/**
+ * Spelerinvoer voor één simulatiestap (`tick`).
+ *
+ * @property moveLeft — schip naar links (keyboard / touch “links”)
+ * @property moveRight — schip naar rechts
+ * @property fire — vuur ingedrukt (continu vuren zolang `true` en cooldown 0)
+ */
 export type GameInput = {
   moveLeft: boolean;
   moveRight: boolean;
   fire: boolean;
 };
 
+/**
+ * Persistentieformaat voor localStorage (versie **1** of **2**).
+ *
+ * - **v** — schemaversie (loot/schild zit in v2)
+ * - **wave … alienFireEvery** — speltoestand zoals in `GameState` (geen particles)
+ * - **status** — nooit `gameover` in een save
+ * - **waveClearRemaining** — alleen relevant bij `wave_clear`
+ * - **shieldCharges, lootDrops, lootSpawnTimer** — optioneel / v2
+ * - **alienBullets[]** — mag ontbrekende `kind`/`vx`/`vy` hebben (legacy → default in `deserializeGame`)
+ *
+ * Runtime-validatie: `SerializedGameV1Schema` in `schemas.ts`.
+ */
 export type SerializedGameV1 = {
   v: 1 | 2;
   wave: number;
@@ -116,7 +147,13 @@ export type SerializedGameV1 = {
   lootSpawnTimer?: number;
 };
 
-/** Highscore-regel; `at` is ISO-8601 UTC (`toISOString()`). */
+/**
+ * Eén regel op het lokale scorebord.
+ *
+ * @property score — behaalde punten (getal)
+ * @property wave — hoogste bereikte golf (getal)
+ * @property at — tijdstip als **ISO-8601**-string, UTC (`new Date().toISOString()`), bv. `"2026-03-21T12:00:00.000Z"`
+ */
 export type HighScoreEntry = {
   score: number;
   wave: number;

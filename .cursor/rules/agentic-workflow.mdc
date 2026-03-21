@@ -141,6 +141,7 @@ This file defines the strict coding standards for all AI agents (Cursor, Opencod
   2. Wait for completion (`gh run watch --exit-status`).
   3. If failed, inspect failed logs, apply a focused fix, commit, and push.
   4. Repeat until required checks pass.
+  5. **PR review comments:** If you addressed inline review threads (CodeRabbit, humans, bots), **resolve those threads on GitHub** after the fix is on the PR branch so the UI shows them as done—not only “fixed in code.” Use GraphQL `resolveReviewThread` via `gh api graphql` (list `reviewThreads` on the PR, then mutate each `id` where `isResolved` is false), or resolve manually in the PR **Files changed** tab.
 - Keep each fix scoped to a single failure cause whenever possible.
 - Never bypass hooks (no `--no-verify`) to force progress.
 - If a failure appears flaky, retry once and report flake evidence.
@@ -148,3 +149,4 @@ This file defines the strict coding standards for all AI agents (Cursor, Opencod
   - current CI status
   - failure summary and applied fixes
   - PR URL once checks are green
+  - confirmation that addressed review threads were resolved (or N/A if none)
