@@ -79,9 +79,15 @@ Current behavior awaits the send result, returns `whatsappNotification` in the J
 
 1. **Wrong `chatId`**: Group JIDs must match what WhatsApp/WaAPI use (often a long number ending in `@g.us`). List groups for this instance:
 
-   `npx tsx scripts/waapi-list-groups.ts --filter "de rijn"`
+   ```bash
+   export WAAPI_INSTANCE_ID="86986"
+   export WAAPI_API_TOKEN="..."   # same token as in Vercel
+   npx tsx scripts/waapi-list-groups.ts --limit 400
+   ```
 
-   Copy the exact `...@g.us` id into `WAAPI_GROUP_CHAT_ID` in Vercel.
+   Output is two columns: **`chatId`** (tab) **`groupName`**. Optional: `--filter "rijn"` (case-insensitive substring on name). If you get no rows, try `--verbose true` to see how many chats the API returned.
+
+   Copy the exact `...@g.us` id for your team into `WAAPI_GROUP_CHAT_ID` in Vercel.
 
 2. **HTTP 200 but WaAPI rejects the send**: The API can return `200` with `{ "success": false, "message": "..." }`. The app now treats that as a failed send and surfaces `details` in the response / Sentry.
 
