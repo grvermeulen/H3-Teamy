@@ -28,6 +28,12 @@
   --christmas-gold: #fbbf24;
 }
 
+/* Voorkom dat brede flex/grid-kinderen de pagina breder maken dan de viewport */
+main {
+  min-width: 0;
+  max-width: 100%;
+}
+
 html,
 body {
   padding: 0;
@@ -257,9 +263,19 @@ body {
 }
 
 .container {
+  box-sizing: border-box;
   max-width: 720px;
+  width: 100%;
   margin: 0 auto;
-  padding: 24px 16px 64px;
+  padding-top: 24px;
+  padding-bottom: 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+header.container > div:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* Reduce extra gap below header nav on mobile */
@@ -311,6 +327,8 @@ h3 {
   padding: 16px;
   position: relative;
   z-index: 2;
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* Christmas theme card styling */
@@ -339,9 +357,11 @@ h3 {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 .grow {
   flex: 1;
+  min-width: 0;
 }
 
 /* Safe-area (PWA / notches) — gebruikt door Space Invaders overlay */
@@ -365,6 +385,8 @@ h3 {
 .rsvp {
   display: inline-flex;
   gap: 8px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .rsvp button {
@@ -410,15 +432,29 @@ h3 {
   display: grid;
   gap: 12px;
   margin-top: 16px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .eventTitle {
   font-weight: 600;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .eventMeta {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  min-width: 0;
+}
+
+/* RSVP-lijst onder details: was één flex-rij → op iPhone te breed */
+.rsvp-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 16px;
+  margin-top: 8px;
+  align-items: start;
 }
 
 .badge {
@@ -428,6 +464,8 @@ h3 {
   background: rgba(255, 255, 255, 0.06);
   color: var(--muted);
   font-size: 12px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 /* Attendance tier badges */
@@ -609,7 +647,10 @@ body.modal-open .card {
 
 @media (max-width: 480px) {
   .container {
-    padding: 16px 12px 56px;
+    padding-top: 16px;
+    padding-bottom: 56px;
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
   }
   .row {
     gap: 8px;

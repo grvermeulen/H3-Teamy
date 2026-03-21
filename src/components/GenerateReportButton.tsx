@@ -114,6 +114,7 @@ export default function GenerateReportButton({
         type="file"
         accept="image/*"
         onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+        style={{ maxWidth: "100%", minWidth: 0, flex: "1 1 auto" }}
       />
       <button
         onClick={onGenerate}
