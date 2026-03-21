@@ -1,6 +1,7 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
+import type { CSSProperties } from "react";
 import {
   useCallback,
   useEffect,
@@ -25,6 +26,18 @@ type InputRef = { moveLeft: boolean; moveRight: boolean; fire: boolean };
 type Props = {
   initialState: GameState;
   onClose: () => void;
+};
+
+/** Voorkomt tekstselectie / iOS callout bij lang indrukken op game-knoppen */
+const touchGameButtonStyle: CSSProperties = {
+  minHeight: 58,
+  touchAction: "manipulation",
+  fontSize: 18,
+  fontWeight: 600,
+  borderRadius: 10,
+  userSelect: "none",
+  WebkitUserSelect: "none",
+  WebkitTouchCallout: "none",
 };
 
 const weaponLabel = (lvl: number) => {
@@ -406,17 +419,14 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
             gap: 14,
             borderTop: "1px solid #30363d",
             background: "linear-gradient(180deg, #0d1117 0%, #010409 100%)",
+            userSelect: "none",
+            WebkitUserSelect: "none",
+            WebkitTouchCallout: "none",
           }}
         >
           <button
             type="button"
-            style={{
-              minHeight: 58,
-              touchAction: "manipulation",
-              fontSize: 18,
-              fontWeight: 600,
-              borderRadius: 10,
-            }}
+            style={touchGameButtonStyle}
             onPointerDown={(e) => {
               e.preventDefault();
               setMoveLeft(true);
@@ -424,18 +434,13 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
             onPointerUp={() => setMoveLeft(false)}
             onPointerLeave={() => setMoveLeft(false)}
             onPointerCancel={() => setMoveLeft(false)}
+            onContextMenu={(e) => e.preventDefault()}
           >
             ← Links
           </button>
           <button
             type="button"
-            style={{
-              minHeight: 58,
-              touchAction: "manipulation",
-              fontSize: 18,
-              fontWeight: 600,
-              borderRadius: 10,
-            }}
+            style={touchGameButtonStyle}
             onPointerDown={(e) => {
               e.preventDefault();
               setFire(true);
@@ -443,18 +448,13 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
             onPointerUp={() => setFire(false)}
             onPointerLeave={() => setFire(false)}
             onPointerCancel={() => setFire(false)}
+            onContextMenu={(e) => e.preventDefault()}
           >
             Vuur
           </button>
           <button
             type="button"
-            style={{
-              minHeight: 58,
-              touchAction: "manipulation",
-              fontSize: 18,
-              fontWeight: 600,
-              borderRadius: 10,
-            }}
+            style={touchGameButtonStyle}
             onPointerDown={(e) => {
               e.preventDefault();
               setMoveRight(true);
@@ -462,6 +462,7 @@ export default function SpaceInvadersGame({ initialState, onClose }: Props) {
             onPointerUp={() => setMoveRight(false)}
             onPointerLeave={() => setMoveRight(false)}
             onPointerCancel={() => setMoveRight(false)}
+            onContextMenu={(e) => e.preventDefault()}
           >
             Rechts →
           </button>

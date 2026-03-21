@@ -7,7 +7,25 @@ export type PlayerBullet = {
   vx?: number;
   vy?: number;
 };
-export type AlienBullet = { x: number; y: number };
+export type AlienWeaponKind = "bolt" | "plasma" | "needle" | "heavy";
+
+/** Alien projectiles — vx/vy in px/s (vy positive = downward) */
+export type AlienBullet = {
+  x: number;
+  y: number;
+  kind: AlienWeaponKind;
+  vx: number;
+  vy: number;
+};
+
+/** Persisted alien shot — optional fields for v1 / legacy saves */
+export type SerializedAlienBullet = {
+  x: number;
+  y: number;
+  kind?: AlienWeaponKind;
+  vx?: number;
+  vy?: number;
+};
 
 export type LootKind = "weapon" | "shield" | "burst";
 
@@ -83,7 +101,7 @@ export type SerializedGameV1 = {
   alienMoveAcc: number;
   alienMoveEvery: number;
   playerBullets: PlayerBullet[];
-  alienBullets: AlienBullet[];
+  alienBullets: SerializedAlienBullet[];
   playerFireCooldown: number;
   alienFireAcc: number;
   alienFireEvery: number;

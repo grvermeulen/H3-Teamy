@@ -17,6 +17,7 @@ export const ALIEN_GAP_Y = 8;
 export const BULLET_W = 4;
 export const BULLET_H = 10;
 export const PLAYER_BULLET_SPEED = 320;
+/** Legacy baseline; actual speed uses `alienBulletSpeedForWave` in game.ts */
 export const ALIEN_BULLET_SPEED = 140;
 
 export const INITIAL_LIVES = 3;

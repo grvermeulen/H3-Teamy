@@ -171,11 +171,54 @@ export function drawGame(
   }
 
   for (const b of state.alienBullets) {
-    ctx.shadowColor = "#ff7b72";
-    ctx.shadowBlur = 8;
-    ctx.fillStyle = "#f85149";
-    ctx.fillRect(b.x - BULLET_W / 2, b.y, BULLET_W, BULLET_H);
+    const k = b.kind;
+    let w = BULLET_W;
+    let h = BULLET_H;
+    let hue = 8;
+    let glow = 8;
+    switch (k) {
+      case "bolt":
+        w = BULLET_W;
+        h = BULLET_H;
+        hue = 8;
+        glow = 8;
+        break;
+      case "plasma":
+        w = BULLET_W * 1.5;
+        h = BULLET_H * 1.15;
+        hue = 285;
+        glow = 16;
+        break;
+      case "needle":
+        w = BULLET_W * 0.65;
+        h = BULLET_H * 1.35;
+        hue = 195;
+        glow = 6;
+        break;
+      case "heavy":
+        w = BULLET_W * 1.65;
+        h = BULLET_H * 1.4;
+        hue = 22;
+        glow = 14;
+        break;
+    }
+    ctx.shadowColor = `hsl(${hue} 90% 55%)`;
+    ctx.shadowBlur = glow;
+    const lg = ctx.createLinearGradient(b.x - w / 2, b.y, b.x + w / 2, b.y + h);
+    lg.addColorStop(0, `hsl(${hue} 95% 62%)`);
+    lg.addColorStop(1, `hsl(${hue} 80% 42%)`);
+    ctx.fillStyle = lg;
+    ctx.fillRect(b.x - w / 2, b.y, w, h);
     ctx.shadowBlur = 0;
+    if (k === "plasma") {
+      ctx.fillStyle = "rgba(255,200,255,0.35)";
+      ctx.fillRect(b.x - w * 0.15, b.y + h * 0.2, w * 0.3, h * 0.5);
+    }
+    if (k === "heavy") {
+      ctx.strokeStyle = "rgba(255,200,160,0.5)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(b.x - w / 2 + 0.5, b.y + 0.5, w - 1, h - 1);
+    }
   }
 
   for (const p of state.particles) {

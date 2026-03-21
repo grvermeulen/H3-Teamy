@@ -28,12 +28,15 @@ import {
   PLAYER_Y,
 } from "./constants";
 import type {
+  AlienBullet,
+  AlienWeaponKind,
   GameInput,
   GameState,
   LootDrop,
   LootKind,
   Particle,
   PlayerBullet,
+  SerializedAlienBullet,
   SerializedGameV1,
 } from "./types";
 
@@ -54,7 +57,140 @@ export function alienMoveEveryForWave(wave: number): number {
 }
 
 export function alienFireEveryForWave(wave: number): number {
-  return Math.max(0.35, 1.1 - wave * 0.08);
+  return Math.max(0.18, 1.1 - wave * 0.082);
+}
+
+/** Downward speed scale (px/s), capped for fairness */
+export function alienBulletSpeedForWave(wave: number): number {
+  return Math.min(230, ALIEN_BULLET_SPEED + wave * 7.5);
+}
+
+/** How many bottom shooters fire on the same tick (different columns when possible) */
+export function alienVolleyCountForWave(wave: number): number {
+  if (wave >= 12) return 3;
+  if (wave >= 6) return 2;
+  return 1;
+}
+
+/**
+ * Pick alien projectile type from wave, row (top → needle bias, bottom → heavy), and rng in [0,1).
+ */
+export function pickAlienWeaponKind(
+  wave: number,
+  row: number,
+  rand01: number,
+): AlienWeaponKind {
+  const fromTop = row;
+  const fromBottom = ALIEN_ROWS - 1 - row;
+  /** 0 on wave 1 → bolt-only; ramps to 1 by ~wave 6 */
+  const ramp = Math.min(1, Math.max(0, (wave - 1) / 5));
+  const needleChance =
+    ramp * Math.min(0.35, 0.05 + wave * 0.018 + fromTop * 0.04);
+  const heavyChance =
+    ramp * Math.min(0.22, Math.max(0, wave - 3) * 0.022 + fromBottom * 0.035);
+  const plasmaChance =
+    ramp * Math.min(0.28, Math.max(0, wave - 2) * 0.025 + 0.06);
+
+  let r = rand01;
+  if (r < needleChance) return "needle";
+  r -= needleChance;
+  if (r < heavyChance) return "heavy";
+  r -= heavyChance;
+  if (r < plasmaChance) return "plasma";
+  return "bolt";
+}
+
+function velocityForAlienWeapon(
+  kind: AlienWeaponKind,
+  wave: number,
+  needleVxSeed: number,
+): { vx: number; vy: number } {
+  const base = alienBulletSpeedForWave(wave);
+  switch (kind) {
+    case "bolt":
+      return { vx: 0, vy: base };
+    case "plasma":
+      return { vx: 0, vy: base * 0.82 };
+    case "needle":
+      return {
+        vx: (needleVxSeed - 0.5) * 95,
+        vy: base * 1.22,
+      };
+    case "heavy":
+      return { vx: 0, vy: base * 0.68 };
+    default: {
+      const _exhaustive: never = kind;
+      return _exhaustive;
+    }
+  }
+}
+
+export function createAlienBullet(
+  x: number,
+  y: number,
+  wave: number,
+  row: number,
+  randKind: number,
+  randNeedle: number,
+): AlienBullet {
+  const kind = pickAlienWeaponKind(wave, row, randKind);
+  const { vx, vy } = velocityForAlienWeapon(kind, wave, randNeedle);
+  return { x, y, kind, vx, vy };
+}
+
+function alienBulletHitSize(kind: AlienWeaponKind): { w: number; h: number } {
+  switch (kind) {
+    case "needle":
+      return { w: BULLET_W * 0.78, h: BULLET_H * 1.05 };
+    case "plasma":
+      return { w: BULLET_W * 1.55, h: BULLET_H * 1.22 };
+    case "heavy":
+      return { w: BULLET_W * 1.72, h: BULLET_H * 1.48 };
+    case "bolt":
+      return { w: BULLET_W, h: BULLET_H };
+    default: {
+      const _exhaustive: never = kind;
+      return _exhaustive;
+    }
+  }
+}
+
+export function alienBulletHitRect(b: AlienBullet) {
+  const { w, h } = alienBulletHitSize(b.kind);
+  return {
+    left: b.x - w / 2,
+    top: b.y,
+    right: b.x + w / 2,
+    bottom: b.y + h,
+  };
+}
+
+function sampleWithoutReplacement<T>(items: T[], count: number): T[] {
+  const pool = [...items];
+  const out: T[] = [];
+  const n = Math.min(count, pool.length);
+  for (let i = 0; i < n; i++) {
+    const j = Math.floor(Math.random() * pool.length);
+    out.push(pool[j]!);
+    pool.splice(j, 1);
+  }
+  return out;
+}
+
+function normalizeAlienBullet(
+  b: SerializedAlienBullet,
+  wave: number,
+): AlienBullet {
+  const kind = b.kind ?? "bolt";
+  if (typeof b.vx === "number" && typeof b.vy === "number") {
+    return { x: b.x, y: b.y, kind, vx: b.vx, vy: b.vy };
+  }
+  return {
+    x: b.x,
+    y: b.y,
+    kind,
+    ...velocityForAlienWeapon(kind, wave, 0.5),
+  };
 }
 
 function randomBetween(a: number, b: number): number {
@@ -386,23 +522,35 @@ export function tick(
       }
     }
     if (shooters.length > 0) {
-      const pick = shooters[Math.floor(Math.random() * shooters.length)]!;
-      const rect = alienRect(next, pick.row, pick.col);
-      if (rect) {
-        next.alienBullets = [
-          ...next.alienBullets,
-          {
-            x: (rect.left + rect.right) / 2,
-            y: rect.bottom + 2,
-          },
-        ];
+      const volley = alienVolleyCountForWave(next.wave);
+      const picked = sampleWithoutReplacement(shooters, volley);
+      const spawned: AlienBullet[] = [];
+      for (const pick of picked) {
+        const rect = alienRect(next, pick.row, pick.col);
+        if (rect) {
+          spawned.push(
+            createAlienBullet(
+              (rect.left + rect.right) / 2,
+              rect.bottom + 2,
+              next.wave,
+              pick.row,
+              Math.random(),
+              Math.random(),
+            ),
+          );
+        }
       }
+      next.alienBullets = [...next.alienBullets, ...spawned];
     }
   }
 
   next.alienBullets = next.alienBullets
-    .map((b) => ({ ...b, y: b.y + ALIEN_BULLET_SPEED * dt }))
-    .filter((b) => b.y < GAME_H + 20);
+    .map((b) => ({
+      ...b,
+      x: b.x + b.vx * dt,
+      y: b.y + b.vy * dt,
+    }))
+    .filter((b) => b.y < GAME_H + 36 && b.x > -24 && b.x < GAME_W + 24);
 
   // Random bonus from the sky
   next.lootSpawnTimer -= dt;
@@ -533,12 +681,7 @@ export function tick(
   let tookHit = false;
   const aBullets: typeof next.alienBullets = [];
   for (const bullet of next.alienBullets) {
-    const br = {
-      left: bullet.x - BULLET_W / 2,
-      top: bullet.y,
-      right: bullet.x + BULLET_W / 2,
-      bottom: bullet.y + BULLET_H,
-    };
+    const br = alienBulletHitRect(bullet);
     if (overlap(br, pr)) {
       if (shieldCharges > 0) {
         shieldCharges -= 1;
@@ -652,7 +795,9 @@ export function deserializeGame(data: SerializedGameV1): GameState {
     alienMoveAcc: data.alienMoveAcc,
     alienMoveEvery: data.alienMoveEvery,
     playerBullets: data.playerBullets.map((b) => ({ ...b })),
-    alienBullets: data.alienBullets.map((b) => ({ ...b })),
+    alienBullets: data.alienBullets.map((b) =>
+      normalizeAlienBullet(b, data.wave),
+    ),
     playerFireCooldown: data.playerFireCooldown,
     alienFireAcc: data.alienFireAcc,
     alienFireEvery: data.alienFireEvery,
