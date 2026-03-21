@@ -51,10 +51,23 @@ function requiredEnv(name: string): string {
   return value;
 }
 
+/**
+ * WaAPI / WhatsApp Web payloads may use `id` as string, number, or a nested object with `_serialized`.
+ */
+function coerceChatId(chat: unknown): string {
+  if (typeof chat !== "object" || chat === null) return "";
+  const raw = (chat as Record<string, unknown>).id;
+  if (typeof raw === "string") return raw;
+  if (typeof raw === "number" && Number.isFinite(raw)) return String(raw);
+  if (typeof raw === "object" && raw !== null) {
+    const nested = (raw as Record<string, unknown>)._serialized;
+    if (typeof nested === "string") return nested;
+  }
+  return "";
+}
+
 function isChatLikeEntry(value: unknown): value is WaapiChat {
-  if (typeof value !== "object" || value === null) return false;
-  const id = (value as WaapiChat).id;
-  return typeof id === "string" && id.length > 0;
+  return coerceChatId(value).length > 0;
 }
 
 /**
@@ -151,7 +164,7 @@ async function main(): Promise<void> {
 
   const json: unknown = await response.json();
   const chats = normalizeChats(json);
-  const groups = chats.filter((chat) => (chat.id || "").endsWith("@g.us"));
+  const groups = chats.filter((chat) => coerceChatId(chat).endsWith("@g.us"));
   const filtered = options.filter
     ? groups.filter((chat) =>
         displayName(chat).toLowerCase().includes(options.filter),
@@ -177,7 +190,12 @@ async function main(): Promise<void> {
   }
 
   process.stdout.write(
-    `chatId\tgroupName\n${filtered.map((g) => `${g.id || "(missing-id)"}\t${displayName(g) || "(no-name)"}`).join("\n")}\n`,
+    `chatId\tgroupName\n${filtered
+      .map((g) => {
+        const id = coerceChatId(g) || "(missing-id)";
+        return `${id}\t${displayName(g) || "(no-name)"}`;
+      })
+      .join("\n")}\n`,
   );
 }
 
