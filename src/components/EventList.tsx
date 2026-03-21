@@ -318,10 +318,7 @@ export default function EventList({ events }: Props) {
                 }}
               >
                 <summary className="muted">Show RSVP list</summary>
-                <div
-                  className="row"
-                  style={{ gap: 16, marginTop: 8, alignItems: "flex-start" }}
-                >
+                <div className="rsvp-columns">
                   <div>
                     <div className="badge">Yes</div>
                     <div className="muted" style={{ marginTop: 4 }}>
