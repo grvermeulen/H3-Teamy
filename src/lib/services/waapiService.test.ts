@@ -1,10 +1,25 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Sentry from "@sentry/nextjs";
-import { sendMatchReportToWhatsAppGroup } from "./waapiService";
+import {
+  normalizeWaapiGroupChatId,
+  sendMatchReportToWhatsAppGroup,
+} from "./waapiService";
 
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
 }));
+
+describe("normalizeWaapiGroupChatId", () => {
+  it("appends @g.us for digit-only ids", () => {
+    expect(normalizeWaapiGroupChatId("1467733237")).toBe("1467733237@g.us");
+  });
+
+  it("trims and leaves full JIDs unchanged", () => {
+    expect(normalizeWaapiGroupChatId(" 120362123456789@g.us ")).toBe(
+      "120362123456789@g.us",
+    );
+  });
+});
 
 describe("waapiService", () => {
   beforeEach(() => {
@@ -87,6 +102,57 @@ describe("waapiService", () => {
 
     expect(result).toEqual({ sent: false, reason: "invalid_event_id" });
     expect(fetchSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it("normalizes digit-only WAAPI_GROUP_CHAT_ID to …@g.us in request body", async () => {
+    vi.stubEnv("WAAPI_NOTIFICATIONS_ENABLED", "true");
+    vi.stubEnv("WAAPI_BASE_URL", "https://waapi.app/api/v1");
+    vi.stubEnv("WAAPI_INSTANCE_ID", "instance-123");
+    vi.stubEnv("WAAPI_API_TOKEN", "token-abc");
+    vi.stubEnv("WAAPI_GROUP_CHAT_ID", "1467733237");
+    vi.stubEnv("APP_URL", "https://teamy.example");
+
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    await sendMatchReportToWhatsAppGroup({ eventId: "evt-1" });
+
+    const [, init] = fetchSpy.mock.calls[0] ?? [];
+    expect(init?.body).toContain("1467733237@g.us");
+  });
+
+  it("returns upstream_error when WaAPI returns 200 with success false", async () => {
+    vi.stubEnv("WAAPI_NOTIFICATIONS_ENABLED", "true");
+    vi.stubEnv("WAAPI_INSTANCE_ID", "instance-123");
+    vi.stubEnv("WAAPI_API_TOKEN", "token-abc");
+    vi.stubEnv("WAAPI_GROUP_CHAT_ID", "1467733237@g.us");
+    vi.stubEnv("APP_URL", "https://teamy.example");
+
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: false,
+          message: "Chat not found",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+
+    const result = await sendMatchReportToWhatsAppGroup({ eventId: "evt-1" });
+
+    expect(result).toEqual({
+      sent: false,
+      reason: "upstream_error",
+      details: "Chat not found",
+    });
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+    );
   });
 
   it("returns upstream_error when WaAPI responds with non-ok", async () => {

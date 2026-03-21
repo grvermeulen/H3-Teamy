@@ -61,7 +61,21 @@ Optional:
 The old implementation dispatched the WAAPI send call in fire-and-forget style from `report/generate`.
 In serverless runtimes this can be interrupted when the request closes, and non-send outcomes (`disabled`, `missing_config`, `upstream_error`) were not surfaced in the API response.
 
-Current behavior awaits the send result and reports non-delivery reasons to Sentry while still returning a successful report response.
+Current behavior awaits the send result, returns `whatsappNotification` in the JSON (so admins see failures in the UI), and reports non-delivery to Sentry (tag `waapi_notification_reason`).
+
+### Troubleshooting: no message in the group
+
+1. **Wrong `chatId`**: Group JIDs must match what WhatsApp/WaAPI use (often a long number ending in `@g.us`). List groups for this instance:
+
+   `npx tsx scripts/waapi-list-groups.ts --filter "de rijn"`
+
+   Copy the exact `...@g.us` id into `WAAPI_GROUP_CHAT_ID` in Vercel.
+
+2. **HTTP 200 but WaAPI rejects the send**: The API can return `200` with `{ "success": false, "message": "..." }`. The app now treats that as a failed send and surfaces `details` in the response / Sentry.
+
+3. **Config not loaded**: `WAAPI_NOTIFICATIONS_ENABLED` must be exactly `true`, and `APP_URL` must be a full URL (`https://...`) so Zod validation passes.
+
+4. **Instance offline**: If the WaAPI client is disconnected, sends fail until you reconnect (QR) in the WaAPI dashboard.
 
 ## WAAPI end-to-end test (safe mode)
 

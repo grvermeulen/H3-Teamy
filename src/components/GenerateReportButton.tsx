@@ -88,6 +88,22 @@ export default function GenerateReportButton({
         alert(`Generation failed: ${info}`);
         return;
       }
+      const data = (await res.json()) as {
+        whatsappNotification?: {
+          sent: boolean;
+          reason?: string;
+          details?: string;
+        };
+      };
+      if (data?.whatsappNotification?.sent === false) {
+        const reason = data.whatsappNotification.reason ?? "onbekend";
+        const details = data.whatsappNotification.details
+          ? ` ${data.whatsappNotification.details}`
+          : "";
+        alert(
+          `Het verslag is opgeslagen, maar de WhatsApp-melding is niet verzonden (${reason}).${details ? `\n\n${details}` : ""}\n\nControleer WAAPI_GROUP_CHAT_ID (juiste …@g.us voor de groep) en of de WaAPI-instance verbonden is. Tip: voer lokaal uit: npx tsx scripts/waapi-list-groups.ts --filter "rijn".`,
+        );
+      }
       setDone(true);
       // Notify other components to refresh report content
       window.dispatchEvent(

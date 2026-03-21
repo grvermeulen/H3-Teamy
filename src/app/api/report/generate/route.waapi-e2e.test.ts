@@ -9,6 +9,7 @@ import screenshotThree from "./__fixtures__/waapi-e2e-screenshot-3.json";
 
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
+  setTag: vi.fn(),
 }));
 
 vi.mock("../../../../lib/kv", () => ({

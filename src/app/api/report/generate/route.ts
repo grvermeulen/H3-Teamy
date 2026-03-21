@@ -58,6 +58,7 @@ function reportNotificationOutcome(
   result: Awaited<ReturnType<typeof sendMatchReportToWhatsAppGroup>>,
 ): void {
   if (result.sent) return;
+  Sentry.setTag("waapi_notification_reason", result.reason);
   const details = result.details ? ` (${result.details})` : "";
   Sentry.captureException(
     new Error(`WaAPI notification not sent: ${result.reason}${details}`),
@@ -510,7 +511,19 @@ Regels:
     });
     reportNotificationOutcome(notificationResult);
 
-    return NextResponse.json({ ok: true, report });
+    return NextResponse.json({
+      ok: true,
+      report,
+      whatsappNotification: notificationResult.sent
+        ? { sent: true as const }
+        : {
+            sent: false as const,
+            reason: notificationResult.reason,
+            ...(notificationResult.details
+              ? { details: notificationResult.details }
+              : {}),
+          },
+    });
   } catch (error: unknown) {
     Sentry.captureException(error);
     const message = error instanceof Error ? error.message : String(error);

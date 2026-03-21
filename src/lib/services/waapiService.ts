@@ -37,6 +37,53 @@ const WaapiConfigSchema = z.object({
   APP_URL: z.string().trim().url(),
 });
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Normalizes a WhatsApp group JID for WaAPI. Some tools return only the numeric id; WaAPI expects `...@g.us`.
+ *
+ * @param raw - Value from `WAAPI_GROUP_CHAT_ID`. Empty strings are returned unchanged.
+ * @returns Trimmed JID, with `@g.us` appended when the value is digits-only.
+ */
+export function normalizeWaapiGroupChatId(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed.includes("@")) return trimmed;
+  if (/^\d+$/.test(trimmed)) return `${trimmed}@g.us`;
+  return trimmed;
+}
+
+/**
+ * WaAPI often returns HTTP 200 with a JSON body where `success: false` indicates the message was not sent.
+ *
+ * @param bodyText - Raw response body from the send-message call.
+ * @returns Whether the payload indicates a successful send, or failure details when `success` is explicitly false.
+ */
+function interpretWaapiSendMessageBody(
+  bodyText: string,
+): { ok: true } | { ok: false; details: string } {
+  const trimmed = bodyText.trim();
+  if (!trimmed) return { ok: true };
+  try {
+    const data = JSON.parse(trimmed) as unknown;
+    if (!isRecord(data)) return { ok: true };
+    if (data.success === false) {
+      const message =
+        typeof data.message === "string"
+          ? data.message
+          : typeof data.error === "string"
+            ? data.error
+            : trimmed;
+      return { ok: false, details: message };
+    }
+  } catch {
+    return { ok: true };
+  }
+  return { ok: true };
+}
+
 function getWaapiConfig(): WaapiConfig | null {
   const parsed = WaapiConfigSchema.safeParse(process.env);
   if (!parsed.success) return null;
@@ -46,7 +93,7 @@ function getWaapiConfig(): WaapiConfig | null {
     baseUrl: env.WAAPI_BASE_URL.replace(/\/$/, ""),
     instanceId: env.WAAPI_INSTANCE_ID,
     apiToken: env.WAAPI_API_TOKEN,
-    groupChatId: env.WAAPI_GROUP_CHAT_ID,
+    groupChatId: normalizeWaapiGroupChatId(env.WAAPI_GROUP_CHAT_ID),
     appUrl: env.APP_URL.replace(/\/$/, ""),
   };
 }
@@ -108,12 +155,24 @@ export async function sendMatchReportToWhatsAppGroup(
     });
     clearTimeout(timeoutId);
 
+    const bodyText = await response.text();
     if (!response.ok) {
-      const details = await response.text();
       Sentry.captureException(
-        new Error(`WaAPI send-message failed: ${response.status} ${details}`),
+        new Error(`WaAPI send-message failed: ${response.status} ${bodyText}`),
       );
-      return { sent: false, reason: "upstream_error", details };
+      return { sent: false, reason: "upstream_error", details: bodyText };
+    }
+
+    const interpreted = interpretWaapiSendMessageBody(bodyText);
+    if (!interpreted.ok) {
+      Sentry.captureException(
+        new Error(`WaAPI send-message rejected: ${interpreted.details}`),
+      );
+      return {
+        sent: false,
+        reason: "upstream_error",
+        details: interpreted.details,
+      };
     }
 
     return { sent: true };
