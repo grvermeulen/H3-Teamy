@@ -4,6 +4,14 @@
 
 Generate reports for events.
 
+### “Page not found” on `/report/[eventId]`
+
+The report page returns **404** when there is **no report in KV** for that exact `eventId` (same string as in the calendar). It is not a missing Next.js route.
+
+Common causes: verslag never generated on **production**, generated only on **Preview**, or wrong `eventId` in the link. After deploy, ensure an admin uses **Verslag genereren** on **heren-3-de-rijn.com** for that match.
+
+The app uses `await Promise.resolve(params)` for `eventId` so Next.js 15+ async `params` still resolve correctly.
+
 ## Entry Points
 
 - UI: `src/components/GenerateReportButton.tsx`, `src/app/report/[eventId]/page.tsx`

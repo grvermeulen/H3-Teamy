@@ -3,12 +3,14 @@ import { getReport } from "../../../lib/kv";
 import Link from "next/link";
 import MvpVotingPanel from "../../../components/MvpVotingPanel";
 
-type Params = { params: { eventId: string } };
+type Params = {
+  params: Promise<{ eventId: string }> | { eventId: string };
+};
 
 export const revalidate = 0;
 
 export default async function ReportPage({ params }: Params) {
-  const eventId = params.eventId;
+  const { eventId } = await Promise.resolve(params);
   const report = await getReport(eventId);
   if (!report) notFound();
   return (
