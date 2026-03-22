@@ -1,16 +1,30 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TeamEvent, RsvpStatus } from "../types";
 import GenerateReportButton from "./GenerateReportButton";
 import ReportPreview from "./ReportPreview";
 import MvpVoteButton from "./MvpVoteButton";
 import SpaceInvadersLauncher from "./spaceInvaders/SpaceInvadersLauncher";
 
-type Props = { events: TeamEvent[] };
+/** Props voor {@link EventList}. */
+type Props = {
+  /** Teamwedstrijden uit de iCal-feed (server component → client). */
+  events: TeamEvent[];
+};
 
 type RsvpMap = Record<string, RsvpStatus>;
 
+/**
+ * RSVP-lijst per wedstrijd: tellingen, eigen status (ingelogd), optionele namenlijsten
+ * in een `<details>` (lazy). Ververs bij focus, tab-zichtbaarheid en handmatige Refresh.
+ *
+ * Na terugkeren vanuit een andere app worden `lists` en `loadedLists` samen geleegd en
+ * open details opnieuw geladen, zodat namen niet “vast” leeg blijven.
+ *
+ * @param props - Componentprops.
+ * @param props.events - Te tonen events (chronologisch gesorteerd in de UI).
+ */
 export default function EventList({ events }: Props) {
   const [rsvpMap, setRsvpMap] = useState<RsvpMap>({});
   const [counts, setCounts] = useState<
@@ -27,12 +41,47 @@ export default function EventList({ events }: Props) {
     >
   >({});
   const [loadedLists, setLoadedLists] = useState<Record<string, boolean>>({});
+  /** Event-ids waarvan de RSVP-details nu open staan (voor refetch na loadAll). */
+  const openRsvpDetailIdsRef = useRef<Set<string>>(new Set());
   const [mounted, setMounted] = useState(false);
   const [nowTs, setNowTs] = useState<number>(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
 
+  const loadedListsRef = useRef<Record<string, boolean>>({});
+  useEffect(() => {
+    loadedListsRef.current = loadedLists;
+  }, [loadedLists]);
+
+  /**
+   * Haalt volledige RSVP-data voor één event (tellingen + yes/maybe/no-namen).
+   *
+   * @param id - `eventId` (Sportlink/event-sleutel).
+   * @param opts - Opties; `force: true` slaat de “al geladen”-cache over (nodig na `loadAll`).
+   */
+  const loadRsvpListDetail = useCallback(
+    async (id: string, opts?: { force?: boolean }) => {
+      if (!opts?.force && loadedListsRef.current[id]) return;
+      const res = await fetch(
+        `/api/rsvp/list?eventId=${encodeURIComponent(id)}`,
+        { cache: "no-store" },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setCounts((prev) => ({ ...prev, [id]: data.counts }));
+        setLists((prev) => ({ ...prev, [id]: data.lists }));
+        setLoadedLists((prev) => ({ ...prev, [id]: true }));
+      }
+    },
+    [],
+  );
+
+  /**
+   * Laadt publieke tellingen voor alle events; als de gebruiker ingelogd is ook eigen RSVP-status.
+   * Wis naamlijst-cache (`lists` + `loadedLists`) zodat die niet out-of-sync raakt met geleegde data.
+   * Open RSVP-details worden direct opnieuw opgehaald (mobiel / app-switch).
+   */
   const loadAll = useCallback(async () => {
     setIsRefreshing(true);
 
@@ -61,6 +110,7 @@ export default function EventList({ events }: Props) {
       // If not logged in, only show counts
       setRsvpMap({});
       setLists({});
+      setLoadedLists({});
       setIsRefreshing(false);
       return;
     }
@@ -80,9 +130,16 @@ export default function EventList({ events }: Props) {
     const map: RsvpMap = {};
     for (const [id, status] of rsvpEntries) map[id] = status;
     setRsvpMap(map);
-    setLists({}); // Will be loaded on demand when user opens RSVP list
+    // Leeg caches: anders blijft loadedLists true terwijl lists {} is → lege UI tot refresh.
+    setLists({});
+    setLoadedLists({});
+    // Details die nog open staan (bijv. na terugkeren vanuit andere app): direct opnieuw laden.
+    const openIds = [...openRsvpDetailIdsRef.current];
+    await Promise.all(
+      openIds.map((id) => loadRsvpListDetail(id, { force: true })),
+    );
     setIsRefreshing(false);
-  }, [events, loggedIn]);
+  }, [events, loggedIn, loadRsvpListDetail]);
 
   // Check authentication on mount only
   useEffect(() => {
@@ -117,6 +174,18 @@ export default function EventList({ events }: Props) {
     return () => window.removeEventListener("focus", onFocus);
   }, [authChecked, loadAll]);
 
+  /** Mobiel: bij terugkeren naar tab/PWA vaak wel visibilitychange, niet altijd window focus. */
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible" && authChecked) {
+        void loadAll();
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [authChecked, loadAll]);
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -125,6 +194,12 @@ export default function EventList({ events }: Props) {
     setNowTs(Date.now());
   }, []);
 
+  /**
+   * Zet RSVP-status voor het huidige account (optimistische UI, daarna serverbevestiging).
+   *
+   * @param id - Event-id.
+   * @param status - Nieuwe status of `null` om te wissen.
+   */
   async function setRsvp(id: string, status: RsvpStatus) {
     const prev = rsvpMap[id] || null;
     setRsvpMap((p) => ({ ...p, [id]: status }));
@@ -157,18 +232,13 @@ export default function EventList({ events }: Props) {
     }
   }
 
-  async function ensureListsLoaded(id: string) {
-    if (loadedLists[id]) return;
-    const res = await fetch(
-      `/api/rsvp/list?eventId=${encodeURIComponent(id)}`,
-      { cache: "no-store" },
-    );
-    if (res.ok) {
-      const data = await res.json();
-      setCounts((prev) => ({ ...prev, [id]: data.counts }));
-      setLists((prev) => ({ ...prev, [id]: data.lists }));
-      setLoadedLists((prev) => ({ ...prev, [id]: true }));
-    }
+  /**
+   * Zorgt dat namenlijsten voor dit event geladen zijn (geen dubbele fetch als al in cache).
+   *
+   * @param id - Event-id.
+   */
+  function ensureListsLoaded(id: string) {
+    void loadRsvpListDetail(id);
   }
 
   const grouped = useMemo(() => {
@@ -314,7 +384,12 @@ export default function EventList({ events }: Props) {
                 style={{ marginTop: 10 }}
                 onToggle={(e) => {
                   const el = e.currentTarget as HTMLDetailsElement;
-                  if (el.open) void ensureListsLoaded(evt.id);
+                  if (el.open) {
+                    openRsvpDetailIdsRef.current.add(evt.id);
+                    ensureListsLoaded(evt.id);
+                  } else {
+                    openRsvpDetailIdsRef.current.delete(evt.id);
+                  }
                 }}
               >
                 <summary className="muted">Show RSVP list</summary>

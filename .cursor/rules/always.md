@@ -13,6 +13,7 @@ These rules are always attached to the model context for this repo.
   - Use `catch (err: unknown)` — never `catch (err: any)`.
   - Declare explicit return types on all exported functions.
   - Use `const list: Foo[] = []` — never `const list = [] as Foo[]`.
+- Make sure Docstrings are there for all methods, functions, etc.
 
 ## Commit rules
 
