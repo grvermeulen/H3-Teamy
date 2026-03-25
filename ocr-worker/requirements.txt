@@ -3,7 +3,7 @@ uvicorn[standard]==0.42.0
 
 # Use PyTorch CPU wheels
 --extra-index-url https://download.pytorch.org/whl/cpu
-torch==2.10.0+cpu
+torch==2.11.0+cpu
 torchvision==0.25.0+cpu
 torchaudio==2.10.0+cpu
 
