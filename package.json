@@ -27,7 +27,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "7.5.0",
     "@prisma/client": "5.19.1",
-    "@sentry/nextjs": "^10.45.0",
+    "@sentry/nextjs": "^10.46.0",
     "@tailwindcss/postcss": "^4.2.2",
     "bcryptjs": "^3.0.3",
     "ical": "^0.8.0",
