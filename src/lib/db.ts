@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { recordPrismaQuery, isDbMetricsEnabled } from "./dbMetrics";
 
 declare global {
@@ -13,9 +14,12 @@ const prismaInstance =
     const baseOptions: Prisma.PrismaClientOptions = isDbMetricsEnabled()
       ? { log: [{ emit: "event", level: "query" as const }] }
       : {};
-    return url
-      ? new PrismaClient({ ...baseOptions, datasources: { db: { url } } })
-      : new PrismaClient(baseOptions);
+    if (!url) {
+      return new PrismaClient(baseOptions);
+    }
+
+    const adapter = new PrismaPg({ connectionString: url });
+    return new PrismaClient({ ...baseOptions, adapter });
   })();
 
 export const prisma = prismaInstance;
