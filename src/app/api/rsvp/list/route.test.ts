@@ -33,6 +33,10 @@ describe("GET /api/rsvp/list", () => {
     vi.clearAllMocks();
   });
 
+  function makeRequest(url: string): NextRequest {
+    return new NextRequest(new Request(url));
+  }
+
   it("returns counts without loading profile data when countsOnly is enabled", async () => {
     vi.mocked(listEventRsvps).mockResolvedValue([
       { userId: "u1", status: "yes" },
@@ -41,10 +45,9 @@ describe("GET /api/rsvp/list", () => {
       { userId: "u4", status: null },
     ]);
 
-    const req = new Request(
-      "http://localhost/api/rsvp/list?eventId=wedstrijd-1&countsOnly=1",
+    const response = await GET(
+      makeRequest("http://localhost/api/rsvp/list?eventId=wedstrijd-1&countsOnly=1"),
     );
-    const response = await GET(req as NextRequest);
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
@@ -69,8 +72,9 @@ describe("GET /api/rsvp/list", () => {
       u2: { total: 3, yes: 2 },
     });
 
-    const req = new Request("http://localhost/api/rsvp/list?eventId=wedstrijd-2");
-    const response = await GET(req as NextRequest);
+    const response = await GET(
+      makeRequest("http://localhost/api/rsvp/list?eventId=wedstrijd-2"),
+    );
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
@@ -87,8 +91,9 @@ describe("GET /api/rsvp/list", () => {
     const error = new Error("db stuk");
     vi.mocked(listEventRsvps).mockRejectedValue(error);
 
-    const req = new Request("http://localhost/api/rsvp/list?eventId=wedstrijd-3");
-    const response = await GET(req as NextRequest);
+    const response = await GET(
+      makeRequest("http://localhost/api/rsvp/list?eventId=wedstrijd-3"),
+    );
 
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toEqual({
