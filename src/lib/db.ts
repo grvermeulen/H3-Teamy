@@ -1,3 +1,4 @@
+import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { recordPrismaQuery, isDbMetricsEnabled } from "./dbMetrics";
 
@@ -9,13 +10,15 @@ declare global {
 const prismaInstance =
   global.prisma ||
   (() => {
-    const url = process.env.PRISMA_DATABASE_URL || process.env.DATABASE_URL;
+    const connectionString =
+      process.env.PRISMA_DATABASE_URL ??
+      process.env.DATABASE_URL ??
+      "postgresql://localhost:5432/postgres";
+    const adapter = new PrismaPg({ connectionString });
     const baseOptions: Prisma.PrismaClientOptions = isDbMetricsEnabled()
       ? { log: [{ emit: "event", level: "query" as const }] }
       : {};
-    return url
-      ? new PrismaClient({ ...baseOptions, datasources: { db: { url } } })
-      : new PrismaClient(baseOptions);
+    return new PrismaClient({ ...baseOptions, adapter });
   })();
 
 export const prisma = prismaInstance;
