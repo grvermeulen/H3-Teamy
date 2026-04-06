@@ -38,4 +38,13 @@ describe("Prisma compatibility", () => {
 
     expect(prismaConfigSource).not.toContain('from "prisma/config"');
   });
+
+  it("keeps the Prisma schema datasource url defined for prisma generate", () => {
+    const schemaSource = readFileSync(
+      resolve(process.cwd(), "prisma/schema.prisma"),
+      "utf8",
+    );
+
+    expect(schemaSource).toContain('url      = env("DATABASE_URL")');
+  });
 });
