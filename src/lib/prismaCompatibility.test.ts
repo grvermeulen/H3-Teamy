@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 type PackageJsonDependencies = {
@@ -16,7 +17,7 @@ function getMajor(version: string): string {
 describe("Prisma compatibility", () => {
   it("keeps Prisma packages on the same major version", () => {
     const packageJson = JSON.parse(
-      readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+      readFileSync(resolve(process.cwd(), "package.json"), "utf8"),
     ) as PackageJsonDependencies;
     const dependencies = packageJson.dependencies ?? {};
     const prismaVersions = [
@@ -31,7 +32,7 @@ describe("Prisma compatibility", () => {
 
   it("avoids Prisma 7-only config helpers while Prisma 5 is installed", () => {
     const prismaConfigSource = readFileSync(
-      new URL("../../prisma.config.ts", import.meta.url),
+      resolve(process.cwd(), "prisma.config.ts"),
       "utf8",
     );
 
