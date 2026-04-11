@@ -14,4 +14,8 @@ export async function register(): Promise<void> {
   }
 }
 
+/**
+ * Next.js `onRequestError`-hook: stuurt requestfouten door naar Sentry.
+ * @see {@link https://docs.sentry.io/platforms/javascript/guides/nextjs/ | Sentry Next.js}
+ */
 export const onRequestError = Sentry.captureRequestError;

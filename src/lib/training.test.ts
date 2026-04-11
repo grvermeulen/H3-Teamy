@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultSeasonWindow, generateTrainingDates, toYMD } from "./training";
 
 describe("toYMD", () => {
@@ -23,19 +23,17 @@ describe("generateTrainingDates", () => {
 });
 
 describe("defaultSeasonWindow", () => {
-  const originalStart = process.env.SEASON_START;
-  const originalEnd = process.env.SEASON_END;
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+  });
 
   afterEach(() => {
-    if (originalStart === undefined) delete process.env.SEASON_START;
-    else process.env.SEASON_START = originalStart;
-    if (originalEnd === undefined) delete process.env.SEASON_END;
-    else process.env.SEASON_END = originalEnd;
+    vi.unstubAllEnvs();
   });
 
   it("gebruikt SEASON_START en SEASON_END wanneer beide gezet en geldig", () => {
-    process.env.SEASON_START = "01-09-2025";
-    process.env.SEASON_END = "30-06-2026";
+    vi.stubEnv("SEASON_START", "01-09-2025");
+    vi.stubEnv("SEASON_END", "30-06-2026");
     const w = defaultSeasonWindow();
     expect(w.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(w.to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
@@ -43,24 +41,20 @@ describe("defaultSeasonWindow", () => {
   });
 
   it("verlengt met een jaar als alleen SEASON_START gezet is", () => {
-    delete process.env.SEASON_END;
-    process.env.SEASON_START = "01-07-2025";
+    vi.stubEnv("SEASON_START", "01-07-2025");
     const w = defaultSeasonWindow();
     expect(w.from).toBe("2025-07-01");
     expect(w.to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it("trekt een jaar terug als alleen SEASON_END gezet is", () => {
-    delete process.env.SEASON_START;
-    process.env.SEASON_END = "30-06-2026";
+    vi.stubEnv("SEASON_END", "30-06-2026");
     const w = defaultSeasonWindow();
     expect(w.to).toBe("2026-06-30");
     expect(w.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it("valt terug op seizoen rond 1 juli zonder env", () => {
-    delete process.env.SEASON_START;
-    delete process.env.SEASON_END;
     const w = defaultSeasonWindow();
     expect(w.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(w.to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
