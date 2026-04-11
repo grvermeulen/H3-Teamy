@@ -1,0 +1,77 @@
+name: Sentry Issue Sync
+
+on:
+  schedule:
+    - cron: "0 8 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  sync:
+    name: Sync Unresolved Sentry Issues to GitHub
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch unresolved Sentry issues
+        id: sentry
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: guido-smeets
+          SENTRY_PROJECT: h3-teamy
+        run: |
+          ISSUES=$(curl -s \
+            -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
+            "https://sentry.io/api/0/projects/$SENTRY_ORG/$SENTRY_PROJECT/issues/?query=is:unresolved+!has:github&statsPeriod=24h&limit=10")
+
+          echo "issues<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$ISSUES" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub issues for new Sentry errors
+        uses: actions/github-script@v7
+        env:
+          SENTRY_ISSUES: ${{ steps.sentry.outputs.issues }}
+        with:
+          script: |
+            const issues = JSON.parse(process.env.SENTRY_ISSUES || '[]');
+            if (!Array.isArray(issues) || issues.length === 0) {
+              core.info('No new unresolved Sentry issues');
+              return;
+            }
+
+            for (const issue of issues.slice(0, 5)) {
+              const title = `[Sentry] ${issue.title}`;
+              const { data: existing } = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                labels: 'sentry',
+                per_page: 100,
+              });
+
+              if (existing.some(i => i.title === title)) {
+                core.info(`Skipping duplicate: ${title}`);
+                continue;
+              }
+
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body: [
+                  `**Sentry Issue**: ${issue.permalink}`,
+                  `**Level**: ${issue.level}`,
+                  `**Events**: ${issue.count}`,
+                  `**First seen**: ${issue.firstSeen}`,
+                  `**Last seen**: ${issue.lastSeen}`,
+                  '',
+                  '```',
+                  issue.culprit || 'N/A',
+                  '```',
+                ].join('\n'),
+                labels: ['sentry', 'bug'],
+              });
+              core.info(`Created issue: ${title}`);
+            }
