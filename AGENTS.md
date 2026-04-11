@@ -10,6 +10,9 @@
 - Run a de-slop pass after AI-assisted implementation to remove narration comments, defensive checks the type system already covers, and tests that test the language rather than business logic.
 - Research existing solutions in `src/lib/` and npm before writing new utilities or helpers.
 - Run the verification loop (build, typecheck, lint, test, security scan, diff review) before creating or updating PRs.
+- **Geen BugBot Pro**: gebruik de gratis stack — CodeRabbit op PRs, Agentic CI, GitHub Copilot-review (workflow), en `.cursor/rules` / `AGENTS.md` in Cursor. BugBot betaalde tier niet nodig.
+- **Sentry**: project-slug is `h3-teamy`. De **organisatie-slug** in Sentry (URL: `sentry.io/organizations/<org>/…`) moet overeenkomen met `org` in `next.config.js` en `SENTRY_ORG` in `.github/workflows/sentry-issue-sync.yml`. Token `SENTRY_AUTH_TOKEN` lokaal in `.env` / `.env.local` houden; naar **Vercel** en **GitHub repo secret** zetten (niet committen).
+- **Vercel Rolling Releases**: niet gebruiken zonder Pro-plan; gewone production deploys blijven voldoende.
 
 ## Learned Workspace Facts
 
