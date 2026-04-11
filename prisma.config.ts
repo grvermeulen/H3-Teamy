@@ -1,16 +1,10 @@
-const prismaDatabaseUrl =
-  process.env.PRISMA_DATABASE_URL ??
-  process.env.DATABASE_URL ??
-  "postgresql://localhost:5432/postgres";
+import "dotenv/config";
+import { defineConfig, env } from "prisma/config";
 
-const config = {
+/** Prisma 7 projectconfiguratie: datasource-URL staat hier (niet in `schema.prisma`). */
+export default defineConfig({
   schema: "prisma/schema.prisma",
-  migrations: {
-    path: "prisma/migrations",
-  },
   datasource: {
-    url: prismaDatabaseUrl,
+    url: env("DATABASE_URL"),
   },
-};
-
-export default config;
+});
