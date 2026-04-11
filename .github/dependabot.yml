@@ -11,6 +11,9 @@ updates:
       interval: "daily"
     open-pull-requests-limit: 10
     ignore:
+      - dependency-name: "eslint"
+        update-types:
+          - "version-update:semver-major"
       - dependency-name: "eslint-config-next"
         update-types:
           - "version-update:semver-major"
