@@ -72,6 +72,15 @@ Review each changed file for:
 - Missing Sentry instrumentation in new catch blocks
 - Dutch strings for all user-facing messages
 
+### Phase 7: PR-reviewthreads (CodeRabbit e.d.)
+
+Als je een PR bijwerkt na **CodeRabbit**- of andere inline review-opmerkingen:
+
+1. Los de opmerkingen in de code op en push; wacht tot CI groen is waar relevant.
+2. Zet daarna de bijbehorende **reviewthreads op GitHub op Resolved** (niet alleen “gefixt in code” — de thread moet dicht). Bijvoorbeeld: GraphQL-mutatie `resolveReviewThread` via `gh api graphql` met de thread-`id` uit de PR.
+
+Zonder deze stap blijven opmerkingen open staan terwijl de fix al op de branch staat.
+
 ## Report Format
 
 After running all phases:
@@ -85,6 +94,7 @@ Lint:      [PASS/FAIL] (X warnings)
 Tests:     [PASS/FAIL] (X/Y passed)
 Security:  [PASS/FAIL] (X issues)
 Diff:      X files changed
+PR threads: [N/A / RESOLVED] (CodeRabbit & co. na fix)
 
 Overall:   [READY/NOT READY] for PR
 ```

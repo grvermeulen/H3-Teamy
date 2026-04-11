@@ -11,13 +11,21 @@ updates:
       interval: "daily"
     open-pull-requests-limit: 10
     ignore:
-      # Keep this aligned with Next.js major version to avoid broken lint/build tooling.
       - dependency-name: "eslint-config-next"
         update-types:
           - "version-update:semver-major"
       - dependency-name: "next"
         update-types:
           - "version-update:semver-major"
+    groups:
+      production-patches:
+        applies-to: security-updates
+        dependency-type: production
+        update-types: ["patch", "minor"]
+      dev-patches:
+        applies-to: version-updates
+        dependency-type: development
+        update-types: ["patch", "minor"]
 
   - package-ecosystem: "pip"
     directory: "/ocr-worker"
