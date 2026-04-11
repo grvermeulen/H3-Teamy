@@ -1,9 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as Sentry from "@sentry/nextjs";
 import { resolveNextAuthUrl } from "./nextAuthUrl";
+
+vi.mock("@sentry/nextjs", () => ({
+  captureException: vi.fn(),
+}));
 
 describe("resolveNextAuthUrl", () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -39,5 +45,18 @@ describe("resolveNextAuthUrl", () => {
     vi.stubEnv("VERCEL_URL", undefined);
     vi.stubEnv("NEXTAUTH_URL", undefined);
     expect(resolveNextAuthUrl()).toBeUndefined();
+  });
+
+  it("returns undefined for invalid NEXTAUTH_URL and logs parse errors to Sentry", () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("VERCEL_URL", "");
+    vi.stubEnv("NEXTAUTH_URL", ":");
+    expect(resolveNextAuthUrl()).toBeUndefined();
+    expect(Sentry.captureException).toHaveBeenCalledWith(
+      expect.any(TypeError),
+      expect.objectContaining({
+        extra: expect.objectContaining({ context: "nextauth_url_toOrigin" }),
+      }),
+    );
   });
 });

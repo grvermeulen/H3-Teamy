@@ -70,8 +70,14 @@ export const authOptions: NextAuthOptions = {
       try {
         const u = new URL(url);
         if (u.origin === baseUrl) return url;
-      } catch {
-        // Invalid url — fall through to baseUrl
+      } catch (error: unknown) {
+        Sentry.captureException(error, {
+          extra: {
+            context: "nextauth_redirect_invalid_url",
+            url,
+            baseUrl,
+          },
+        });
       }
       return baseUrl;
     },
