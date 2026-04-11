@@ -12,7 +12,7 @@ let prismaLoaded = false;
 let prisma: PrismaClient | null = null;
 async function getPrisma(): Promise<PrismaClient | null> {
   if (prismaLoaded) return prisma;
-  if (!process.env.DATABASE_URL) {
+  if (!process.env.DATABASE_URL && !process.env.PRISMA_DATABASE_URL) {
     prismaLoaded = true;
     prisma = null;
     return null;

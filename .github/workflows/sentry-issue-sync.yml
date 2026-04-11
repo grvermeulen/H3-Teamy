@@ -18,7 +18,7 @@ jobs:
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: h3-teamy
-          SENTRY_PROJECT: h3-teamy
+          SENTRY_PROJECT: javascript-nextjs
         run: |
           ISSUES=$(curl --fail-with-body --show-error --max-time 30 \
             -H "Authorization: Bearer $SENTRY_AUTH_TOKEN" \
