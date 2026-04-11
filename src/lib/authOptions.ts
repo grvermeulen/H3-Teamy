@@ -1,6 +1,8 @@
 import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
+import * as Sentry from "@sentry/nextjs";
+import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import bcrypt from "bcryptjs";
 
@@ -23,15 +25,27 @@ export const authOptions: NextAuthOptions = {
         const email = (creds?.email as string) || "";
         const password = (creds?.password as string) || "";
         if (!email || !password) return null;
-        const user = await prisma.user.findFirst({ where: { email } });
-        if (!user || !user.passwordHash) return null;
-        const ok = await bcrypt.compare(password, user.passwordHash);
-        if (!ok) return null;
-        return {
-          id: user.id,
-          name: `${user.firstName} ${user.lastName}`.trim(),
-          email: user.email ?? undefined,
-        };
+        try {
+          const user = await prisma.user.findFirst({ where: { email } });
+          if (!user || !user.passwordHash) return null;
+          const ok = await bcrypt.compare(password, user.passwordHash);
+          if (!ok) return null;
+          return {
+            id: user.id,
+            name: `${user.firstName} ${user.lastName}`.trim(),
+            email: user.email ?? undefined,
+          };
+        } catch (error: unknown) {
+          const code =
+            error instanceof Prisma.PrismaClientKnownRequestError
+              ? error.code
+              : undefined;
+          Sentry.captureException(error, {
+            tags: { context: "credentials_authorize" },
+            extra: { prismaCode: code },
+          });
+          return null;
+        }
       },
     }),
   ],
