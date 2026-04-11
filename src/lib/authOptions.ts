@@ -4,6 +4,9 @@ import Credentials from "next-auth/providers/credentials";
 import { prisma } from "./db";
 import bcrypt from "bcryptjs";
 
+/**
+ * NextAuth configuration: Google + credentials, JWT sessions with user id on `session.user.id`.
+ */
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
@@ -24,23 +27,39 @@ export const authOptions: NextAuthOptions = {
         if (!user || !user.passwordHash) return null;
         const ok = await bcrypt.compare(password, user.passwordHash);
         if (!ok) return null;
-        return { id: user.id, name: `${user.firstName} ${user.lastName}`.trim(), email: user.email || undefined } as any;
+        return {
+          id: user.id,
+          name: `${user.firstName} ${user.lastName}`.trim(),
+          email: user.email ?? undefined,
+        };
       },
     }),
   ],
   secret: process.env.NEXTAUTH_SECRET,
   callbacks: {
-    async session({ session }) {
+    async jwt({ token, user }) {
+      if (user?.id) {
+        token.sub = user.id;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (token.sub) {
+        session.user.id = token.sub;
+      }
       return session;
     },
     async redirect({ url, baseUrl }) {
+      if (url.startsWith("/")) {
+        return `${baseUrl}${url}`;
+      }
       try {
         const u = new URL(url);
         if (u.origin === baseUrl) return url;
-      } catch {}
+      } catch {
+        // Invalid url — fall through to baseUrl
+      }
       return baseUrl;
     },
   },
 };
-
-
