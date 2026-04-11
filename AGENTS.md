@@ -2,7 +2,7 @@
 
 - CodeRabbit docstring coverage is configured in `.coderabbit.yaml` (threshold **80%**); add JSDoc on exported `src/**/*.ts(x)` symbols and use CodeRabbit “Generate docstrings” when needed.
 - Use GitHub CLI for GitHub actions (PRs, checks, comments, merges) when possible.
-- Use the `loop-on-ci` workflow when asked: watch CI, inspect failures, apply focused fixes, and iterate until green. Also check for unresolved review comments (CodeRabbit, Cursor bot) and address them before considering the loop complete; **after implementing those fixes, resolve the matching PR review threads** (e.g. GitHub GraphQL `resolveReviewThread` with `gh api graphql`) so the PR clearly shows the work as done.
+- Use the `loop-on-ci` workflow when asked: watch CI, inspect failures, apply focused fixes, and iterate until green. Voor **CodeRabbit** (en andere PR-bots zoals Cursor bot): na het verwerken van review-opmerkingen in code moeten de bijbehorende **GitHub-reviewthreads ook op resolved gezet worden** — dat hoort bij dezelfde CI/PR-ronde, niet als aparte stap later. Gebruik bijv. GraphQL `resolveReviewThread` met `gh api graphql` zodat de PR zichtbaar “af” is.
 - When syncing Vercel environment configuration, treat remote settings as source of truth and sync local values from remote.
 - Use the GitHub CLI when GitHub information is needed.
 - Follow the provided Sentry instrumentation patterns for Next.js projects.
@@ -10,7 +10,9 @@
 - Run a de-slop pass after AI-assisted implementation to remove narration comments, defensive checks the type system already covers, and tests that test the language rather than business logic.
 - Research existing solutions in `src/lib/` and npm before writing new utilities or helpers.
 - Run the verification loop (build, typecheck, lint, test, security scan, diff review) before creating or updating PRs.
-- When stating framework or runtime versions (Node, Next, React, TypeScript, Vitest, Sentry), prefer `package.json` and the lockfile over memory or older docs.
+- **Geen BugBot Pro**: gebruik de gratis stack — CodeRabbit op PRs, Agentic CI, GitHub Copilot-review (workflow), en `.cursor/rules` / `AGENTS.md` in Cursor. BugBot betaalde tier niet nodig.
+- **Sentry**: organisatie-slug en project-slug zijn beide `h3-teamy` (Sentry **Organization settings → General**). Dat moet overeenkomen met `org` / `project` in `next.config.js` en `SENTRY_ORG` / `SENTRY_PROJECT` in `.github/workflows/sentry-issue-sync.yml`. Token `SENTRY_AUTH_TOKEN` lokaal in `.env` / `.env.local` houden; naar **Vercel** en **GitHub repo secret** zetten (niet committen).
+- **Vercel Rolling Releases**: niet gebruiken zonder Pro-plan; gewone production deploys blijven voldoende.
 
 ## Learned Workspace Facts
 

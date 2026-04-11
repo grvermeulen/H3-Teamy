@@ -22,7 +22,8 @@
     "docs:generate": "tsx scripts/docs/generate.ts",
     "docs:check": "node -e \"process.exit(0)\"",
     "docs:serve": "npx serve docs",
-    "test": "vitest"
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^5.19.1",
