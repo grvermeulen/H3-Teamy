@@ -10,14 +10,13 @@ declare global {
 const prismaInstance =
   global.prisma ||
   (() => {
-    const url = process.env.PRISMA_DATABASE_URL || process.env.DATABASE_URL;
+    const url =
+      process.env.PRISMA_DATABASE_URL ||
+      process.env.DATABASE_URL ||
+      "postgresql://postgres:postgres@127.0.0.1:5432/postgres";
     const baseOptions: Prisma.PrismaClientOptions = isDbMetricsEnabled()
       ? { log: [{ emit: "event", level: "query" as const }] }
       : {};
-    if (!url) {
-      return new PrismaClient(baseOptions);
-    }
-
     const adapter = new PrismaPg({ connectionString: url });
     return new PrismaClient({ ...baseOptions, adapter });
   })();
