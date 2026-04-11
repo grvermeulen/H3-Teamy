@@ -1,15 +1,21 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
-import { useEffect } from "react";
+import { useEffect, type ReactElement } from "react";
 
+type GlobalErrorProps = {
+  error: Error & { digest?: string };
+  reset: () => void;
+};
+
+/**
+ * Root-level foutgrens voor onverwachte runtimefouten buiten de normale layout.
+ * Rapporteert naar Sentry en biedt een herstelactie.
+ */
 export default function GlobalError({
   error,
   reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+}: GlobalErrorProps): ReactElement {
   useEffect(() => {
     Sentry.captureException(error);
   }, [error]);
@@ -17,30 +23,14 @@ export default function GlobalError({
   return (
     <html lang="nl">
       <body>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            height: "50vh",
-            gap: "1rem",
-            textAlign: "center",
-          }}
-        >
-          <h2>Something went wrong!</h2>
+        <div className="flex h-[50vh] flex-col items-center justify-center gap-4 text-center">
+          <h2>Er is iets misgegaan!</h2>
           <button
+            type="button"
             onClick={reset}
-            style={{
-              padding: "8px 16px",
-              background: "#111926",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
-            }}
+            className="cursor-pointer rounded border-0 bg-[#111926] px-4 py-2 text-white"
           >
-            Try again
+            Opnieuw proberen
           </button>
         </div>
       </body>

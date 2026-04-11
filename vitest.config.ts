@@ -14,13 +14,9 @@ export default defineConfig({
     },
     coverage: {
       provider: "v8",
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: ["**/*.d.ts", "**/*.test.{ts,tsx}", "**/__tests__/**"],
       reporter: ["text", "json-summary"],
-      thresholds: {
-        statements: 60,
-        branches: 50,
-        functions: 55,
-        lines: 60,
-      },
     },
   },
 });

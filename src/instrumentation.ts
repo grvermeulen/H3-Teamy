@@ -1,6 +1,10 @@
 import * as Sentry from "@sentry/nextjs";
 
-export async function register() {
+/**
+ * Next.js instrumentation hook: laadt runtime-specifieke Sentry-configuratie
+ * (Node vs Edge) op basis van `NEXT_RUNTIME`.
+ */
+export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     await import("../sentry.server.config");
   }
