@@ -37,7 +37,7 @@ describe("Prisma compatibility", () => {
     );
 
     expect(prismaConfigSource).toContain('from "prisma/config"');
-    expect(prismaConfigSource).toContain('env("DATABASE_URL")');
+    expect(prismaConfigSource).toContain("process.env.DATABASE_URL");
   });
 
   it("keeps the datasource URL out of schema.prisma (Prisma 7)", () => {
