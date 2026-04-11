@@ -9,7 +9,7 @@ const nextConfig = {
 };
 
 module.exports = withSentryConfig(nextConfig, {
-  org: "guido-smeets",
+  org: "h3-teamy",
   project: "h3-teamy",
 
   silent: !process.env.CI,
