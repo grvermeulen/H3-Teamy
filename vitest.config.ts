@@ -8,7 +8,13 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
-    exclude: ["node_modules/**", "ecc-reference/**", ".next/**"],
+    exclude: [
+      "node_modules/**",
+      "ecc-reference/**",
+      ".next/**",
+      "e2e/**",
+      "**/.opencode/**",
+    ],
     alias: {
       "@": resolve(__dirname, "./src"),
     },

@@ -23,7 +23,9 @@
     "docs:check": "node -e \"process.exit(0)\"",
     "docs:serve": "npx serve docs",
     "test": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:e2e:post-merge": "playwright test e2e/post-merge",
+    "test:e2e:preview": "playwright test e2e/post-merge"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.7.0",
@@ -48,6 +50,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",

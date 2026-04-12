@@ -1,0 +1,79 @@
+# E2E tegen Vercel Preview vóór merge naar main:
+# - Triggert op succesvolle GitHub Deployment (Vercel Preview), niet op elke push.
+# - Zelfde read-only checks als post-merge (GET-only), maar tegen deployment_status.environment_url.
+# - Vercel gebruikt vaak environment-namen als "Preview" of "Preview – <project>"; daarom startsWith('Preview').
+#
+# Branch protection: voeg de job "E2E preview (read-only)" toe als verplichte check samen met
+# Agentic CI en Vercel. Als deze job niet draait (geen preview-deploy), verschijnt hij niet op de PR
+# — zorg dat PR’s een Vercel Preview krijgen.
+#
+# Handmatig testen: Actions → Preview E2E verify → Run workflow → base_url = preview-origin (zonder / aan het eind).
+name: Preview E2E verify
+
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Preview-origin (zonder trailing slash)"
+        required: true
+        type: string
+
+concurrency:
+  group: preview-e2e-${{ github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-preview:
+    name: E2E preview (read-only)
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' &&
+       github.event.deployment_status.environment_url != '' &&
+       (startsWith(github.event.deployment.environment, 'Preview') ||
+        startsWith(github.event.deployment.environment, 'preview')))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'deployment_status' && github.event.deployment.sha || github.sha }}
+
+      - name: Stel verify-URL in
+        env:
+          MANUAL_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.base_url || '' }}
+          DEPLOYMENT_BASE_URL: ${{ github.event_name == 'deployment_status' && github.event.deployment_status.environment_url || '' }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "PRODUCTION_VERIFY_BASE_URL=${MANUAL_BASE_URL}" >> "$GITHUB_ENV"
+          else
+            echo "PRODUCTION_VERIFY_BASE_URL=${DEPLOYMENT_BASE_URL}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps --ignore-scripts
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Vitest HTTP smoke (read-only)
+        run: npx vitest run tests/production-verify-http.test.ts
+
+      - name: Playwright browser smoke (read-only)
+        run: npm run test:e2e:post-merge
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-preview
+          path: playwright-report/
