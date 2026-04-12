@@ -2,7 +2,14 @@ import nextVitals from "eslint-config-next/core-web-vitals";
 
 const config = [
   {
-    ignores: ["coverage/**", ".next/**", "node_modules/**", ".cursor/**", "ecc-reference/**"],
+    ignores: [
+      "coverage/**",
+      ".next/**",
+      "node_modules/**",
+      ".cursor/**",
+      "ecc-reference/**",
+      "e2e/**",
+    ],
   },
   ...nextVitals,
   {
