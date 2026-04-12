@@ -6,6 +6,10 @@ language: nl-NL
 
 reviews:
   profile: chill
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    drafts: false
   pre_merge_checks:
     docstrings:
       mode: warning
@@ -13,6 +17,21 @@ reviews:
   finishing_touches:
     docstrings:
       enabled: true
+    custom:
+      - name: "deslop"
+        instructions: |
+          Remove AI-generated narration comments (comments that merely restate
+          the code), redundant defensive type checks already covered by
+          TypeScript, and tests that test the language runtime rather than
+          business logic. Keep comments that explain non-obvious intent,
+          trade-offs, or constraints.
+      - name: "nl-check"
+        instructions: |
+          Scan changed files for English user-facing strings (button labels,
+          headings, toast messages, placeholder text, alt text, aria-label)
+          and flag them. All UI text in this project must be Dutch (NL).
+          Ignore: code identifiers, log messages, HTTP status text, and
+          comments.
 
 code_generation:
   docstrings:
