@@ -12,6 +12,21 @@ For the Next.js app to build on Vercel:
 
 - Optional: **PRISMA_DATABASE_URL** is used by the app at runtime if set; build only needs **DATABASE_URL**.
 
+## Runtime database timeouts (Sentry: connection timeout / Prisma P100x)
+
+If Sentry shows **“Connection terminated due to connection timeout”**, **“timeout exceeded when trying to connect”**, or **`PrismaClientKnownRequestError`** on API routes, the app is usually hitting **Postgres connection limits** or **slow direct connections** from many Vercel function instances.
+
+**Do this in Vercel (Production + Preview):**
+
+1. Set **`PRISMA_DATABASE_URL`** to the **pooled** connection string from your host (not the direct “session” URL):
+   - **Neon**: use the URL that includes `-pooler` / the pooler host, or port **6543** as documented for serverless.
+   - **Supabase**: use the **Transaction pooler** (often port **6543**), not port 5432.
+   - **Other**: use PgBouncer or the provider’s “serverless” / “pooled” URL.
+2. Keep **`DATABASE_URL`** for Prisma CLI / migrations if your host requires a **direct** URL for `prisma migrate`; runtime traffic should prefer **`PRISMA_DATABASE_URL`** when both exist.
+3. Optional tuning via env: **`PG_POOL_MAX`** (default **1** on Vercel, **10** locally), **`PG_CONNECTION_TIMEOUT_MS`** (default **20000**), **`PG_IDLE_TIMEOUT_MS`** (default **20000**).
+
+The app uses a small **`pg` `Pool`** per instance (`src/lib/db.ts`) so connections stay bounded; without a pooled URL, cold starts can still exhaust the database.
+
 ## Common causes of Vercel deployment failure
 
 1. **DATABASE_URL not set for Build** – See above. Fix: add the variable in Vercel dashboard for Build (all environments).
