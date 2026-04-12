@@ -8,7 +8,7 @@ name: Post-merge verification
 
 on:
   push:
-    branches: ["main", "master"]
+    branches: ["main", "master", "image"]
   workflow_dispatch:
 
 concurrency:
