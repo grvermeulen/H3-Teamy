@@ -17,7 +17,7 @@
 ## Learned Workspace Facts
 
 - This repository is `H3-Teamy`, hosted at `grvermeulen/H3-Teamy`.
-- The project is a Next.js 16 TypeScript app with Prisma (PostgreSQL), NextAuth, Tailwind CSS, Sentry, and Vitest.
+- The project targets **Node.js 22** (`package.json` `engines`), and is a Next.js 16 app with React 19, TypeScript 6, Prisma 5 (PostgreSQL), NextAuth, Tailwind CSS 4, Sentry, and Vitest.
 - CI includes an "Agentic CI" verify pipeline (lint, typecheck, build, test) and Vercel deployment checks.
 - Technical documentation is organized under `docs/tech/*`.
 - Pull request #54 requires `AGENTS.md` to only contain learned preferences and learned workspace facts.
