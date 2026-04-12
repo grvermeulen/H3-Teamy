@@ -41,3 +41,6 @@ ecc-reference/
 
 # Temporary files
 tmp-*
+
+# Sentry
+.sentryclirc
