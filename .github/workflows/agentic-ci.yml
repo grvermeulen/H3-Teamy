@@ -1,3 +1,8 @@
+# Agent-/ontwikkelaarworkflow (niet door deze job geautomatiseerd):
+# Na fixes voor CodeRabbit- of andere PR-reviewopmerkingen: reviewthreads op GitHub
+# op "Resolved" zetten (zelfde ronde als groene checks). Zie AGENTS.md en
+# .cursor/rules/verification-loop.mdc (fase 7).
+# E2E tegen Vercel Preview (na deploy) zit in preview-e2e-verify.yml; post-merge smoke in post-merge-verify.yml.
 name: Agentic CI
 
 on:
