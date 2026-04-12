@@ -167,6 +167,23 @@ describe("SpaceInvadersGame", () => {
     fireEvent.pointerUp(left);
   });
 
+  it("prevents context menu on the game overlay root", async () => {
+    render(
+      <SpaceInvadersGame
+        initialState={createInitialState()}
+        onClose={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+    const dialog = screen.getByRole("dialog", { name: "Space Invaders" });
+    const event = new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+    });
+    dialog.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it("registers gameover score once via addHighScore", async () => {
     const addSpy = vi.spyOn(SpaceStorage, "addHighScore").mockReturnValue([]);
     const clearSpy = vi
