@@ -7,7 +7,16 @@ import {
 } from "../../../../lib/kv";
 import { getBadgeForAttendance } from "../../../../lib/badges";
 import { withDbRequestMetrics } from "../../../../lib/dbMetrics";
+import { displayName } from "../../../../lib/userUtils";
 
+const UNKNOWN_RSVP_NAME = "Onbekende speler";
+
+/**
+ * Returns RSVP counts and, when requested, the named RSVP lists for an event.
+ *
+ * @param req - Incoming request containing the event identifier and optional countsOnly flag.
+ * @returns JSON response with RSVP counts and grouped attendee lists.
+ */
 export async function GET(req: NextRequest) {
   return withDbRequestMetrics("api/rsvp/list.GET", async () => {
     const eventId = req.nextUrl.searchParams.get("eventId");
@@ -41,13 +50,7 @@ export async function GET(req: NextRequest) {
         continue;
       }
       const profile = profilesById[userId];
-      const first = (profile?.firstName || "").trim();
-      const last = (profile?.lastName || "").trim();
-      const name = `${first} ${last}`.trim();
-      const displayName = name || (profile?.email || "").trim();
-      if (!displayName) {
-        continue;
-      }
+      const resolvedDisplayName = displayName(profile ?? {}) || UNKNOWN_RSVP_NAME;
       // Compute simple attendance percentage as Yes/(Yes+No+Maybe) across all events (kept for potential future use)
       try {
         const stats = statsById[userId] || { total: 0, yes: 0 };
@@ -57,10 +60,11 @@ export async function GET(req: NextRequest) {
       } catch (error: unknown) {
         Sentry.captureException(error);
       }
-      if (status === "yes") yes.push({ id: userId, name: displayName });
-      else if (status === "no") no.push({ id: userId, name: displayName });
+      if (status === "yes") yes.push({ id: userId, name: resolvedDisplayName });
+      else if (status === "no")
+        no.push({ id: userId, name: resolvedDisplayName });
       else if (status === "maybe")
-        maybe.push({ id: userId, name: displayName });
+        maybe.push({ id: userId, name: resolvedDisplayName });
     }
     return NextResponse.json({
       counts,
