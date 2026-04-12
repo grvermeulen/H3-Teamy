@@ -1,5 +1,5 @@
-fastapi==0.135.2
-uvicorn[standard]==0.42.0
+fastapi==0.135.3
+uvicorn[standard]==0.44.0
 
 # Use PyTorch CPU wheels
 --extra-index-url https://download.pytorch.org/whl/cpu
@@ -10,5 +10,5 @@ torchaudio==2.11.0+cpu
 easyocr==1.7.2
 opencv-python-headless==4.13.0.92
 numpy==2.4.4
-python-multipart==0.0.22
+python-multipart==0.0.26
 
