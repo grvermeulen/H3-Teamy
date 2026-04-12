@@ -27,24 +27,25 @@ describe("Prisma compatibility", () => {
     ];
 
     expect(prismaVersions).toHaveLength(3);
-    expect(new Set(prismaVersions.map(getMajor))).toEqual(new Set(["5"]));
+    expect(new Set(prismaVersions.map(getMajor))).toEqual(new Set(["7"]));
   });
 
-  it("avoids Prisma 7-only config helpers while Prisma 5 is installed", () => {
+  it("defines the datasource URL in prisma.config.ts for Prisma 7", () => {
     const prismaConfigSource = readFileSync(
       resolve(process.cwd(), "prisma.config.ts"),
       "utf8",
     );
 
-    expect(prismaConfigSource).not.toContain('from "prisma/config"');
+    expect(prismaConfigSource).toContain('from "prisma/config"');
+    expect(prismaConfigSource).toContain("process.env.DATABASE_URL");
   });
 
-  it("keeps the Prisma schema datasource url defined for prisma generate", () => {
+  it("keeps the datasource URL out of schema.prisma (Prisma 7)", () => {
     const schemaSource = readFileSync(
       resolve(process.cwd(), "prisma/schema.prisma"),
       "utf8",
     );
 
-    expect(schemaSource).toContain('url      = env("DATABASE_URL")');
+    expect(schemaSource).not.toMatch(/url\s*=\s*env\("DATABASE_URL"\)/);
   });
 });

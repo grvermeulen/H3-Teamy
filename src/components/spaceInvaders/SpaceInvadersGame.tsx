@@ -341,7 +341,8 @@ export default function SpaceInvadersGame({
       aria-modal="true"
       aria-label="Space Invaders"
       tabIndex={-1}
-      className="fixed inset-0 z-[3200] flex min-h-dvh flex-col touch-none bg-[#010409] pt-safe pb-safe-bottom-bar pl-safe pr-safe"
+      className="fixed inset-0 z-[3200] flex min-h-dvh flex-col touch-none select-none bg-[#010409] pt-safe pb-safe-bottom-bar pl-safe pr-safe [-webkit-user-select:none] [-webkit-touch-callout:none]"
+      onContextMenu={(e) => e.preventDefault()}
     >
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#21262d] px-3 py-2">
         <div className="flex flex-wrap gap-2.5 text-sm text-[#c9d1d9]">
