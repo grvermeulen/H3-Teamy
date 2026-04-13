@@ -11,8 +11,19 @@ function parsePositiveInt(value: string | undefined, fallback: number): number {
 }
 
 /**
+ * Parses a positive duration in milliseconds from env, or returns `fallback`.
+ * @param value - Raw string (e.g. from `process.env.PG_CONNECTION_TIMEOUT_MS`).
+ * @param fallback - Used when missing, NaN, or non-positive.
+ */
+function parsePositiveMs(value: string | undefined, fallback: number): number {
+  const n = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+/**
  * Builds `pg.Pool` options for Prisma’s driver adapter.
- * Uses a modest `max` on Vercel to avoid opening one TCP connection per request (which can exhaust Postgres or stall with `ETIMEDOUT`).
+ * Uses a small `max` on Vercel (default **1**) so each serverless instance opens few TCP connections;
+ * many instances × many connections per instance exhausts Postgres and surfaces as connection timeouts.
  *
  * @param connectionString - Postgres URL (`DATABASE_URL` / `PRISMA_DATABASE_URL`).
  * @returns Pool configuration passed to `@prisma/adapter-pg` (internally builds a `pg.Pool`).
@@ -26,13 +37,21 @@ export function getPgPoolConfig(connectionString: string): {
   allowExitOnIdle: boolean;
 } {
   const onVercel = process.env.VERCEL === "1";
-  const max = parsePositiveInt(process.env.PG_POOL_MAX, onVercel ? 5 : 20);
+  const max = parsePositiveInt(process.env.PG_POOL_MAX, onVercel ? 1 : 20);
+  const connectionTimeoutMillis = parsePositiveMs(
+    process.env.PG_CONNECTION_TIMEOUT_MS,
+    20_000,
+  );
+  const idleTimeoutMillis = parsePositiveMs(
+    process.env.PG_IDLE_TIMEOUT_MS,
+    20_000,
+  );
   return {
     connectionString,
     max,
     min: 0,
-    idleTimeoutMillis: 10_000,
-    connectionTimeoutMillis: 15_000,
+    idleTimeoutMillis,
+    connectionTimeoutMillis,
     allowExitOnIdle: onVercel,
   };
 }

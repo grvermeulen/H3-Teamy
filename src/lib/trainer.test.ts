@@ -1,9 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import * as Sentry from "@sentry/nextjs";
 import { isTrainer, isAdminUser } from "./trainer";
 import { prisma } from "./db";
 import { getActiveUser } from "./activeUser";
 import { getUserRoles } from "./kv";
 import { NextRequest } from "next/server";
+
+vi.mock("@sentry/nextjs", () => ({
+  captureException: vi.fn(),
+}));
 
 // Mock dependencies
 vi.mock("./db", () => ({
@@ -87,6 +92,13 @@ describe("trainer permissions", () => {
       const result = await isTrainer(mockReq);
       expect(result.isTrainer).toBe(false);
       expect(result.me.name).toBe("");
+      expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({
+          tags: { component: "trainer" },
+          extra: expect.objectContaining({ context: "isTrainer", userId: "5" }),
+        }),
+      );
     });
   });
 
@@ -134,6 +146,16 @@ describe("trainer permissions", () => {
       const result = await isAdminUser(mockReq);
       expect(result.isAdmin).toBe(false);
       expect(result.me.name).toBe("");
+      expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({
+          tags: { component: "trainer" },
+          extra: expect.objectContaining({
+            context: "isAdminUser",
+            userId: "5",
+          }),
+        }),
+      );
     });
   });
 });
