@@ -27,6 +27,14 @@ describe("isTransientPostgresConnectError", () => {
     ).toBe(true);
   });
 
+  it("returns true for Prisma/pg connection terminated message", () => {
+    expect(
+      isTransientPostgresConnectError(
+        new Error("Connection terminated unexpectedly"),
+      ),
+    ).toBe(true);
+  });
+
   it("returns false for unrelated errors", () => {
     expect(isTransientPostgresConnectError(new Error("unique violation"))).toBe(
       false,
