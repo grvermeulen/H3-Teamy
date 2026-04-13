@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { getActiveUser } from "./activeUser";
 import { prisma } from "./db";
-import { getUserRoles } from "./kv";
+import { getUserRoles, type UserRoles } from "./kv";
 
 function norm(s: string) {
   return (s || "").toLowerCase().trim();
@@ -28,15 +29,23 @@ export async function isTrainer(
       .filter(Boolean);
     const isAdmin = norm(full) === norm(admin);
     const isTrainerListed = trainers.includes(norm(full));
-    const roles = await getUserRoles(userId).catch(
-      () => ({ player: true }) as any,
-    );
+    const roles: UserRoles = await getUserRoles(userId).catch((err: unknown) => {
+      Sentry.captureException(err, {
+        tags: { component: "trainer" },
+        extra: { context: "getUserRoles_isTrainer", userId },
+      });
+      return { player: true };
+    });
     const byRole = Boolean(roles?.trainer || roles?.admin);
     return {
       isTrainer: Boolean(isAdmin || isTrainerListed || byRole),
       me: { id: userId, name: full },
     };
-  } catch {
+  } catch (err: unknown) {
+    Sentry.captureException(err, {
+      tags: { component: "trainer" },
+      extra: { context: "isTrainer", userId },
+    });
     return { isTrainer: false, me: { id: userId, name: "" } };
   }
 }
@@ -57,17 +66,23 @@ export async function isAdminUser(
     const full = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
     const admin = process.env.ADMIN_FULL_NAME || "";
     const envAdmin = norm(full) === norm(admin);
-    const roles = await getUserRoles(userId).catch(
-      () => ({ player: true }) as any,
-    );
+    const roles: UserRoles = await getUserRoles(userId).catch((err: unknown) => {
+      Sentry.captureException(err, {
+        tags: { component: "trainer" },
+        extra: { context: "getUserRoles_isAdminUser", userId },
+      });
+      return { player: true };
+    });
     const byRole = Boolean(roles?.admin);
     return {
       isAdmin: Boolean(envAdmin || byRole),
       me: { id: userId, name: full },
     };
-  } catch {
+  } catch (err: unknown) {
+    Sentry.captureException(err, {
+      tags: { component: "trainer" },
+      extra: { context: "isAdminUser", userId },
+    });
     return { isAdmin: false, me: { id: userId, name: "" } };
   }
 }
-
-// CI: trigger AI review

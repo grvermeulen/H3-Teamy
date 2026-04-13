@@ -6,11 +6,12 @@ describe("getPgPoolConfig", () => {
     vi.unstubAllEnvs();
   });
 
-  it("uses max 5 on Vercel when PG_POOL_MAX is unset", () => {
+  it("uses max 1 on Vercel when PG_POOL_MAX is unset", () => {
     vi.stubEnv("VERCEL", "1");
     const cfg = getPgPoolConfig("postgresql://u:p@localhost/db");
-    expect(cfg.max).toBe(5);
-    expect(cfg.connectionTimeoutMillis).toBe(15_000);
+    expect(cfg.max).toBe(1);
+    expect(cfg.connectionTimeoutMillis).toBe(20_000);
+    expect(cfg.idleTimeoutMillis).toBe(20_000);
     expect(cfg.allowExitOnIdle).toBe(true);
   });
 
@@ -26,5 +27,14 @@ describe("getPgPoolConfig", () => {
     const cfg = getPgPoolConfig("postgresql://u:p@localhost/db");
     expect(cfg.max).toBe(20);
     expect(cfg.allowExitOnIdle).toBe(false);
+  });
+
+  it("respects PG_CONNECTION_TIMEOUT_MS and PG_IDLE_TIMEOUT_MS", () => {
+    vi.stubEnv("VERCEL", "1");
+    vi.stubEnv("PG_CONNECTION_TIMEOUT_MS", "25000");
+    vi.stubEnv("PG_IDLE_TIMEOUT_MS", "30000");
+    const cfg = getPgPoolConfig("postgresql://u:p@localhost/db");
+    expect(cfg.connectionTimeoutMillis).toBe(25_000);
+    expect(cfg.idleTimeoutMillis).toBe(30_000);
   });
 });

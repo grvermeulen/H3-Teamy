@@ -860,7 +860,12 @@ export async function listAllAttendanceKeys(): Promise<string[]> {
 }
 
 // Roles (admin/trainer/player) stored in KV/Redis for simplicity
-type Roles = { admin?: boolean; trainer?: boolean; player?: boolean };
+export type UserRoles = {
+  admin?: boolean;
+  trainer?: boolean;
+  player?: boolean;
+};
+type Roles = UserRoles;
 
 export async function getUserRoles(userId: string): Promise<Roles> {
   const key = `roles:${userId}`;
