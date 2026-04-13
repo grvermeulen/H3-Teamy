@@ -24,9 +24,10 @@ function parsePositiveMs(value: string | undefined, fallback: number): number {
  * Builds `pg.Pool` options for Prisma’s driver adapter.
  * Uses a small `max` on Vercel (default **1**) so each serverless instance opens few TCP connections;
  * many instances × many connections per instance exhausts Postgres and surfaces as connection timeouts.
+ * On Vercel, `maxLifetimeSeconds` defaults to 300 so pooled sockets are recycled before NAT/LB idle drops.
  *
  * @param connectionString - Postgres URL (`DATABASE_URL` / `PRISMA_DATABASE_URL`).
- * @returns Pool configuration passed to `@prisma/adapter-pg` (internally builds a `pg.Pool`).
+ * @returns Pool configuration passed to `@prisma/adapter-pg` (internally builds a `pg.Pool`), including keepalive and optional lifetime limits.
  */
 export function getPgPoolConfig(connectionString: string): {
   connectionString: string;
@@ -49,12 +50,12 @@ export function getPgPoolConfig(connectionString: string): {
     process.env.PG_IDLE_TIMEOUT_MS,
     20_000,
   );
-  /** Recycle pooled connections so idle TCP sessions dropped by NAT/LB are not reused (avoids "Connection terminated unexpectedly"). */
+  // Recycle pooled connections so idle TCP sessions dropped by NAT/LB are not reused (avoids "Connection terminated unexpectedly").
   const maxLifetimeSeconds = parsePositiveInt(
     process.env.PG_POOL_MAX_LIFETIME_SECONDS,
     onVercel ? 300 : 0,
   );
-  /** First TCP keepalive probe delay (`pg` passes this to libpq as `keepalives_idle`). */
+  // First TCP keepalive probe delay (`pg` passes this to libpq as `keepalives_idle`).
   const keepAliveInitialDelayMillis = parsePositiveMs(
     process.env.PG_KEEPALIVE_INITIAL_DELAY_MS,
     10_000,

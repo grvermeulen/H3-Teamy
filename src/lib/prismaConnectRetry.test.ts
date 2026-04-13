@@ -27,7 +27,7 @@ describe("isTransientPostgresConnectError", () => {
     ).toBe(true);
   });
 
-  it("returns true for connection terminated unexpectedly (pg pool)", () => {
+  it("returns true for Prisma/pg connection terminated message", () => {
     expect(
       isTransientPostgresConnectError(
         new Error("Connection terminated unexpectedly"),
@@ -63,7 +63,7 @@ describe("withPgConnectRetry", () => {
     let attempt = 0;
     const fn = vi.fn().mockImplementation(() => {
       attempt += 1;
-      if (attempt < 3) {
+      if (attempt < 4) {
         return Promise.reject(
           new Error("timeout exceeded when trying to connect"),
         );
@@ -73,7 +73,7 @@ describe("withPgConnectRetry", () => {
     const promise = withPgConnectRetry("listEventRsvps", fn);
     await vi.runAllTimersAsync();
     await expect(promise).resolves.toBe("ok");
-    expect(fn).toHaveBeenCalledTimes(3);
+    expect(fn).toHaveBeenCalledTimes(4);
     expect(vi.mocked(Sentry.addBreadcrumb)).toHaveBeenCalled();
   });
 
