@@ -43,12 +43,14 @@ function computeBackoffMs(attemptIndex: number): number {
  * @param fn - Async functie die de query uitvoert.
  * @returns Resultaat van `fn`.
  * @throws De laatste fout wanneer alle pogingen falen of de fout niet als transient wordt gezien.
+ *
+ * Voert tot vier pogingen uit zodat een eerste fout door een verouderde pool-connectie niet direct faalt.
  */
 export async function withPgConnectRetry<T>(
   operationName: string,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const maxAttempts = 3;
+  const maxAttempts = 4;
   let lastError: unknown;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {

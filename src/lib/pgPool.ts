@@ -35,6 +35,9 @@ export function getPgPoolConfig(connectionString: string): {
   idleTimeoutMillis: number;
   connectionTimeoutMillis: number;
   allowExitOnIdle: boolean;
+  keepAlive: boolean;
+  keepAliveInitialDelayMillis: number;
+  maxLifetimeSeconds: number;
 } {
   const onVercel = process.env.VERCEL === "1";
   const max = parsePositiveInt(process.env.PG_POOL_MAX, onVercel ? 1 : 20);
@@ -46,6 +49,16 @@ export function getPgPoolConfig(connectionString: string): {
     process.env.PG_IDLE_TIMEOUT_MS,
     20_000,
   );
+  /** Recycle pooled connections so idle TCP sessions dropped by NAT/LB are not reused (avoids "Connection terminated unexpectedly"). */
+  const maxLifetimeSeconds = parsePositiveInt(
+    process.env.PG_POOL_MAX_LIFETIME_SECONDS,
+    onVercel ? 300 : 0,
+  );
+  /** First TCP keepalive probe delay (`pg` passes this to libpq as `keepalives_idle`). */
+  const keepAliveInitialDelayMillis = parsePositiveMs(
+    process.env.PG_KEEPALIVE_INITIAL_DELAY_MS,
+    10_000,
+  );
   return {
     connectionString,
     max,
@@ -53,6 +66,9 @@ export function getPgPoolConfig(connectionString: string): {
     idleTimeoutMillis,
     connectionTimeoutMillis,
     allowExitOnIdle: onVercel,
+    keepAlive: true,
+    keepAliveInitialDelayMillis,
+    maxLifetimeSeconds,
   };
 }
 
