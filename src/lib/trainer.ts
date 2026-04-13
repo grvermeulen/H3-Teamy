@@ -14,11 +14,22 @@ function norm(s: string) {
  *
  * @param req - The incoming Next.js request.
  * @returns An object containing `isTrainer` boolean and the user's identity `me`.
+ *   When user resolution fails (e.g. database connection timeout), returns `isTrainer: false`
+ *   and an empty `me` after logging to Sentry.
  */
 export async function isTrainer(
   req: NextRequest,
 ): Promise<{ isTrainer: boolean; me: { id: string; name: string } }> {
-  const { userId } = await getActiveUser(req);
+  let userId: string;
+  try {
+    ({ userId } = await getActiveUser(req));
+  } catch (err: unknown) {
+    Sentry.captureException(err, {
+      tags: { component: "trainer" },
+      extra: { context: "getActiveUser_isTrainer" },
+    });
+    return { isTrainer: false, me: { id: "", name: "" } };
+  }
   try {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     const full = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
@@ -56,11 +67,22 @@ export async function isTrainer(
  *
  * @param req - The incoming Next.js request.
  * @returns An object containing `isAdmin` boolean and the user's identity `me`.
+ *   When user resolution fails (e.g. database connection timeout), returns `isAdmin: false`
+ *   and an empty `me` after logging to Sentry.
  */
 export async function isAdminUser(
   req: NextRequest,
 ): Promise<{ isAdmin: boolean; me: { id: string; name: string } }> {
-  const { userId } = await getActiveUser(req);
+  let userId: string;
+  try {
+    ({ userId } = await getActiveUser(req));
+  } catch (err: unknown) {
+    Sentry.captureException(err, {
+      tags: { component: "trainer" },
+      extra: { context: "getActiveUser_isAdminUser" },
+    });
+    return { isAdmin: false, me: { id: "", name: "" } };
+  }
   try {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     const full = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
