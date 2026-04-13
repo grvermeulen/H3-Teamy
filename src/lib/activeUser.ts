@@ -1,27 +1,21 @@
 import { NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { Prisma } from "@prisma/client";
-import { prisma } from "./db";
+import type { Session } from "next-auth";
 import { getServerSession } from "next-auth";
+import { prisma } from "./db";
 import { authOptions } from "./authOptions";
+import { withPgConnectRetry } from "./prismaConnectRetry";
 
 export type ActiveUserResult = {
   userId: string;
   needsLink: boolean;
 };
 
-/**
- * Resolves the active user for a request in authenticated and anonymous flows.
- *
- * @param req - Incoming request carrying auth session and anon cookie.
- * @returns Resolved user identifier and whether explicit account linking is required.
- */
-export async function getActiveUser(
-  req: NextRequest,
+async function resolveActiveUser(
+  cookieId: string | null,
+  session: Session | null,
 ): Promise<ActiveUserResult> {
-  const cookieId = req.cookies.get("anon_id")?.value || null;
-  const session = await getServerSession(authOptions);
-
   async function ensureCookieIdentityUser(cookie: string): Promise<string> {
     // Create identity and user atomically; handle races by falling back to existing identity
     try {
@@ -269,4 +263,20 @@ export async function getActiveUser(
     data: { firstName: "", lastName: "" },
   });
   return { userId: user.id, needsLink: false };
+}
+
+/**
+ * Resolves the active user for a request in authenticated and anonymous flows.
+ *
+ * @param req - Incoming request carrying auth session and anon cookie.
+ * @returns Resolved user identifier and whether explicit account linking is required.
+ */
+export async function getActiveUser(
+  req: NextRequest,
+): Promise<ActiveUserResult> {
+  const cookieId = req.cookies.get("anon_id")?.value || null;
+  const session = await getServerSession(authOptions);
+  return withPgConnectRetry("getActiveUser", () =>
+    resolveActiveUser(cookieId, session),
+  );
 }
