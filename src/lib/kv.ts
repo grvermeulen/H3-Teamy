@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 import type { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { withPgConnectRetry } from "./prismaConnectRetry";
 
 type RsvpStatus = "yes" | "no" | "maybe" | null;
 type UserProfile = {
@@ -369,18 +370,21 @@ export async function getUserProfiles(
 
   const p = await getPrisma();
   if (p) {
-    const rows = await p.user.findMany({
-      where: { id: { in: uniqueIds } },
-      select: { id: true, firstName: true, lastName: true, email: true },
+    return withPgConnectRetry("getUserProfiles", async () => {
+      const rows = await p.user.findMany({
+        where: { id: { in: uniqueIds } },
+        select: { id: true, firstName: true, lastName: true, email: true },
+      });
+      const result: Record<string, UserProfile> = {};
+      for (const row of rows) {
+        result[row.id] = {
+          firstName: row.firstName,
+          lastName: row.lastName,
+          email: row.email ?? undefined,
+        };
+      }
+      return result;
     });
-    for (const row of rows) {
-      out[row.id] = {
-        firstName: row.firstName,
-        lastName: row.lastName,
-        email: row.email ?? undefined,
-      };
-    }
-    return out;
   }
 
   const redis = await getRedis();
@@ -429,11 +433,13 @@ export async function listEventRsvps(
 ): Promise<{ userId: string; status: RsvpStatus }[]> {
   const p = await getPrisma();
   if (p) {
-    const rows = await p.rsvp.findMany({ where: { eventId } });
-    return rows.map((r: any) => ({
-      userId: r.userId,
-      status: (r.status as RsvpStatus) ?? null,
-    }));
+    return withPgConnectRetry("listEventRsvps", async () => {
+      const rows = await p.rsvp.findMany({ where: { eventId } });
+      return rows.map((r: { userId: string; status: unknown }) => ({
+        userId: r.userId,
+        status: (r.status as RsvpStatus) ?? null,
+      }));
+    });
   }
   const redis = await getRedis();
   if (redis) {
@@ -509,20 +515,23 @@ export async function getUserRsvpStats(
 
   const p = await getPrisma();
   if (p) {
-    const rows = await p.rsvp.findMany({
-      where: { userId: { in: uniqueIds } },
-      select: { userId: true, status: true },
+    return withPgConnectRetry("getUserRsvpStats", async () => {
+      const rows = await p.rsvp.findMany({
+        where: { userId: { in: uniqueIds } },
+        select: { userId: true, status: true },
+      });
+      const result: Record<string, { total: number; yes: number }> = {};
+      for (const userId of uniqueIds) {
+        result[userId] = { total: 0, yes: 0 };
+      }
+      for (const row of rows) {
+        const current = result[row.userId] || { total: 0, yes: 0 };
+        current.total += 1;
+        if (row.status === "yes") current.yes += 1;
+        result[row.userId] = current;
+      }
+      return result;
     });
-    for (const userId of uniqueIds) {
-      out[userId] = { total: 0, yes: 0 };
-    }
-    for (const row of rows) {
-      const current = out[row.userId] || { total: 0, yes: 0 };
-      current.total += 1;
-      if (row.status === "yes") current.yes += 1;
-      out[row.userId] = current;
-    }
-    return out;
   }
 
   for (const userId of uniqueIds) {
