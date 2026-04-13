@@ -37,7 +37,8 @@ function computeBackoffMs(attemptIndex: number): number {
 }
 
 /**
- * Voert een Prisma-actie uit met beperkte herhaling bij tijdelijke connectiefouten (serverless/pool).
+ * Voert een Prisma-actie uit met beperkte herhaling bij tijdelijke connectiefouten (serverless/pool),
+ * tot vier pogingen, zodat een eerste fout door een verouderde pool-connectie niet direct faalt.
  *
  * @param operationName - Korte naam voor breadcrumbs (bijv. `listEventRsvps`).
  * @param fn - Async functie die de query uitvoert.
@@ -48,7 +49,7 @@ export async function withPgConnectRetry<T>(
   operationName: string,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const maxAttempts = 3;
+  const maxAttempts = 4;
   let lastError: unknown;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
