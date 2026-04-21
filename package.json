@@ -31,7 +31,7 @@
     "@prisma/adapter-pg": "7.7.0",
     "@prisma/client": "7.7.0",
     "@sentry/nextjs": "^10.49.0",
-    "@tailwindcss/postcss": "^4.2.2",
+    "@tailwindcss/postcss": "^4.2.3",
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
     "ical": "^0.8.0",
