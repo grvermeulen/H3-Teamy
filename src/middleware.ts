@@ -2,28 +2,21 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import {
-  NEXT_RSC_HEADER,
-  NEXT_RSC_UNION_QUERY,
   NEXT_ROUTER_STATE_TREE_HEADER,
+  flightRequestPartsFromNextRequest,
   shouldDropStaleFlightRouterStateTree,
-} from "@/lib/nextFlightRequest";
+} from "./lib/middlewareRsc";
 
 /**
- * Ensures each visitor has an `anon_id` cookie for anonymous identity flows.
- * Strips stale `next-router-state-tree` on App Router flight fetches to avoid 500s after deploy (Next.js #92907).
+ * Zet een `anon_id`-cookie voor anonieme flows en verwijdert een stale
+ * `next-router-state-tree` op App Router flight-fetches (na deploy; zie vercel/next.js#92907).
  */
 export function middleware(request: NextRequest): NextResponse {
-  const pathname = request.nextUrl.pathname;
-  const hasRscQuery = request.nextUrl.searchParams.has(NEXT_RSC_UNION_QUERY);
-  const rscHeader = request.headers.get(NEXT_RSC_HEADER);
-
   const requestHeaders = new Headers(request.headers);
   if (
-    shouldDropStaleFlightRouterStateTree({
-      pathname,
-      hasRscQuery,
-      rscHeader,
-    })
+    shouldDropStaleFlightRouterStateTree(
+      flightRequestPartsFromNextRequest(request),
+    )
   ) {
     requestHeaders.delete(NEXT_ROUTER_STATE_TREE_HEADER);
   }
