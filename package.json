@@ -46,7 +46,7 @@
     "react-dom": "19.2.5",
     "resend": "^6.12.2",
     "sharp": "^0.34.5",
-    "tailwindcss": "^4.2.3",
+    "tailwindcss": "^4.2.4",
     "zod": "^4.3.6"
   },
   "devDependencies": {
