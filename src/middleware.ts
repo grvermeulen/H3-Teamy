@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { isAppRouterRscRequest } from "./lib/middlewareRsc";
+
 /**
  * Ensures each visitor has an `anon_id` cookie for anonymous identity flows.
  */
 export function middleware(request: NextRequest) {
+  if (isAppRouterRscRequest(request)) {
+    return NextResponse.next();
+  }
   const response = NextResponse.next();
   const cookieName = "anon_id";
   const existing = request.cookies.get(cookieName)?.value;
