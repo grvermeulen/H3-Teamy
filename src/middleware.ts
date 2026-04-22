@@ -1,16 +1,30 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-import { isAppRouterRscRequest } from "./lib/middlewareRsc";
+import {
+  NEXT_ROUTER_STATE_TREE_HEADER,
+  flightRequestPartsFromNextRequest,
+  shouldDropStaleFlightRouterStateTree,
+} from "./lib/middlewareRsc";
 
 /**
- * Ensures each visitor has an `anon_id` cookie for anonymous identity flows.
+ * Zet een `anon_id`-cookie voor anonieme flows en verwijdert een stale
+ * `next-router-state-tree` op App Router flight-fetches (na deploy; zie vercel/next.js#92907).
  */
-export function middleware(request: NextRequest) {
-  if (isAppRouterRscRequest(request)) {
-    return NextResponse.next();
+export function middleware(request: NextRequest): NextResponse {
+  const requestHeaders = new Headers(request.headers);
+  if (
+    shouldDropStaleFlightRouterStateTree(
+      flightRequestPartsFromNextRequest(request),
+    )
+  ) {
+    requestHeaders.delete(NEXT_ROUTER_STATE_TREE_HEADER);
   }
-  const response = NextResponse.next();
+
+  const response = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
+
   const cookieName = "anon_id";
   const existing = request.cookies.get(cookieName)?.value;
   if (!existing) {
