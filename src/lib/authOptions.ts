@@ -26,7 +26,16 @@ export const authOptions: NextAuthOptions = {
         const password = (creds?.password as string) || "";
         if (!email || !password) return null;
         try {
-          const user = await prisma.user.findFirst({ where: { email } });
+          const user = await prisma.user.findFirst({
+            where: { email },
+            select: {
+              id: true,
+              email: true,
+              passwordHash: true,
+              firstName: true,
+              lastName: true,
+            },
+          });
           if (!user || !user.passwordHash) return null;
           const ok = await bcrypt.compare(password, user.passwordHash);
           if (!ok) return null;
