@@ -1,14 +1,22 @@
--- CreateEnum
-CREATE TYPE "FeedbackType" AS ENUM ('BUG', 'IDEA');
+-- Idempotent where possible: preview DBs may already have objects from earlier branches.
 
--- CreateEnum
-CREATE TYPE "FeedbackStatus" AS ENUM ('NEW', 'TRIAGED', 'PLANNED', 'SHIPPED', 'DECLINED');
+DO $$
+BEGIN
+  CREATE TYPE "FeedbackType" AS ENUM ('BUG', 'IDEA');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
--- AlterTable
-ALTER TABLE "User" ADD COLUMN "lastVersionSeen" TEXT;
+DO $$
+BEGIN
+  CREATE TYPE "FeedbackStatus" AS ENUM ('NEW', 'TRIAGED', 'PLANNED', 'SHIPPED', 'DECLINED');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateTable
-CREATE TABLE "Feedback" (
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastVersionSeen" TEXT;
+
+CREATE TABLE IF NOT EXISTS "Feedback" (
     "id" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -27,14 +35,15 @@ CREATE TABLE "Feedback" (
     CONSTRAINT "Feedback_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE INDEX "Feedback_type_createdAt_idx" ON "Feedback"("type", "createdAt");
+CREATE INDEX IF NOT EXISTS "Feedback_type_createdAt_idx" ON "Feedback"("type", "createdAt");
 
--- CreateIndex
-CREATE INDEX "Feedback_userId_idx" ON "Feedback"("userId");
+CREATE INDEX IF NOT EXISTS "Feedback_userId_idx" ON "Feedback"("userId");
 
--- CreateIndex
-CREATE INDEX "Feedback_status_idx" ON "Feedback"("status");
+CREATE INDEX IF NOT EXISTS "Feedback_status_idx" ON "Feedback"("status");
 
--- AddForeignKey
-ALTER TABLE "Feedback" ADD CONSTRAINT "Feedback_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+  ALTER TABLE "Feedback" ADD CONSTRAINT "Feedback_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
