@@ -21,7 +21,8 @@ export default async function LoginPage({
 }): Promise<JSX.Element> {
   const sp = await resolveSearchParams(searchParams);
   const raw = sp.callbackUrl;
-  const rawStr = typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : undefined;
+  const rawStr =
+    typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : undefined;
   const callbackUrl = getSafeCallbackUrl(rawStr);
 
   return <LoginForm callbackUrl={callbackUrl} />;

@@ -47,7 +47,7 @@ describe("shapeIdea", () => {
     vi.resetModules();
   });
 
-  it("calls the AI SDK with anthropic/claude-opus-4-7 and returns the parsed object", async () => {
+  it("calls the AI SDK with anthropic/claude-opus-4 and returns the parsed object", async () => {
     const generateObject = vi.fn(async () => ({
       object: {
         aiTheme: "RSVP UX",
@@ -68,7 +68,7 @@ describe("shapeIdea", () => {
       model: string;
       system: string;
     };
-    expect(args.model).toBe("anthropic/claude-opus-4-7");
+    expect(args.model).toBe("anthropic/claude-opus-4");
     expect(args.system).toBe(PM_SYSTEM_PROMPT);
   });
 
