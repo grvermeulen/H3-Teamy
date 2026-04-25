@@ -30,7 +30,9 @@ const ALIASED_KEYS = [
 for (const key of ALIASED_KEYS) {
   const previewValue = process.env[`PREVIEW_${key}`];
   if (!previewValue) continue;
-  if (!process.env[key]) {
-    process.env[key] = previewValue;
-  }
+  // Always overwrite when PREVIEW_* is present. The Prisma Postgres marketplace
+  // integration silently injects DATABASE_URL / PRISMA_DATABASE_URL (the prod
+  // Accelerate URL) into preview deploys; the explicit PREVIEW_* values must win.
+  // Production env has no PREVIEW_* set, so this branch is a no-op there.
+  process.env[key] = previewValue;
 }
