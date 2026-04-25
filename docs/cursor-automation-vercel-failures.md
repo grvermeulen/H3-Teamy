@@ -6,11 +6,10 @@ This repository has a GitHub Actions workflow (`Vercel Deployment Failure Monito
 
 For the Next.js app to build on Vercel:
 
-- **DATABASE_URL** must be set in **Vercel Project Settings → Environment Variables** for the **Build** phase (Production and Preview).  
-  Prisma runs `prisma generate` in `postinstall`; the schema uses `env("DATABASE_URL")`, so the build fails with "Environment variable not found: DATABASE_URL" if it is missing.  
-  For Preview deployments you can use the same production URL or a dedicated preview DB URL.
+- **DATABASE_URL** (or **POSTGRES_URL** / **POSTGRES_PRISMA_URL** from Vercel Postgres) must be available for the **Build** phase (Production and Preview).  
+  `prisma.config.ts` resolves the datasource URL in that order so `postinstall` (`prisma generate`) and `vercel.json` `prisma migrate deploy` find a connection string when the project uses Vercel’s Postgres integration naming.
 
-- Optional: **PRISMA_DATABASE_URL** is used by the app at runtime if set; build only needs **DATABASE_URL**.
+- **PRISMA_DATABASE_URL** is used by the app at runtime if set (pooled URL). For migrations, prefer a **direct** URL in **DATABASE_URL** when your host rejects DDL on the pooler.
 
 ## Runtime database timeouts (Sentry: connection timeout / Prisma P100x)
 
