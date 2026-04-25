@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import * as Sentry from "@sentry/nextjs";
 import { prisma } from "./db";
 import { authOptions } from "./authOptions";
+import type { UserCoreRow } from "./userPrismaSelect";
 
 vi.mock("./db", () => ({
   prisma: {
@@ -52,13 +53,14 @@ describe("Credentials authorize", () => {
   });
 
   it("returns user on success", async () => {
-    vi.mocked(prisma.user.findFirst).mockResolvedValueOnce({
+    const row: UserCoreRow = {
       id: "u1",
       email: "a@b.nl",
       passwordHash: "$2a$10$hashed",
       firstName: "A",
       lastName: "B",
-    } as never);
+    };
+    vi.mocked(prisma.user.findFirst).mockResolvedValueOnce(row);
 
     const bcrypt = await import("bcryptjs");
     vi.mocked(bcrypt.default.compare).mockResolvedValueOnce(true);

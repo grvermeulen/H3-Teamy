@@ -4,6 +4,7 @@ import { getActiveUser } from "./activeUser";
 import { isDbUnavailableError } from "./dbUnavailableError";
 import { prisma } from "./db";
 import { getUserRoles, type UserRoles } from "./kv";
+import { USER_CORE_SELECT } from "./userPrismaSelect";
 
 function norm(s: string) {
   return (s || "").toLowerCase().trim();
@@ -34,7 +35,10 @@ export async function isTrainer(
     return { isTrainer: false, me: { id: "", name: "" } };
   }
   try {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: USER_CORE_SELECT,
+    });
     const full = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
     const admin = process.env.ADMIN_FULL_NAME || "";
     const trainers = (process.env.TRAINER_FULL_NAMES || "")
@@ -89,7 +93,10 @@ export async function isAdminUser(
     return { isAdmin: false, me: { id: "", name: "" } };
   }
   try {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: USER_CORE_SELECT,
+    });
     const full = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
     const admin = process.env.ADMIN_FULL_NAME || "";
     const envAdmin = norm(full) === norm(admin);

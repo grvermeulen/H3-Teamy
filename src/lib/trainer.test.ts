@@ -4,6 +4,7 @@ import { isTrainer, isAdminUser } from "./trainer";
 import { prisma } from "./db";
 import { getActiveUser } from "./activeUser";
 import { getUserRoles } from "./kv";
+import { USER_CORE_SELECT } from "./userPrismaSelect";
 import { NextRequest } from "next/server";
 import { DbUnavailableError } from "./dbUnavailableError";
 
@@ -48,6 +49,10 @@ describe("trainer permissions", () => {
 
       const result = await isTrainer(mockReq);
       expect(result.isTrainer).toBe(true);
+      expect(vi.mocked(prisma.user.findUnique)).toHaveBeenCalledWith({
+        where: { id: "1" },
+        select: USER_CORE_SELECT,
+      });
     });
 
     it("returns true if user is Admin", async () => {

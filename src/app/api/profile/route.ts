@@ -6,11 +6,15 @@ import {
   isDbUnavailableError,
   jsonDatabaseUnavailable,
 } from "../../../lib/dbUnavailableError";
+import { USER_CORE_SELECT } from "../../../lib/userPrismaSelect";
 
 export async function GET(req: NextRequest) {
   try {
     const { userId } = await getActiveUser(req);
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: USER_CORE_SELECT,
+    });
     if (!user) return NextResponse.json({ user: null });
     return NextResponse.json({
       user: {
