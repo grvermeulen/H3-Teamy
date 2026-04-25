@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { fetchJsonOr } from "../lib/safeClientJson";
 import type { TeamEvent, RsvpStatus } from "../types";
 import GenerateReportButton from "./GenerateReportButton";
 import ReportPreview from "./ReportPreview";
@@ -87,18 +88,16 @@ export default function EventList({ events }: Props) {
   // Check authentication on mount only
   useEffect(() => {
     async function checkAuth() {
-      try {
-        const me = await fetch("/api/me", { cache: "no-store" })
-          .then((r) => r.json())
-          .catch(() => ({ user: null }));
-        const isLoggedIn = Boolean(me?.user?.id);
-        setLoggedIn(isLoggedIn);
-      } catch {
-        setLoggedIn(false);
-      }
+      const me = await fetchJsonOr<{ user?: { id?: string } | null }>(
+        "/api/me",
+        { cache: "no-store" },
+        { user: null },
+        "event-list-me",
+      );
+      setLoggedIn(Boolean(me?.user?.id));
       setAuthChecked(true);
     }
-    checkAuth();
+    void checkAuth();
   }, []);
 
   useEffect(() => {
