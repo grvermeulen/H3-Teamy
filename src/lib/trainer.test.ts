@@ -4,6 +4,7 @@ import { isTrainer, isAdminUser } from "./trainer";
 import { prisma } from "./db";
 import { getActiveUser } from "./activeUser";
 import { getUserRoles } from "./kv";
+import { userAuthSnapshotSelect } from "./userAuthSnapshot";
 import { NextRequest } from "next/server";
 
 vi.mock("@sentry/nextjs", () => ({
@@ -47,6 +48,10 @@ describe("trainer permissions", () => {
 
       const result = await isTrainer(mockReq);
       expect(result.isTrainer).toBe(true);
+      expect(vi.mocked(prisma.user.findUnique)).toHaveBeenCalledWith({
+        where: { id: "1" },
+        select: userAuthSnapshotSelect,
+      });
     });
 
     it("returns true if user is Admin", async () => {
