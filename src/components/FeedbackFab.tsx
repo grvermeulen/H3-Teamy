@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import * as React from "react";
 import * as Sentry from "@sentry/nextjs";
 import { APP_VERSION } from "../lib/version";
 
@@ -33,15 +33,15 @@ const COPY: Record<
  */
 export default function FeedbackFab(): React.JSX.Element | null {
   const pathname = usePathname() || "/";
-  const dialogRef = useRef<HTMLDialogElement | null>(null);
-  const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
-  const [tab, setTab] = useState<Tab>("BUG");
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const dialogRef = React.useRef<HTMLDialogElement | null>(null);
+  const [loggedIn, setLoggedIn] = React.useState<boolean | null>(null);
+  const [tab, setTab] = React.useState<Tab>("BUG");
+  const [title, setTitle] = React.useState("");
+  const [body, setBody] = React.useState("");
+  const [submitting, setSubmitting] = React.useState(false);
+  const [notice, setNotice] = React.useState<string | null>(null);
 
-  useEffect(() => {
+  React.useEffect(() => {
     let alive = true;
     fetch("/api/auth/session", { cache: "no-store" })
       .then((r) => r.json())
@@ -74,7 +74,7 @@ export default function FeedbackFab(): React.JSX.Element | null {
     dialogRef.current?.close();
   }
 
-  async function submit(e: React.FormEvent): Promise<void> {
+  async function submit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
     if (submitting) return;
     setSubmitting(true);
