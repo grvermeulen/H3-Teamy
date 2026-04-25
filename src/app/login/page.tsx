@@ -3,6 +3,7 @@
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import { Button, Card, Input, Stack } from "../../components/ui";
 
 function Content() {
   const [email, setEmail] = useState("");
@@ -12,117 +13,174 @@ function Content() {
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [invitationCode, setInvitationCode] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{
+    tone: "info" | "error";
+    text: string;
+  } | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
+  const [registering, setRegistering] = useState(false);
   const search = useSearchParams();
   const callbackUrl = search.get("callbackUrl") || "/";
 
   async function register() {
     setNotice(null);
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        email: signupEmail,
-        password: signupPassword,
-        firstName,
-        lastName,
-        invitationCode,
-      }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setNotice(data.error || "Registration failed");
-      return;
+    setRegistering(true);
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: signupEmail,
+          password: signupPassword,
+          firstName,
+          lastName,
+          invitationCode,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setNotice({ tone: "error", text: data.error || "Registratie mislukt" });
+        return;
+      }
+      setNotice({ tone: "info", text: "Geregistreerd. Je kunt nu inloggen." });
+    } finally {
+      setRegistering(false);
     }
-    setNotice("Registered. You can now sign in.");
   }
 
   async function login() {
     setNotice(null);
-    await signIn("credentials", {
-      email,
-      password,
-      redirect: true,
-      callbackUrl,
-    });
-    // next-auth handles navigation
+    setSigningIn(true);
+    try {
+      await signIn("credentials", {
+        email,
+        password,
+        redirect: true,
+        callbackUrl,
+      });
+      // next-auth handelt navigatie af
+    } finally {
+      setSigningIn(false);
+    }
   }
 
   return (
     <main>
       <div className="container">
-        <h1>Login</h1>
+        <h1>Inloggen</h1>
         <div className="muted" style={{ marginTop: 6 }}>
-          <a href={callbackUrl}>Back</a>
+          <a href={callbackUrl}>← Terug</a>
         </div>
-        <div className="card" style={{ marginTop: 12 }}>
-          <h3>Email &amp; Password</h3>
-          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-            <input
-              placeholder="Email"
+
+        <Card style={{ marginTop: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Met Google</h3>
+          <Button
+            variant="primary"
+            isFullWidth
+            onClick={() => signIn("google", { callbackUrl })}
+          >
+            Inloggen met Google
+          </Button>
+        </Card>
+
+        <Card style={{ marginTop: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Met e-mail</h3>
+          <Stack gap="3">
+            <Input
+              label="E-mailadres"
+              type="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              style={{ padding: 6, borderRadius: 6 }}
             />
-            <input
-              placeholder="Password"
+            <Input
+              label="Wachtwoord"
               type="password"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              style={{ padding: 6, borderRadius: 6 }}
             />
-            <button onClick={login}>Sign in</button>
-          </div>
-          <div className="muted" style={{ marginTop: 8 }}>
-            <a href="/reset-request">Forgot password?</a>
-          </div>
-          <h4 style={{ marginTop: 12 }}>Or create an account</h4>
-          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-            <input
-              placeholder="Email"
+            <Stack direction="row" gap="2" justify="between" align="center">
+              <a href="/reset-request" className="muted">
+                Wachtwoord vergeten?
+              </a>
+              <Button
+                variant="primary"
+                onClick={login}
+                loading={signingIn}
+                loadingLabel="Inloggen…"
+              >
+                Inloggen
+              </Button>
+            </Stack>
+          </Stack>
+        </Card>
+
+        <Card style={{ marginTop: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Account aanmaken</h3>
+          <Stack gap="3">
+            <Input
+              label="E-mailadres"
+              type="email"
+              autoComplete="email"
               value={signupEmail}
               onChange={(e) => setSignupEmail(e.target.value)}
-              style={{ padding: 6, borderRadius: 6 }}
             />
-            <input
-              placeholder="Password"
+            <Input
+              label="Wachtwoord"
               type="password"
+              autoComplete="new-password"
               value={signupPassword}
               onChange={(e) => setSignupPassword(e.target.value)}
-              style={{ padding: 6, borderRadius: 6 }}
+              hint="Minimaal 8 tekens"
             />
-            <input
-              placeholder="First name"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              style={{ padding: 6, borderRadius: 6 }}
-            />
-            <input
-              placeholder="Last name"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              style={{ padding: 6, borderRadius: 6 }}
-            />
-            <input
-              placeholder="Invitation code"
+            <Stack direction="row" gap="3">
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Input
+                  label="Voornaam"
+                  autoComplete="given-name"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Input
+                  label="Achternaam"
+                  autoComplete="family-name"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                />
+              </div>
+            </Stack>
+            <Input
+              label="Uitnodigingscode"
               value={invitationCode}
               onChange={(e) => setInvitationCode(e.target.value)}
-              style={{ padding: 6, borderRadius: 6 }}
+              hint="Krijg je van de trainer of teammanager"
             />
-            <button onClick={register}>Create account</button>
-          </div>
-        </div>
-
-        <div className="card" style={{ marginTop: 12 }}>
-          <h3>Google</h3>
-          <button onClick={() => signIn("google", { callbackUrl })}>
-            Sign in with Google
-          </button>
-        </div>
+            <Stack direction="row" justify="end">
+              <Button
+                onClick={register}
+                loading={registering}
+                loadingLabel="Aanmaken…"
+              >
+                Account aanmaken
+              </Button>
+            </Stack>
+          </Stack>
+        </Card>
 
         {notice ? (
-          <div className="muted" style={{ marginTop: 10 }}>
-            {notice}
+          <div
+            role={notice.tone === "error" ? "alert" : "status"}
+            className="card"
+            style={{
+              marginTop: 12,
+              borderColor:
+                notice.tone === "error" ? "var(--negative)" : "var(--accent)",
+            }}
+          >
+            {notice.text}
           </div>
         ) : null}
       </div>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import * as Sentry from "@sentry/nextjs";
+import { EmptyState } from "../../../components/ui";
 
 type FeedbackRow = {
   id: string;
@@ -31,6 +32,19 @@ const STATUSES: FeedbackRow["status"][] = [
   "SHIPPED",
   "DECLINED",
 ];
+
+const STATUS_NL: Record<FeedbackRow["status"], string> = {
+  NEW: "Nieuw",
+  TRIAGED: "Getriaged",
+  PLANNED: "Gepland",
+  SHIPPED: "Geleverd",
+  DECLINED: "Afgewezen",
+};
+
+const TYPE_NL: Record<FeedbackRow["type"], string> = {
+  BUG: "Bug",
+  IDEA: "Idee",
+};
 
 /**
  * Admin inbox for user-submitted feedback. Lists rows from
@@ -158,7 +172,7 @@ export default function AdminFeedbackPage(): React.JSX.Element {
             <option value="ALL">Alle</option>
             {STATUSES.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {STATUS_NL[s]}
               </option>
             ))}
           </select>
@@ -168,16 +182,23 @@ export default function AdminFeedbackPage(): React.JSX.Element {
       {error ? <p className="muted">{error}</p> : null}
 
       {loading ? (
-        <p className="muted">Laden…</p>
+        <div className="list" aria-busy="true">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="card skeleton" style={{ height: 80 }} />
+          ))}
+        </div>
       ) : rows.length === 0 ? (
-        <p className="muted">Nog geen feedback.</p>
+        <EmptyState
+          title="Nog geen feedback"
+          body="Zodra spelers iets indienen verschijnt het hier."
+        />
       ) : (
         <ul className="list-none p-0 grid gap-3">
           {rows.map((r) => (
             <li key={r.id} className="card">
               <div className="row justify-between mb-1">
                 <strong>
-                  <span className="badge mr-2">{r.type}</span>
+                  <span className="badge mr-2">{TYPE_NL[r.type]}</span>
                   {r.title}
                 </strong>
                 <select
@@ -191,7 +212,7 @@ export default function AdminFeedbackPage(): React.JSX.Element {
                 >
                   {STATUSES.map((s) => (
                     <option key={s} value={s}>
-                      {s}
+                      {STATUS_NL[s]}
                     </option>
                   ))}
                 </select>

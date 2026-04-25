@@ -11,6 +11,14 @@
 import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import bcrypt from "bcryptjs";
+
+/**
+ * Predictable login for the trainer account so anyone can sign into preview.
+ * Override with `SEED_TRAINER_PASSWORD=…` if you want a stronger value.
+ * Only ever runs against non-production envs (see `assertNonProd`).
+ */
+const TRAINER_PASSWORD = process.env.SEED_TRAINER_PASSWORD || "preview123";
 
 const SEASON_DATES = [
   "2025-09-22",
@@ -76,16 +84,25 @@ async function main() {
   const prisma = new PrismaClient({ adapter });
 
   try {
+    const trainerHash = await bcrypt.hash(TRAINER_PASSWORD, 10);
     const created = [] as { id: string; email: string }[];
     for (const u of USERS) {
+      const passwordHash =
+        u.email === "trainer@example.test" ? trainerHash : null;
       const row = await prisma.user.upsert({
         where: { email: u.email },
-        update: { firstName: u.firstName, lastName: u.lastName },
-        create: u,
+        update: {
+          firstName: u.firstName,
+          lastName: u.lastName,
+          ...(passwordHash ? { passwordHash } : {}),
+        },
+        create: { ...u, ...(passwordHash ? { passwordHash } : {}) },
       });
       created.push({ id: row.id, email: row.email ?? "" });
     }
-    console.log(`Upserted ${created.length} users.`);
+    console.log(
+      `Upserted ${created.length} users. Login: trainer@example.test / ${TRAINER_PASSWORD}`,
+    );
 
     let attendanceCount = 0;
     for (const date of SEASON_DATES) {

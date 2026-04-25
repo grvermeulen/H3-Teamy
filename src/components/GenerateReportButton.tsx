@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useSession } from "./SessionContext";
 
 export default function GenerateReportButton({
   eventId,
@@ -9,7 +10,7 @@ export default function GenerateReportButton({
   eventId: string;
   opponent?: string;
 }) {
-  const [isAdmin, setIsAdmin] = useState(false);
+  const { isAdmin } = useSession();
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -17,24 +18,11 @@ export default function GenerateReportButton({
     homeScore?: number;
     awayScore?: number;
   } | null>(null);
-
-  useEffect(() => {
-    async function checkAdmin() {
-      try {
-        const adminRes = await fetch("/api/admin/status", {
-          cache: "no-store",
-        });
-        const adminData = await adminRes.json();
-        setIsAdmin(Boolean(adminData?.isAdmin));
-      } catch {
-        setIsAdmin(false);
-      }
-    }
-    checkAdmin();
-  }, []);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function onGenerate() {
     setLoading(true);
+    setNotice(null);
     try {
       let payload: any = { eventId };
       if (imageFile) {
@@ -72,7 +60,7 @@ export default function GenerateReportButton({
         const hasEvents =
           Array.isArray(payload.events) && payload.events.length > 0;
         if (!hasScores || !hasEvents) {
-          alert(
+          setNotice(
             "Ongeldige invoer: upload eerst een screenshot of zorg dat score en events zijn ingevuld.",
           );
           return;
@@ -85,7 +73,7 @@ export default function GenerateReportButton({
       });
       if (!res.ok) {
         const info = await res.text();
-        alert(`Generation failed: ${info}`);
+        setNotice(`Genereren mislukt: ${info}`);
         return;
       }
       const data = (await res.json()) as {
@@ -100,8 +88,8 @@ export default function GenerateReportButton({
         const details = data.whatsappNotification.details
           ? ` ${data.whatsappNotification.details}`
           : "";
-        alert(
-          `Het verslag is opgeslagen, maar de WhatsApp-melding is niet verzonden (${reason}).${details ? `\n\n${details}` : ""}\n\nControleer WAAPI_GROUP_CHAT_ID (juiste …@g.us voor de groep) en of de WaAPI-instance verbonden is. Tip: voer lokaal uit: npx tsx scripts/waapi-list-groups.ts --filter "rijn".`,
+        setNotice(
+          `Het verslag is opgeslagen, maar de WhatsApp-melding is niet verzonden (${reason}).${details ? ` ${details}` : ""}`,
         );
       }
       setDone(true);
@@ -140,6 +128,15 @@ export default function GenerateReportButton({
       >
         {loading ? "Genereren…" : done ? "Gegenereerd" : "Verslag genereren"}
       </button>
+      {notice ? (
+        <div
+          role="alert"
+          className="muted"
+          style={{ flexBasis: "100%", marginTop: 4, color: "var(--negative)" }}
+        >
+          {notice}
+        </div>
+      ) : null}
     </div>
   );
 }

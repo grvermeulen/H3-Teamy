@@ -34,6 +34,7 @@ export default function AdminUsersPage() {
   const [generatedReport, setGeneratedReport] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [testError, setTestError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -65,6 +66,7 @@ export default function AdminUsersPage() {
 
   async function onSave() {
     setSaving(true);
+    setSaveError(null);
     try {
       const items = rows.map((r) => ({ id: r.id, roles: r.roles }));
       const res = await fetch("/api/admin/users", {
@@ -74,7 +76,7 @@ export default function AdminUsersPage() {
       });
       if (!res.ok) {
         const t = await res.text();
-        alert(`Save failed: ${t}`);
+        setSaveError(`Opslaan mislukt: ${t}`);
         return;
       }
       setDirty(false);
@@ -108,7 +110,7 @@ export default function AdminUsersPage() {
 
   async function onTestExtract() {
     if (!testImageFile) {
-      setTestError("Please select an image file first");
+      setTestError("Kies eerst een afbeelding.");
       return;
     }
     setExtracting(true);
@@ -123,13 +125,13 @@ export default function AdminUsersPage() {
       });
       if (!res.ok) {
         const text = await res.text();
-        setTestError(`Extract failed: ${text}`);
+        setTestError(`Extractie mislukt: ${text}`);
         return;
       }
       const data = await res.json();
       setExtractedJson(data?.result || null);
     } catch (e: any) {
-      setTestError(`Extract error: ${e?.message || String(e)}`);
+      setTestError(`Extractiefout: ${e?.message || String(e)}`);
     } finally {
       setExtracting(false);
     }
@@ -137,7 +139,7 @@ export default function AdminUsersPage() {
 
   async function onTestGenerate() {
     if (!extractedJson) {
-      setTestError("Please extract JSON first");
+      setTestError("Doe eerst een extractie.");
       return;
     }
     setGenerating(true);
@@ -160,13 +162,13 @@ export default function AdminUsersPage() {
       });
       if (!res.ok) {
         const text = await res.text();
-        setTestError(`Generate failed: ${text}`);
+        setTestError(`Genereren mislukt: ${text}`);
         return;
       }
       const data = await res.json();
       setGeneratedReport(data?.report?.content || null);
     } catch (e: any) {
-      setTestError(`Generate error: ${e?.message || String(e)}`);
+      setTestError(`Genereerfout: ${e?.message || String(e)}`);
     } finally {
       setGenerating(false);
     }
@@ -176,7 +178,7 @@ export default function AdminUsersPage() {
     return (
       <div className="container">
         <h1>Admin</h1>
-        <div className="muted">You do not have access.</div>
+        <div className="muted">Je hebt geen toegang.</div>
       </div>
     );
 
@@ -186,7 +188,7 @@ export default function AdminUsersPage() {
         <h1>Admin</h1>
 
         <div className="row" style={{ gap: 8, marginBottom: 12 }}>
-          <Link href={{ pathname: "/admin/feedback" }}>Feedback inbox →</Link>
+          <Link href={{ pathname: "/admin/feedback" }}>Feedback-inbox →</Link>
         </div>
 
         <div className="card" style={{ position: "sticky", top: 0, zIndex: 1 }}>
@@ -197,16 +199,25 @@ export default function AdminUsersPage() {
               alignItems: "center",
             }}
           >
-            <div className="muted">User roles</div>
+            <div className="muted">Gebruikersrollen</div>
             <div className="row" style={{ gap: 8 }}>
               <button onClick={onRefresh} disabled={refreshing}>
-                {refreshing ? "Refreshing…" : "Refresh"}
+                {refreshing ? "Vernieuwen…" : "Vernieuwen"}
               </button>
               <button onClick={onSave} disabled={!dirty || saving}>
-                {saving ? "Saving…" : "Save"}
+                {saving ? "Opslaan…" : "Opslaan"}
               </button>
             </div>
           </div>
+          {saveError ? (
+            <div
+              role="alert"
+              className="muted"
+              style={{ marginTop: 8, color: "var(--negative)" }}
+            >
+              {saveError}
+            </div>
+          ) : null}
         </div>
         <div className="list">
           {sorted.map((u) => (
@@ -221,28 +232,40 @@ export default function AdminUsersPage() {
               >
                 <div>{u.name}</div>
                 <div className="row" style={{ gap: 8 }}>
-                  <label className="badge" style={{ cursor: "pointer" }}>
+                  <label
+                    className="badge"
+                    style={{ cursor: "pointer", padding: "6px 10px" }}
+                  >
                     <input
                       type="checkbox"
                       checked={!!u.roles.player}
                       onChange={() => toggle(u.id, "player")}
-                    />{" "}
-                    Player
+                      style={{ marginRight: 6 }}
+                    />
+                    Speler
                   </label>
-                  <label className="badge" style={{ cursor: "pointer" }}>
+                  <label
+                    className="badge"
+                    style={{ cursor: "pointer", padding: "6px 10px" }}
+                  >
                     <input
                       type="checkbox"
                       checked={!!u.roles.trainer}
                       onChange={() => toggle(u.id, "trainer")}
-                    />{" "}
+                      style={{ marginRight: 6 }}
+                    />
                     Trainer
                   </label>
-                  <label className="badge" style={{ cursor: "pointer" }}>
+                  <label
+                    className="badge"
+                    style={{ cursor: "pointer", padding: "6px 10px" }}
+                  >
                     <input
                       type="checkbox"
                       checked={!!u.roles.admin}
                       onChange={() => toggle(u.id, "admin")}
-                    />{" "}
+                      style={{ marginRight: 6 }}
+                    />
                     Admin
                   </label>
                 </div>
@@ -250,12 +273,12 @@ export default function AdminUsersPage() {
             </div>
           ))}
           {sorted.length === 0 ? (
-            <div className="muted">No users found.</div>
+            <div className="muted">Geen gebruikers gevonden.</div>
           ) : null}
         </div>
 
         <div className="card" style={{ marginTop: 24 }}>
-          <h2 style={{ marginTop: 0 }}>Match Report Testing</h2>
+          <h2 style={{ marginTop: 0 }}>Wedstrijdverslag testen</h2>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div>
               <input
@@ -274,22 +297,25 @@ export default function AdminUsersPage() {
                 onClick={onTestExtract}
                 disabled={!testImageFile || extracting}
               >
-                {extracting ? "Extracting…" : "Test Extract"}
+                {extracting ? "Extractie…" : "Test extractie"}
               </button>
               <button
                 onClick={onTestGenerate}
                 disabled={!extractedJson || generating}
               >
-                {generating ? "Generating…" : "Test Generate"}
+                {generating ? "Genereren…" : "Test verslag"}
               </button>
             </div>
             {testError && (
               <div
+                role="alert"
                 style={{
-                  color: "red",
-                  padding: 8,
-                  backgroundColor: "#ffe0e0",
-                  borderRadius: 4,
+                  padding: 10,
+                  borderRadius: "var(--radius-md)",
+                  border: "1px solid var(--negative)",
+                  background:
+                    "color-mix(in oklab, var(--negative) 12%, transparent)",
+                  color: "var(--text)",
                 }}
               >
                 {testError}
@@ -297,15 +323,16 @@ export default function AdminUsersPage() {
             )}
             {extractedJson && (
               <div>
-                <h3>Extracted JSON:</h3>
+                <h3>Geëxtraheerde JSON</h3>
                 <pre
                   style={{
                     padding: 12,
-                    backgroundColor: "#f5f5f5",
-                    borderRadius: 4,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: "var(--radius-md)",
                     overflow: "auto",
-                    maxHeight: "400px",
-                    fontSize: "12px",
+                    maxHeight: 400,
+                    fontSize: 12,
                   }}
                 >
                   {JSON.stringify(extractedJson, null, 2)}
@@ -314,12 +341,13 @@ export default function AdminUsersPage() {
             )}
             {generatedReport && (
               <div>
-                <h3>Generated Report:</h3>
+                <h3>Gegenereerd verslag</h3>
                 <div
                   style={{
                     padding: 12,
-                    backgroundColor: "#f5f5f5",
-                    borderRadius: 4,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: "var(--radius-md)",
                     whiteSpace: "pre-wrap",
                     lineHeight: 1.6,
                   }}
