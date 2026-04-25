@@ -12,6 +12,10 @@
  *
  * Side effect: mutates `process.env`. Imported only by server modules (db.ts, kv.ts).
  */
+/**
+ * Same source name on both sides: `process.env.${key}` is overwritten with
+ * `process.env.PREVIEW_${key}` when present.
+ */
 const ALIASED_KEYS = [
   "DATABASE_URL",
   "DATABASE_URL_UNPOOLED",
@@ -27,6 +31,26 @@ const ALIASED_KEYS = [
   "KV_REST_API_READ_ONLY_TOKEN",
 ] as const;
 
+/**
+ * Cross-name aliases: Neon ships `PREVIEW_POSTGRES_PRISMA_URL`, but the
+ * Prisma Postgres marketplace integration injects `PRISMA_DATABASE_URL` —
+ * different prefix names for the same role. Map them explicitly with a
+ * fallback to `PREVIEW_DATABASE_URL`.
+ */
+const CROSS_NAME_ALIASES: Array<{ target: string; sources: string[] }> = [
+  {
+    target: "PRISMA_DATABASE_URL",
+    sources: ["PREVIEW_POSTGRES_PRISMA_URL", "PREVIEW_DATABASE_URL"],
+  },
+  {
+    target: "DIRECT_URL",
+    sources: [
+      "PREVIEW_POSTGRES_URL_NON_POOLING",
+      "PREVIEW_DATABASE_URL_UNPOOLED",
+    ],
+  },
+];
+
 for (const key of ALIASED_KEYS) {
   const previewValue = process.env[`PREVIEW_${key}`];
   if (!previewValue) continue;
@@ -35,4 +59,14 @@ for (const key of ALIASED_KEYS) {
   // Accelerate URL) into preview deploys; the explicit PREVIEW_* values must win.
   // Production env has no PREVIEW_* set, so this branch is a no-op there.
   process.env[key] = previewValue;
+}
+
+for (const { target, sources } of CROSS_NAME_ALIASES) {
+  for (const source of sources) {
+    const value = process.env[source];
+    if (value) {
+      process.env[target] = value;
+      break;
+    }
+  }
 }
