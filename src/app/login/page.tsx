@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
@@ -39,13 +40,19 @@ function Content() {
 
   async function login() {
     setNotice(null);
-    await signIn("credentials", {
-      email,
-      password,
-      redirect: true,
-      callbackUrl,
-    });
-    // next-auth handles navigation
+    try {
+      await signIn("credentials", {
+        email,
+        password,
+        redirect: true,
+        callbackUrl,
+      });
+    } catch (error: unknown) {
+      Sentry.captureException(error, { tags: { flow: "login-credentials" } });
+      setNotice(
+        "Inloggen mislukt (netwerk of server). Controleer je verbinding en probeer het opnieuw.",
+      );
+    }
   }
 
   return (
@@ -115,8 +122,23 @@ function Content() {
 
         <div className="card" style={{ marginTop: 12 }}>
           <h3>Google</h3>
-          <button onClick={() => signIn("google", { callbackUrl })}>
-            Sign in with Google
+          <button
+            type="button"
+            onClick={async () => {
+              setNotice(null);
+              try {
+                await signIn("google", { callbackUrl });
+              } catch (error: unknown) {
+                Sentry.captureException(error, {
+                  tags: { flow: "login-google" },
+                });
+                setNotice(
+                  "Google-inloggen mislukt (netwerk of server). Probeer het opnieuw.",
+                );
+              }
+            }}
+          >
+            Inloggen met Google
           </button>
         </div>
 
