@@ -14,6 +14,7 @@ model User {
   lastName  String
   email     String? @unique
   passwordHash String?
+  /** Laatst gezien app-versie (what's new / tour); optioneel. */
   lastVersionSeen String?
   // Optional: link to sessions/devices in future
   rsvps     Rsvp[]

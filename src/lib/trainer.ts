@@ -1,8 +1,10 @@
 import { NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { getActiveUser } from "./activeUser";
+import { isDbUnavailableError } from "./dbUnavailableError";
 import { prisma } from "./db";
 import { getUserRoles, type UserRoles } from "./kv";
+import { USER_CORE_SELECT } from "./userPrismaSelect";
 
 function norm(s: string) {
   return (s || "").toLowerCase().trim();
@@ -24,14 +26,19 @@ export async function isTrainer(
   try {
     ({ userId } = await getActiveUser(req));
   } catch (err: unknown) {
-    Sentry.captureException(err, {
-      tags: { component: "trainer" },
-      extra: { context: "getActiveUser_isTrainer" },
-    });
+    if (!isDbUnavailableError(err)) {
+      Sentry.captureException(err, {
+        tags: { component: "trainer" },
+        extra: { context: "getActiveUser_isTrainer" },
+      });
+    }
     return { isTrainer: false, me: { id: "", name: "" } };
   }
   try {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: USER_CORE_SELECT,
+    });
     const full = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
     const admin = process.env.ADMIN_FULL_NAME || "";
     const trainers = (process.env.TRAINER_FULL_NAMES || "")
@@ -40,13 +47,15 @@ export async function isTrainer(
       .filter(Boolean);
     const isAdmin = norm(full) === norm(admin);
     const isTrainerListed = trainers.includes(norm(full));
-    const roles: UserRoles = await getUserRoles(userId).catch((err: unknown) => {
-      Sentry.captureException(err, {
-        tags: { component: "trainer" },
-        extra: { context: "getUserRoles_isTrainer", userId },
-      });
-      return { player: true };
-    });
+    const roles: UserRoles = await getUserRoles(userId).catch(
+      (err: unknown) => {
+        Sentry.captureException(err, {
+          tags: { component: "trainer" },
+          extra: { context: "getUserRoles_isTrainer", userId },
+        });
+        return { player: true };
+      },
+    );
     const byRole = Boolean(roles?.trainer || roles?.admin);
     return {
       isTrainer: Boolean(isAdmin || isTrainerListed || byRole),
@@ -77,24 +86,31 @@ export async function isAdminUser(
   try {
     ({ userId } = await getActiveUser(req));
   } catch (err: unknown) {
-    Sentry.captureException(err, {
-      tags: { component: "trainer" },
-      extra: { context: "getActiveUser_isAdminUser" },
-    });
+    if (!isDbUnavailableError(err)) {
+      Sentry.captureException(err, {
+        tags: { component: "trainer" },
+        extra: { context: "getActiveUser_isAdminUser" },
+      });
+    }
     return { isAdmin: false, me: { id: "", name: "" } };
   }
   try {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: USER_CORE_SELECT,
+    });
     const full = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
     const admin = process.env.ADMIN_FULL_NAME || "";
     const envAdmin = norm(full) === norm(admin);
-    const roles: UserRoles = await getUserRoles(userId).catch((err: unknown) => {
-      Sentry.captureException(err, {
-        tags: { component: "trainer" },
-        extra: { context: "getUserRoles_isAdminUser", userId },
-      });
-      return { player: true };
-    });
+    const roles: UserRoles = await getUserRoles(userId).catch(
+      (err: unknown) => {
+        Sentry.captureException(err, {
+          tags: { component: "trainer" },
+          extra: { context: "getUserRoles_isAdminUser", userId },
+        });
+        return { player: true };
+      },
+    );
     const byRole = Boolean(roles?.admin);
     return {
       isAdmin: Boolean(envAdmin || byRole),

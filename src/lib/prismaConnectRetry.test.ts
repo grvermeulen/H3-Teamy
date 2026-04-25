@@ -5,9 +5,11 @@ import {
   isTransientPostgresConnectError,
   withPgConnectRetry,
 } from "./prismaConnectRetry";
+import { DbUnavailableError } from "./dbUnavailableError";
 
 vi.mock("@sentry/nextjs", () => ({
   addBreadcrumb: vi.fn(),
+  captureException: vi.fn(),
 }));
 
 describe("isTransientPostgresConnectError", () => {
@@ -82,5 +84,32 @@ describe("withPgConnectRetry", () => {
     const fn = vi.fn().mockRejectedValue(err);
     await expect(withPgConnectRetry("op", fn)).rejects.toThrow("permanent");
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("after max attempts on P1001 captures once and throws DbUnavailableError", async () => {
+    const prismaErr = new Prisma.PrismaClientKnownRequestError("unreachable", {
+      code: "P1001",
+      clientVersion: "test",
+    });
+    const fn = vi.fn().mockRejectedValue(prismaErr);
+    const settled = withPgConnectRetry("getActiveUser", fn).then(
+      () => ({ ok: true as const }),
+      (e: unknown) => ({ ok: false as const, e }),
+    );
+    await vi.runAllTimersAsync();
+    const out = await settled;
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.e).toBeInstanceOf(DbUnavailableError);
+    expect(fn).toHaveBeenCalledTimes(4);
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      prismaErr,
+      expect.objectContaining({
+        extra: expect.objectContaining({
+          operationName: "getActiveUser",
+          exhaustedRetries: true,
+        }),
+      }),
+    );
   });
 });
