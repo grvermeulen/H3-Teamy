@@ -3,7 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { getActiveUser } from "./activeUser";
 import { prisma } from "./db";
 import { getUserRoles, type UserRoles } from "./kv";
-import { userAuthSnapshotSelect } from "./userAuthSnapshot";
+import { USER_CORE_SELECT } from "./userPrismaSelect";
 
 function norm(s: string) {
   return (s || "").toLowerCase().trim();
@@ -34,7 +34,7 @@ export async function isTrainer(
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: userAuthSnapshotSelect,
+      select: USER_CORE_SELECT,
     });
     const full = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
     const admin = process.env.ADMIN_FULL_NAME || "";
@@ -90,7 +90,7 @@ export async function isAdminUser(
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: userAuthSnapshotSelect,
+      select: USER_CORE_SELECT,
     });
     const full = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
     const admin = process.env.ADMIN_FULL_NAME || "";

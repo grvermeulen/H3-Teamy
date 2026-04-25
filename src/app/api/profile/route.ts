@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../lib/db";
 import { getActiveUser } from "../../../lib/activeUser";
+import { USER_CORE_SELECT } from "../../../lib/userPrismaSelect";
 
 export async function GET(req: NextRequest) {
   const { userId } = await getActiveUser(req);
-  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: USER_CORE_SELECT,
+  });
   if (!user) return NextResponse.json({ user: null });
   return NextResponse.json({
     user: {
