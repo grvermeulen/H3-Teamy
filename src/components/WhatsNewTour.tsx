@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import * as Sentry from "@sentry/nextjs";
 import type { ChangelogEntry, TourStep } from "../lib/changelog";
+import { fetchJsonOr } from "../lib/safeClientJson";
 
 type Spotlight = {
   top: number;
@@ -40,27 +41,30 @@ export default function WhatsNewTour(): React.JSX.Element | null {
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/whats-new", { cache: "no-store" })
-      .then((r) => r.json())
-      .then(
-        (data: {
-          show: boolean;
-          version: string;
-          payload?: ChangelogEntry;
-        }) => {
-          if (!alive) return;
-          if (data.show && data.payload) {
-            setEntry(data.payload);
-            setVersion(data.version);
-            setStepIdx(0);
-          }
-        },
-      )
-      .catch((err: unknown) => {
-        Sentry.captureException(err, { tags: { component: "whats-new-tour" } });
-      });
+    const ac = new AbortController();
+    type WhatsNewResponse = {
+      show: boolean;
+      version: string;
+      payload?: ChangelogEntry;
+    };
+    const empty: WhatsNewResponse = { show: false, version: "" };
+    void (async () => {
+      const data = await fetchJsonOr<WhatsNewResponse>(
+        "/api/whats-new",
+        { cache: "no-store", signal: ac.signal },
+        empty,
+        "whats-new-tour",
+      );
+      if (!alive) return;
+      if (data.show && data.payload) {
+        setEntry(data.payload);
+        setVersion(data.version);
+        setStepIdx(0);
+      }
+    })();
     return () => {
       alive = false;
+      ac.abort();
     };
   }, []);
 

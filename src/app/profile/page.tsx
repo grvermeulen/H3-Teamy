@@ -239,6 +239,13 @@ export default function ProfilePage() {
         >
           App-versie {APP_VERSION}
         </div>
+        <div
+          data-tour="profile-version"
+          className="muted"
+          style={{ marginTop: 16, fontSize: 12, textAlign: "center" }}
+        >
+          App version {APP_VERSION}
+        </div>
       </div>
     </main>
   );

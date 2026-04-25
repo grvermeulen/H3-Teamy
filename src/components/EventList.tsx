@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { fetchJsonOr } from "../lib/safeClientJson";
 import type { TeamEvent, RsvpStatus } from "../types";
 import GenerateReportButton from "./GenerateReportButton";
 import ReportPreview from "./ReportPreview";

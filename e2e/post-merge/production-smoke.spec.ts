@@ -29,7 +29,7 @@ test.describe("Read-only deploy smoke", () => {
   test("loginpagina laadt", async ({ page }) => {
     await page.goto("/login");
     await expect(
-      page.getByRole("heading", { level: 1, name: "Login" }),
+      page.getByRole("heading", { level: 1, name: "Inloggen" }),
     ).toBeVisible();
   });
 });
