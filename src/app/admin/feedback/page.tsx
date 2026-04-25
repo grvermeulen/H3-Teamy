@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import * as Sentry from "@sentry/nextjs";
 
 type FeedbackRow = {
   id: string;
@@ -31,45 +32,81 @@ const STATUSES: FeedbackRow["status"][] = [
   "DECLINED",
 ];
 
-export default function AdminFeedbackPage() {
+/**
+ * Admin inbox for user-submitted feedback. Lists rows from
+ * `GET /api/admin/feedback`, supports filtering by type and status, and lets
+ * an admin update a row's status inline via `PATCH /api/admin/feedback/:id`.
+ * Non-admin viewers are short-circuited to a "Forbidden" message via the 403
+ * response from the listing endpoint.
+ */
+export default function AdminFeedbackPage(): React.JSX.Element {
   const [rows, setRows] = useState<FeedbackRow[]>([]);
   const [forbidden, setForbidden] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<"ALL" | "BUG" | "IDEA">("ALL");
   const [filterStatus, setFilterStatus] = useState<
     "ALL" | FeedbackRow["status"]
   >("ALL");
 
-  async function load() {
+  async function load(): Promise<void> {
     setLoading(true);
+    setError(null);
     const params = new URLSearchParams();
     if (filterType !== "ALL") params.set("type", filterType);
     if (filterStatus !== "ALL") params.set("status", filterStatus);
-    const res = await fetch(`/api/admin/feedback?${params.toString()}`, {
-      cache: "no-store",
-    });
-    if (res.status === 403) {
-      setForbidden(true);
+    try {
+      const res = await fetch(`/api/admin/feedback?${params.toString()}`, {
+        cache: "no-store",
+      });
+      if (res.status === 403) {
+        setForbidden(true);
+        return;
+      }
+      const data = await res.json().catch(() => ({ items: [] }));
+      setRows((data?.items || []) as FeedbackRow[]);
+    } catch (err: unknown) {
+      Sentry.captureException(err, { tags: { component: "admin-feedback" } });
+      setError("Laden mislukt. Probeer het opnieuw.");
+    } finally {
       setLoading(false);
-      return;
     }
-    const data = await res.json().catch(() => ({ items: [] }));
-    setRows((data?.items || []) as FeedbackRow[]);
-    setLoading(false);
   }
 
   useEffect(() => {
-    load();
+    void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterType, filterStatus]);
 
-  async function updateStatus(id: string, status: FeedbackRow["status"]) {
+  async function updateStatus(
+    id: string,
+    status: FeedbackRow["status"],
+  ): Promise<void> {
+    const previous = rows.find((r) => r.id === id)?.status ?? "NEW";
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
-    await fetch(`/api/admin/feedback/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
-    });
+    try {
+      const res = await fetch(`/api/admin/feedback/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        Sentry.captureException(
+          new Error(`feedback PATCH failed: ${res.status}`),
+          { tags: { component: "admin-feedback" } },
+        );
+        setRows((prev) =>
+          prev.map((r) => (r.id === id ? { ...r, status: previous } : r)),
+        );
+        setError("Status bijwerken mislukt.");
+      }
+    } catch (err: unknown) {
+      Sentry.captureException(err, { tags: { component: "admin-feedback" } });
+      setRows((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status: previous } : r)),
+      );
+      setError("Status bijwerken mislukt.");
+    }
   }
 
   const counts = useMemo(() => {
@@ -81,46 +118,44 @@ export default function AdminFeedbackPage() {
   if (forbidden) {
     return (
       <main className="container">
-        <h1>Forbidden</h1>
-        <p className="muted">You need admin access to view this page.</p>
-        <Link href="/">Back home</Link>
+        <h1>Geen toegang</h1>
+        <p className="muted">
+          Je hebt admin-rechten nodig om deze pagina te zien.
+        </p>
+        <Link href="/">Terug naar start</Link>
       </main>
     );
   }
 
   return (
-    <main className="container" style={{ paddingBottom: 96 }}>
+    <main className="container pb-24">
       <h1>Feedback</h1>
       <p className="muted">
-        {counts.BUG} bug{counts.BUG === 1 ? "" : "s"} • {counts.IDEA} idea
-        {counts.IDEA === 1 ? "" : "s"}
+        {counts.BUG} {counts.BUG === 1 ? "bug" : "bugs"} • {counts.IDEA}{" "}
+        {counts.IDEA === 1 ? "idee" : "ideeën"}
       </p>
 
-      <div className="row" style={{ gap: 12, marginBottom: 16 }}>
+      <div className="row gap-3 mb-4">
         <label>
-          <span className="muted" style={{ fontSize: 12, marginRight: 6 }}>
-            Type
-          </span>
+          <span className="muted text-xs mr-1">Type</span>
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value as typeof filterType)}
           >
-            <option value="ALL">All</option>
+            <option value="ALL">Alle</option>
             <option value="BUG">Bugs</option>
-            <option value="IDEA">Ideas</option>
+            <option value="IDEA">Ideeën</option>
           </select>
         </label>
         <label>
-          <span className="muted" style={{ fontSize: 12, marginRight: 6 }}>
-            Status
-          </span>
+          <span className="muted text-xs mr-1">Status</span>
           <select
             value={filterStatus}
             onChange={(e) =>
               setFilterStatus(e.target.value as typeof filterStatus)
             }
           >
-            <option value="ALL">All</option>
+            <option value="ALL">Alle</option>
             {STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s}
@@ -130,28 +165,28 @@ export default function AdminFeedbackPage() {
         </label>
       </div>
 
+      {error ? <p className="muted">{error}</p> : null}
+
       {loading ? (
-        <p className="muted">Loading…</p>
+        <p className="muted">Laden…</p>
       ) : rows.length === 0 ? (
-        <p className="muted">No feedback yet.</p>
+        <p className="muted">Nog geen feedback.</p>
       ) : (
-        <ul style={{ listStyle: "none", padding: 0, display: "grid", gap: 12 }}>
+        <ul className="list-none p-0 grid gap-3">
           {rows.map((r) => (
             <li key={r.id} className="card">
-              <div
-                className="row"
-                style={{ justifyContent: "space-between", marginBottom: 6 }}
-              >
+              <div className="row justify-between mb-1">
                 <strong>
-                  <span className="badge" style={{ marginRight: 8 }}>
-                    {r.type}
-                  </span>
+                  <span className="badge mr-2">{r.type}</span>
                   {r.title}
                 </strong>
                 <select
                   value={r.status}
                   onChange={(e) =>
-                    updateStatus(r.id, e.target.value as FeedbackRow["status"])
+                    void updateStatus(
+                      r.id,
+                      e.target.value as FeedbackRow["status"],
+                    )
                   }
                 >
                   {STATUSES.map((s) => (
@@ -161,21 +196,19 @@ export default function AdminFeedbackPage() {
                   ))}
                 </select>
               </div>
-              <p style={{ whiteSpace: "pre-wrap", margin: "8px 0" }}>
-                {r.body}
-              </p>
+              <p className="whitespace-pre-wrap my-2">{r.body}</p>
               {r.aiSummary ? (
-                <div className="muted" style={{ fontSize: 13 }}>
+                <div className="muted text-[13px]">
                   <strong>AI PM:</strong> {r.aiSummary}
-                  {r.aiTheme ? ` · theme: ${r.aiTheme}` : ""}
+                  {r.aiTheme ? ` · thema: ${r.aiTheme}` : ""}
                   {r.aiImpact ? ` · impact: ${r.aiImpact}` : ""}
                 </div>
               ) : null}
-              <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+              <div className="muted text-xs mt-2">
                 {r.user.firstName} {r.user.lastName}
                 {r.user.email ? ` · ${r.user.email}` : ""} ·{" "}
-                {new Date(r.createdAt).toLocaleString()}
-                {r.route ? ` · on ${r.route}` : ""}
+                {new Date(r.createdAt).toLocaleString("nl-NL")}
+                {r.route ? ` · op ${r.route}` : ""}
                 {r.appVersion ? ` · v${r.appVersion}` : ""}
               </div>
             </li>

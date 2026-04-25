@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import * as Sentry from "@sentry/nextjs";
 import { APP_VERSION } from "../lib/version";
 
 type Tab = "BUG" | "IDEA";
@@ -11,20 +12,26 @@ const COPY: Record<
   { label: string; titlePh: string; bodyPh: string; cta: string }
 > = {
   BUG: {
-    label: "Report a bug",
-    titlePh: "Short summary (e.g. RSVP button doesn't work)",
-    bodyPh: "What did you do, what happened, what did you expect?",
-    cta: "Send bug report",
+    label: "Meld een bug",
+    titlePh: "Korte samenvatting (bv. RSVP-knop werkt niet)",
+    bodyPh: "Wat deed je, wat gebeurde er, wat verwachtte je?",
+    cta: "Verstuur bugmelding",
   },
   IDEA: {
-    label: "Pitch an idea",
-    titlePh: "One-line idea (e.g. Notify me 1h before training)",
-    bodyPh: "Tell us the problem and how this would help.",
-    cta: "Submit idea",
+    label: "Tip een idee",
+    titlePh: "Idee in één zin (bv. Stuur 1 uur voor training een herinnering)",
+    bodyPh: "Beschrijf het probleem en hoe dit zou helpen.",
+    cta: "Verstuur idee",
   },
 };
 
-export default function FeedbackFab() {
+/**
+ * Floating action button that opens a modal dialog where the logged-in user
+ * can submit a Bug or Idea. Captures the current route, `APP_VERSION`, and
+ * user-agent server-side. Rendered globally from the root layout; hidden for
+ * anonymous users and on the `/login` route.
+ */
+export default function FeedbackFab(): React.JSX.Element | null {
   const pathname = usePathname() || "/";
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
@@ -42,7 +49,8 @@ export default function FeedbackFab() {
         if (!alive) return;
         setLoggedIn(!!data?.user);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        Sentry.captureException(err, { tags: { component: "feedback-fab" } });
         if (!alive) return;
         setLoggedIn(false);
       });
@@ -54,7 +62,7 @@ export default function FeedbackFab() {
   if (loggedIn !== true) return null;
   if (pathname.startsWith("/login")) return null;
 
-  function open(initialTab: Tab) {
+  function open(initialTab: Tab): void {
     setTab(initialTab);
     setTitle("");
     setBody("");
@@ -62,11 +70,11 @@ export default function FeedbackFab() {
     dialogRef.current?.showModal();
   }
 
-  function close() {
+  function close(): void {
     dialogRef.current?.close();
   }
 
-  async function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     if (submitting) return;
     setSubmitting(true);
@@ -85,18 +93,23 @@ export default function FeedbackFab() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setNotice(data?.error || "Could not send. Please try again.");
+        Sentry.captureException(
+          new Error(`feedback POST failed: ${res.status}`),
+          { tags: { component: "feedback-fab" } },
+        );
+        setNotice(data?.error || "Versturen mislukt. Probeer het opnieuw.");
         return;
       }
-      setNotice("Thanks — we got it.");
+      setNotice("Bedankt — we hebben je bericht ontvangen.");
       setTitle("");
       setBody("");
       setTimeout(() => {
         close();
         setNotice(null);
       }, 1200);
-    } catch {
-      setNotice("Network error. Please try again.");
+    } catch (err: unknown) {
+      Sentry.captureException(err, { tags: { component: "feedback-fab" } });
+      setNotice("Netwerkfout. Probeer het opnieuw.");
     } finally {
       setSubmitting(false);
     }
@@ -107,33 +120,29 @@ export default function FeedbackFab() {
       <button
         type="button"
         data-tour="feedback-fab"
-        aria-label="Send feedback"
+        aria-label="Stuur feedback"
         onClick={() => open("BUG")}
         className="feedbackFab"
       >
         💬
       </button>
       <dialog ref={dialogRef} className="feedbackDialog">
-        <form onSubmit={submit} className="card" style={{ minWidth: 280 }}>
-          <div
-            className="row"
-            style={{ justifyContent: "space-between", marginBottom: 12 }}
-          >
+        <form onSubmit={submit} className="card min-w-[280px]">
+          <div className="row justify-between mb-3">
             <strong>Feedback</strong>
             <button
               type="button"
               onClick={close}
-              aria-label="Close"
-              style={{ background: "transparent", border: 0, color: "inherit" }}
+              aria-label="Sluiten"
+              className="bg-transparent border-0 text-inherit"
             >
               ✕
             </button>
           </div>
           <div
-            className="row"
+            className="row mb-3 gap-2"
             role="tablist"
-            aria-label="Feedback type"
-            style={{ marginBottom: 12, gap: 8 }}
+            aria-label="Type feedback"
           >
             <button
               type="button"
@@ -151,13 +160,11 @@ export default function FeedbackFab() {
               onClick={() => setTab("IDEA")}
               className={tab === "IDEA" ? "navActive" : undefined}
             >
-              Idea
+              Idee
             </button>
           </div>
-          <label style={{ display: "block", marginBottom: 8 }}>
-            <span className="muted" style={{ fontSize: 12 }}>
-              Title
-            </span>
+          <label className="block mb-2">
+            <span className="muted text-xs">Titel</span>
             <input
               type="text"
               value={title}
@@ -166,13 +173,11 @@ export default function FeedbackFab() {
               maxLength={120}
               required
               minLength={3}
-              style={{ width: "100%", marginTop: 4 }}
+              className="w-full mt-1"
             />
           </label>
-          <label style={{ display: "block", marginBottom: 12 }}>
-            <span className="muted" style={{ fontSize: 12 }}>
-              Details
-            </span>
+          <label className="block mb-3">
+            <span className="muted text-xs">Toelichting</span>
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
@@ -181,23 +186,18 @@ export default function FeedbackFab() {
               required
               minLength={5}
               rows={5}
-              style={{ width: "100%", marginTop: 4, resize: "vertical" }}
+              className="w-full mt-1 resize-y"
             />
           </label>
-          <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
+          <div className="row justify-end gap-2">
             {notice ? (
-              <span className="muted" style={{ fontSize: 13 }}>
-                {notice}
-              </span>
+              <span className="muted text-[13px]">{notice}</span>
             ) : null}
             <button type="submit" disabled={submitting}>
-              {submitting ? "Sending…" : COPY[tab].cta}
+              {submitting ? "Versturen…" : COPY[tab].cta}
             </button>
           </div>
-          <div
-            className="muted"
-            style={{ fontSize: 11, marginTop: 8, textAlign: "right" }}
-          >
+          <div className="muted text-[11px] mt-2 text-right">
             v{APP_VERSION}
           </div>
         </form>

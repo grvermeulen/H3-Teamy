@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { buildWeeklyIdeaBlocks, postSlackBlocks } from "./slack";
 
 describe("buildWeeklyIdeaBlocks", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("renders an empty-state block when there are no groups", () => {
     const blocks = buildWeeklyIdeaBlocks({}, "2026-04-18 → 2026-04-25");
     expect(blocks).toHaveLength(2);
@@ -48,42 +52,45 @@ describe("buildWeeklyIdeaBlocks", () => {
 });
 
 describe("postSlackBlocks", () => {
-  const originalFetch = global.fetch;
-  const originalEnv = process.env.SLACK_WEBHOOK_URL;
-
   beforeEach(() => {
-    process.env.SLACK_WEBHOOK_URL = "https://hooks.slack.test/abc";
+    vi.clearAllMocks();
+    vi.stubEnv("SLACK_WEBHOOK_URL", "https://hooks.slack.test/abc");
   });
 
   afterEach(() => {
-    global.fetch = originalFetch;
-    process.env.SLACK_WEBHOOK_URL = originalEnv;
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
   it("returns ok:false when SLACK_WEBHOOK_URL is missing", async () => {
-    delete process.env.SLACK_WEBHOOK_URL;
+    vi.stubEnv("SLACK_WEBHOOK_URL", "");
     const r = await postSlackBlocks([{ type: "section" }]);
     expect(r.ok).toBe(false);
     expect(r.status).toBe(0);
   });
 
   it("posts to the webhook with text + blocks payload", async () => {
-    const fetchMock = vi.fn(
-      async () => ({ ok: true, status: 200 }) as Response,
-    );
-    global.fetch = fetchMock as unknown as typeof fetch;
+    const fetchSpy = vi
+      .spyOn(global, "fetch")
+      .mockResolvedValue({ ok: true, status: 200 } as Response);
     const r = await postSlackBlocks(
       [{ type: "section", text: { type: "mrkdwn", text: "hi" } }],
       "test",
     );
     expect(r.ok).toBe(true);
     expect(r.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://hooks.slack.test/abc");
     const body = JSON.parse(String(init.body));
     expect(body.text).toBe("test");
     expect(Array.isArray(body.blocks)).toBe(true);
+  });
+
+  it("returns ok:false and reports to Sentry when fetch throws", async () => {
+    vi.spyOn(global, "fetch").mockRejectedValue(new Error("network down"));
+    const r = await postSlackBlocks([{ type: "section" }]);
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe(0);
   });
 });

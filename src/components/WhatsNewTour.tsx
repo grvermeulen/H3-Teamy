@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import * as Sentry from "@sentry/nextjs";
 import type { ChangelogEntry, TourStep } from "../lib/changelog";
 
 type Spotlight = {
@@ -24,7 +25,14 @@ function spotlightFor(target: string | undefined): Spotlight {
   };
 }
 
-export default function WhatsNewTour() {
+/**
+ * Client-side overlay that walks a logged-in user through the changes in the
+ * current `APP_VERSION` once. On mount it asks `/api/whats-new` whether the
+ * tour should run; if so it renders a stepper, drawing a fixed-position
+ * spotlight box around each step's `target` selector. Dismiss / "Done"
+ * acknowledges the version via `POST /api/whats-new/ack`.
+ */
+export default function WhatsNewTour(): React.JSX.Element | null {
   const [entry, setEntry] = useState<ChangelogEntry | null>(null);
   const [version, setVersion] = useState<string | null>(null);
   const [stepIdx, setStepIdx] = useState(0);
@@ -48,8 +56,8 @@ export default function WhatsNewTour() {
           }
         },
       )
-      .catch(() => {
-        /* silent — tour is optional */
+      .catch((err: unknown) => {
+        Sentry.captureException(err, { tags: { component: "whats-new-tour" } });
       });
     return () => {
       alive = false;
@@ -61,7 +69,7 @@ export default function WhatsNewTour() {
   useEffect(() => {
     if (!step) return;
     setSpotlight(spotlightFor(step.target));
-    function onResize() {
+    function onResize(): void {
       setSpotlight(spotlightFor(step?.target));
     }
     window.addEventListener("resize", onResize);
@@ -74,16 +82,16 @@ export default function WhatsNewTour() {
 
   if (!entry || !step) return null;
 
-  async function dismiss() {
+  async function dismiss(): Promise<void> {
     setEntry(null);
     try {
       await fetch("/api/whats-new/ack", { method: "POST" });
-    } catch {
-      /* ack is best-effort */
+    } catch (err: unknown) {
+      Sentry.captureException(err, { tags: { component: "whats-new-tour" } });
     }
   }
 
-  function next() {
+  function next(): void {
     if (!entry) return;
     if (stepIdx < entry.steps.length - 1) {
       setStepIdx(stepIdx + 1);
@@ -109,39 +117,29 @@ export default function WhatsNewTour() {
       ) : null}
       <div className="whatsNewBackdrop" role="dialog" aria-modal="true">
         <div className="card whatsNewCard">
-          <div
-            className="row"
-            style={{ justifyContent: "space-between", marginBottom: 8 }}
-          >
+          <div className="row justify-between mb-2">
             <strong>{entry.title}</strong>
             <button
               type="button"
               onClick={() => void dismiss()}
-              aria-label="Close tour"
-              style={{ background: "transparent", border: 0, color: "inherit" }}
+              aria-label="Sluit rondleiding"
+              className="bg-transparent border-0 text-inherit"
             >
               ✕
             </button>
           </div>
-          <h3 style={{ margin: "8px 0" }}>{step.title}</h3>
+          <h3 className="my-2">{step.title}</h3>
           <p>{step.body}</p>
-          <div
-            className="row"
-            style={{
-              justifyContent: "space-between",
-              marginTop: 16,
-              alignItems: "center",
-            }}
-          >
-            <span className="muted" style={{ fontSize: 12 }}>
+          <div className="row justify-between mt-4 items-center">
+            <span className="muted text-xs">
               v{version} · {stepIdx + 1} / {entry.steps.length}
             </span>
-            <div className="row" style={{ gap: 8 }}>
+            <div className="row gap-2">
               <button type="button" onClick={() => void dismiss()}>
-                Skip
+                Overslaan
               </button>
               <button type="button" onClick={next}>
-                {isLast ? "Done" : "Next"}
+                {isLast ? "Klaar" : "Volgende"}
               </button>
             </div>
           </div>
