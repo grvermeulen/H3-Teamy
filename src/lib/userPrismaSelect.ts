@@ -3,7 +3,8 @@ import type { Prisma } from "@prisma/client";
 /**
  * Columns to read from `User` in hot paths. Keeps generated SQL aligned with
  * databases that may lag behind the Prisma schema (e.g. preview without latest
- * migrations), avoiding `SELECT *` / implicit full-model reads.
+ * migrations), avoiding `SELECT *` / implicit full-model reads. Optional columns
+ * such as `lastVersionSeen` belong in dedicated migrations and reads — not here.
  */
 export const USER_CORE_SELECT = {
   id: true,
