@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { getActiveUser } from "./activeUser";
+import { isDbUnavailableError } from "./dbUnavailableError";
 import { prisma } from "./db";
 import { getUserRoles, type UserRoles } from "./kv";
 
@@ -24,10 +25,12 @@ export async function isTrainer(
   try {
     ({ userId } = await getActiveUser(req));
   } catch (err: unknown) {
-    Sentry.captureException(err, {
-      tags: { component: "trainer" },
-      extra: { context: "getActiveUser_isTrainer" },
-    });
+    if (!isDbUnavailableError(err)) {
+      Sentry.captureException(err, {
+        tags: { component: "trainer" },
+        extra: { context: "getActiveUser_isTrainer" },
+      });
+    }
     return { isTrainer: false, me: { id: "", name: "" } };
   }
   try {
@@ -77,10 +80,12 @@ export async function isAdminUser(
   try {
     ({ userId } = await getActiveUser(req));
   } catch (err: unknown) {
-    Sentry.captureException(err, {
-      tags: { component: "trainer" },
-      extra: { context: "getActiveUser_isAdminUser" },
-    });
+    if (!isDbUnavailableError(err)) {
+      Sentry.captureException(err, {
+        tags: { component: "trainer" },
+        extra: { context: "getActiveUser_isAdminUser" },
+      });
+    }
     return { isAdmin: false, me: { id: "", name: "" } };
   }
   try {
