@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "eslint .",
+    "check:merge-conflicts": "node scripts/check-no-merge-conflict-markers.mjs",
     "lint:fix": "eslint . --fix",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
