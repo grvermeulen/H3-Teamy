@@ -49,6 +49,11 @@ theirs
 `;
     expect(findMergeConflictMarkerLines(src)).toEqual([2, 4, 6]);
   });
+
+  it("detects markers embedded in CSS (same failure mode as PostCss unknown HEAD)", () => {
+    const src = `.foo { color: red; }\n<<<<<<< HEAD\n.bar { color: blue; }\n=======\n`;
+    expect(findMergeConflictMarkerLines(src)).toEqual([2, 4]);
+  });
 });
 
 describe("MERGE_CONFLICT_LINE_PREFIXES", () => {

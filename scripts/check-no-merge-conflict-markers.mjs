@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Fails if any tracked source file under src/ contains Git merge conflict markers.
- * Prevents recurrence of Turbopack "Expression expected" parse errors (e.g. JAVASCRIPT-NEXTJS-14).
+ * Prevents recurrence of Turbopack/PostCSS parse errors (e.g. JAVASCRIPT-NEXTJS-14, JAVASCRIPT-NEXTJS-17:
+ * CssSyntaxError "Unknown word HEAD" when `<<<<<<< HEAD` is left in globals.css).
  */
 import { readdir, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
@@ -38,7 +39,7 @@ async function* walk(dir) {
       if (e.name === "node_modules" || e.name === ".next") continue;
       yield* walk(p);
     } else if (
-      /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(e.name) &&
+      /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|css)$/.test(e.name) &&
       !/\.(test|spec)\.(ts|tsx|mts|cts|js|jsx)$/.test(e.name)
     ) {
       yield p;
