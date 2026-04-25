@@ -6,6 +6,7 @@ import { getServerSession } from "next-auth";
 import { prisma } from "./db";
 import { authOptions } from "./authOptions";
 import { withPgConnectRetry } from "./prismaConnectRetry";
+import { USER_CORE_SELECT } from "./userPrismaSelect";
 
 export type ActiveUserResult = {
   userId: string;
@@ -103,6 +104,7 @@ async function resolveActiveUser(
       if (sessionEmail) {
         const existingByEmail = await prisma.user.findUnique({
           where: { email: sessionEmail },
+          select: USER_CORE_SELECT,
         });
         if (existingByEmail) {
           authUserId = existingByEmail.id;
@@ -215,7 +217,10 @@ async function resolveActiveUser(
     }
 
     // Hydrate missing fields from session
-    const current = await prisma.user.findUnique({ where: { id: authUserId } });
+    const current = await prisma.user.findUnique({
+      where: { id: authUserId },
+      select: USER_CORE_SELECT,
+    });
     const updates: {
       email?: string;
       firstName?: string;
@@ -225,6 +230,7 @@ async function resolveActiveUser(
       // Only set email if it's not used by another user already
       const other = await prisma.user.findUnique({
         where: { email: sessionEmail },
+        select: USER_CORE_SELECT,
       });
       if (!other || other.id === current?.id) {
         updates.email = sessionEmail;

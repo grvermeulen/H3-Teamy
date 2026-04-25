@@ -5,6 +5,7 @@ import * as Sentry from "@sentry/nextjs";
 import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import bcrypt from "bcryptjs";
+import { USER_CORE_SELECT } from "./userPrismaSelect";
 
 /**
  * NextAuth configuration: Google + credentials, JWT sessions with user id on `session.user.id`.
@@ -28,13 +29,7 @@ export const authOptions: NextAuthOptions = {
         try {
           const user = await prisma.user.findFirst({
             where: { email },
-            select: {
-              id: true,
-              email: true,
-              passwordHash: true,
-              firstName: true,
-              lastName: true,
-            },
+            select: USER_CORE_SELECT,
           });
           if (!user || !user.passwordHash) return null;
           const ok = await bcrypt.compare(password, user.passwordHash);

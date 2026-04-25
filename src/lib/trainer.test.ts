@@ -4,7 +4,9 @@ import { isTrainer, isAdminUser } from "./trainer";
 import { prisma } from "./db";
 import { getActiveUser } from "./activeUser";
 import { getUserRoles } from "./kv";
+import { USER_CORE_SELECT } from "./userPrismaSelect";
 import { NextRequest } from "next/server";
+import { DbUnavailableError } from "./dbUnavailableError";
 
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
@@ -47,6 +49,10 @@ describe("trainer permissions", () => {
 
       const result = await isTrainer(mockReq);
       expect(result.isTrainer).toBe(true);
+      expect(vi.mocked(prisma.user.findUnique)).toHaveBeenCalledWith({
+        where: { id: "1" },
+        select: USER_CORE_SELECT,
+      });
     });
 
     it("returns true if user is Admin", async () => {
@@ -115,6 +121,13 @@ describe("trainer permissions", () => {
           extra: expect.objectContaining({ context: "getActiveUser_isTrainer" }),
         }),
       );
+    });
+
+    it("does not double-report Sentry when getActiveUser throws DbUnavailableError", async () => {
+      vi.mocked(getActiveUser).mockRejectedValueOnce(new DbUnavailableError());
+      const result = await isTrainer(mockReq);
+      expect(result.isTrainer).toBe(false);
+      expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
     });
   });
 
@@ -188,6 +201,13 @@ describe("trainer permissions", () => {
           extra: expect.objectContaining({ context: "getActiveUser_isAdminUser" }),
         }),
       );
+    });
+
+    it("does not double-report Sentry when getActiveUser throws DbUnavailableError", async () => {
+      vi.mocked(getActiveUser).mockRejectedValueOnce(new DbUnavailableError());
+      const result = await isAdminUser(mockReq);
+      expect(result.isAdmin).toBe(false);
+      expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
     });
   });
 });

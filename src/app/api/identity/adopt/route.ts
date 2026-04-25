@@ -1,24 +1,74 @@
 import { NextRequest, NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { prisma } from "../../../../lib/db";
 import { getActiveUser } from "../../../../lib/activeUser";
+import {
+  isDbUnavailableError,
+  jsonDatabaseUnavailable,
+} from "../../../../lib/dbUnavailableError";
 
 export async function POST(req: NextRequest) {
-  const cookieId = req.cookies.get("anon_id")?.value || null;
-  if (!cookieId) return NextResponse.json({ error: "no cookie" }, { status: 400 });
-  const { userId } = await getActiveUser(req);
-  const cookieIdentity = await prisma.identity.findUnique({ where: { provider_providerUserId: { provider: "cookie", providerUserId: cookieId } }, include: { user: true } });
-  if (!cookieIdentity || cookieIdentity.userId === userId) return NextResponse.json({ ok: true });
+  try {
+    const cookieId = req.cookies.get("anon_id")?.value || null;
+    if (!cookieId)
+      return NextResponse.json({ error: "no cookie" }, { status: 400 });
+    const { userId } = await getActiveUser(req);
+    const cookieIdentity = await prisma.identity.findUnique({
+      where: {
+        provider_providerUserId: {
+          provider: "cookie",
+          providerUserId: cookieId,
+        },
+      },
+      include: { user: true },
+    });
+    if (!cookieIdentity || cookieIdentity.userId === userId)
+      return NextResponse.json({ ok: true });
 
-  // Move RSVPs and repoint identity transactionally
-  await prisma.$transaction(async (tx) => {
-    await tx.rsvp.updateMany({ where: { userId: cookieIdentity.userId }, data: { userId } });
-    await tx.identity.upsert({ where: { provider_providerUserId: { provider: "cookie", providerUserId: cookieId } }, create: { provider: "cookie", providerUserId: cookieId, userId }, update: { userId } });
-    // Delete cookie user if no identities remain
-    const left = await tx.identity.count({ where: { userId: cookieIdentity.userId } });
-    if (left === 0) {
-      await tx.user.delete({ where: { id: cookieIdentity.userId } }).catch(() => null as any);
+    // Move RSVPs and repoint identity transactionally
+    await prisma.$transaction(async (tx) => {
+      await tx.rsvp.updateMany({
+        where: { userId: cookieIdentity.userId },
+        data: { userId },
+      });
+      await tx.identity.upsert({
+        where: {
+          provider_providerUserId: {
+            provider: "cookie",
+            providerUserId: cookieId,
+          },
+        },
+        create: {
+          provider: "cookie",
+          providerUserId: cookieId,
+          userId,
+        },
+        update: { userId },
+      });
+      // Delete cookie user if no identities remain
+      const left = await tx.identity.count({
+        where: { userId: cookieIdentity.userId },
+      });
+      if (left === 0) {
+        try {
+          await tx.user.delete({ where: { id: cookieIdentity.userId } });
+        } catch (delErr: unknown) {
+          Sentry.captureException(delErr, {
+            extra: { context: "identity_adopt_delete_cookie_user" },
+          });
+        }
+      }
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (error: unknown) {
+    if (isDbUnavailableError(error)) {
+      return jsonDatabaseUnavailable();
     }
-  });
-
-  return NextResponse.json({ ok: true });
+    Sentry.captureException(error);
+    return NextResponse.json(
+      { error: "Er ging iets mis" },
+      { status: 500 },
+    );
+  }
 }
