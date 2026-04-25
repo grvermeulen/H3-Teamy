@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { Prisma } from "@prisma/client";
+import { DbUnavailableError } from "./dbUnavailableError";
 
 const TRANSIENT_PRISMA_CONNECT_CODES = new Set<string>([
   "P1001",
@@ -43,7 +44,8 @@ function computeBackoffMs(attemptIndex: number): number {
  * @param operationName - Korte naam voor breadcrumbs (bijv. `listEventRsvps`).
  * @param fn - Async functie die de query uitvoert.
  * @returns Resultaat van `fn`.
- * @throws De laatste fout wanneer alle pogingen falen of de fout niet als transient wordt gezien.
+ * @throws {@link DbUnavailableError} wanneer alle pogingen falen met een als transient herkende connectiefout.
+ * @throws De oorspronkelijke fout wanneer die niet als transient wordt gezien.
  */
 export async function withPgConnectRetry<T>(
   operationName: string,
@@ -56,21 +58,31 @@ export async function withPgConnectRetry<T>(
       return await fn();
     } catch (error: unknown) {
       lastError = error;
-      const canRetry =
-        attempt < maxAttempts - 1 && isTransientPostgresConnectError(error);
-      if (!canRetry) {
+      const transient = isTransientPostgresConnectError(error);
+      if (attempt < maxAttempts - 1 && transient) {
+        Sentry.addBreadcrumb({
+          category: "postgres",
+          message: `Opnieuw proberen na tijdelijke DB-connectiefout: ${operationName}`,
+          level: "warning",
+          data: { attempt: attempt + 1, operationName },
+        });
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, computeBackoffMs(attempt));
+        });
+        continue;
+      }
+      if (!transient) {
         throw error;
       }
-      Sentry.addBreadcrumb({
-        category: "postgres",
-        message: `Opnieuw proberen na tijdelijke DB-connectiefout: ${operationName}`,
-        level: "warning",
-        data: { attempt: attempt + 1, operationName },
-      });
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, computeBackoffMs(attempt));
-      });
+      break;
     }
+  }
+  if (lastError !== undefined && isTransientPostgresConnectError(lastError)) {
+    Sentry.captureException(lastError, {
+      extra: { operationName, exhaustedRetries: true },
+      tags: { db_connect: "exhausted" },
+    });
+    throw new DbUnavailableError();
   }
   throw lastError;
 }
