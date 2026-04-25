@@ -2,6 +2,8 @@
 
 ## API Routes
 
+- /api/admin/feedback
+- /api/admin/feedback/[id]
 - /api/admin/status
 - /api/admin/users
 - /api/auth/[...nextauth]
@@ -9,11 +11,13 @@
 - /api/auth/password/reset-confirm
 - /api/auth/password/reset-request
 - /api/auth/register
+- /api/cron/idea-weekly
 - /api/debug/attendance
 - /api/debug/cleanup/orphans
 - /api/debug/migrate/event-ids
 - /api/debug/persistence
 - /api/events
+- /api/feedback
 - /api/identity/adopt
 - /api/identity/status
 - /api/link/complete
@@ -34,11 +38,14 @@
 - /api/training/overview
 - /api/training/sessions
 - /api/users
+- /api/whats-new
+- /api/whats-new/ack
 
 ## Pages
 
 - 
 - /admin
+- /admin/feedback
 - /attendance
 - /docs
 - /login
