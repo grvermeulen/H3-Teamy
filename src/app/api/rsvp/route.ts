@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRsvp, setRsvp } from "../../../lib/kv";
 import { getActiveUser } from "../../../lib/activeUser";
 import { prisma } from "../../../lib/db";
+import { USER_CORE_SELECT } from "../../../lib/userPrismaSelect";
 
 export async function GET(req: NextRequest) {
   try {
@@ -25,7 +26,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "invalid status" }, { status: 400 });
     }
     const { userId } = await getActiveUser(req);
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: USER_CORE_SELECT,
+    });
     const first = (user?.firstName || "").trim();
     const last = (user?.lastName || "").trim();
     if (!first || !last) {

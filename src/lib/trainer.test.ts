@@ -47,6 +47,16 @@ describe("trainer permissions", () => {
 
       const result = await isTrainer(mockReq);
       expect(result.isTrainer).toBe(true);
+      expect(vi.mocked(prisma.user.findUnique)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: "1" },
+          select: expect.objectContaining({
+            id: true,
+            firstName: true,
+            lastName: true,
+          }),
+        }),
+      );
     });
 
     it("returns true if user is Admin", async () => {
