@@ -49,17 +49,31 @@ function Content() {
   }
 
   async function login() {
+    if (signingIn) return;
     setNotice(null);
     setSigningIn(true);
     try {
-      await signIn("credentials", {
+      const result = await signIn("credentials", {
         email,
         password,
-        redirect: true,
+        redirect: false,
         callbackUrl,
       });
-      // next-auth handelt navigatie af
-    } finally {
+      if (result?.error) {
+        setNotice({
+          tone: "error",
+          text: "Inloggen mislukt. Controleer e-mail en wachtwoord.",
+        });
+        setSigningIn(false);
+        return;
+      }
+      // Navigeer expliciet — laat de "Inloggen…" spinner staan tijdens de redirect.
+      window.location.assign(result?.url || callbackUrl);
+    } catch {
+      setNotice({
+        tone: "error",
+        text: "Netwerkfout bij inloggen. Probeer opnieuw.",
+      });
       setSigningIn(false);
     }
   }
@@ -85,89 +99,103 @@ function Content() {
 
         <Card style={{ marginTop: 12 }}>
           <h3 style={{ marginTop: 0 }}>Met e-mail</h3>
-          <Stack gap="3">
-            <Input
-              label="E-mailadres"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <Input
-              label="Wachtwoord"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <Stack direction="row" gap="2" justify="between" align="center">
-              <a href="/reset-request" className="muted">
-                Wachtwoord vergeten?
-              </a>
-              <Button
-                variant="primary"
-                onClick={login}
-                loading={signingIn}
-                loadingLabel="Inloggen…"
-              >
-                Inloggen
-              </Button>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void login();
+            }}
+          >
+            <Stack gap="3">
+              <Input
+                label="E-mailadres"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <Input
+                label="Wachtwoord"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <Stack direction="row" gap="2" justify="between" align="center">
+                <a href="/reset-request" className="muted">
+                  Wachtwoord vergeten?
+                </a>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  loading={signingIn}
+                  loadingLabel="Inloggen…"
+                >
+                  Inloggen
+                </Button>
+              </Stack>
             </Stack>
-          </Stack>
+          </form>
         </Card>
 
         <Card style={{ marginTop: 12 }}>
           <h3 style={{ marginTop: 0 }}>Account aanmaken</h3>
-          <Stack gap="3">
-            <Input
-              label="E-mailadres"
-              type="email"
-              autoComplete="email"
-              value={signupEmail}
-              onChange={(e) => setSignupEmail(e.target.value)}
-            />
-            <Input
-              label="Wachtwoord"
-              type="password"
-              autoComplete="new-password"
-              value={signupPassword}
-              onChange={(e) => setSignupPassword(e.target.value)}
-              hint="Minimaal 8 tekens"
-            />
-            <Stack direction="row" gap="3">
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <Input
-                  label="Voornaam"
-                  autoComplete="given-name"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <Input
-                  label="Achternaam"
-                  autoComplete="family-name"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                />
-              </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void register();
+            }}
+          >
+            <Stack gap="3">
+              <Input
+                label="E-mailadres"
+                type="email"
+                autoComplete="email"
+                value={signupEmail}
+                onChange={(e) => setSignupEmail(e.target.value)}
+              />
+              <Input
+                label="Wachtwoord"
+                type="password"
+                autoComplete="new-password"
+                value={signupPassword}
+                onChange={(e) => setSignupPassword(e.target.value)}
+                hint="Minimaal 8 tekens"
+              />
+              <Stack direction="row" gap="3">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Input
+                    label="Voornaam"
+                    autoComplete="given-name"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                  />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Input
+                    label="Achternaam"
+                    autoComplete="family-name"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                  />
+                </div>
+              </Stack>
+              <Input
+                label="Uitnodigingscode"
+                value={invitationCode}
+                onChange={(e) => setInvitationCode(e.target.value)}
+                hint="Krijg je van de trainer of teammanager"
+              />
+              <Stack direction="row" justify="end">
+                <Button
+                  type="submit"
+                  loading={registering}
+                  loadingLabel="Aanmaken…"
+                >
+                  Account aanmaken
+                </Button>
+              </Stack>
             </Stack>
-            <Input
-              label="Uitnodigingscode"
-              value={invitationCode}
-              onChange={(e) => setInvitationCode(e.target.value)}
-              hint="Krijg je van de trainer of teammanager"
-            />
-            <Stack direction="row" justify="end">
-              <Button
-                onClick={register}
-                loading={registering}
-                loadingLabel="Aanmaken…"
-              >
-                Account aanmaken
-              </Button>
-            </Stack>
-          </Stack>
+          </form>
         </Card>
 
         {notice ? (

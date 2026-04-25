@@ -1053,7 +1053,8 @@ body.modal-open .card {
 }
 
 /* Button */
-.ui-btn {
+button.ui-btn,
+a.ui-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1061,8 +1062,8 @@ body.modal-open .card {
   min-height: var(--hit);
   padding: 0 var(--space-4);
   border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text);
   font: inherit;
   font-weight: 600;
@@ -1071,43 +1072,82 @@ body.modal-open .card {
   transition:
     filter 120ms ease,
     border-color 120ms ease,
-    background 120ms ease;
+    background 120ms ease,
+    transform 80ms ease;
   white-space: nowrap;
+  -webkit-appearance: none;
+  appearance: none;
 }
-.ui-btn:hover:not(:disabled) {
+button.ui-btn:hover:not(:disabled),
+a.ui-btn:hover {
   filter: brightness(1.08);
+  border-color: rgba(255, 255, 255, 0.42);
 }
-.ui-btn:disabled {
+button.ui-btn:active:not(:disabled),
+a.ui-btn:active {
+  transform: scale(0.98);
+}
+button.ui-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
-.ui-btn:focus-visible {
+button.ui-btn:focus-visible,
+a.ui-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.ui-btn[data-size="sm"] {
+button.ui-btn[data-size="sm"],
+a.ui-btn[data-size="sm"] {
   min-height: 36px;
   padding: 0 var(--space-3);
   font-size: 14px;
 }
-.ui-btn[data-fullwidth="true"] {
+button.ui-btn[data-fullwidth="true"],
+a.ui-btn[data-fullwidth="true"] {
   width: 100%;
 }
-.ui-btn[data-variant="primary"] {
+button.ui-btn[data-variant="primary"],
+a.ui-btn[data-variant="primary"] {
   background: var(--accent);
   border-color: var(--accent);
   color: #06121a;
 }
-.ui-btn[data-variant="secondary"] {
-  background: rgba(255, 255, 255, 0.04);
+button.ui-btn[data-variant="secondary"],
+a.ui-btn[data-variant="secondary"] {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.28);
 }
-.ui-btn[data-variant="ghost"] {
+button.ui-btn[data-variant="ghost"],
+a.ui-btn[data-variant="ghost"] {
   border-color: transparent;
   background: transparent;
 }
-.ui-btn[data-variant="danger"] {
+button.ui-btn[data-variant="danger"],
+a.ui-btn[data-variant="danger"] {
   border-color: var(--negative);
   color: var(--negative);
+  background: color-mix(in oklab, var(--negative) 12%, transparent);
+}
+button.ui-btn[aria-busy="true"]::after {
+  content: "";
+  width: 14px;
+  height: 14px;
+  margin-left: var(--space-2);
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: ui-spin 0.7s linear infinite;
+  flex: 0 0 auto;
+}
+@keyframes ui-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  button.ui-btn[aria-busy="true"]::after {
+    animation: none;
+  }
 }
 
 /* Input + Field */
@@ -1122,34 +1162,36 @@ body.modal-open .card {
   color: var(--muted);
   font-weight: 500;
 }
-.ui-input,
-.ui-textarea,
-.ui-select {
+input.ui-input,
+textarea.ui-textarea,
+select.ui-select {
   width: 100%;
   min-height: var(--hit);
   padding: 0 var(--space-3);
   border-radius: var(--radius-md);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text);
   font: inherit;
   font-size: 16px; /* prevents iOS zoom on focus */
+  -webkit-appearance: none;
+  appearance: none;
 }
-.ui-textarea {
+textarea.ui-textarea {
   padding: var(--space-2) var(--space-3);
   min-height: 96px;
   resize: vertical;
 }
-.ui-input:focus,
-.ui-textarea:focus,
-.ui-select:focus {
+input.ui-input:focus,
+textarea.ui-textarea:focus,
+select.ui-select:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
   border-color: var(--accent);
 }
-.ui-input[aria-invalid="true"],
-.ui-textarea[aria-invalid="true"],
-.ui-select[aria-invalid="true"] {
+input.ui-input[aria-invalid="true"],
+textarea.ui-textarea[aria-invalid="true"],
+select.ui-select[aria-invalid="true"] {
   border-color: var(--negative);
 }
 .ui-field-hint {
