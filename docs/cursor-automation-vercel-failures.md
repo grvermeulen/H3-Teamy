@@ -6,10 +6,9 @@ This repository has a GitHub Actions workflow (`Vercel Deployment Failure Monito
 
 For the Next.js app to build on Vercel:
 
-- **DATABASE_URL** (or **POSTGRES_URL** / **POSTGRES_PRISMA_URL** from Vercel Postgres) must be available for the **Build** phase (Production and Preview).  
-  `prisma.config.ts` resolves the datasource URL in that order so `postinstall` (`prisma generate`) and `vercel.json` `prisma migrate deploy` find a connection string when the project uses Vercel’s Postgres integration naming.
+- **Database URL for build**: `scripts/migrate-deploy-or-skip.mjs` runs before `next build` and calls `prisma migrate deploy` when any of these is set (direct/unpooled first): **DATABASE_URL_UNPOOLED**, **POSTGRES_URL_NON_POOLING**, **DIRECT_URL**, **DATABASE_URL**, **POSTGRES_URL**, **POSTGRES_PRISMA_URL**, **PRISMA_DATABASE_URL**. If none are set, the script skips migrations so the build still succeeds (set at least one URL on Preview/Production to avoid schema drift).
 
-- **PRISMA_DATABASE_URL** is used by the app at runtime if set (pooled URL). For migrations, prefer a **direct** URL in **DATABASE_URL** when your host rejects DDL on the pooler.
+- **PRISMA_DATABASE_URL** is used by the app at runtime if set (pooled URL). For migrations, prefer a **direct** URL (e.g. **DATABASE_URL_UNPOOLED** on Vercel Postgres) when the pooler rejects DDL.
 
 ## Runtime database timeouts (Sentry: connection timeout / Prisma P100x)
 

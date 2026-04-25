@@ -1,5 +1,5 @@
 {
   "installCommand": "npm ci --legacy-peer-deps",
   "framework": "nextjs",
-  "buildCommand": "npx prisma migrate deploy && npm run build"
+  "buildCommand": "node scripts/migrate-deploy-or-skip.mjs && npm run build"
 }
