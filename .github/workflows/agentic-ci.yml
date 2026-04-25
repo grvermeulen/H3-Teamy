@@ -26,6 +26,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Block unresolved Git merge markers in src
+        run: |
+          set -euo pipefail
+          if grep -rEn --include='*.ts' --include='*.tsx' --include='*.js' \
+            --include='*.jsx' --include='*.mjs' --include='*.cjs' \
+            '^<<<<<<<|^=======[[:space:]]*$|^>>>>>>>' src; then
+            echo "::error::Unresolved Git merge conflict markers found under src/ (prevents Next.js/Turbopack from parsing)."
+            exit 1
+          fi
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
