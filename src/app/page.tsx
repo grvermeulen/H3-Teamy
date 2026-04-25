@@ -9,6 +9,7 @@ export default async function Page() {
   return (
     <main>
       <div className="container">
+        <h1>De Rijn H3 — Waterpolo</h1>
         <h2 style={{ marginTop: 4 }}>Aankomende wedstrijden</h2>
         <EventList events={events} />
       </div>
