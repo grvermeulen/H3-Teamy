@@ -1,11 +1,7 @@
 import type { ErrorEvent, EventHint } from "@sentry/core";
 import { Prisma } from "@prisma/client";
 
-const TRANSIENT_PRISMA_DEV_CONNECT_CODES = new Set([
-  "P1001",
-  "P1002",
-  "P1017",
-]);
+const TRANSIENT_PRISMA_DEV_CONNECT_CODES = new Set(["P1001", "P1002", "P1017"]);
 
 /**
  * Bepaalt of een Sentry-serverevent lokale ontwikkel-ruis is (Postgres niet bereikbaar)
@@ -21,9 +17,7 @@ export function shouldDropDevLocalhostDbNoiseForSentry(
   hint: EventHint,
 ): boolean {
   if (process.env.NODE_ENV === "production") return false;
-  const envTag = String(
-    event.tags?.environment ?? event.environment ?? "",
-  );
+  const envTag = String(event.tags?.environment ?? event.environment ?? "");
   if (envTag !== "development") return false;
 
   const original = hint.originalException;

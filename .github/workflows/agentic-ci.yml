@@ -41,11 +41,11 @@ jobs:
           DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
         run: npx prisma generate
 
+      - name: Check for merge conflict markers in src/
+        run: npm run check:merge-conflicts
+
       - name: Lint
         run: npm run lint
-
-      - name: Check merge conflict markers
-        run: npx tsx scripts/check-merge-conflicts.ts
 
       - name: Typecheck
         run: npx tsc --noEmit

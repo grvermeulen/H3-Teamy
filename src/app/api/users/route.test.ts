@@ -51,8 +51,7 @@ describe("GET /api/users", () => {
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({
-      error:
-        "Database tijdelijk niet beschikbaar. Probeer het later opnieuw.",
+      error: "Database tijdelijk niet beschikbaar. Probeer het later opnieuw.",
     });
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });

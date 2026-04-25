@@ -7,6 +7,10 @@ import { defineConfig } from "prisma/config";
  * (vaak pooler — sommige hosts accepteren migraties daar niet).
  */
 const databaseUrl =
+  process.env.PREVIEW_DATABASE_URL_UNPOOLED ??
+  process.env.PREVIEW_POSTGRES_URL_NON_POOLING ??
+  process.env.PREVIEW_DATABASE_URL ??
+  process.env.PREVIEW_POSTGRES_URL ??
   process.env.DATABASE_URL_UNPOOLED ??
   process.env.POSTGRES_URL_NON_POOLING ??
   process.env.DIRECT_URL ??
