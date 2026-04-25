@@ -44,6 +44,15 @@ describe("fetchJsonOr", () => {
     });
   });
 
+  it("returns fallback without Sentry when fetch aborts", async () => {
+    const aborted = new DOMException("The user aborted a request.", "AbortError");
+    vi.spyOn(global, "fetch").mockRejectedValue(aborted);
+    const fallback = { ok: false };
+    const result = await fetchJsonOr("/api/x", { signal: new AbortController().signal }, fallback, "test-abort");
+    expect(result).toEqual(fallback);
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
   it("returns fallback and reports to Sentry when JSON is invalid", async () => {
     vi.spyOn(global, "fetch").mockResolvedValue(
       new Response("not json", {
