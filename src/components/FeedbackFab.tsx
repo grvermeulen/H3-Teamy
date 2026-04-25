@@ -1,10 +1,11 @@
 "use client";
 
-import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
-import * as React from "react";
+import { useRef, useState } from "react";
 import * as Sentry from "@sentry/nextjs";
 import { APP_VERSION } from "../lib/version";
+import { Button, Input, Textarea } from "./ui";
+import { useSession } from "./SessionContext";
 
 type Tab = "BUG" | "IDEA";
 
@@ -29,21 +30,20 @@ const COPY: Record<
 /**
  * Floating action button that opens a modal dialog where the logged-in user
  * can submit a Bug or Idea. Captures the current route, `APP_VERSION`, and
- * user-agent server-side. Must render inside `SessionProvider` (root layout);
- * hidden while the session is loading, for anonymous users, and on `/login`.
+ * user-agent server-side. Rendered globally from the root layout; hidden for
+ * anonymous users and on the `/login` route.
  */
 export default function FeedbackFab(): React.JSX.Element | null {
   const pathname = usePathname() || "/";
-  const { data: session, status } = useSession();
-  const dialogRef = React.useRef<HTMLDialogElement | null>(null);
-  const [tab, setTab] = React.useState<Tab>("BUG");
-  const [title, setTitle] = React.useState("");
-  const [body, setBody] = React.useState("");
-  const [submitting, setSubmitting] = React.useState(false);
-  const [notice, setNotice] = React.useState<string | null>(null);
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const { loading, loggedIn } = useSession();
+  const [tab, setTab] = useState<Tab>("BUG");
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  if (status === "loading") return null;
-  if (status !== "authenticated" || !session?.user) return null;
+  if (loading || !loggedIn) return null;
   if (pathname.startsWith("/login")) return null;
 
   function open(initialTab: Tab): void {
@@ -58,7 +58,7 @@ export default function FeedbackFab(): React.JSX.Element | null {
     dialogRef.current?.close();
   }
 
-  async function submit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
+  async function submit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     if (submitting) return;
     setSubmitting(true);
@@ -108,7 +108,20 @@ export default function FeedbackFab(): React.JSX.Element | null {
         onClick={() => open("BUG")}
         className="feedbackFab"
       >
-        💬
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path
+            d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8A2.5 2.5 0 0 1 17.5 16H10l-4 4v-4h-.5A1.5 1.5 0 0 1 4 14.5v-9Z"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M8 8.5h8M8 11.5h5"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+        </svg>
       </button>
       <dialog ref={dialogRef} className="feedbackDialog">
         <form onSubmit={submit} className="card min-w-[280px]">
@@ -128,28 +141,28 @@ export default function FeedbackFab(): React.JSX.Element | null {
             role="tablist"
             aria-label="Type feedback"
           >
-            <button
-              type="button"
+            <Button
               role="tab"
               aria-selected={tab === "BUG"}
+              variant={tab === "BUG" ? "primary" : "secondary"}
+              size="sm"
               onClick={() => setTab("BUG")}
-              className={tab === "BUG" ? "navActive" : undefined}
             >
               Bug
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
               role="tab"
               aria-selected={tab === "IDEA"}
+              variant={tab === "IDEA" ? "primary" : "secondary"}
+              size="sm"
               onClick={() => setTab("IDEA")}
-              className={tab === "IDEA" ? "navActive" : undefined}
             >
               Idee
-            </button>
+            </Button>
           </div>
-          <label className="block mb-2">
-            <span className="muted text-xs">Titel</span>
-            <input
+          <div style={{ marginBottom: 12 }}>
+            <Input
+              label="Titel"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -157,12 +170,11 @@ export default function FeedbackFab(): React.JSX.Element | null {
               maxLength={120}
               required
               minLength={3}
-              className="w-full mt-1"
             />
-          </label>
-          <label className="block mb-3">
-            <span className="muted text-xs">Toelichting</span>
-            <textarea
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <Textarea
+              label="Toelichting"
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder={COPY[tab].bodyPh}
@@ -170,16 +182,20 @@ export default function FeedbackFab(): React.JSX.Element | null {
               required
               minLength={5}
               rows={5}
-              className="w-full mt-1 resize-y"
             />
-          </label>
+          </div>
           <div className="row justify-end gap-2">
             {notice ? (
               <span className="muted text-[13px]">{notice}</span>
             ) : null}
-            <button type="submit" disabled={submitting}>
-              {submitting ? "Versturen…" : COPY[tab].cta}
-            </button>
+            <Button
+              type="submit"
+              variant="primary"
+              loading={submitting}
+              loadingLabel="Versturen…"
+            >
+              {COPY[tab].cta}
+            </Button>
           </div>
           <div className="muted text-[11px] mt-2 text-right">
             v{APP_VERSION}

@@ -3,15 +3,19 @@
 import * as Sentry from "@sentry/nextjs";
 import { signIn } from "next-auth/react";
 import { useState, type JSX } from "react";
+import { Button, Card, Input, Stack } from "../../components/ui";
 
 type LoginFormProps = {
   /** Veilig relatief redirect-pad na succesvolle login (server-gevalideerd). */
   callbackUrl: string;
 };
 
+type Notice = { tone: "info" | "error"; text: string } | null;
+
 /**
- * Client-side login- en registratieformulier (credentials + Google).
- * Ontvangt `callbackUrl` van de serverpagina zodat er geen `useSearchParams`-hydratatie-race is.
+ * Client-side login- en registratieformulier (credentials + Google) gebouwd op
+ * het H3 design-systeem (Button/Card/Input/Stack). Ontvangt `callbackUrl` als
+ * prop van de serverpagina zodat er geen `useSearchParams`-hydratatie-race is.
  */
 export default function LoginForm({
   callbackUrl,
@@ -23,47 +27,86 @@ export default function LoginForm({
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [invitationCode, setInvitationCode] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice>(null);
+  const [signingIn, setSigningIn] = useState(false);
+  const [registering, setRegistering] = useState(false);
 
   async function register(): Promise<void> {
     setNotice(null);
-    const res = await fetch("/api/auth/register", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        email: signupEmail,
-        password: signupPassword,
-        firstName,
-        lastName,
-        invitationCode,
-      }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setNotice(
-        typeof data.error === "string"
-          ? data.error
-          : "Registratie mislukt. Controleer de gegevens en probeer het opnieuw.",
-      );
-      return;
+    setRegistering(true);
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: signupEmail,
+          password: signupPassword,
+          firstName,
+          lastName,
+          invitationCode,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setNotice({
+          tone: "error",
+          text:
+            typeof data.error === "string"
+              ? data.error
+              : "Registratie mislukt. Controleer de gegevens en probeer het opnieuw.",
+        });
+        return;
+      }
+      setNotice({
+        tone: "info",
+        text: "Account aangemaakt. Je kunt nu inloggen.",
+      });
+    } finally {
+      setRegistering(false);
     }
-    setNotice("Account aangemaakt. Je kunt nu inloggen.");
   }
 
   async function login(): Promise<void> {
+    if (signingIn) return;
     setNotice(null);
+    setSigningIn(true);
     try {
-      await signIn("credentials", {
+      const result = await signIn("credentials", {
         email,
         password,
-        redirect: true,
+        redirect: false,
         callbackUrl,
       });
+      if (result?.error) {
+        setNotice({
+          tone: "error",
+          text: "Inloggen mislukt. Controleer e-mail en wachtwoord.",
+        });
+        setSigningIn(false);
+        return;
+      }
+      // Navigeer expliciet — laat de "Inloggen…" spinner staan tijdens de redirect.
+      window.location.assign(result?.url || callbackUrl);
     } catch (error: unknown) {
       Sentry.captureException(error, { tags: { flow: "login-credentials" } });
-      setNotice(
-        "Inloggen mislukt (netwerk of server). Controleer je verbinding en probeer het opnieuw.",
-      );
+      setNotice({
+        tone: "error",
+        text: "Netwerkfout bij inloggen. Probeer opnieuw.",
+      });
+      setSigningIn(false);
+    }
+  }
+
+  async function loginGoogle(): Promise<void> {
+    setNotice(null);
+    try {
+      await signIn("google", { callbackUrl });
+    } catch (error: unknown) {
+      Sentry.captureException(error, { tags: { flow: "login-google" } });
+      setNotice({
+        tone: "error",
+        text: "Google-inloggen mislukt (netwerk of server). Probeer het opnieuw.",
+      });
     }
   }
 
@@ -72,95 +115,132 @@ export default function LoginForm({
       <div className="container">
         <h1>Inloggen</h1>
         <div className="muted" style={{ marginTop: 6 }}>
-          <a href={callbackUrl}>Terug</a>
-        </div>
-        <div className="card" style={{ marginTop: 12 }}>
-          <h3>E-mail en wachtwoord</h3>
-          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-            <input
-              placeholder="E-mail"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={{ padding: 6, borderRadius: 6 }}
-            />
-            <input
-              placeholder="Wachtwoord"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={{ padding: 6, borderRadius: 6 }}
-            />
-            <button type="button" onClick={() => void login()}>
-              Inloggen
-            </button>
-          </div>
-          <div className="muted" style={{ marginTop: 8 }}>
-            <a href="/reset-request">Wachtwoord vergeten?</a>
-          </div>
-          <h4 style={{ marginTop: 12 }}>Of maak een account</h4>
-          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-            <input
-              placeholder="E-mail"
-              value={signupEmail}
-              onChange={(e) => setSignupEmail(e.target.value)}
-              style={{ padding: 6, borderRadius: 6 }}
-            />
-            <input
-              placeholder="Wachtwoord"
-              type="password"
-              value={signupPassword}
-              onChange={(e) => setSignupPassword(e.target.value)}
-              style={{ padding: 6, borderRadius: 6 }}
-            />
-            <input
-              placeholder="Voornaam"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              style={{ padding: 6, borderRadius: 6 }}
-            />
-            <input
-              placeholder="Achternaam"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              style={{ padding: 6, borderRadius: 6 }}
-            />
-            <input
-              placeholder="Uitnodigingscode"
-              value={invitationCode}
-              onChange={(e) => setInvitationCode(e.target.value)}
-              style={{ padding: 6, borderRadius: 6 }}
-            />
-            <button type="button" onClick={() => void register()}>
-              Account aanmaken
-            </button>
-          </div>
+          <a href={callbackUrl}>← Terug</a>
         </div>
 
-        <div className="card" style={{ marginTop: 12 }}>
-          <h3>Google</h3>
-          <button
-            type="button"
-            onClick={async () => {
-              setNotice(null);
-              try {
-                await signIn("google", { callbackUrl });
-              } catch (error: unknown) {
-                Sentry.captureException(error, {
-                  tags: { flow: "login-google" },
-                });
-                setNotice(
-                  "Google-inloggen mislukt (netwerk of server). Probeer het opnieuw.",
-                );
-              }
-            }}
+        <Card style={{ marginTop: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Met Google</h3>
+          <Button
+            variant="primary"
+            isFullWidth
+            onClick={() => void loginGoogle()}
           >
             Inloggen met Google
-          </button>
-        </div>
+          </Button>
+        </Card>
+
+        <Card style={{ marginTop: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Met e-mail</h3>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void login();
+            }}
+          >
+            <Stack gap="3">
+              <Input
+                label="E-mailadres"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <Input
+                label="Wachtwoord"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <Stack direction="row" gap="2" justify="between" align="center">
+                <a href="/reset-request" className="muted">
+                  Wachtwoord vergeten?
+                </a>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  loading={signingIn}
+                  loadingLabel="Inloggen…"
+                >
+                  Inloggen
+                </Button>
+              </Stack>
+            </Stack>
+          </form>
+        </Card>
+
+        <Card style={{ marginTop: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Account aanmaken</h3>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void register();
+            }}
+          >
+            <Stack gap="3">
+              <Input
+                label="E-mailadres"
+                type="email"
+                autoComplete="email"
+                value={signupEmail}
+                onChange={(e) => setSignupEmail(e.target.value)}
+              />
+              <Input
+                label="Wachtwoord"
+                type="password"
+                autoComplete="new-password"
+                value={signupPassword}
+                onChange={(e) => setSignupPassword(e.target.value)}
+                hint="Minimaal 8 tekens"
+              />
+              <Stack direction="row" gap="3">
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Input
+                    label="Voornaam"
+                    autoComplete="given-name"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                  />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Input
+                    label="Achternaam"
+                    autoComplete="family-name"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                  />
+                </div>
+              </Stack>
+              <Input
+                label="Uitnodigingscode"
+                value={invitationCode}
+                onChange={(e) => setInvitationCode(e.target.value)}
+                hint="Krijg je van de trainer of teammanager"
+              />
+              <Stack direction="row" justify="end">
+                <Button
+                  type="submit"
+                  loading={registering}
+                  loadingLabel="Aanmaken…"
+                >
+                  Account aanmaken
+                </Button>
+              </Stack>
+            </Stack>
+          </form>
+        </Card>
 
         {notice ? (
-          <div className="muted" style={{ marginTop: 10 }}>
-            {notice}
+          <div
+            role={notice.tone === "error" ? "alert" : "status"}
+            className="card"
+            style={{
+              marginTop: 12,
+              borderColor:
+                notice.tone === "error" ? "var(--negative)" : "var(--accent)",
+            }}
+          >
+            {notice.text}
           </div>
         ) : null}
       </div>

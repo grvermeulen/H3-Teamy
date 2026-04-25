@@ -7,6 +7,8 @@ import GenerateReportButton from "./GenerateReportButton";
 import ReportPreview from "./ReportPreview";
 import MvpVoteButton from "./MvpVoteButton";
 import SpaceInvadersLauncher from "./spaceInvaders/SpaceInvadersLauncher";
+import { useSession } from "./SessionContext";
+import { formatEventDate, formatEventTime } from "../lib/datetime";
 
 type Props = { events: TeamEvent[] };
 
@@ -31,8 +33,10 @@ export default function EventList({ events }: Props) {
   const [mounted, setMounted] = useState(false);
   const [nowTs, setNowTs] = useState<number>(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
+  const session = useSession();
+  const loggedIn = session.loggedIn;
+  const authChecked = !session.loading;
+  const [notice, setNotice] = useState<string | null>(null);
 
   const loadAll = useCallback(async () => {
     setIsRefreshing(true);
@@ -85,21 +89,6 @@ export default function EventList({ events }: Props) {
     setIsRefreshing(false);
   }, [events, loggedIn]);
 
-  // Check authentication on mount only
-  useEffect(() => {
-    async function checkAuth() {
-      const me = await fetchJsonOr<{ user?: { id?: string } | null }>(
-        "/api/me",
-        { cache: "no-store" },
-        { user: null },
-        "event-list-me",
-      );
-      setLoggedIn(Boolean(me?.user?.id));
-      setAuthChecked(true);
-    }
-    void checkAuth();
-  }, []);
-
   useEffect(() => {
     if (authChecked) {
       void loadAll();
@@ -133,13 +122,13 @@ export default function EventList({ events }: Props) {
       body: JSON.stringify({ eventId: id, status }),
     });
     if (res.status === 412) {
-      // profile incomplete → revert optimistic UI and redirect to profile
+      // Profiel incompleet → optimistic UI terugdraaien en doorsturen naar profiel
       setRsvpMap((p) => ({ ...p, [id]: prev }));
+      setNotice(
+        "Vul eerst je voor- en achternaam in op je profiel om te kunnen RSVP'en. Je wordt doorgestuurd…",
+      );
       if (typeof window !== "undefined") {
-        const message =
-          "Please complete your profile (first and last name) before RSVP-ing.";
-        alert(message);
-        window.location.assign("/profile");
+        setTimeout(() => window.location.assign("/profile"), 1500);
       }
       return;
     }
@@ -186,11 +175,11 @@ export default function EventList({ events }: Props) {
     return [...past, ...future];
   }, [events, nowTs]);
 
-  // Don't render anything until authentication is checked
+  // Niets renderen tot de auth-check klaar is
   if (!authChecked) {
     return (
       <div className="list">
-        <div className="muted">Loading...</div>
+        <div className="muted">Laden…</div>
       </div>
     );
   }
@@ -207,12 +196,25 @@ export default function EventList({ events }: Props) {
         }}
       >
         <button onClick={() => void loadAll()} disabled={isRefreshing}>
-          {isRefreshing ? "Refreshing…" : "Refresh"}
+          {isRefreshing ? "Vernieuwen…" : "Vernieuwen"}
         </button>
         <span className="muted" style={{ fontSize: 13 }}>
-          Pull to refresh: focus page or press Refresh
+          Tip: open de app opnieuw of druk op Vernieuwen
         </span>
       </div>
+      {notice ? (
+        <div
+          role="alert"
+          className="card"
+          style={{
+            marginBottom: 12,
+            borderColor: "var(--accent)",
+            color: "var(--text)",
+          }}
+        >
+          {notice}
+        </div>
+      ) : null}
       {grouped.map((evt) => {
         const start = new Date(evt.start);
         const end = evt.end ? new Date(evt.end) : undefined;
@@ -224,31 +226,23 @@ export default function EventList({ events }: Props) {
                 <div className="eventTitle">{evt.title}</div>
                 <div className="eventMeta muted">
                   <span className="badge badge-date" suppressHydrationWarning>
-                    {mounted
-                      ? start.toLocaleDateString(undefined, {
-                          weekday: "short",
-                          day: "2-digit",
-                          month: "short",
-                        })
-                      : ""}
+                    {mounted ? formatEventDate(start) : ""}
                   </span>
                   <span className="badge badge-time" suppressHydrationWarning>
-                    {mounted
-                      ? `${start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${end ? ` – ${end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}`
-                      : ""}
+                    {mounted ? formatEventTime(start, end) : ""}
                   </span>
                   {evt.location ? (
                     <span className="badge">{evt.location}</span>
                   ) : null}
                   {counts[evt.id] ? (
-                    <span className="badge">
-                      Yes{" "}
-                      <span className="count-yes">{counts[evt.id].yes}</span> ·
-                      Maybe{" "}
+                    <span className="badge" aria-label="RSVP-overzicht">
+                      Ja <span className="count-yes">{counts[evt.id].yes}</span>{" "}
+                      · Misschien{" "}
                       <span className="count-maybe">
                         {counts[evt.id].maybe}
                       </span>{" "}
-                      · No <span className="count-no">{counts[evt.id].no}</span>
+                      · Nee{" "}
+                      <span className="count-no">{counts[evt.id].no}</span>
                     </span>
                   ) : null}
                 </div>
@@ -260,27 +254,30 @@ export default function EventList({ events }: Props) {
                 >
                   <button
                     className={status === "yes" ? "active-yes" : ""}
+                    aria-pressed={status === "yes"}
                     onClick={() =>
                       setRsvp(evt.id, status === "yes" ? null : "yes")
                     }
                   >
-                    Yes
+                    Ja
                   </button>
                   <button
                     className={status === "maybe" ? "active-maybe" : ""}
+                    aria-pressed={status === "maybe"}
                     onClick={() =>
                       setRsvp(evt.id, status === "maybe" ? null : "maybe")
                     }
                   >
-                    Maybe
+                    Misschien
                   </button>
                   <button
                     className={status === "no" ? "active-no" : ""}
+                    aria-pressed={status === "no"}
                     onClick={() =>
                       setRsvp(evt.id, status === "no" ? null : "no")
                     }
                   >
-                    No
+                    Nee
                   </button>
                 </div>
               ) : null}
@@ -316,10 +313,10 @@ export default function EventList({ events }: Props) {
                   if (el.open) void ensureListsLoaded(evt.id);
                 }}
               >
-                <summary className="muted">Show RSVP list</summary>
+                <summary className="muted">RSVP-lijst tonen</summary>
                 <div className="rsvp-columns">
                   <div>
-                    <div className="badge">Yes</div>
+                    <div className="badge">Ja</div>
                     <div className="muted" style={{ marginTop: 4 }}>
                       {(lists[evt.id]?.yes || []).map((u) => (
                         <div key={u.id}>{u.name}</div>
@@ -330,7 +327,7 @@ export default function EventList({ events }: Props) {
                     </div>
                   </div>
                   <div>
-                    <div className="badge">Maybe</div>
+                    <div className="badge">Misschien</div>
                     <div className="muted" style={{ marginTop: 4 }}>
                       {(lists[evt.id]?.maybe || []).map((u) => (
                         <div key={u.id}>{u.name}</div>
@@ -341,7 +338,7 @@ export default function EventList({ events }: Props) {
                     </div>
                   </div>
                   <div>
-                    <div className="badge">No</div>
+                    <div className="badge">Nee</div>
                     <div className="muted" style={{ marginTop: 4 }}>
                       {(lists[evt.id]?.no || []).map((u) => (
                         <div key={u.id}>{u.name}</div>
@@ -349,12 +346,6 @@ export default function EventList({ events }: Props) {
                       {(lists[evt.id]?.no || []).length === 0 ? (
                         <div>—</div>
                       ) : null}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="badge">1e wissel:</div>
-                    <div className="muted" style={{ marginTop: 4 }}>
-                      <div>Hans</div>
                     </div>
                   </div>
                 </div>
@@ -365,7 +356,7 @@ export default function EventList({ events }: Props) {
       })}
       <SpaceInvadersLauncher />
       {grouped.length === 0 ? (
-        <div className="muted">No recent or upcoming matches.</div>
+        <div className="muted">Geen recente of aankomende wedstrijden.</div>
       ) : null}
     </div>
   );

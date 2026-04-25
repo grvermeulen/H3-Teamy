@@ -6,6 +6,7 @@ import ChristmasTheme from "../components/ChristmasTheme";
 import SessionStatus from "../components/SessionStatus";
 import FeedbackFab from "../components/FeedbackFab";
 import WhatsNewTour from "../components/WhatsNewTour";
+import { ToastRegion } from "../components/ui";
 
 export const metadata: Metadata = {
   title: "De Rijn H3 Teamy MVP",
@@ -26,7 +27,7 @@ export default function RootLayout({
     process.env.NEXT_PUBLIC_christmas_event === "TRUE";
   return (
     <html
-      lang="en"
+      lang="nl"
       className={isChristmasTheme ? "christmas-theme" : undefined}
     >
       <head>
@@ -52,52 +53,53 @@ export default function RootLayout({
       </head>
       <body>
         <ChristmasTheme />
-        <header
-          className="container"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            paddingTop: 20,
-          }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={process.env.NEXT_PUBLIC_LOGO_URL || "/logo.svg"}
-            alt="H3 Logo"
-            width={44}
-            height={44}
-            style={{
-              borderRadius: 8,
-              background: "#111926",
-              objectFit: "cover",
-            }}
-          />
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 18 }}>
-              De Rijn H3 — Waterpolo
-            </div>
-            <div className="muted" style={{ fontSize: 13 }}>
-              Matches from Sportlink • RSVP on device
-            </div>
-          </div>
-        </header>
-        <div className="container topNavSpacer">
-          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            <SessionStatus />
-          </div>
-        </div>
         <Providers>
+          <header
+            className="container"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              paddingTop: 20,
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={process.env.NEXT_PUBLIC_LOGO_URL || "/logo.svg"}
+              alt="H3-logo"
+              width={44}
+              height={44}
+              style={{
+                borderRadius: 8,
+                background: "#111926",
+                objectFit: "cover",
+              }}
+            />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 18 }}>
+                De Rijn H3 — Waterpolo
+              </div>
+              <div className="muted" style={{ fontSize: 13 }}>
+                Wedstrijden uit Sportlink • RSVP op je telefoon
+              </div>
+            </div>
+          </header>
+          <div className="container topNavSpacer">
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <SessionStatus />
+            </div>
+          </div>
           {children}
           <FeedbackFab />
+          <WhatsNewTour />
+          <BottomNav />
+          <ToastRegion />
+          <footer className="container" style={{ marginTop: 24 }}>
+            <a href="/privacy" className="muted">
+              Privacybeleid
+            </a>
+          </footer>
         </Providers>
-        <WhatsNewTour />
-        <BottomNav />
-        <footer className="container" style={{ marginTop: 24 }}>
-          <a href="/privacy" className="muted">
-            Privacy policy
-          </a>
-        </footer>
         <script
           dangerouslySetInnerHTML={{
             __html: `

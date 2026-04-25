@@ -15,7 +15,9 @@ export const MERGE_CONFLICT_LINE_PREFIXES: readonly string[] = [
  * @param content - Full file contents.
  * @returns Sorted unique line numbers.
  */
-export function findMergeConflictMarkerLines(content: string): readonly number[] {
+export function findMergeConflictMarkerLines(
+  content: string,
+): readonly number[] {
   const lines = content.split(/\r?\n/);
   const found = new Set<number>();
   for (let i = 0; i < lines.length; i++) {

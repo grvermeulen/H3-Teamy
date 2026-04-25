@@ -6,7 +6,7 @@ import {
   fireEvent,
 } from "@testing-library/react";
 import { usePathname } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession } from "./SessionContext";
 import {
   afterAll,
   afterEach,
@@ -24,9 +24,31 @@ vi.mock("next/navigation", () => ({
   usePathname: vi.fn(() => "/"),
 }));
 
-vi.mock("next-auth/react", () => ({
+vi.mock("./SessionContext", () => ({
   useSession: vi.fn(),
 }));
+
+const sessionAuthenticated = {
+  loading: false,
+  loggedIn: true,
+  isAdmin: false,
+  isTrainer: false,
+  refresh: vi.fn(async () => {}),
+};
+const sessionUnauthenticated = {
+  loading: false,
+  loggedIn: false,
+  isAdmin: false,
+  isTrainer: false,
+  refresh: vi.fn(async () => {}),
+};
+const sessionLoading = {
+  loading: true,
+  loggedIn: false,
+  isAdmin: false,
+  isTrainer: false,
+  refresh: vi.fn(async () => {}),
+};
 
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
@@ -98,11 +120,7 @@ describe("FeedbackFab", () => {
 
   it("renders the fab when the user is signed in and not on /login", async () => {
     vi.mocked(usePathname).mockReturnValue("/events");
-    vi.mocked(useSession).mockReturnValue({
-      data: { user: { id: "u1", name: "Test" } },
-      status: "authenticated",
-      update: vi.fn(),
-    });
+    vi.mocked(useSession).mockReturnValue(sessionAuthenticated);
 
     render(<FeedbackFab />);
 
@@ -113,11 +131,7 @@ describe("FeedbackFab", () => {
 
   it("hides the fab on /login even when the session has a user", () => {
     vi.mocked(usePathname).mockReturnValue("/login");
-    vi.mocked(useSession).mockReturnValue({
-      data: { user: { id: "u1", name: "Test" } },
-      status: "authenticated",
-      update: vi.fn(),
-    });
+    vi.mocked(useSession).mockReturnValue(sessionAuthenticated);
 
     render(<FeedbackFab />);
 
@@ -125,11 +139,7 @@ describe("FeedbackFab", () => {
   });
 
   it("hides the fab when there is no session user", () => {
-    vi.mocked(useSession).mockReturnValue({
-      data: null,
-      status: "unauthenticated",
-      update: vi.fn(),
-    });
+    vi.mocked(useSession).mockReturnValue(sessionUnauthenticated);
 
     render(<FeedbackFab />);
 
@@ -137,11 +147,7 @@ describe("FeedbackFab", () => {
   });
 
   it("hides the fab while session is loading", () => {
-    vi.mocked(useSession).mockReturnValue({
-      data: null,
-      status: "loading",
-      update: vi.fn(),
-    });
+    vi.mocked(useSession).mockReturnValue(sessionLoading);
 
     render(<FeedbackFab />);
 
@@ -150,11 +156,7 @@ describe("FeedbackFab", () => {
 
   it("captures feedback POST network errors in Sentry and shows a notice", async () => {
     vi.mocked(usePathname).mockReturnValue("/events");
-    vi.mocked(useSession).mockReturnValue({
-      data: { user: { id: "u1", name: "Test" } },
-      status: "authenticated",
-      update: vi.fn(),
-    });
+    vi.mocked(useSession).mockReturnValue(sessionAuthenticated);
     vi.spyOn(global, "fetch").mockRejectedValue(new Error("network down"));
 
     render(<FeedbackFab />);
@@ -193,11 +195,7 @@ describe("FeedbackFab", () => {
 
   it("submits feedback when POST succeeds", async () => {
     vi.mocked(usePathname).mockReturnValue("/events");
-    vi.mocked(useSession).mockReturnValue({
-      data: { user: { id: "u1", name: "Test" } },
-      status: "authenticated",
-      update: vi.fn(),
-    });
+    vi.mocked(useSession).mockReturnValue(sessionAuthenticated);
     vi.spyOn(global, "fetch").mockResolvedValue(jsonResponse({ ok: true }));
 
     render(<FeedbackFab />);

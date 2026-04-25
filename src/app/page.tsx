@@ -1,5 +1,4 @@
 import EventList from "../components/EventList";
-import Link from "next/link";
 
 import { fetchTeamEvents } from "../lib/ical";
 
@@ -10,8 +9,7 @@ export default async function Page() {
   return (
     <main>
       <div className="container">
-        <h1>De Rijn H3 — Waterpolo</h1>
-        <div className="muted">Matches from Sportlink (read-only)</div>
+        <h2 style={{ marginTop: 4 }}>Aankomende wedstrijden</h2>
         <EventList events={events} />
       </div>
     </main>
