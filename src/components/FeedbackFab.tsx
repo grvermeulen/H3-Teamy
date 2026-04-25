@@ -1,5 +1,6 @@
 "use client";
 
+import { useSession } from "next-auth/react";
 import { usePathname } from "next/navigation";
 import * as React from "react";
 import * as Sentry from "@sentry/nextjs";
@@ -28,38 +29,21 @@ const COPY: Record<
 /**
  * Floating action button that opens a modal dialog where the logged-in user
  * can submit a Bug or Idea. Captures the current route, `APP_VERSION`, and
- * user-agent server-side. Rendered globally from the root layout; hidden for
- * anonymous users and on the `/login` route.
+ * user-agent server-side. Must render inside `SessionProvider` (root layout);
+ * hidden while the session is loading, for anonymous users, and on `/login`.
  */
 export default function FeedbackFab(): React.JSX.Element | null {
   const pathname = usePathname() || "/";
+  const { data: session, status } = useSession();
   const dialogRef = React.useRef<HTMLDialogElement | null>(null);
-  const [loggedIn, setLoggedIn] = React.useState<boolean | null>(null);
   const [tab, setTab] = React.useState<Tab>("BUG");
   const [title, setTitle] = React.useState("");
   const [body, setBody] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    let alive = true;
-    fetch("/api/auth/session", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((data) => {
-        if (!alive) return;
-        setLoggedIn(!!data?.user);
-      })
-      .catch((err: unknown) => {
-        Sentry.captureException(err, { tags: { component: "feedback-fab" } });
-        if (!alive) return;
-        setLoggedIn(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  if (loggedIn !== true) return null;
+  if (status === "loading") return null;
+  if (status !== "authenticated" || !session?.user) return null;
   if (pathname.startsWith("/login")) return null;
 
   function open(initialTab: Tab): void {

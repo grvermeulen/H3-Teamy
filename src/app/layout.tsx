@@ -87,8 +87,10 @@ export default function RootLayout({
             <SessionStatus />
           </div>
         </div>
-        <Providers>{children}</Providers>
-        <FeedbackFab />
+        <Providers>
+          {children}
+          <FeedbackFab />
+        </Providers>
         <WhatsNewTour />
         <BottomNav />
         <footer className="container" style={{ marginTop: 24 }}>
