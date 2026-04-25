@@ -20,8 +20,13 @@ test.describe("Read-only deploy smoke", () => {
     await page.goto("/");
     await expect(
       page.getByRole("heading", {
-        level: 1,
-        name: "De Rijn H3 — Waterpolo",
+        level: 2,
+        name: "Aankomende wedstrijden",
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("De Rijn H3 — Waterpolo", {
+        exact: true,
       }),
     ).toBeVisible();
   });
@@ -29,7 +34,15 @@ test.describe("Read-only deploy smoke", () => {
   test("loginpagina laadt", async ({ page }) => {
     await page.goto("/login");
     await expect(
-      page.getByRole("heading", { level: 1, name: "Login" }),
+      page.getByRole("heading", {
+        level: 1,
+        name: "Inloggen",
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("De Rijn H3 — Waterpolo", {
+        exact: true,
+      }),
     ).toBeVisible();
   });
 });

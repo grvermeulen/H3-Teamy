@@ -101,7 +101,7 @@ async function main() {
       created.push({ id: row.id, email: row.email ?? "" });
     }
     console.log(
-      `Upserted ${created.length} users. Login: trainer@example.test / ${TRAINER_PASSWORD}`,
+      `Upserted ${created.length} users. Trainer login: trainer@example.test.`,
     );
 
     let attendanceCount = 0;
