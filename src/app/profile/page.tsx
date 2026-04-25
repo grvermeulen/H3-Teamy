@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { getBadgeForAttendance, type AttendanceBadge } from "../../lib/badges";
+import { APP_VERSION } from "../../lib/version";
 
 type Profile = {
   id: string;
@@ -237,6 +238,13 @@ export default function ProfilePage() {
               </span>
             ) : null}
           </div>
+        </div>
+        <div
+          data-tour="profile-version"
+          className="muted"
+          style={{ marginTop: 16, fontSize: 12, textAlign: "center" }}
+        >
+          App version {APP_VERSION}
         </div>
       </div>
     </main>

@@ -185,6 +185,10 @@ export default function AdminUsersPage() {
       <div className="container">
         <h1>Admin</h1>
 
+        <div className="row" style={{ gap: 8, marginBottom: 12 }}>
+          <Link href={{ pathname: "/admin/feedback" }}>Feedback inbox →</Link>
+        </div>
+
         <div className="card" style={{ position: "sticky", top: 0, zIndex: 1 }}>
           <div
             style={{

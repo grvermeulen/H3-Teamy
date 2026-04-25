@@ -47,13 +47,15 @@ export async function isTrainer(
       .filter(Boolean);
     const isAdmin = norm(full) === norm(admin);
     const isTrainerListed = trainers.includes(norm(full));
-    const roles: UserRoles = await getUserRoles(userId).catch((err: unknown) => {
-      Sentry.captureException(err, {
-        tags: { component: "trainer" },
-        extra: { context: "getUserRoles_isTrainer", userId },
-      });
-      return { player: true };
-    });
+    const roles: UserRoles = await getUserRoles(userId).catch(
+      (err: unknown) => {
+        Sentry.captureException(err, {
+          tags: { component: "trainer" },
+          extra: { context: "getUserRoles_isTrainer", userId },
+        });
+        return { player: true };
+      },
+    );
     const byRole = Boolean(roles?.trainer || roles?.admin);
     return {
       isTrainer: Boolean(isAdmin || isTrainerListed || byRole),
@@ -100,13 +102,15 @@ export async function isAdminUser(
     const full = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
     const admin = process.env.ADMIN_FULL_NAME || "";
     const envAdmin = norm(full) === norm(admin);
-    const roles: UserRoles = await getUserRoles(userId).catch((err: unknown) => {
-      Sentry.captureException(err, {
-        tags: { component: "trainer" },
-        extra: { context: "getUserRoles_isAdminUser", userId },
-      });
-      return { player: true };
-    });
+    const roles: UserRoles = await getUserRoles(userId).catch(
+      (err: unknown) => {
+        Sentry.captureException(err, {
+          tags: { component: "trainer" },
+          extra: { context: "getUserRoles_isAdminUser", userId },
+        });
+        return { player: true };
+      },
+    );
     const byRole = Boolean(roles?.admin);
     return {
       isAdmin: Boolean(envAdmin || byRole),

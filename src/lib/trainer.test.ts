@@ -118,7 +118,9 @@ describe("trainer permissions", () => {
         connectErr,
         expect.objectContaining({
           tags: { component: "trainer" },
-          extra: expect.objectContaining({ context: "getActiveUser_isTrainer" }),
+          extra: expect.objectContaining({
+            context: "getActiveUser_isTrainer",
+          }),
         }),
       );
     });
@@ -198,7 +200,9 @@ describe("trainer permissions", () => {
         connectErr,
         expect.objectContaining({
           tags: { component: "trainer" },
-          extra: expect.objectContaining({ context: "getActiveUser_isAdminUser" }),
+          extra: expect.objectContaining({
+            context: "getActiveUser_isAdminUser",
+          }),
         }),
       );
     });

@@ -4,6 +4,8 @@ import Providers from "../components/Providers";
 import BottomNav from "../components/BottomNav";
 import ChristmasTheme from "../components/ChristmasTheme";
 import SessionStatus from "../components/SessionStatus";
+import FeedbackFab from "../components/FeedbackFab";
+import WhatsNewTour from "../components/WhatsNewTour";
 
 export const metadata: Metadata = {
   title: "De Rijn H3 Teamy MVP",
@@ -86,6 +88,8 @@ export default function RootLayout({
           </div>
         </div>
         <Providers>{children}</Providers>
+        <FeedbackFab />
+        <WhatsNewTour />
         <BottomNav />
         <footer className="container" style={{ marginTop: 24 }}>
           <a href="/privacy" className="muted">

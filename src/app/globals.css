@@ -874,3 +874,70 @@ body.modal-open .card {
     filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.4));
   }
 }
+
+/* Feedback floating action button */
+.feedbackFab {
+  position: fixed;
+  right: calc(16px + env(safe-area-inset-right, 0));
+  bottom: calc(80px + env(safe-area-inset-bottom, 0));
+  width: 48px;
+  height: 48px;
+  border-radius: 24px;
+  background: var(--accent);
+  color: #0b1220;
+  border: 0;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  z-index: 900;
+}
+.feedbackFab:hover {
+  filter: brightness(1.08);
+}
+
+.feedbackDialog {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  max-width: min(92vw, 480px);
+  width: 100%;
+}
+.feedbackDialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+.feedbackDialog input,
+.feedbackDialog textarea {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+}
+
+/* What's-new tour overlay */
+.whatsNewBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.whatsNewCard {
+  max-width: 420px;
+  width: 100%;
+}
+.whatsNewSpotlight {
+  position: fixed;
+  border: 2px solid var(--accent);
+  border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  z-index: 1099;
+  transition: all 200ms ease;
+}

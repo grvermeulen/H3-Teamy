@@ -17,7 +17,9 @@ export class DbUnavailableError extends Error {
  * @param error - Waarde uit een `catch`-blok of een geworpen fout.
  * @returns `true` wanneer de fout een {@link DbUnavailableError} is.
  */
-export function isDbUnavailableError(error: unknown): error is DbUnavailableError {
+export function isDbUnavailableError(
+  error: unknown,
+): error is DbUnavailableError {
   return error instanceof DbUnavailableError;
 }
 
@@ -27,8 +29,7 @@ export function isDbUnavailableError(error: unknown): error is DbUnavailableErro
 export function jsonDatabaseUnavailable(): NextResponse {
   return NextResponse.json(
     {
-      error:
-        "Database tijdelijk niet beschikbaar. Probeer het later opnieuw.",
+      error: "Database tijdelijk niet beschikbaar. Probeer het later opnieuw.",
     },
     { status: 503 },
   );

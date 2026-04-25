@@ -15,9 +15,6 @@ export async function GET(req: NextRequest) {
       return jsonDatabaseUnavailable();
     }
     Sentry.captureException(error);
-    return NextResponse.json(
-      { error: "Er ging iets mis" },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Er ging iets mis" }, { status: 500 });
   }
 }
