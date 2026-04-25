@@ -1,3 +1,8 @@
+// Side-effect: rewrites PREVIEW_* env vars onto their canonical names so this
+// file (and kv.ts) can read DATABASE_URL/REDIS_URL/etc. uniformly across envs.
+// Don't remove — the Prisma Postgres marketplace integration silently injects
+// production's DATABASE_URL into Preview deploys; the bootstrap overlays Neon's
+// per-deploy values back on top so previews stay isolated. See envBootstrap.ts.
 import "./envBootstrap";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";

@@ -1,3 +1,6 @@
+// Side-effect import — required, see envBootstrap.ts. Without it Preview
+// deploys read the production Redis/KV URLs instead of the per-deploy Upstash
+// instance provisioned by the Neon/Upstash marketplace integrations.
 import "./envBootstrap";
 import * as Sentry from "@sentry/nextjs";
 import type { PrismaClient } from "@prisma/client";
