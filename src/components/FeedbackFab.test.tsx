@@ -75,9 +75,8 @@ describe("FeedbackFab", () => {
         nativeShowModal,
       );
     } else {
-      delete (
-        HTMLDialogElement.prototype as unknown as { showModal?: unknown }
-      ).showModal;
+      delete (HTMLDialogElement.prototype as unknown as { showModal?: unknown })
+        .showModal;
     }
     if (nativeClose) {
       Object.defineProperty(HTMLDialogElement.prototype, "close", nativeClose);
@@ -174,7 +173,9 @@ describe("FeedbackFab", () => {
     fireEvent.change(screen.getByPlaceholderText(/Wat deed je/i), {
       target: { value: "Langere toelichting hier." },
     });
-    const form = screen.getByRole("button", { name: /Verstuur bugmelding/i }).closest("form");
+    const form = screen
+      .getByRole("button", { name: /Verstuur bugmelding/i })
+      .closest("form");
     expect(form).toBeTruthy();
     fireEvent.submit(form!);
 
@@ -187,9 +188,7 @@ describe("FeedbackFab", () => {
         tags: expect.objectContaining({ component: "feedback-fab" }),
       }),
     );
-    expect(
-      await screen.findByText(/Netwerkfout/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Netwerkfout/i)).toBeInTheDocument();
   });
 
   it("submits feedback when POST succeeds", async () => {
@@ -217,7 +216,9 @@ describe("FeedbackFab", () => {
     fireEvent.change(screen.getByPlaceholderText(/Wat deed je/i), {
       target: { value: "Langere toelichting hier." },
     });
-    const form = screen.getByRole("button", { name: /Verstuur bugmelding/i }).closest("form");
+    const form = screen
+      .getByRole("button", { name: /Verstuur bugmelding/i })
+      .closest("form");
     expect(form).toBeTruthy();
     fireEvent.submit(form!);
 

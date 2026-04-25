@@ -36,7 +36,7 @@ export type ShapeIdeaInput = { title: string; body: string };
 
 /**
  * Calls the AI SDK through the Vercel AI Gateway with model
- * `anthropic/claude-opus-4-7` and returns a structured idea triage.
+ * `anthropic/claude-opus-4` and returns a structured idea triage.
  *
  * Loaded dynamically so this module does not pull `ai` into the bundle of
  * routes that don't need it (e.g. middleware/edge routes).
@@ -44,7 +44,7 @@ export type ShapeIdeaInput = { title: string; body: string };
 export async function shapeIdea(input: ShapeIdeaInput): Promise<IdeaShape> {
   const { generateObject } = await import("ai");
   const { object } = await generateObject({
-    model: "anthropic/claude-opus-4-7",
+    model: "anthropic/claude-opus-4",
     schema: IdeaShapeSchema,
     system: PM_SYSTEM_PROMPT,
     prompt: `Title: ${input.title}\n\nBody: ${input.body}`,

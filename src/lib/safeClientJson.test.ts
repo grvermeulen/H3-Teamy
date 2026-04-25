@@ -36,19 +36,35 @@ describe("fetchJsonOr", () => {
     const loadFailed = new TypeError("Load failed");
     vi.spyOn(global, "fetch").mockRejectedValue(loadFailed);
     const fallback = { user: null as null };
-    const result = await fetchJsonOr("/api/me", undefined, fallback, "test-reject");
+    const result = await fetchJsonOr(
+      "/api/me",
+      undefined,
+      fallback,
+      "test-reject",
+    );
     expect(result).toBe(fallback);
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(loadFailed, {
-      tags: { clientFetch: "test-reject" },
-    });
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      loadFailed,
+      {
+        tags: { clientFetch: "test-reject" },
+      },
+    );
   });
 
   it("returns fallback without Sentry when fetch aborts", async () => {
-    const aborted = new DOMException("The user aborted a request.", "AbortError");
+    const aborted = new DOMException(
+      "The user aborted a request.",
+      "AbortError",
+    );
     vi.spyOn(global, "fetch").mockRejectedValue(aborted);
     const fallback = { ok: false };
-    const result = await fetchJsonOr("/api/x", { signal: new AbortController().signal }, fallback, "test-abort");
+    const result = await fetchJsonOr(
+      "/api/x",
+      { signal: new AbortController().signal },
+      fallback,
+      "test-abort",
+    );
     expect(result).toEqual(fallback);
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });

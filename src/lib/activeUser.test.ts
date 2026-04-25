@@ -1,11 +1,4 @@
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  afterEach,
-} from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
 import { getActiveUser } from "./activeUser";
 import { prisma } from "./db";
