@@ -1,3 +1,4 @@
+import "./envBootstrap";
 import * as Sentry from "@sentry/nextjs";
 import type { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";

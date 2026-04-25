@@ -1,3 +1,4 @@
+import "./envBootstrap";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { recordPrismaQuery, isDbMetricsEnabled } from "./dbMetrics";
