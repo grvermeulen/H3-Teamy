@@ -1,8 +1,16 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   findMergeConflictMarkerLines,
   MERGE_CONFLICT_LINE_PREFIXES,
 } from "./checkMergeConflictMarkers";
+
+/** Files on the home-page import path that previously broke the dev bundler when conflict markers leaked in. */
+const ENTRYPOINTS_WITHOUT_MERGE_MARKERS: readonly string[] = [
+  "src/components/EventList.tsx",
+  "src/app/page.tsx",
+];
 
 describe("findMergeConflictMarkerLines", () => {
   it("returns empty for clean TSX", () => {
@@ -64,4 +72,15 @@ describe("MERGE_CONFLICT_LINE_PREFIXES", () => {
       ">>>>>>>",
     ]);
   });
+});
+
+describe("entrypoint source on disk (JAVASCRIPT-NEXTJS-18 regression)", () => {
+  it.each(ENTRYPOINTS_WITHOUT_MERGE_MARKERS)(
+    "has no merge conflict markers in %s",
+    (relativePath) => {
+      const absolutePath = resolve(process.cwd(), relativePath);
+      const content = readFileSync(absolutePath, "utf8");
+      expect(findMergeConflictMarkerLines(content)).toEqual([]);
+    },
+  );
 });
