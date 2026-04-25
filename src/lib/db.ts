@@ -9,13 +9,31 @@ declare global {
   var prismaQueryMetricsAttached: boolean | undefined;
 }
 
+/**
+ * Removes `channel_binding=require` from the connection string.
+ *
+ * Some PostgreSQL connection-string consumers — including the version of `pg`
+ * we ship — don't negotiate SCRAM-SHA-256-PLUS against PgBouncer reliably on
+ * Node 22. The same URL works against the direct compute endpoint and on
+ * Node 24. Stripping the parameter falls back to plain SCRAM-SHA-256, which
+ * still uses TLS via `sslmode=require`.
+ */
+function relaxChannelBinding(url: string): string {
+  if (!url.includes("channel_binding=")) return url;
+  return url
+    .replace(/[?&]channel_binding=[^&]*/, (m) => (m.startsWith("?") ? "?" : ""))
+    .replace(/\?&/, "?")
+    .replace(/\?$/, "");
+}
+
 const prismaInstance =
   global.prisma ||
   (() => {
-    const url =
+    const rawUrl =
       process.env.PRISMA_DATABASE_URL ||
       process.env.DATABASE_URL ||
       "postgresql://postgres:postgres@127.0.0.1:5432/postgres";
+    const url = relaxChannelBinding(rawUrl);
     const baseOptions: Prisma.PrismaClientOptions = isDbMetricsEnabled()
       ? { log: [{ emit: "event", level: "query" as const }] }
       : {};
