@@ -14,12 +14,13 @@ model User {
   lastName  String
   email     String? @unique
   passwordHash String?
-  /** Laatst gezien app-versie (what's new / tour); optioneel. */
+  /** Laatst gezien app-versie (wat is er nieuw / rondleiding); optioneel. */
   lastVersionSeen String?
   // Optional: link to sessions/devices in future
   rsvps     Rsvp[]
   identities Identity[]
   attendances Attendance[]
+  feedback  Feedback[]
 }
 
 model Rsvp {
@@ -71,3 +72,38 @@ model Attendance {
   @@index([userId])
 }
 
+enum FeedbackType {
+  BUG
+  IDEA
+}
+
+enum FeedbackStatus {
+  NEW
+  TRIAGED
+  PLANNED
+  SHIPPED
+  DECLINED
+}
+
+model Feedback {
+  id         String         @id @default(cuid())
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  userId     String
+  type       FeedbackType
+  status     FeedbackStatus @default(NEW)
+  title      String
+  body       String
+  route      String?
+  appVersion String?
+  userAgent  String?
+  aiTheme    String?
+  aiImpact   String?
+  aiSummary  String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([type, createdAt])
+  @@index([userId])
+  @@index([status])
+}
