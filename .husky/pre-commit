@@ -7,11 +7,14 @@ if [ -n "$STAGED_FILES" ]; then
 	git add $STAGED_FILES
 fi
 
-# 2. Lint (ESLint)
+# 2. Merge conflict markers (must not reach Turbopack / Next parse)
+npm run check:merge-conflicts
+
+# 3. Lint (ESLint)
 npm run lint
 
-# 3. Typecheck (TypeScript)
+# 4. Typecheck (TypeScript)
 npx tsc --noEmit
 
-# 4. Test (Vitest - Run Once)
+# 5. Test (Vitest - Run Once)
 npx vitest run
