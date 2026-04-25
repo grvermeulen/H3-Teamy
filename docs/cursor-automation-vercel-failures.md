@@ -6,9 +6,11 @@ This repository has a GitHub Actions workflow (`Vercel Deployment Failure Monito
 
 For the Next.js app to build on Vercel:
 
-- **Database URL for build**: `scripts/migrate-deploy-or-skip.mjs` runs before `next build` and calls `prisma migrate deploy` when any of these is set (direct/unpooled first): **DATABASE_URL_UNPOOLED**, **POSTGRES_URL_NON_POOLING**, **DIRECT_URL**, **DATABASE_URL**, **POSTGRES_URL**, **POSTGRES_PRISMA_URL**, **PRISMA_DATABASE_URL**. If none are set, the script skips migrations so the build still succeeds (set at least one URL on Preview/Production to avoid schema drift).
+- **Build / `prisma generate`**: `prisma.config.ts` leest de datasource-URL in deze volgorde: **DATABASE_URL_UNPOOLED**, **POSTGRES_URL_NON_POOLING**, **DIRECT_URL**, **DATABASE_URL**, **POSTGRES_URL**, **POSTGRES_PRISMA_URL**, **PRISMA_DATABASE_URL** (zodat Vercel Postgres-integratie en pooler/direct-varianten werken).
 
-- **PRISMA_DATABASE_URL** is used by the app at runtime if set (pooled URL). For migrations, prefer a **direct** URL (e.g. **DATABASE_URL_UNPOOLED** on Vercel Postgres) when the pooler rejects DDL.
+- **Migraties op de database**: standaard draait deze repo **geen** `migrate deploy` in `vercel.json` (voorkomt mislukte builds bij verkeerde pooler-URL). Voer `npx prisma migrate deploy` uit tegen de juiste (directe) database na merge, of zet in Vercel **Project Settings → Build Command** bijv. `npx prisma migrate deploy && npm run build` met een **directe** URL in **DATABASE_URL** voor de build.
+
+- **PRISMA_DATABASE_URL** is voor runtime (pooled). Gebruik voor migraties een **directe** URL wanneer de pooler DDL weigert.
 
 ## Runtime database timeouts (Sentry: connection timeout / Prisma P100x)
 
