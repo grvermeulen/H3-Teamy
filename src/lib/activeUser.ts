@@ -13,10 +13,53 @@ export type ActiveUserResult = {
   needsLink: boolean;
 };
 
+/**
+ * Bepaalt hoe `anon_id` voor Identity-lookups gebruikt wordt.
+ * Oude clients kregen na accountkoppeling een user-cuid in `anon_id`; dat is geen geldige
+ * `providerUserId` voor `provider: "cookie"` en veroorzaakte Prisma-fouten op composite keys.
+ *
+ * @param raw - Ruwe cookiewaarde of `null`.
+ * @returns `identityProviderUserId` voor cookie-identities, of `legacyResolvedUserId` wanneer de waarde een bestaand user-id is.
+ */
+async function resolveAnonCookieContext(raw: string | null): Promise<{
+  identityProviderUserId: string | null;
+  legacyResolvedUserId: string | null;
+}> {
+  if (!raw) {
+    return { identityProviderUserId: null, legacyResolvedUserId: null };
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { identityProviderUserId: null, legacyResolvedUserId: null };
+  }
+  const looksLikeRandomUuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      trimmed,
+    );
+  if (looksLikeRandomUuid) {
+    return { identityProviderUserId: trimmed, legacyResolvedUserId: null };
+  }
+  const userRow = await prisma.user.findUnique({
+    where: { id: trimmed },
+    select: { id: true },
+  });
+  if (userRow) {
+    Sentry.addBreadcrumb({
+      category: "auth",
+      message: "anon_id is legacy user-id cookie; skipping cookie identity key",
+      level: "info",
+    });
+    return { identityProviderUserId: null, legacyResolvedUserId: userRow.id };
+  }
+  return { identityProviderUserId: trimmed, legacyResolvedUserId: null };
+}
+
 async function resolveActiveUser(
   cookieId: string | null,
   session: Session | null,
 ): Promise<ActiveUserResult> {
+  const { identityProviderUserId, legacyResolvedUserId } =
+    await resolveAnonCookieContext(cookieId);
   async function ensureCookieIdentityUser(cookie: string): Promise<string> {
     // Create identity and user atomically; handle races by falling back to existing identity
     try {
@@ -108,39 +151,39 @@ async function resolveActiveUser(
         });
         if (existingByEmail) {
           authUserId = existingByEmail.id;
-        } else if (cookieId) {
+        } else if (identityProviderUserId) {
           // Reuse or create a cookie-linked user atomically
           cookieIdentityFromAuthLookup = await prisma.identity.findUnique({
             where: {
               provider_providerUserId: {
                 provider: "cookie",
-                providerUserId: cookieId,
+                providerUserId: identityProviderUserId,
               },
             },
             select: { userId: true },
           });
           authUserId = cookieIdentityFromAuthLookup
             ? cookieIdentityFromAuthLookup.userId
-            : await ensureCookieIdentityUser(cookieId);
+            : await ensureCookieIdentityUser(identityProviderUserId);
         } else {
           const u = await prisma.user.create({
             data: { firstName: "", lastName: "" },
           });
           authUserId = u.id;
         }
-      } else if (cookieId) {
+      } else if (identityProviderUserId) {
         cookieIdentityFromAuthLookup = await prisma.identity.findUnique({
           where: {
             provider_providerUserId: {
               provider: "cookie",
-              providerUserId: cookieId,
+              providerUserId: identityProviderUserId,
             },
           },
           select: { userId: true },
         });
         authUserId = cookieIdentityFromAuthLookup
           ? cookieIdentityFromAuthLookup.userId
-          : await ensureCookieIdentityUser(cookieId);
+          : await ensureCookieIdentityUser(identityProviderUserId);
       } else {
         const u = await prisma.user.create({
           data: { firstName: "", lastName: "" },
@@ -152,20 +195,20 @@ async function resolveActiveUser(
 
     // Now consider cookie identity merge/adopt
     let needsLink = false;
-    if (cookieId) {
+    if (identityProviderUserId) {
       const cookieIdentity =
         cookieIdentityFromAuthLookup ||
         (await prisma.identity.findUnique({
           where: {
             provider_providerUserId: {
               provider: "cookie",
-              providerUserId: cookieId,
+              providerUserId: identityProviderUserId,
             },
           },
           select: { userId: true },
         }));
       if (!cookieIdentity) {
-        await upsertIdentity("cookie", cookieId, authUserId);
+        await upsertIdentity("cookie", identityProviderUserId, authUserId);
       } else if (cookieIdentity.userId !== authUserId) {
         // Evaluate emptiness
         const [cookieUser, rsvpCount] = await Promise.all([
@@ -188,12 +231,12 @@ async function resolveActiveUser(
               where: {
                 provider_providerUserId: {
                   provider: "cookie",
-                  providerUserId: cookieId,
+                  providerUserId: identityProviderUserId,
                 },
               },
               create: {
                 provider: "cookie",
-                providerUserId: cookieId,
+                providerUserId: identityProviderUserId,
                 userId: authUserId,
               },
               update: { userId: authUserId },
@@ -251,18 +294,22 @@ async function resolveActiveUser(
   }
 
   // Anonymous path
-  if (cookieId) {
+  if (legacyResolvedUserId) {
+    return { userId: legacyResolvedUserId, needsLink: false };
+  }
+  if (identityProviderUserId) {
     const cookieIdentity = await prisma.identity.findUnique({
       where: {
         provider_providerUserId: {
           provider: "cookie",
-          providerUserId: cookieId,
+          providerUserId: identityProviderUserId,
         },
       },
+      select: { userId: true },
     });
     if (cookieIdentity)
       return { userId: cookieIdentity.userId, needsLink: false };
-    const userId = await ensureCookieIdentityUser(cookieId);
+    const userId = await ensureCookieIdentityUser(identityProviderUserId);
     return { userId, needsLink: false };
   }
   const user = await prisma.user.create({
