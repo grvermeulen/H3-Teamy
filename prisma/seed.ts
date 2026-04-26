@@ -12,6 +12,7 @@ import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
+import ical from "ical";
 
 /**
  * Predictable login for the trainer account so anyone can sign into preview.
@@ -160,16 +161,7 @@ async function fetchSportlinkEvents(): Promise<SeedEvent[]> {
       return [];
     }
     const text = await res.text();
-    const icalMod = (await import("ical")) as unknown as {
-      parseICS?: (s: string) => unknown;
-      default?: { parseICS: (s: string) => unknown };
-    };
-    const parseICS = icalMod.parseICS ?? icalMod.default?.parseICS;
-    if (!parseICS) {
-      console.warn("ical.parseICS not available; skipping RSVP seed.");
-      return [];
-    }
-    const data = parseICS(text) as Record<
+    const data = ical.parseICS(text) as Record<
       string,
       { type?: string; summary?: unknown; start?: unknown }
     >;

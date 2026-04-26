@@ -7,7 +7,16 @@ name: Agentic CI
 
 on:
   push:
-    branches: ["main", "master", "image", "feat/**", "fix/**", "dependabot/**"]
+    branches:
+      [
+        "main",
+        "master",
+        "image",
+        "feat/**",
+        "fix/**",
+        "dependabot/**",
+        "cursor/**",
+      ]
   pull_request:
     branches: ["main", "master", "image"]
 
