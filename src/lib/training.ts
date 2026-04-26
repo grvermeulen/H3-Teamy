@@ -65,5 +65,33 @@ export function defaultSeasonWindow(): { from: string; to: string } {
   return { from: toYMD(seasonStart), to: toYMD(seasonEnd) };
 }
 
+/**
+ * Splits training session dates (YYYY-MM-DD) into recent past, older past, and today-or-future
+ * for compact trainer UI. Dates are compared as strings on the calendar day.
+ *
+ * @param datesYmd - Session dates, typically ascending from the API.
+ * @param todayYmd - Today's date as YYYY-MM-DD (local calendar for the team).
+ * @param recentPastCount - Past sessions to show outside the "earlier" group (default 3).
+ */
+export function splitTrainingSessionDatesForDisplay(
+  datesYmd: string[],
+  todayYmd: string,
+  recentPastCount = 3,
+): { recentPast: string[]; olderPast: string[]; upcoming: string[] } {
+  const sorted = datesYmd.slice().sort();
+  const past = sorted.filter((d) => d < todayYmd);
+  const upcoming = sorted.filter((d) => d >= todayYmd);
+  const recentPast =
+    past.length <= recentPastCount
+      ? past
+      : past.slice(-recentPastCount);
+  const olderPast =
+    past.length > recentPastCount
+      ? past.slice(0, past.length - recentPastCount)
+      : [];
+  return { recentPast, olderPast, upcoming };
+}
+
+
 
 
