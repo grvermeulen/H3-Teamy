@@ -76,9 +76,9 @@ export default function RootLayout({
               }}
             />
             <div>
-              <div style={{ fontWeight: 700, fontSize: 18 }}>
+              <h1 style={{ fontWeight: 700, fontSize: 18, margin: 0 }}>
                 De Rijn H3 — Waterpolo
-              </div>
+              </h1>
               <div className="muted" style={{ fontSize: 13 }}>
                 Wedstrijden uit Sportlink • RSVP op je telefoon
               </div>
