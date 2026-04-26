@@ -1,6 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
 import ical from "ical";
-
 import { TeamEvent } from "../types";
 import { canonicalEventId } from "./eventId";
 import { kvGetJson, kvSetJson } from "./kv";
@@ -27,6 +26,7 @@ function icalDateToIso(value: Date | string | number): string {
 
 /**
  * Fetches, parses, and caches team events from the external iCal feed.
+ * Uses the `ical` package for parsing (not `node-ical`) so the SSR bundle avoids `rrule-temporal` / `@js-temporal/polyfill` / `jsbi`, which can break under Next.js Turbopack (`BigInt is not a function` on the polyfill).
  * Merges new data with existing cached data to preserve history.
  * Events outside a bounded window (roughly 400 days past through 540 days future) are dropped when updating the cache.
  *
