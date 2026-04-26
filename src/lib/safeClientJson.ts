@@ -4,7 +4,26 @@ function isAbortError(error: unknown): boolean {
   if (error instanceof DOMException && error.name === "AbortError") {
     return true;
   }
-  return error instanceof Error && error.name === "AbortError";
+  if (error instanceof Error && error.name === "AbortError") {
+    return true;
+  }
+  if (error instanceof Error && error.cause !== undefined) {
+    return isAbortError(error.cause);
+  }
+  return false;
+}
+
+function isCancelledClientFetch(
+  error: unknown,
+  signal: AbortSignal | undefined,
+): boolean {
+  if (isAbortError(error)) {
+    return true;
+  }
+  if (signal?.aborted) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -12,7 +31,9 @@ function isAbortError(error: unknown): boolean {
  * (e.g. `TypeError: Failed to fetch`, WebKit `TypeError: Load failed`) and
  * invalid JSON are reported to Sentry and the caller receives `fallback`
  * instead. Aborted requests (`AbortSignal`, React unmount) return `fallback`
- * without reporting — they are expected during navigation.
+ * without reporting — they are expected during navigation. Some browsers
+ * surface cancellation as `TypeError: Failed to fetch` while the
+ * `AbortSignal` is already aborted; those are treated as cancellation too.
  *
  * @param url - Request URL (same as `fetch` first argument).
  * @param init - Optional `fetch` init; pass `undefined` when not needed.
@@ -31,7 +52,7 @@ export async function fetchJsonOr<T>(
     const data = (await res.json()) as T;
     return data;
   } catch (error: unknown) {
-    if (!isAbortError(error)) {
+    if (!isCancelledClientFetch(error, init?.signal ?? undefined)) {
       Sentry.captureException(error, {
         tags: { clientFetch: context },
       });
