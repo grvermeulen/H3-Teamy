@@ -32,7 +32,39 @@ model Event {
   startDate   DateTime?
   endDate     DateTime?
 
-  rsvps Rsvp[]
+  rsvps   Rsvp[]
+  reports MatchReport[]
+  votes   MvpVote[]
+}
+
+model MatchReport {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  eventId   String   @unique
+  content   String
+  authorId  String?
+  mvpResult Json?
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
+model MvpVote {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  eventId       String
+  voterId       String
+  candidateId   String
+  candidateName String
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, voterId])
+  @@index([eventId])
+  @@index([voterId])
+  @@index([candidateId])
 }
 
 model Rsvp {
