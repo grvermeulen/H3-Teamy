@@ -1,5 +1,11 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { getPgPoolConfig } from "./pgPool";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as Sentry from "@sentry/nextjs";
+import { getPgPoolConfig, getPrismaPgAdapterOptions } from "./pgPool";
+
+vi.mock("@sentry/nextjs", () => ({
+  addBreadcrumb: vi.fn(),
+  captureException: vi.fn(),
+}));
 
 describe("getPgPoolConfig", () => {
   afterEach(() => {
@@ -49,5 +55,28 @@ describe("getPgPoolConfig", () => {
     const cfg = getPgPoolConfig("postgresql://u:p@localhost/db");
     expect(cfg.connectionTimeoutMillis).toBe(25_000);
     expect(cfg.idleTimeoutMillis).toBe(30_000);
+  });
+});
+
+describe("getPrismaPgAdapterOptions onPoolError", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("adds a breadcrumb for idle Connection terminated unexpectedly instead of captureException", () => {
+    const { onPoolError } = getPrismaPgAdapterOptions();
+    onPoolError(new Error("Connection terminated unexpectedly"));
+    expect(vi.mocked(Sentry.addBreadcrumb)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
+  it("calls captureException for unexpected pool errors", () => {
+    const { onPoolError } = getPrismaPgAdapterOptions();
+    const err = new Error("password authentication failed for user");
+    onPoolError(err);
+    expect(vi.mocked(Sentry.addBreadcrumb)).not.toHaveBeenCalled();
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(err, {
+      tags: { component: "pg-pool" },
+    });
   });
 });
