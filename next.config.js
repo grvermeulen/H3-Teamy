@@ -5,6 +5,8 @@ const pkg = require("./package.json");
 const nextConfig = {
   reactStrictMode: true,
   typedRoutes: true,
+  /** CommonJS `ical` + `rrule` load more reliably when not bundled by Turbopack (Vercel preview). */
+  serverExternalPackages: ["ical"],
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
   },
