@@ -3,6 +3,8 @@ import { prisma } from "../db";
 import { kvGetJson, kvSetJson } from "../kv";
 import { displayName } from "../userUtils";
 import * as Sentry from "@sentry/nextjs";
+import { withPgConnectRetry } from "../prismaConnectRetry";
+import { isDbUnavailableError } from "../dbUnavailableError";
 
 type UserRow = Pick<User, "id" | "firstName" | "lastName" | "email">;
 const DEFAULT_ACTIVE_USERS_MAX = 1000;
@@ -18,9 +20,12 @@ function getActiveUsersLimit(): number {
  *
  * @param refresh - If true, bypasses the cache and fetches fresh data from the DB.
  * @returns A promise resolving to a sorted list of users with IDs and display names.
- * @throws Will throw if the DB query fails.
+ * @throws `DbUnavailableError` wanneer Postgres na herhaalde pogingen niet bereikbaar is.
+ * @throws De oorspronkelijke fout wanneer de databasequery faalt (na Sentry-registratie, behalve bij uitgeputte connectie-retries).
  */
-export async function getActiveUsers(refresh = false) {
+export async function getActiveUsers(
+  refresh = false,
+): Promise<{ id: string; name: string }[]> {
   const cacheKey = "users:roster:v2";
   const maxUsers = getActiveUsersLimit();
 
@@ -33,13 +38,17 @@ export async function getActiveUsers(refresh = false) {
 
   let users: UserRow[] = [];
   try {
-    users = await prisma.user.findMany({
-      select: { id: true, firstName: true, lastName: true, email: true },
-      take: maxUsers,
-      orderBy: { updatedAt: "desc" },
-    });
+    users = await withPgConnectRetry("getActiveUsersList", () =>
+      prisma.user.findMany({
+        select: { id: true, firstName: true, lastName: true, email: true },
+        take: maxUsers,
+        orderBy: { updatedAt: "desc" },
+      }),
+    );
   } catch (error: unknown) {
-    Sentry.captureException(error);
+    if (!isDbUnavailableError(error)) {
+      Sentry.captureException(error);
+    }
     throw error;
   }
 

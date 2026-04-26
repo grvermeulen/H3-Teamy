@@ -17,7 +17,12 @@ function parseDdMmYyyy(input: string | undefined | null): Date | null {
   // JS Date months are 0-based
   const date = new Date(yyyy, mm - 1, dd);
   // Validate that Date did not overflow (e.g., 31-02-2025)
-  if (date.getFullYear() !== yyyy || date.getMonth() !== mm - 1 || date.getDate() !== dd) return null;
+  if (
+    date.getFullYear() !== yyyy ||
+    date.getMonth() !== mm - 1 ||
+    date.getDate() !== dd
+  )
+    return null;
   return date;
 }
 
@@ -60,10 +65,36 @@ export function defaultSeasonWindow(): { from: string; to: string } {
   const now = new Date();
   const year = now.getFullYear();
   const isBeforeJuly = now.getMonth() < 6; // 0-indexed months, 6 = July
-  const seasonStart = isBeforeJuly ? new Date(year - 1, 6, 1) : new Date(year, 6, 1);
-  const seasonEnd = isBeforeJuly ? new Date(year, 6, 1) : new Date(year + 1, 6, 1);
+  const seasonStart = isBeforeJuly
+    ? new Date(year - 1, 6, 1)
+    : new Date(year, 6, 1);
+  const seasonEnd = isBeforeJuly
+    ? new Date(year, 6, 1)
+    : new Date(year + 1, 6, 1);
   return { from: toYMD(seasonStart), to: toYMD(seasonEnd) };
 }
 
-
-
+/**
+ * Splits training session dates (YYYY-MM-DD) into recent past, older past, and today-or-future
+ * for compact trainer UI. Dates are compared as strings on the calendar day.
+ *
+ * @param datesYmd - Session dates, typically ascending from the API.
+ * @param todayYmd - Today's date as YYYY-MM-DD (local calendar for the team).
+ * @param recentPastCount - Past sessions to show outside the "earlier" group (default 3).
+ */
+export function splitTrainingSessionDatesForDisplay(
+  datesYmd: string[],
+  todayYmd: string,
+  recentPastCount = 3,
+): { recentPast: string[]; olderPast: string[]; upcoming: string[] } {
+  const sorted = datesYmd.slice().sort();
+  const past = sorted.filter((d) => d < todayYmd);
+  const upcoming = sorted.filter((d) => d >= todayYmd);
+  const recentPast =
+    past.length <= recentPastCount ? past : past.slice(-recentPastCount);
+  const olderPast =
+    past.length > recentPastCount
+      ? past.slice(0, past.length - recentPastCount)
+      : [];
+  return { recentPast, olderPast, upcoming };
+}

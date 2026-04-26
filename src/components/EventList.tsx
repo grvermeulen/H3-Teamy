@@ -1,11 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as Sentry from "@sentry/nextjs";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { TeamEvent, RsvpStatus } from "../types";
+import { splitPastAndFutureByStart } from "../lib/listSplitPast";
 import GenerateReportButton from "./GenerateReportButton";
 import ReportPreview from "./ReportPreview";
 import MvpVoteButton from "./MvpVoteButton";
 import SpaceInvadersLauncher from "./spaceInvaders/SpaceInvadersLauncher";
+import { useSession } from "./SessionContext";
+import { formatEventDate, formatEventTime } from "../lib/datetime";
 
 /** Props voor {@link EventList}. */
 type Props = {
@@ -25,7 +35,7 @@ type RsvpMap = Record<string, RsvpStatus>;
  * @param props - Componentprops.
  * @param props.events - Te tonen events (chronologisch gesorteerd in de UI).
  */
-export default function EventList({ events }: Props) {
+export default function EventList({ events }: Props): React.JSX.Element {
   const [rsvpMap, setRsvpMap] = useState<RsvpMap>({});
   const [counts, setCounts] = useState<
     Record<string, { yes: number; no: number; maybe: number }>
@@ -46,8 +56,10 @@ export default function EventList({ events }: Props) {
   const [mounted, setMounted] = useState(false);
   const [nowTs, setNowTs] = useState<number>(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [authChecked, setAuthChecked] = useState(false);
+  const session = useSession();
+  const loggedIn = session.loggedIn;
+  const authChecked = !session.loading;
+  const [notice, setNotice] = useState<string | null>(null);
 
   const loadedListsRef = useRef<Record<string, boolean>>({});
   useEffect(() => {
@@ -63,19 +75,25 @@ export default function EventList({ events }: Props) {
   const loadRsvpListDetail = useCallback(
     async (id: string, opts?: { force?: boolean }) => {
       if (!opts?.force && loadedListsRef.current[id]) return;
-      const res = await fetch(
-        `/api/rsvp/list?eventId=${encodeURIComponent(id)}`,
-        { cache: "no-store" },
-      );
-      if (res.ok) {
+      try {
+        const res = await fetch(
+          `/api/rsvp/list?eventId=${encodeURIComponent(id)}`,
+          { cache: "no-store" },
+        );
+        if (!res.ok) return;
+
         const data = await res.json();
         setCounts((prev) => ({ ...prev, [id]: data.counts }));
         setLists((prev) => ({ ...prev, [id]: data.lists }));
         setLoadedLists((prev) => ({ ...prev, [id]: true }));
+      } catch (error: unknown) {
+        Sentry.captureException(error);
       }
     },
     [],
   );
+
+  const isLoadAllInFlightRef = useRef(false);
 
   /**
    * Laadt publieke tellingen voor alle events; als de gebruiker ingelogd is ook eigen RSVP-status.
@@ -83,80 +101,68 @@ export default function EventList({ events }: Props) {
    * Open RSVP-details worden direct opnieuw opgehaald (mobiel / app-switch).
    */
   const loadAll = useCallback(async () => {
+    if (isLoadAllInFlightRef.current) return;
+    isLoadAllInFlightRef.current = true;
     setIsRefreshing(true);
 
-    // Always load public counts
-    const countsEntries = await Promise.all(
-      events.map(async (e) => {
-        const res = await fetch(
-          `/api/rsvp/list?eventId=${encodeURIComponent(e.id)}&countsOnly=1`,
-          { cache: "no-store" },
-        );
-        if (!res.ok) return [e.id, { yes: 0, no: 0, maybe: 0 }] as const;
-        const data = await res.json();
-        return [
-          e.id,
-          data.counts as { yes: number; no: number; maybe: number },
-        ] as const;
-      }),
-    );
-    const cMap: Record<string, { yes: number; no: number; maybe: number }> = {};
-    for (const [id, c] of countsEntries) {
-      cMap[id] = c;
-    }
-    setCounts(cMap);
+    try {
+      const countsEntries = await Promise.all(
+        events.map(async (e) => {
+          const res = await fetch(
+            `/api/rsvp/list?eventId=${encodeURIComponent(e.id)}&countsOnly=1`,
+            { cache: "no-store" },
+          );
+          if (!res.ok) return [e.id, { yes: 0, no: 0, maybe: 0 }] as const;
+          const data = await res.json();
+          return [
+            e.id,
+            data.counts as { yes: number; no: number; maybe: number },
+          ] as const;
+        }),
+      );
+      const cMap: Record<string, { yes: number; no: number; maybe: number }> =
+        {};
+      for (const [id, c] of countsEntries) {
+        cMap[id] = c;
+      }
+      setCounts(cMap);
 
-    if (!loggedIn) {
-      // If not logged in, only show counts
-      setRsvpMap({});
+      if (!loggedIn) {
+        setRsvpMap({});
+        setLists({});
+        setLoadedLists({});
+        return;
+      }
+
+      const rsvpEntries = await Promise.all(
+        events.map(async (e) => {
+          const res = await fetch(
+            `/api/rsvp?eventId=${encodeURIComponent(e.id)}`,
+            { cache: "no-store" },
+          );
+          if (!res.ok) return [e.id, null] as const;
+          const data = await res.json();
+          return [e.id, (data?.status ?? null) as RsvpStatus] as const;
+        }),
+      );
+      const map: RsvpMap = {};
+      for (const [id, status] of rsvpEntries) map[id] = status;
+      setRsvpMap(map);
       setLists({});
       setLoadedLists({});
+      const visibleEventIds = new Set(events.map((event) => event.id));
+      const openIds = [...openRsvpDetailIdsRef.current].filter((eventId) =>
+        visibleEventIds.has(eventId),
+      );
+      openRsvpDetailIdsRef.current = new Set(openIds);
+      await Promise.all(
+        openIds.map((id) => loadRsvpListDetail(id, { force: true })),
+      );
+    } finally {
+      isLoadAllInFlightRef.current = false;
       setIsRefreshing(false);
-      return;
     }
-
-    // If logged in, also load personal RSVP data and lists
-    const rsvpEntries = await Promise.all(
-      events.map(async (e) => {
-        const res = await fetch(
-          `/api/rsvp?eventId=${encodeURIComponent(e.id)}`,
-          { cache: "no-store" },
-        );
-        if (!res.ok) return [e.id, null] as const;
-        const data = await res.json();
-        return [e.id, (data?.status ?? null) as RsvpStatus] as const;
-      }),
-    );
-    const map: RsvpMap = {};
-    for (const [id, status] of rsvpEntries) map[id] = status;
-    setRsvpMap(map);
-    // Leeg caches: anders blijft loadedLists true terwijl lists {} is → lege UI tot refresh.
-    setLists({});
-    setLoadedLists({});
-    // Details die nog open staan (bijv. na terugkeren vanuit andere app): direct opnieuw laden.
-    const openIds = [...openRsvpDetailIdsRef.current];
-    await Promise.all(
-      openIds.map((id) => loadRsvpListDetail(id, { force: true })),
-    );
-    setIsRefreshing(false);
   }, [events, loggedIn, loadRsvpListDetail]);
-
-  // Check authentication on mount only
-  useEffect(() => {
-    async function checkAuth() {
-      try {
-        const me = await fetch("/api/me", { cache: "no-store" })
-          .then((r) => r.json())
-          .catch(() => ({ user: null }));
-        const isLoggedIn = Boolean(me?.user?.id);
-        setLoggedIn(isLoggedIn);
-      } catch {
-        setLoggedIn(false);
-      }
-      setAuthChecked(true);
-    }
-    checkAuth();
-  }, []);
 
   useEffect(() => {
     if (authChecked) {
@@ -209,13 +215,13 @@ export default function EventList({ events }: Props) {
       body: JSON.stringify({ eventId: id, status }),
     });
     if (res.status === 412) {
-      // profile incomplete → revert optimistic UI and redirect to profile
+      // Profiel incompleet → optimistic UI terugdraaien en doorsturen naar profiel
       setRsvpMap((p) => ({ ...p, [id]: prev }));
+      setNotice(
+        "Vul eerst je voor- en achternaam in op je profiel om te kunnen RSVP'en. Je wordt doorgestuurd…",
+      );
       if (typeof window !== "undefined") {
-        const message =
-          "Please complete your profile (first and last name) before RSVP-ing.";
-        alert(message);
-        window.location.assign("/profile");
+        setTimeout(() => window.location.assign("/profile"), 1500);
       }
       return;
     }
@@ -241,27 +247,153 @@ export default function EventList({ events }: Props) {
     void loadRsvpListDetail(id);
   }
 
-  const grouped = useMemo(() => {
-    const now = nowTs || 0;
-    const allSorted = events
-      .slice()
-      .sort(
-        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
-      );
-    const idx = allSorted.findIndex((e) => new Date(e.start).getTime() >= now);
-    const future = idx === -1 ? [] : allSorted.slice(idx);
-    // last two past (if available)
-    const past = (idx === -1 ? allSorted : allSorted.slice(0, idx)).slice(-2);
-    // If there are no past items at all yet (first ever match hasn't been played), just return future
-    // But once the very first match has been played, ensure at least that single past match remains visible
-    return [...past, ...future];
-  }, [events, nowTs]);
+  const { recentPast, olderPast, future } = useMemo(
+    () => splitPastAndFutureByStart(events, nowTs || 0, 3),
+    [events, nowTs],
+  );
 
-  // Don't render anything until authentication is checked
+  const visibleCount = recentPast.length + olderPast.length + future.length;
+
+  function renderEventCard(evt: TeamEvent) {
+    const start = new Date(evt.start);
+    const end = evt.end ? new Date(evt.end) : undefined;
+    const status = rsvpMap[evt.id] || null;
+    return (
+      <div className="card" key={evt.id}>
+        <div className="row" style={{ flexWrap: "wrap" }}>
+          <div className="grow">
+            <div className="eventTitle">{evt.title}</div>
+            <div className="eventMeta muted">
+              <span className="badge badge-date" suppressHydrationWarning>
+                {mounted ? formatEventDate(start) : ""}
+              </span>
+              <span className="badge badge-time" suppressHydrationWarning>
+                {mounted ? formatEventTime(start, end) : ""}
+              </span>
+              {evt.location ? (
+                <span className="badge">{evt.location}</span>
+              ) : null}
+              {counts[evt.id] ? (
+                <span className="badge" aria-label="RSVP-overzicht">
+                  Ja <span className="count-yes">{counts[evt.id].yes}</span> ·
+                  Misschien{" "}
+                  <span className="count-maybe">{counts[evt.id].maybe}</span> ·
+                  Nee <span className="count-no">{counts[evt.id].no}</span>
+                </span>
+              ) : null}
+            </div>
+          </div>
+          {loggedIn ? (
+            <div
+              className="rsvp"
+              style={{ width: "100%", justifyContent: "flex-end" }}
+            >
+              <button
+                className={status === "yes" ? "active-yes" : ""}
+                aria-pressed={status === "yes"}
+                onClick={() => setRsvp(evt.id, status === "yes" ? null : "yes")}
+              >
+                Ja
+              </button>
+              <button
+                className={status === "maybe" ? "active-maybe" : ""}
+                aria-pressed={status === "maybe"}
+                onClick={() =>
+                  setRsvp(evt.id, status === "maybe" ? null : "maybe")
+                }
+              >
+                Misschien
+              </button>
+              <button
+                className={status === "no" ? "active-no" : ""}
+                aria-pressed={status === "no"}
+                onClick={() => setRsvp(evt.id, status === "no" ? null : "no")}
+              >
+                Nee
+              </button>
+            </div>
+          ) : null}
+        </div>
+        {loggedIn ? (
+          <div
+            className="rsvp"
+            style={{
+              justifyContent: "flex-end",
+              marginTop: 8,
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <ReportPreview eventId={evt.id} />
+            <MvpVoteButton eventId={evt.id} />
+          </div>
+        ) : null}
+        {loggedIn ? (
+          <GenerateReportButton eventId={evt.id} opponent={evt.title} />
+        ) : null}
+        {evt.description ? (
+          <div className="muted" style={{ marginTop: 8 }}>
+            {evt.description}
+          </div>
+        ) : null}
+        {loggedIn ? (
+          <details
+            style={{ marginTop: 10 }}
+            onToggle={(e) => {
+              const el = e.currentTarget as HTMLDetailsElement;
+              if (el.open) {
+                openRsvpDetailIdsRef.current.add(evt.id);
+                void ensureListsLoaded(evt.id);
+              } else {
+                openRsvpDetailIdsRef.current.delete(evt.id);
+              }
+            }}
+          >
+            <summary className="muted">RSVP-lijst tonen</summary>
+            <div className="rsvp-columns">
+              <div>
+                <div className="badge">Ja</div>
+                <div className="muted" style={{ marginTop: 4 }}>
+                  {(lists[evt.id]?.yes || []).map((u) => (
+                    <div key={u.id}>{u.name}</div>
+                  ))}
+                  {(lists[evt.id]?.yes || []).length === 0 ? (
+                    <div>—</div>
+                  ) : null}
+                </div>
+              </div>
+              <div>
+                <div className="badge">Misschien</div>
+                <div className="muted" style={{ marginTop: 4 }}>
+                  {(lists[evt.id]?.maybe || []).map((u) => (
+                    <div key={u.id}>{u.name}</div>
+                  ))}
+                  {(lists[evt.id]?.maybe || []).length === 0 ? (
+                    <div>—</div>
+                  ) : null}
+                </div>
+              </div>
+              <div>
+                <div className="badge">Nee</div>
+                <div className="muted" style={{ marginTop: 4 }}>
+                  {(lists[evt.id]?.no || []).map((u) => (
+                    <div key={u.id}>{u.name}</div>
+                  ))}
+                  {(lists[evt.id]?.no || []).length === 0 ? <div>—</div> : null}
+                </div>
+              </div>
+            </div>
+          </details>
+        ) : null}
+      </div>
+    );
+  }
+
+  // Niets renderen tot de auth-check klaar is
   if (!authChecked) {
     return (
       <div className="list">
-        <div className="muted">Loading...</div>
+        <div className="muted">Laden…</div>
       </div>
     );
   }
@@ -278,170 +410,50 @@ export default function EventList({ events }: Props) {
         }}
       >
         <button onClick={() => void loadAll()} disabled={isRefreshing}>
-          {isRefreshing ? "Refreshing…" : "Refresh"}
+          {isRefreshing ? "Vernieuwen…" : "Vernieuwen"}
         </button>
         <span className="muted" style={{ fontSize: 13 }}>
-          Pull to refresh: focus page or press Refresh
+          Tip: open de app opnieuw of druk op Vernieuwen
         </span>
       </div>
-      {grouped.map((evt) => {
-        const start = new Date(evt.start);
-        const end = evt.end ? new Date(evt.end) : undefined;
-        const status = rsvpMap[evt.id] || null;
-        return (
-          <div className="card" key={evt.id}>
-            <div className="row" style={{ flexWrap: "wrap" }}>
-              <div className="grow">
-                <div className="eventTitle">{evt.title}</div>
-                <div className="eventMeta muted">
-                  <span className="badge badge-date" suppressHydrationWarning>
-                    {mounted
-                      ? start.toLocaleDateString(undefined, {
-                          weekday: "short",
-                          day: "2-digit",
-                          month: "short",
-                        })
-                      : ""}
-                  </span>
-                  <span className="badge badge-time" suppressHydrationWarning>
-                    {mounted
-                      ? `${start.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${end ? ` – ${end.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}`
-                      : ""}
-                  </span>
-                  {evt.location ? (
-                    <span className="badge">{evt.location}</span>
-                  ) : null}
-                  {counts[evt.id] ? (
-                    <span className="badge">
-                      Yes{" "}
-                      <span className="count-yes">{counts[evt.id].yes}</span> ·
-                      Maybe{" "}
-                      <span className="count-maybe">
-                        {counts[evt.id].maybe}
-                      </span>{" "}
-                      · No <span className="count-no">{counts[evt.id].no}</span>
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-              {loggedIn ? (
-                <div
-                  className="rsvp"
-                  style={{ width: "100%", justifyContent: "flex-end" }}
-                >
-                  <button
-                    className={status === "yes" ? "active-yes" : ""}
-                    onClick={() =>
-                      setRsvp(evt.id, status === "yes" ? null : "yes")
-                    }
-                  >
-                    Yes
-                  </button>
-                  <button
-                    className={status === "maybe" ? "active-maybe" : ""}
-                    onClick={() =>
-                      setRsvp(evt.id, status === "maybe" ? null : "maybe")
-                    }
-                  >
-                    Maybe
-                  </button>
-                  <button
-                    className={status === "no" ? "active-no" : ""}
-                    onClick={() =>
-                      setRsvp(evt.id, status === "no" ? null : "no")
-                    }
-                  >
-                    No
-                  </button>
-                </div>
-              ) : null}
-            </div>
-            {/* Match report controls (bottom-right) */}
-            {loggedIn ? (
-              <div
-                className="rsvp"
-                style={{
-                  justifyContent: "flex-end",
-                  marginTop: 8,
-                  gap: 8,
-                  flexWrap: "wrap",
-                }}
-              >
-                <ReportPreview eventId={evt.id} />
-                <MvpVoteButton eventId={evt.id} />
-              </div>
-            ) : null}
-            {loggedIn ? (
-              <GenerateReportButton eventId={evt.id} opponent={evt.title} />
-            ) : null}
-            {evt.description ? (
-              <div className="muted" style={{ marginTop: 8 }}>
-                {evt.description}
-              </div>
-            ) : null}
-            {loggedIn ? (
-              <details
-                style={{ marginTop: 10 }}
-                onToggle={(e) => {
-                  const el = e.currentTarget as HTMLDetailsElement;
-                  if (el.open) {
-                    openRsvpDetailIdsRef.current.add(evt.id);
-                    ensureListsLoaded(evt.id);
-                  } else {
-                    openRsvpDetailIdsRef.current.delete(evt.id);
-                  }
-                }}
-              >
-                <summary className="muted">Show RSVP list</summary>
-                <div className="rsvp-columns">
-                  <div>
-                    <div className="badge">Yes</div>
-                    <div className="muted" style={{ marginTop: 4 }}>
-                      {(lists[evt.id]?.yes || []).map((u) => (
-                        <div key={u.id}>{u.name}</div>
-                      ))}
-                      {(lists[evt.id]?.yes || []).length === 0 ? (
-                        <div>—</div>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="badge">Maybe</div>
-                    <div className="muted" style={{ marginTop: 4 }}>
-                      {(lists[evt.id]?.maybe || []).map((u) => (
-                        <div key={u.id}>{u.name}</div>
-                      ))}
-                      {(lists[evt.id]?.maybe || []).length === 0 ? (
-                        <div>—</div>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="badge">No</div>
-                    <div className="muted" style={{ marginTop: 4 }}>
-                      {(lists[evt.id]?.no || []).map((u) => (
-                        <div key={u.id}>{u.name}</div>
-                      ))}
-                      {(lists[evt.id]?.no || []).length === 0 ? (
-                        <div>—</div>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="badge">1e wissel:</div>
-                    <div className="muted" style={{ marginTop: 4 }}>
-                      <div>Hans</div>
-                    </div>
-                  </div>
-                </div>
-              </details>
-            ) : null}
+      {notice ? (
+        <div
+          role="alert"
+          className="card"
+          style={{
+            marginBottom: 12,
+            borderColor: "var(--accent)",
+            color: "var(--text)",
+          }}
+        >
+          {notice}
+        </div>
+      ) : null}
+      {recentPast.map((evt) => renderEventCard(evt))}
+      {olderPast.length > 0 ? (
+        <details style={{ marginBottom: 12 }}>
+          <summary
+            className="muted"
+            style={{ cursor: "pointer", fontWeight: 600 }}
+          >
+            Vorige wedstrijden ({olderPast.length})
+          </summary>
+          <div
+            style={{
+              marginTop: 12,
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+            }}
+          >
+            {olderPast.map((evt) => renderEventCard(evt))}
           </div>
-        );
-      })}
+        </details>
+      ) : null}
+      {future.map((evt) => renderEventCard(evt))}
       <SpaceInvadersLauncher />
-      {grouped.length === 0 ? (
-        <div className="muted">No recent or upcoming matches.</div>
+      {visibleCount === 0 ? (
+        <div className="muted">Geen recente of aankomende wedstrijden.</div>
       ) : null}
     </div>
   );

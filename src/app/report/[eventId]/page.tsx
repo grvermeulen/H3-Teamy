@@ -16,9 +16,9 @@ export default async function ReportPage({ params }: Params) {
   return (
     <main>
       <div className="container">
-        <h1>Match report</h1>
+        <h1>Wedstrijdverslag</h1>
         <div className="muted" style={{ marginBottom: 12 }}>
-          Event: {eventId}
+          Wedstrijd: {eventId}
         </div>
         <article style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
           {report.content}
@@ -30,11 +30,11 @@ export default async function ReportPage({ params }: Params) {
           </div>
         ) : null}
         <div className="muted" style={{ marginTop: 12 }}>
-          Published {new Date(report.createdAt).toLocaleString()}
+          Gepubliceerd {new Date(report.createdAt).toLocaleString("nl-NL")}
         </div>
         <MvpVotingPanel eventId={eventId} />
         <div style={{ marginTop: 16 }}>
-          <Link href="/">← Back</Link>
+          <Link href="/">← Terug</Link>
         </div>
       </div>
     </main>

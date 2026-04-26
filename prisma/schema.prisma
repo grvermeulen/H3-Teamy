@@ -1,6 +1,5 @@
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -15,10 +14,57 @@ model User {
   lastName  String
   email     String? @unique
   passwordHash String?
+  /** Laatst gezien app-versie (wat is er nieuw / rondleiding); optioneel. */
+  lastVersionSeen String?
   // Optional: link to sessions/devices in future
   rsvps     Rsvp[]
   identities Identity[]
   attendances Attendance[]
+  feedback  Feedback[]
+}
+
+model Event {
+  id          String    @id
+  createdAt   DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  title       String?
+  description String?
+  startDate   DateTime?
+  endDate     DateTime?
+
+  rsvps   Rsvp[]
+  reports MatchReport[]
+  votes   MvpVote[]
+}
+
+model MatchReport {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  eventId   String   @unique
+  content   String
+  authorId  String?
+  mvpResult Json?
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
+model MvpVote {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  eventId       String
+  voterId       String
+  candidateId   String
+  candidateName String
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, voterId])
+  @@index([eventId])
+  @@index([voterId])
+  @@index([candidateId])
 }
 
 model Rsvp {
@@ -29,7 +75,8 @@ model Rsvp {
   eventId   String
   status    String  // "yes" | "no" | "maybe"
 
-  user User @relation(fields: [userId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@unique([userId, eventId])
   @@index([eventId])
@@ -70,3 +117,38 @@ model Attendance {
   @@index([userId])
 }
 
+enum FeedbackType {
+  BUG
+  IDEA
+}
+
+enum FeedbackStatus {
+  NEW
+  TRIAGED
+  PLANNED
+  SHIPPED
+  DECLINED
+}
+
+model Feedback {
+  id         String         @id @default(cuid())
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  userId     String
+  type       FeedbackType
+  status     FeedbackStatus @default(NEW)
+  title      String
+  body       String
+  route      String?
+  appVersion String?
+  userAgent  String?
+  aiTheme    String?
+  aiImpact   String?
+  aiSummary  String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([type, createdAt])
+  @@index([userId])
+  @@index([status])
+}

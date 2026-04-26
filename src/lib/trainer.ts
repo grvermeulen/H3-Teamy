@@ -1,7 +1,10 @@
 import { NextRequest } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { getActiveUser } from "./activeUser";
+import { isDbUnavailableError } from "./dbUnavailableError";
 import { prisma } from "./db";
-import { getUserRoles } from "./kv";
+import { getUserRoles, type UserRoles } from "./kv";
+import { USER_CORE_SELECT } from "./userPrismaSelect";
 
 function norm(s: string) {
   return (s || "").toLowerCase().trim();
@@ -13,13 +16,29 @@ function norm(s: string) {
  *
  * @param req - The incoming Next.js request.
  * @returns An object containing `isTrainer` boolean and the user's identity `me`.
+ *   When user resolution fails (e.g. database connection timeout), returns `isTrainer: false`
+ *   and an empty `me` after logging to Sentry.
  */
 export async function isTrainer(
   req: NextRequest,
 ): Promise<{ isTrainer: boolean; me: { id: string; name: string } }> {
-  const { userId } = await getActiveUser(req);
+  let userId: string;
   try {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    ({ userId } = await getActiveUser(req));
+  } catch (err: unknown) {
+    if (!isDbUnavailableError(err)) {
+      Sentry.captureException(err, {
+        tags: { component: "trainer" },
+        extra: { context: "getActiveUser_isTrainer" },
+      });
+    }
+    return { isTrainer: false, me: { id: "", name: "" } };
+  }
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: USER_CORE_SELECT,
+    });
     const full = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
     const admin = process.env.ADMIN_FULL_NAME || "";
     const trainers = (process.env.TRAINER_FULL_NAMES || "")
@@ -28,15 +47,25 @@ export async function isTrainer(
       .filter(Boolean);
     const isAdmin = norm(full) === norm(admin);
     const isTrainerListed = trainers.includes(norm(full));
-    const roles = await getUserRoles(userId).catch(
-      () => ({ player: true }) as any,
+    const roles: UserRoles = await getUserRoles(userId).catch(
+      (err: unknown) => {
+        Sentry.captureException(err, {
+          tags: { component: "trainer" },
+          extra: { context: "getUserRoles_isTrainer", userId },
+        });
+        return { player: true };
+      },
     );
     const byRole = Boolean(roles?.trainer || roles?.admin);
     return {
       isTrainer: Boolean(isAdmin || isTrainerListed || byRole),
       me: { id: userId, name: full },
     };
-  } catch {
+  } catch (err: unknown) {
+    Sentry.captureException(err, {
+      tags: { component: "trainer" },
+      extra: { context: "isTrainer", userId },
+    });
     return { isTrainer: false, me: { id: userId, name: "" } };
   }
 }
@@ -47,27 +76,51 @@ export async function isTrainer(
  *
  * @param req - The incoming Next.js request.
  * @returns An object containing `isAdmin` boolean and the user's identity `me`.
+ *   When user resolution fails (e.g. database connection timeout), returns `isAdmin: false`
+ *   and an empty `me` after logging to Sentry.
  */
 export async function isAdminUser(
   req: NextRequest,
 ): Promise<{ isAdmin: boolean; me: { id: string; name: string } }> {
-  const { userId } = await getActiveUser(req);
+  let userId: string;
   try {
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    ({ userId } = await getActiveUser(req));
+  } catch (err: unknown) {
+    if (!isDbUnavailableError(err)) {
+      Sentry.captureException(err, {
+        tags: { component: "trainer" },
+        extra: { context: "getActiveUser_isAdminUser" },
+      });
+    }
+    return { isAdmin: false, me: { id: "", name: "" } };
+  }
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: USER_CORE_SELECT,
+    });
     const full = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
     const admin = process.env.ADMIN_FULL_NAME || "";
     const envAdmin = norm(full) === norm(admin);
-    const roles = await getUserRoles(userId).catch(
-      () => ({ player: true }) as any,
+    const roles: UserRoles = await getUserRoles(userId).catch(
+      (err: unknown) => {
+        Sentry.captureException(err, {
+          tags: { component: "trainer" },
+          extra: { context: "getUserRoles_isAdminUser", userId },
+        });
+        return { player: true };
+      },
     );
     const byRole = Boolean(roles?.admin);
     return {
       isAdmin: Boolean(envAdmin || byRole),
       me: { id: userId, name: full },
     };
-  } catch {
+  } catch (err: unknown) {
+    Sentry.captureException(err, {
+      tags: { component: "trainer" },
+      extra: { context: "isAdminUser", userId },
+    });
     return { isAdmin: false, me: { id: userId, name: "" } };
   }
 }
-
-// CI: trigger AI review

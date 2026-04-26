@@ -1,9 +1,12 @@
 import { NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { Prisma } from "@prisma/client";
-import { prisma } from "./db";
+import type { Session } from "next-auth";
 import { getServerSession } from "next-auth";
+import { prisma } from "./db";
 import { authOptions } from "./authOptions";
+import { withPgConnectRetry } from "./prismaConnectRetry";
+import { USER_CORE_SELECT } from "./userPrismaSelect";
 
 export type ActiveUserResult = {
   userId: string;
@@ -11,17 +14,52 @@ export type ActiveUserResult = {
 };
 
 /**
- * Resolves the active user for a request in authenticated and anonymous flows.
+ * Bepaalt hoe `anon_id` voor Identity-lookups gebruikt wordt.
+ * Oude clients kregen na accountkoppeling een user-cuid in `anon_id`; dat is geen geldige
+ * `providerUserId` voor `provider: "cookie"` en veroorzaakte Prisma-fouten op composite keys.
  *
- * @param req - Incoming request carrying auth session and anon cookie.
- * @returns Resolved user identifier and whether explicit account linking is required.
+ * @param raw - Ruwe cookiewaarde of `null`.
+ * @returns `identityProviderUserId` voor cookie-identities, of `legacyResolvedUserId` wanneer de waarde een bestaand user-id is.
  */
-export async function getActiveUser(
-  req: NextRequest,
-): Promise<ActiveUserResult> {
-  const cookieId = req.cookies.get("anon_id")?.value || null;
-  const session = await getServerSession(authOptions);
+async function resolveAnonCookieContext(raw: string | null): Promise<{
+  identityProviderUserId: string | null;
+  legacyResolvedUserId: string | null;
+}> {
+  if (!raw) {
+    return { identityProviderUserId: null, legacyResolvedUserId: null };
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { identityProviderUserId: null, legacyResolvedUserId: null };
+  }
+  const looksLikeRandomUuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      trimmed,
+    );
+  if (looksLikeRandomUuid) {
+    return { identityProviderUserId: trimmed, legacyResolvedUserId: null };
+  }
+  const userRow = await prisma.user.findUnique({
+    where: { id: trimmed },
+    select: { id: true },
+  });
+  if (userRow) {
+    Sentry.addBreadcrumb({
+      category: "auth",
+      message: "anon_id is legacy user-id cookie; skipping cookie identity key",
+      level: "info",
+    });
+    return { identityProviderUserId: null, legacyResolvedUserId: userRow.id };
+  }
+  return { identityProviderUserId: trimmed, legacyResolvedUserId: null };
+}
 
+async function resolveActiveUser(
+  cookieId: string | null,
+  session: Session | null,
+): Promise<ActiveUserResult> {
+  const { identityProviderUserId, legacyResolvedUserId } =
+    await resolveAnonCookieContext(cookieId);
   async function ensureCookieIdentityUser(cookie: string): Promise<string> {
     // Create identity and user atomically; handle races by falling back to existing identity
     try {
@@ -109,42 +147,43 @@ export async function getActiveUser(
       if (sessionEmail) {
         const existingByEmail = await prisma.user.findUnique({
           where: { email: sessionEmail },
+          select: USER_CORE_SELECT,
         });
         if (existingByEmail) {
           authUserId = existingByEmail.id;
-        } else if (cookieId) {
+        } else if (identityProviderUserId) {
           // Reuse or create a cookie-linked user atomically
           cookieIdentityFromAuthLookup = await prisma.identity.findUnique({
             where: {
               provider_providerUserId: {
                 provider: "cookie",
-                providerUserId: cookieId,
+                providerUserId: identityProviderUserId,
               },
             },
             select: { userId: true },
           });
           authUserId = cookieIdentityFromAuthLookup
             ? cookieIdentityFromAuthLookup.userId
-            : await ensureCookieIdentityUser(cookieId);
+            : await ensureCookieIdentityUser(identityProviderUserId);
         } else {
           const u = await prisma.user.create({
             data: { firstName: "", lastName: "" },
           });
           authUserId = u.id;
         }
-      } else if (cookieId) {
+      } else if (identityProviderUserId) {
         cookieIdentityFromAuthLookup = await prisma.identity.findUnique({
           where: {
             provider_providerUserId: {
               provider: "cookie",
-              providerUserId: cookieId,
+              providerUserId: identityProviderUserId,
             },
           },
           select: { userId: true },
         });
         authUserId = cookieIdentityFromAuthLookup
           ? cookieIdentityFromAuthLookup.userId
-          : await ensureCookieIdentityUser(cookieId);
+          : await ensureCookieIdentityUser(identityProviderUserId);
       } else {
         const u = await prisma.user.create({
           data: { firstName: "", lastName: "" },
@@ -156,20 +195,20 @@ export async function getActiveUser(
 
     // Now consider cookie identity merge/adopt
     let needsLink = false;
-    if (cookieId) {
+    if (identityProviderUserId) {
       const cookieIdentity =
         cookieIdentityFromAuthLookup ||
         (await prisma.identity.findUnique({
           where: {
             provider_providerUserId: {
               provider: "cookie",
-              providerUserId: cookieId,
+              providerUserId: identityProviderUserId,
             },
           },
           select: { userId: true },
         }));
       if (!cookieIdentity) {
-        await upsertIdentity("cookie", cookieId, authUserId);
+        await upsertIdentity("cookie", identityProviderUserId, authUserId);
       } else if (cookieIdentity.userId !== authUserId) {
         // Evaluate emptiness
         const [cookieUser, rsvpCount] = await Promise.all([
@@ -192,12 +231,12 @@ export async function getActiveUser(
               where: {
                 provider_providerUserId: {
                   provider: "cookie",
-                  providerUserId: cookieId,
+                  providerUserId: identityProviderUserId,
                 },
               },
               create: {
                 provider: "cookie",
-                providerUserId: cookieId,
+                providerUserId: identityProviderUserId,
                 userId: authUserId,
               },
               update: { userId: authUserId },
@@ -221,7 +260,10 @@ export async function getActiveUser(
     }
 
     // Hydrate missing fields from session
-    const current = await prisma.user.findUnique({ where: { id: authUserId } });
+    const current = await prisma.user.findUnique({
+      where: { id: authUserId },
+      select: USER_CORE_SELECT,
+    });
     const updates: {
       email?: string;
       firstName?: string;
@@ -231,6 +273,7 @@ export async function getActiveUser(
       // Only set email if it's not used by another user already
       const other = await prisma.user.findUnique({
         where: { email: sessionEmail },
+        select: USER_CORE_SELECT,
       });
       if (!other || other.id === current?.id) {
         updates.email = sessionEmail;
@@ -251,22 +294,42 @@ export async function getActiveUser(
   }
 
   // Anonymous path
-  if (cookieId) {
+  if (legacyResolvedUserId) {
+    return { userId: legacyResolvedUserId, needsLink: false };
+  }
+  if (identityProviderUserId) {
     const cookieIdentity = await prisma.identity.findUnique({
       where: {
         provider_providerUserId: {
           provider: "cookie",
-          providerUserId: cookieId,
+          providerUserId: identityProviderUserId,
         },
       },
+      select: { userId: true },
     });
     if (cookieIdentity)
       return { userId: cookieIdentity.userId, needsLink: false };
-    const userId = await ensureCookieIdentityUser(cookieId);
+    const userId = await ensureCookieIdentityUser(identityProviderUserId);
     return { userId, needsLink: false };
   }
   const user = await prisma.user.create({
     data: { firstName: "", lastName: "" },
   });
   return { userId: user.id, needsLink: false };
+}
+
+/**
+ * Resolves the active user for a request in authenticated and anonymous flows.
+ *
+ * @param req - Incoming request carrying auth session and anon cookie.
+ * @returns Resolved user identifier and whether explicit account linking is required.
+ */
+export async function getActiveUser(
+  req: NextRequest,
+): Promise<ActiveUserResult> {
+  const cookieId = req.cookies.get("anon_id")?.value || null;
+  const session = await getServerSession(authOptions);
+  return withPgConnectRetry("getActiveUser", () =>
+    resolveActiveUser(cookieId, session),
+  );
 }

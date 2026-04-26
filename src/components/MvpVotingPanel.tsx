@@ -105,12 +105,12 @@ export default function MvpVotingPanel({
   const statusText = useMemo(() => {
     if (!data) return "";
     if (data.status === "open") {
-      return "MVP voting still open";
+      return "Stemming nog open";
     }
     if (data.winner) {
       return `MVP: ${data.winner.name} (${data.winner.percent}% van ${data.totalVotes} stemmen)`;
     }
-    return "MVP voting closed";
+    return "Stemming gesloten";
   }, [data]);
 
   async function submitVote() {
@@ -205,7 +205,7 @@ export default function MvpVotingPanel({
   if (loading && !data) {
     return (
       <ContainerTag className={containerClassName} style={containerStyle}>
-        <h2 style={{ marginTop: 0 }}>Man of the Match</h2>
+        <h2 style={{ marginTop: 0 }}>Man of the match</h2>
         <div className="muted">Laden…</div>
       </ContainerTag>
     );
@@ -213,7 +213,7 @@ export default function MvpVotingPanel({
 
   return (
     <ContainerTag className={containerClassName} style={containerStyle}>
-      <h2 style={{ marginTop: 0 }}>Man of the Match</h2>
+      <h2 style={{ marginTop: 0 }}>Man of the match</h2>
       <p className="muted" style={{ marginTop: -4, marginBottom: 12 }}>
         {statusText}
       </p>

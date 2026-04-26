@@ -9,17 +9,19 @@ This document reflects the features that exist in the code today. Planned or fut
 ### Current Capabilities
 
 <!-- AUTOGEN:features -->
-| Feature | Docs |
-|---|---|
-| admin | docs/tech/admin/README.md |
-| auth | docs/tech/auth/README.md |
-| events | docs/tech/events/README.md |
-| identity-link | docs/tech/identity-link/README.md |
+
+| Feature        | Docs                               |
+| -------------- | ---------------------------------- |
+| admin          | docs/tech/admin/README.md          |
+| auth           | docs/tech/auth/README.md           |
+| events         | docs/tech/events/README.md         |
+| identity-link  | docs/tech/identity-link/README.md  |
 | password-reset | docs/tech/password-reset/README.md |
-| profile | docs/tech/profile/README.md |
-| reports | docs/tech/reports/README.md |
-| rsvp | docs/tech/rsvp/README.md |
-| training | docs/tech/training/README.md |
+| profile        | docs/tech/profile/README.md        |
+| reports        | docs/tech/reports/README.md        |
+| rsvp           | docs/tech/rsvp/README.md           |
+| training       | docs/tech/training/README.md       |
+
 <!-- /AUTOGEN:features -->
 
 ### Implemented User Journeys
@@ -42,10 +44,13 @@ This document reflects the features that exist in the code today. Planned or fut
 ### API and Routes Inventory
 
 <!-- AUTOGEN:routes -->
+
 # Routes Inventory
 
 ## API Routes
 
+- /api/admin/feedback
+- /api/admin/feedback/[id]
 - /api/admin/status
 - /api/admin/users
 - /api/auth/[...nextauth]
@@ -53,11 +58,13 @@ This document reflects the features that exist in the code today. Planned or fut
 - /api/auth/password/reset-confirm
 - /api/auth/password/reset-request
 - /api/auth/register
+- /api/cron/idea-weekly
 - /api/debug/attendance
 - /api/debug/cleanup/orphans
 - /api/debug/migrate/event-ids
 - /api/debug/persistence
 - /api/events
+- /api/feedback
 - /api/identity/adopt
 - /api/identity/status
 - /api/link/complete
@@ -78,11 +85,14 @@ This document reflects the features that exist in the code today. Planned or fut
 - /api/training/overview
 - /api/training/sessions
 - /api/users
+- /api/whats-new
+- /api/whats-new/ack
 
 ## Pages
 
-- 
+-
 - /admin
+- /admin/feedback
 - /attendance
 - /docs
 - /login

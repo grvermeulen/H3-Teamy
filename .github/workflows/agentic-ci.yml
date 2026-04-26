@@ -1,8 +1,22 @@
+# Agent-/ontwikkelaarworkflow (niet door deze job geautomatiseerd):
+# Na fixes voor CodeRabbit- of andere PR-reviewopmerkingen: reviewthreads op GitHub
+# op "Resolved" zetten (zelfde ronde als groene checks). Zie AGENTS.md en
+# .cursor/rules/verification-loop.mdc (fase 7).
+# E2E tegen Vercel Preview (na deploy) zit in preview-e2e-verify.yml; post-merge smoke in post-merge-verify.yml.
 name: Agentic CI
 
 on:
   push:
-    branches: ["main", "master", "image", "feat/**", "fix/**", "dependabot/**"]
+    branches:
+      [
+        "main",
+        "master",
+        "image",
+        "feat/**",
+        "fix/**",
+        "dependabot/**",
+        "cursor/**",
+      ]
   pull_request:
     branches: ["main", "master", "image"]
 
@@ -30,8 +44,14 @@ jobs:
       - name: Install Dependencies
         run: npm ci --legacy-peer-deps --ignore-scripts
 
+      # Prisma 7 laadt prisma.config.ts en verwacht DATABASE_URL; generate gebruikt geen echte connectie.
       - name: Generate Prisma Client
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
         run: npx prisma generate
+
+      - name: Check for merge conflict markers in src/
+        run: npm run check:merge-conflicts
 
       - name: Lint
         run: npm run lint

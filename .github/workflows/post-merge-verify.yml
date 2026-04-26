@@ -1,0 +1,58 @@
+# Post-merge deterministische verificatie (automation / Dependabot-agent):
+# - Triggert na push naar de default branch zodat een merge-commit gecontroleerd kan worden.
+# - Alleen niet-destructieve checks (GET-only): geen registratie, geen user-delete op productie.
+# - PR/preview: dezelfde smoke-tests draaien tegen Vercel Preview vóór merge via
+#   `.github/workflows/preview-e2e-verify.yml` (URL uit deployment, geen secret nodig).
+# Vereist repository secret: PRODUCTION_VERIFY_BASE_URL (volledige origin, zonder trailing slash).
+name: Post-merge verification
+
+on:
+  push:
+    branches: ["main", "master", "image"]
+  workflow_dispatch:
+
+concurrency:
+  group: post-merge-verify-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify-production-readonly:
+    name: Production smoke (read-only)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps --ignore-scripts
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Vitest HTTP smoke (read-only)
+        env:
+          PRODUCTION_VERIFY_BASE_URL: ${{ secrets.PRODUCTION_VERIFY_BASE_URL }}
+        run: npx vitest run tests/production-verify-http.test.ts
+
+      - name: Playwright browser smoke (read-only)
+        env:
+          PRODUCTION_VERIFY_BASE_URL: ${{ secrets.PRODUCTION_VERIFY_BASE_URL }}
+        run: npm run test:e2e:post-merge
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/

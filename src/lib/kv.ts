@@ -1,6 +1,11 @@
+// Side-effect import — required, see envBootstrap.ts. Without it Preview
+// deploys read the production Redis/KV URLs instead of the per-deploy Upstash
+// instance provisioned by the Neon/Upstash marketplace integrations.
+import "./envBootstrap";
 import * as Sentry from "@sentry/nextjs";
 import type { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { withPgConnectRetry } from "./prismaConnectRetry";
 
 type RsvpStatus = "yes" | "no" | "maybe" | null;
 type UserProfile = {
@@ -12,7 +17,7 @@ let prismaLoaded = false;
 let prisma: PrismaClient | null = null;
 async function getPrisma(): Promise<PrismaClient | null> {
   if (prismaLoaded) return prisma;
-  if (!process.env.DATABASE_URL) {
+  if (!process.env.DATABASE_URL && !process.env.PRISMA_DATABASE_URL) {
     prismaLoaded = true;
     prisma = null;
     return null;
@@ -47,55 +52,54 @@ async function getRedis() {
   return redisClient;
 }
 async function kvGet(key: string): Promise<RsvpStatus | null> {
-  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
-    const redis = await getRedis();
-    if (redis) {
-      const val = (await redis.get(key)) as RsvpStatus | null;
-      if (val !== "yes" && val !== "no" && val !== "maybe") return null;
-      return val;
-    }
-    return memoryStore.get(key) ?? null;
+  const redis = await getRedis();
+  if (redis) {
+    const val = (await redis.get(key)) as RsvpStatus | null;
+    if (val !== "yes" && val !== "no" && val !== "maybe") return null;
+    return val;
   }
-  const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
-    },
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  const data = await res.json().catch(() => ({}) as any);
-  const val = data?.result ?? null;
-  if (val !== "yes" && val !== "no" && val !== "maybe") return null;
-  return val;
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => ({}) as any);
+    const val = data?.result ?? null;
+    if (val !== "yes" && val !== "no" && val !== "maybe") return null;
+    return val;
+  }
+  return memoryStore.get(key) ?? null;
 }
 
 async function kvSet(key: string, value: RsvpStatus): Promise<void> {
-  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
-    const redis = await getRedis();
-    if (redis) {
-      if (value === null) {
-        await redis.del(key);
-      } else {
-        await redis.set(key, value);
-      }
-      return;
+  const redis = await getRedis();
+  if (redis) {
+    if (value === null) {
+      await redis.del(key);
+    } else {
+      await redis.set(key, value);
     }
-    if (value === null) memoryStore.delete(key);
-    else memoryStore.set(key, value);
     return;
   }
-  const url = `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`;
-  const body = new URLSearchParams();
-  body.set("value", value ?? "");
-  await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
-      "content-type": "application/x-www-form-urlencoded",
-    },
-    body,
-  });
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    await fetch(
+      `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+        },
+        body: value ?? "",
+      },
+    );
+    return;
+  }
+  if (value === null) memoryStore.delete(key);
+  else memoryStore.set(key, value);
 }
 
 export async function getRsvp(
@@ -115,6 +119,14 @@ export async function getRsvp(
   return kvGet(key);
 }
 
+/**
+ * Stores or clears an RSVP for a calendar event when Prisma is available.
+ * Ensures stub `Event` and `User` rows exist so FK constraints (`Rsvp_eventId_fkey`, user) are satisfied.
+ *
+ * @param userId - Authenticated user id.
+ * @param eventId - Calendar event id (same string as in the UI / iCal-derived events).
+ * @param status - RSVP value, or `null` to remove the row.
+ */
 export async function setRsvp(
   userId: string,
   eventId: string,
@@ -125,9 +137,17 @@ export async function setRsvp(
     if (status === null) {
       await p.rsvp
         .delete({ where: { userId_eventId: { userId, eventId } } })
-        .catch(() => {});
+        .catch((error: unknown) => {
+          Sentry.captureException(error, {
+            extra: { userId, eventId, context: "setRsvp_delete" },
+          });
+        });
     } else {
-      // Ensure user exists to satisfy FK constraint
+      await p.event.upsert({
+        where: { id: eventId },
+        create: { id: eventId },
+        update: {},
+      });
       await p.user.upsert({
         where: { id: userId },
         create: { id: userId, firstName: "", lastName: "" },
@@ -148,23 +168,8 @@ export async function setRsvp(
 // Generic JSON KV helpers for caching lists/objects
 export async function kvGetJson<T = any>(key: string): Promise<T | null> {
   const redis = await getRedis();
-  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
-    if (redis) {
-      const raw = (await redis.get(key)) as string | null;
-      if (!raw) return null;
-      try {
-        return JSON.parse(raw) as T;
-      } catch {
-        return null;
-      }
-    }
-    const exp = memoryTtl.get(key);
-    if (typeof exp === "number" && Date.now() > exp) {
-      memoryJson.delete(key);
-      memoryTtl.delete(key);
-      return null;
-    }
-    const raw = memoryJson.get(key);
+  if (redis) {
+    const raw = (await redis.get(key)) as string | null;
     if (!raw) return null;
     try {
       return JSON.parse(raw) as T;
@@ -172,14 +177,29 @@ export async function kvGetJson<T = any>(key: string): Promise<T | null> {
       return null;
     }
   }
-  const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` },
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  const data = await res.json().catch(() => ({}) as any);
-  const raw = data?.result ?? null;
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => ({}) as any);
+    const raw = data?.result ?? null;
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return null;
+    }
+  }
+  const exp = memoryTtl.get(key);
+  if (typeof exp === "number" && Date.now() > exp) {
+    memoryJson.delete(key);
+    memoryTtl.delete(key);
+    return null;
+  }
+  const raw = memoryJson.get(key);
   if (!raw) return null;
   try {
     return JSON.parse(raw) as T;
@@ -191,43 +211,46 @@ export async function kvGetJson<T = any>(key: string): Promise<T | null> {
 export async function kvSetJson(key: string, value: any): Promise<void> {
   const redis = await getRedis();
   const payload = JSON.stringify(value);
-  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
-    if (redis) {
-      await redis.set(key, payload);
-      return;
-    }
-    memoryJson.set(key, payload);
+  if (redis) {
+    await redis.set(key, payload);
     return;
   }
-  const url = `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`;
-  const body = new URLSearchParams();
-  body.set("value", payload);
-  await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
-      "content-type": "application/x-www-form-urlencoded",
-    },
-    body,
-  });
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    await fetch(
+      `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+        },
+        body: payload,
+      },
+    );
+    return;
+  }
+  memoryJson.set(key, payload);
 }
 
 export async function kvDelete(key: string): Promise<void> {
   const redis = await getRedis();
-  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
-    if (redis) {
-      await redis.del(key).catch(() => {});
-      return;
-    }
-    memoryJson.delete(key);
-    memoryTtl.delete(key);
+  if (redis) {
+    await redis.del(key).catch(() => {});
     return;
   }
-  const url = `${process.env.KV_REST_API_URL}/del/${encodeURIComponent(key)}`;
-  await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` },
-  }).catch(() => {});
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    await fetch(
+      `${process.env.KV_REST_API_URL}/del/${encodeURIComponent(key)}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+        },
+      },
+    ).catch(() => {});
+    return;
+  }
+  memoryJson.delete(key);
+  memoryTtl.delete(key);
 }
 
 function makeToken(): string {
@@ -369,18 +392,21 @@ export async function getUserProfiles(
 
   const p = await getPrisma();
   if (p) {
-    const rows = await p.user.findMany({
-      where: { id: { in: uniqueIds } },
-      select: { id: true, firstName: true, lastName: true, email: true },
+    return withPgConnectRetry("getUserProfiles", async () => {
+      const rows = await p.user.findMany({
+        where: { id: { in: uniqueIds } },
+        select: { id: true, firstName: true, lastName: true, email: true },
+      });
+      const result: Record<string, UserProfile> = {};
+      for (const row of rows) {
+        result[row.id] = {
+          firstName: row.firstName,
+          lastName: row.lastName,
+          email: row.email ?? undefined,
+        };
+      }
+      return result;
     });
-    for (const row of rows) {
-      out[row.id] = {
-        firstName: row.firstName,
-        lastName: row.lastName,
-        email: row.email ?? undefined,
-      };
-    }
-    return out;
   }
 
   const redis = await getRedis();
@@ -429,11 +455,13 @@ export async function listEventRsvps(
 ): Promise<{ userId: string; status: RsvpStatus }[]> {
   const p = await getPrisma();
   if (p) {
-    const rows = await p.rsvp.findMany({ where: { eventId } });
-    return rows.map((r: any) => ({
-      userId: r.userId,
-      status: (r.status as RsvpStatus) ?? null,
-    }));
+    return withPgConnectRetry("listEventRsvps", async () => {
+      const rows = await p.rsvp.findMany({ where: { eventId } });
+      return rows.map((r: { userId: string; status: unknown }) => ({
+        userId: r.userId,
+        status: (r.status as RsvpStatus) ?? null,
+      }));
+    });
   }
   const redis = await getRedis();
   if (redis) {
@@ -509,20 +537,23 @@ export async function getUserRsvpStats(
 
   const p = await getPrisma();
   if (p) {
-    const rows = await p.rsvp.findMany({
-      where: { userId: { in: uniqueIds } },
-      select: { userId: true, status: true },
+    return withPgConnectRetry("getUserRsvpStats", async () => {
+      const rows = await p.rsvp.findMany({
+        where: { userId: { in: uniqueIds } },
+        select: { userId: true, status: true },
+      });
+      const result: Record<string, { total: number; yes: number }> = {};
+      for (const userId of uniqueIds) {
+        result[userId] = { total: 0, yes: 0 };
+      }
+      for (const row of rows) {
+        const current = result[row.userId] || { total: 0, yes: 0 };
+        current.total += 1;
+        if (row.status === "yes") current.yes += 1;
+        result[row.userId] = current;
+      }
+      return result;
     });
-    for (const userId of uniqueIds) {
-      out[userId] = { total: 0, yes: 0 };
-    }
-    for (const row of rows) {
-      const current = out[row.userId] || { total: 0, yes: 0 };
-      current.total += 1;
-      if (row.status === "yes") current.yes += 1;
-      out[row.userId] = current;
-    }
-    return out;
   }
 
   for (const userId of uniqueIds) {
@@ -555,20 +586,32 @@ type MatchReport = {
   mvpResult?: MvpResult;
 };
 
+/**
+ * Retrieves a match report for the given event.
+ * Primary: PostgreSQL. Fallback: Redis / KV / memory.
+ *
+ * @param eventId - Calendar event id.
+ * @returns The report or null if none exists.
+ */
 export async function getReport(eventId: string): Promise<MatchReport | null> {
-  const key = `report:${eventId}`;
-  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
-    const redis = await getRedis();
-    if (redis) {
-      const raw = (await redis.get(key)) as string | null;
-      if (!raw) return null;
-      try {
-        return JSON.parse(raw) as MatchReport;
-      } catch {
-        return null;
-      }
+  const p = await getPrisma();
+  if (p) {
+    const row = await p.matchReport.findUnique({ where: { eventId } });
+    if (row) {
+      return {
+        content: row.content,
+        createdAt: row.createdAt.toISOString(),
+        authorId: row.authorId ?? undefined,
+        mvpResult: (row.mvpResult as MvpResult) ?? undefined,
+      };
     }
-    const raw = memoryStore.get(key) as unknown as string | undefined;
+    return null;
+  }
+
+  const key = `report:${eventId}`;
+  const redis = await getRedis();
+  if (redis) {
+    const raw = (await redis.get(key)) as string | null;
     if (!raw) return null;
     try {
       return JSON.parse(raw) as MatchReport;
@@ -576,16 +619,25 @@ export async function getReport(eventId: string): Promise<MatchReport | null> {
       return null;
     }
   }
-  const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
-    },
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  const data = await res.json().catch(() => ({}) as any);
-  const raw = data?.result ?? null;
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => ({}) as Record<string, unknown>);
+    const raw = (data as Record<string, unknown>)?.result ?? null;
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw as string) as MatchReport;
+    } catch {
+      return null;
+    }
+  }
+  const raw = memoryStore.get(key) as unknown as string | undefined;
   if (!raw) return null;
   try {
     return JSON.parse(raw) as MatchReport;
@@ -594,36 +646,94 @@ export async function getReport(eventId: string): Promise<MatchReport | null> {
   }
 }
 
+/**
+ * Stores or removes a match report for the given event.
+ * Primary: PostgreSQL (upsert). Also writes to Redis for cache coherence.
+ *
+ * @param eventId - Calendar event id.
+ * @param report - The report to store, or null to delete.
+ */
 export async function setReport(
   eventId: string,
   report: MatchReport | null,
 ): Promise<void> {
-  const key = `report:${eventId}`;
-  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
+  const p = await getPrisma();
+  if (p) {
+    if (report === null) {
+      await p.matchReport
+        .delete({ where: { eventId } })
+        .catch((error: unknown) => {
+          Sentry.captureException(error, {
+            extra: { eventId, context: "setReport_delete" },
+          });
+        });
+    } else {
+      await p.event.upsert({
+        where: { id: eventId },
+        create: { id: eventId },
+        update: {},
+      });
+      await p.matchReport.upsert({
+        where: { eventId },
+        create: {
+          eventId,
+          content: report.content,
+          authorId: report.authorId,
+          mvpResult: report.mvpResult ?? undefined,
+        },
+        update: {
+          content: report.content,
+          authorId: report.authorId,
+          mvpResult: report.mvpResult ?? undefined,
+        },
+      });
+    }
+    // Also update Redis cache for read performance
+    const key = `report:${eventId}`;
     const redis = await getRedis();
     if (redis) {
       if (report === null) {
-        await redis.del(key);
-        return;
+        await redis.del(key).catch((err: unknown) => {
+          Sentry.captureException(err, {
+            extra: { eventId, context: "setReport_redis_del" },
+          });
+        });
+      } else {
+        await redis.set(key, JSON.stringify(report)).catch((err: unknown) => {
+          Sentry.captureException(err, {
+            extra: { eventId, context: "setReport_redis_set" },
+          });
+        });
       }
-      await redis.set(key, JSON.stringify(report));
-      return;
     }
-    if (report === null) memoryStore.delete(key);
-    else memoryStore.set(key, JSON.stringify(report) as any);
     return;
   }
-  const url = `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`;
-  const body = new URLSearchParams();
-  body.set("value", report ? JSON.stringify(report) : "");
-  await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
-      "content-type": "application/x-www-form-urlencoded",
-    },
-    body,
-  });
+
+  const key = `report:${eventId}`;
+  const redis = await getRedis();
+  if (redis) {
+    if (report === null) {
+      await redis.del(key);
+      return;
+    }
+    await redis.set(key, JSON.stringify(report));
+    return;
+  }
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    await fetch(
+      `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+        },
+        body: report ? JSON.stringify(report) : "",
+      },
+    );
+    return;
+  }
+  if (report === null) memoryStore.delete(key);
+  else memoryStore.set(key, JSON.stringify(report) as any);
 }
 
 // Training Attendance
@@ -860,7 +970,12 @@ export async function listAllAttendanceKeys(): Promise<string[]> {
 }
 
 // Roles (admin/trainer/player) stored in KV/Redis for simplicity
-type Roles = { admin?: boolean; trainer?: boolean; player?: boolean };
+export type UserRoles = {
+  admin?: boolean;
+  trainer?: boolean;
+  player?: boolean;
+};
+type Roles = UserRoles;
 
 export async function getUserRoles(userId: string): Promise<Roles> {
   const key = `roles:${userId}`;
