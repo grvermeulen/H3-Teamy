@@ -586,7 +586,28 @@ type MatchReport = {
   mvpResult?: MvpResult;
 };
 
+/**
+ * Retrieves a match report for the given event.
+ * Primary: PostgreSQL. Fallback: Redis / KV / memory.
+ *
+ * @param eventId - Calendar event id.
+ * @returns The report or null if none exists.
+ */
 export async function getReport(eventId: string): Promise<MatchReport | null> {
+  const p = await getPrisma();
+  if (p) {
+    const row = await p.matchReport.findUnique({ where: { eventId } });
+    if (row) {
+      return {
+        content: row.content,
+        createdAt: row.createdAt.toISOString(),
+        authorId: row.authorId ?? undefined,
+        mvpResult: (row.mvpResult as MvpResult) ?? undefined,
+      };
+    }
+    return null;
+  }
+
   const key = `report:${eventId}`;
   const redis = await getRedis();
   if (redis) {
@@ -607,11 +628,11 @@ export async function getReport(eventId: string): Promise<MatchReport | null> {
       cache: "no-store",
     });
     if (!res.ok) return null;
-    const data = await res.json().catch(() => ({}) as any);
-    const raw = data?.result ?? null;
+    const data = await res.json().catch(() => ({}) as Record<string, unknown>);
+    const raw = (data as Record<string, unknown>)?.result ?? null;
     if (!raw) return null;
     try {
-      return JSON.parse(raw) as MatchReport;
+      return JSON.parse(raw as string) as MatchReport;
     } catch {
       return null;
     }
@@ -625,10 +646,69 @@ export async function getReport(eventId: string): Promise<MatchReport | null> {
   }
 }
 
+/**
+ * Stores or removes a match report for the given event.
+ * Primary: PostgreSQL (upsert). Also writes to Redis for cache coherence.
+ *
+ * @param eventId - Calendar event id.
+ * @param report - The report to store, or null to delete.
+ */
 export async function setReport(
   eventId: string,
   report: MatchReport | null,
 ): Promise<void> {
+  const p = await getPrisma();
+  if (p) {
+    if (report === null) {
+      await p.matchReport
+        .delete({ where: { eventId } })
+        .catch((error: unknown) => {
+          Sentry.captureException(error, {
+            extra: { eventId, context: "setReport_delete" },
+          });
+        });
+    } else {
+      await p.event.upsert({
+        where: { id: eventId },
+        create: { id: eventId },
+        update: {},
+      });
+      await p.matchReport.upsert({
+        where: { eventId },
+        create: {
+          eventId,
+          content: report.content,
+          authorId: report.authorId,
+          mvpResult: report.mvpResult ?? undefined,
+        },
+        update: {
+          content: report.content,
+          authorId: report.authorId,
+          mvpResult: report.mvpResult ?? undefined,
+        },
+      });
+    }
+    // Also update Redis cache for read performance
+    const key = `report:${eventId}`;
+    const redis = await getRedis();
+    if (redis) {
+      if (report === null) {
+        await redis.del(key).catch((err: unknown) => {
+          Sentry.captureException(err, {
+            extra: { eventId, context: "setReport_redis_del" },
+          });
+        });
+      } else {
+        await redis.set(key, JSON.stringify(report)).catch((err: unknown) => {
+          Sentry.captureException(err, {
+            extra: { eventId, context: "setReport_redis_set" },
+          });
+        });
+      }
+    }
+    return;
+  }
+
   const key = `report:${eventId}`;
   const redis = await getRedis();
   if (redis) {

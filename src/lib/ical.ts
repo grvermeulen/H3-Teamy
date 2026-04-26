@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import ical from "ical";
+import type { PrismaClient } from "@prisma/client";
 import { TeamEvent } from "../types";
 import { canonicalEventId } from "./eventId";
 import { fetchWithTimeoutAndRetries } from "./fetchWithRetry";
@@ -19,6 +20,51 @@ type ParsedVEvent = {
 const PRUNE_PAST_MS = 400 * 24 * 60 * 60 * 1000;
 /** Future events kept — Sportlink feeds often list the next full season (>365 days). */
 const PRUNE_FUTURE_MS = 540 * 24 * 60 * 60 * 1000;
+
+let dbLoaded = false;
+let prisma: PrismaClient | null = null;
+async function getLazyPrisma(): Promise<PrismaClient | null> {
+  if (dbLoaded) return prisma;
+  if (!process.env.DATABASE_URL && !process.env.PRISMA_DATABASE_URL) {
+    dbLoaded = true;
+    prisma = null;
+    return null;
+  }
+  const mod = await import("./db");
+  prisma = mod.prisma;
+  dbLoaded = true;
+  return prisma;
+}
+
+/**
+ * Loads historical events from the database when the iCal feed and cache are
+ * both empty. Only returns events that have a title and startDate populated.
+ */
+async function fetchEventsFromDb(): Promise<TeamEvent[]> {
+  try {
+    const p = await getLazyPrisma();
+    if (!p) return [];
+    const rows = await p.event.findMany({
+      where: { title: { not: null }, startDate: { not: null } },
+      orderBy: { startDate: "asc" },
+    });
+    return rows
+      .filter((r) => r.title && r.startDate)
+      .map((r) => ({
+        id: r.id,
+        title: r.title!,
+        start: r.startDate!.toISOString(),
+        end: r.endDate?.toISOString(),
+        description: r.description ?? undefined,
+      }));
+  } catch (err: unknown) {
+    Sentry.captureException(
+      err instanceof Error ? err : new Error(String(err)),
+      { tags: { source: "event_db_fallback" } },
+    );
+    return [];
+  }
+}
 
 function icalDateToIso(value: Date | string | number): string {
   const d = value instanceof Date ? value : new Date(value);
@@ -106,6 +152,12 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
     });
   } else if (cached.length) {
     merged = cached;
+  }
+
+  // Fallback: when both iCal feed and cache are empty, load from the database
+  // so historical events with RSVPs remain visible.
+  if (merged.length === 0) {
+    merged = await fetchEventsFromDb();
   }
 
   return merged;
