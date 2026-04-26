@@ -51,6 +51,12 @@ describe("fetchTeamEvents when ical.parseICS throws", () => {
     expect(events).toHaveLength(1);
     expect(events[0].title).toBe("Cached Match");
     expect(kvSetJson).not.toHaveBeenCalled();
-    expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error));
+    expect(Sentry.captureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: { source: "sportlink_ical" },
+        fingerprint: ["sportlink-ical-fetch"],
+      }),
+    );
   });
 });

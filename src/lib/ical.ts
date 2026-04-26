@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/nextjs";
 import ical from "ical";
 import { TeamEvent } from "../types";
 import { canonicalEventId } from "./eventId";
+import { fetchWithTimeoutAndRetries } from "./fetchWithRetry";
 import { kvGetJson, kvSetJson } from "./kv";
 
 type ParsedVEvent = {
@@ -29,6 +30,7 @@ function icalDateToIso(value: Date | string | number): string {
  * Uses the `ical` package for parsing (not `node-ical`) so the SSR bundle avoids `rrule-temporal` / `@js-temporal/polyfill` / `jsbi`, which can break under Next.js Turbopack (`BigInt is not a function` on the polyfill).
  * Merges new data with existing cached data to preserve history.
  * Events outside a bounded window (roughly 400 days past through 540 days future) are dropped when updating the cache.
+ * The Sportlink HTTP request uses a bounded timeout and a few retries so transient `ETIMEDOUT` spikes do not fail the page or spam Sentry on every retry.
  *
  * @returns A list of {@link TeamEvent} objects sorted by date.
  */
@@ -40,7 +42,11 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
 
   if (url) {
     try {
-      const res = await fetch(url, { cache: "no-store" });
+      const res = await fetchWithTimeoutAndRetries(url, {
+        cache: "no-store",
+        timeoutMs: 12_000,
+        maxAttempts: 3,
+      });
       if (!res.ok) throw new Error(`Failed to fetch iCal: ${res.status}`);
       const text = await res.text();
       const data = ical.parseICS(text) as Record<string, ParsedVEvent>;
@@ -64,9 +70,11 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
           } satisfies TeamEvent;
         });
     } catch (err: unknown) {
-      Sentry.captureException(
-        err instanceof Error ? err : new Error(String(err)),
-      );
+      const error = err instanceof Error ? err : new Error(String(err));
+      Sentry.captureException(error, {
+        tags: { source: "sportlink_ical" },
+        fingerprint: ["sportlink-ical-fetch"],
+      });
     }
   }
 
