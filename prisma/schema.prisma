@@ -23,6 +23,18 @@ model User {
   feedback  Feedback[]
 }
 
+model Event {
+  id          String    @id
+  createdAt   DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  title       String?
+  description String?
+  startDate   DateTime?
+  endDate     DateTime?
+
+  rsvps Rsvp[]
+}
+
 model Rsvp {
   id        String  @id @default(cuid())
   createdAt DateTime @default(now())
@@ -31,7 +43,8 @@ model Rsvp {
   eventId   String
   status    String  // "yes" | "no" | "maybe"
 
-  user User @relation(fields: [userId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@unique([userId, eventId])
   @@index([eventId])

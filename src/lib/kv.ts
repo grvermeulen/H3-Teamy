@@ -120,6 +120,14 @@ export async function getRsvp(
   return kvGet(key);
 }
 
+/**
+ * Stores or clears an RSVP for a calendar event when Prisma is available.
+ * Ensures stub `Event` and `User` rows exist so FK constraints (`Rsvp_eventId_fkey`, user) are satisfied.
+ *
+ * @param userId - Authenticated user id.
+ * @param eventId - Calendar event id (same string as in the UI / iCal-derived events).
+ * @param status - RSVP value, or `null` to remove the row.
+ */
 export async function setRsvp(
   userId: string,
   eventId: string,
@@ -130,9 +138,17 @@ export async function setRsvp(
     if (status === null) {
       await p.rsvp
         .delete({ where: { userId_eventId: { userId, eventId } } })
-        .catch(() => {});
+        .catch((error: unknown) => {
+          Sentry.captureException(error, {
+            extra: { userId, eventId, context: "setRsvp_delete" },
+          });
+        });
     } else {
-      // Ensure user exists to satisfy FK constraint
+      await p.event.upsert({
+        where: { id: eventId },
+        create: { id: eventId },
+        update: {},
+      });
       await p.user.upsert({
         where: { id: userId },
         create: { id: userId, firstName: "", lastName: "" },
