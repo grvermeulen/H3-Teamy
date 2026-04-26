@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { fetchJsonOr } from "../lib/safeClientJson";
 import type { TeamEvent, RsvpStatus } from "../types";
+import { splitPastAndFutureByStart } from "../lib/listSplitPast";
 import GenerateReportButton from "./GenerateReportButton";
 import ReportPreview from "./ReportPreview";
 import MvpVoteButton from "./MvpVoteButton";
@@ -159,21 +159,152 @@ export default function EventList({ events }: Props) {
     }
   }
 
-  const grouped = useMemo(() => {
-    const now = nowTs || 0;
-    const allSorted = events
-      .slice()
-      .sort(
-        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
-      );
-    const idx = allSorted.findIndex((e) => new Date(e.start).getTime() >= now);
-    const future = idx === -1 ? [] : allSorted.slice(idx);
-    // last two past (if available)
-    const past = (idx === -1 ? allSorted : allSorted.slice(0, idx)).slice(-2);
-    // If there are no past items at all yet (first ever match hasn't been played), just return future
-    // But once the very first match has been played, ensure at least that single past match remains visible
-    return [...past, ...future];
-  }, [events, nowTs]);
+  const { recentPast, olderPast, future } = useMemo(
+    () => splitPastAndFutureByStart(events, nowTs || 0, 3),
+    [events, nowTs],
+  );
+
+  const visibleCount =
+    recentPast.length + olderPast.length + future.length;
+
+  function renderEventCard(evt: TeamEvent) {
+    const start = new Date(evt.start);
+    const end = evt.end ? new Date(evt.end) : undefined;
+    const status = rsvpMap[evt.id] || null;
+    return (
+      <div className="card" key={evt.id}>
+        <div className="row" style={{ flexWrap: "wrap" }}>
+          <div className="grow">
+            <div className="eventTitle">{evt.title}</div>
+            <div className="eventMeta muted">
+              <span className="badge badge-date" suppressHydrationWarning>
+                {mounted ? formatEventDate(start) : ""}
+              </span>
+              <span className="badge badge-time" suppressHydrationWarning>
+                {mounted ? formatEventTime(start, end) : ""}
+              </span>
+              {evt.location ? (
+                <span className="badge">{evt.location}</span>
+              ) : null}
+              {counts[evt.id] ? (
+                <span className="badge" aria-label="RSVP-overzicht">
+                  Ja <span className="count-yes">{counts[evt.id].yes}</span>{" "}
+                  · Misschien{" "}
+                  <span className="count-maybe">
+                    {counts[evt.id].maybe}
+                  </span>{" "}
+                  · Nee{" "}
+                  <span className="count-no">{counts[evt.id].no}</span>
+                </span>
+              ) : null}
+            </div>
+          </div>
+          {loggedIn ? (
+            <div
+              className="rsvp"
+              style={{ width: "100%", justifyContent: "flex-end" }}
+            >
+              <button
+                className={status === "yes" ? "active-yes" : ""}
+                aria-pressed={status === "yes"}
+                onClick={() =>
+                  setRsvp(evt.id, status === "yes" ? null : "yes")
+                }
+              >
+                Ja
+              </button>
+              <button
+                className={status === "maybe" ? "active-maybe" : ""}
+                aria-pressed={status === "maybe"}
+                onClick={() =>
+                  setRsvp(evt.id, status === "maybe" ? null : "maybe")
+                }
+              >
+                Misschien
+              </button>
+              <button
+                className={status === "no" ? "active-no" : ""}
+                aria-pressed={status === "no"}
+                onClick={() =>
+                  setRsvp(evt.id, status === "no" ? null : "no")
+                }
+              >
+                Nee
+              </button>
+            </div>
+          ) : null}
+        </div>
+        {loggedIn ? (
+          <div
+            className="rsvp"
+            style={{
+              justifyContent: "flex-end",
+              marginTop: 8,
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <ReportPreview eventId={evt.id} />
+            <MvpVoteButton eventId={evt.id} />
+          </div>
+        ) : null}
+        {loggedIn ? (
+          <GenerateReportButton eventId={evt.id} opponent={evt.title} />
+        ) : null}
+        {evt.description ? (
+          <div className="muted" style={{ marginTop: 8 }}>
+            {evt.description}
+          </div>
+        ) : null}
+        {loggedIn ? (
+          <details
+            style={{ marginTop: 10 }}
+            onToggle={(e) => {
+              const el = e.currentTarget as HTMLDetailsElement;
+              if (el.open) void ensureListsLoaded(evt.id);
+            }}
+          >
+            <summary className="muted">RSVP-lijst tonen</summary>
+            <div className="rsvp-columns">
+              <div>
+                <div className="badge">Ja</div>
+                <div className="muted" style={{ marginTop: 4 }}>
+                  {(lists[evt.id]?.yes || []).map((u) => (
+                    <div key={u.id}>{u.name}</div>
+                  ))}
+                  {(lists[evt.id]?.yes || []).length === 0 ? (
+                    <div>—</div>
+                  ) : null}
+                </div>
+              </div>
+              <div>
+                <div className="badge">Misschien</div>
+                <div className="muted" style={{ marginTop: 4 }}>
+                  {(lists[evt.id]?.maybe || []).map((u) => (
+                    <div key={u.id}>{u.name}</div>
+                  ))}
+                  {(lists[evt.id]?.maybe || []).length === 0 ? (
+                    <div>—</div>
+                  ) : null}
+                </div>
+              </div>
+              <div>
+                <div className="badge">Nee</div>
+                <div className="muted" style={{ marginTop: 4 }}>
+                  {(lists[evt.id]?.no || []).map((u) => (
+                    <div key={u.id}>{u.name}</div>
+                  ))}
+                  {(lists[evt.id]?.no || []).length === 0 ? (
+                    <div>—</div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          </details>
+        ) : null}
+      </div>
+    );
+  }
 
   // Niets renderen tot de auth-check klaar is
   if (!authChecked) {
@@ -215,147 +346,30 @@ export default function EventList({ events }: Props) {
           {notice}
         </div>
       ) : null}
-      {grouped.map((evt) => {
-        const start = new Date(evt.start);
-        const end = evt.end ? new Date(evt.end) : undefined;
-        const status = rsvpMap[evt.id] || null;
-        return (
-          <div className="card" key={evt.id}>
-            <div className="row" style={{ flexWrap: "wrap" }}>
-              <div className="grow">
-                <div className="eventTitle">{evt.title}</div>
-                <div className="eventMeta muted">
-                  <span className="badge badge-date" suppressHydrationWarning>
-                    {mounted ? formatEventDate(start) : ""}
-                  </span>
-                  <span className="badge badge-time" suppressHydrationWarning>
-                    {mounted ? formatEventTime(start, end) : ""}
-                  </span>
-                  {evt.location ? (
-                    <span className="badge">{evt.location}</span>
-                  ) : null}
-                  {counts[evt.id] ? (
-                    <span className="badge" aria-label="RSVP-overzicht">
-                      Ja <span className="count-yes">{counts[evt.id].yes}</span>{" "}
-                      · Misschien{" "}
-                      <span className="count-maybe">
-                        {counts[evt.id].maybe}
-                      </span>{" "}
-                      · Nee{" "}
-                      <span className="count-no">{counts[evt.id].no}</span>
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-              {loggedIn ? (
-                <div
-                  className="rsvp"
-                  style={{ width: "100%", justifyContent: "flex-end" }}
-                >
-                  <button
-                    className={status === "yes" ? "active-yes" : ""}
-                    aria-pressed={status === "yes"}
-                    onClick={() =>
-                      setRsvp(evt.id, status === "yes" ? null : "yes")
-                    }
-                  >
-                    Ja
-                  </button>
-                  <button
-                    className={status === "maybe" ? "active-maybe" : ""}
-                    aria-pressed={status === "maybe"}
-                    onClick={() =>
-                      setRsvp(evt.id, status === "maybe" ? null : "maybe")
-                    }
-                  >
-                    Misschien
-                  </button>
-                  <button
-                    className={status === "no" ? "active-no" : ""}
-                    aria-pressed={status === "no"}
-                    onClick={() =>
-                      setRsvp(evt.id, status === "no" ? null : "no")
-                    }
-                  >
-                    Nee
-                  </button>
-                </div>
-              ) : null}
-            </div>
-            {/* Match report controls (bottom-right) */}
-            {loggedIn ? (
-              <div
-                className="rsvp"
-                style={{
-                  justifyContent: "flex-end",
-                  marginTop: 8,
-                  gap: 8,
-                  flexWrap: "wrap",
-                }}
-              >
-                <ReportPreview eventId={evt.id} />
-                <MvpVoteButton eventId={evt.id} />
-              </div>
-            ) : null}
-            {loggedIn ? (
-              <GenerateReportButton eventId={evt.id} opponent={evt.title} />
-            ) : null}
-            {evt.description ? (
-              <div className="muted" style={{ marginTop: 8 }}>
-                {evt.description}
-              </div>
-            ) : null}
-            {loggedIn ? (
-              <details
-                style={{ marginTop: 10 }}
-                onToggle={(e) => {
-                  const el = e.currentTarget as HTMLDetailsElement;
-                  if (el.open) void ensureListsLoaded(evt.id);
-                }}
-              >
-                <summary className="muted">RSVP-lijst tonen</summary>
-                <div className="rsvp-columns">
-                  <div>
-                    <div className="badge">Ja</div>
-                    <div className="muted" style={{ marginTop: 4 }}>
-                      {(lists[evt.id]?.yes || []).map((u) => (
-                        <div key={u.id}>{u.name}</div>
-                      ))}
-                      {(lists[evt.id]?.yes || []).length === 0 ? (
-                        <div>—</div>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="badge">Misschien</div>
-                    <div className="muted" style={{ marginTop: 4 }}>
-                      {(lists[evt.id]?.maybe || []).map((u) => (
-                        <div key={u.id}>{u.name}</div>
-                      ))}
-                      {(lists[evt.id]?.maybe || []).length === 0 ? (
-                        <div>—</div>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="badge">Nee</div>
-                    <div className="muted" style={{ marginTop: 4 }}>
-                      {(lists[evt.id]?.no || []).map((u) => (
-                        <div key={u.id}>{u.name}</div>
-                      ))}
-                      {(lists[evt.id]?.no || []).length === 0 ? (
-                        <div>—</div>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              </details>
-            ) : null}
+      {recentPast.map((evt) => renderEventCard(evt))}
+      {olderPast.length > 0 ? (
+        <details style={{ marginBottom: 12 }}>
+          <summary
+            className="muted"
+            style={{ cursor: "pointer", fontWeight: 600 }}
+          >
+            Vorige wedstrijden ({olderPast.length})
+          </summary>
+          <div
+            style={{
+              marginTop: 12,
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+            }}
+          >
+            {olderPast.map((evt) => renderEventCard(evt))}
           </div>
-        );
-      })}
+        </details>
+      ) : null}
+      {future.map((evt) => renderEventCard(evt))}
       <SpaceInvadersLauncher />
-      {grouped.length === 0 ? (
+      {visibleCount === 0 ? (
         <div className="muted">Geen recente of aankomende wedstrijden.</div>
       ) : null}
     </div>

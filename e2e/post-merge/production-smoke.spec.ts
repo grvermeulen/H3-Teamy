@@ -18,11 +18,9 @@ test.describe("Read-only deploy smoke", () => {
 
   test("homepage laadt en toont teamtitel", async ({ page }) => {
     await page.goto("/");
+    // Site title lives in the global header (not necessarily as <h1> — subpages have their own h1).
     await expect(
-      page.getByRole("heading", {
-        level: 1,
-        name: "De Rijn H3 — Waterpolo",
-      }),
+      page.locator("header").getByText("De Rijn H3 — Waterpolo", { exact: true }),
     ).toBeVisible();
   });
 
