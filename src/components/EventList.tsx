@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import * as Sentry from "@sentry/nextjs";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { TeamEvent, RsvpStatus } from "../types";
 import { splitPastAndFutureByStart } from "../lib/listSplitPast";
 import GenerateReportButton from "./GenerateReportButton";
@@ -10,11 +17,25 @@ import SpaceInvadersLauncher from "./spaceInvaders/SpaceInvadersLauncher";
 import { useSession } from "./SessionContext";
 import { formatEventDate, formatEventTime } from "../lib/datetime";
 
-type Props = { events: TeamEvent[] };
+/** Props voor {@link EventList}. */
+type Props = {
+  /** Teamwedstrijden uit de iCal-feed (server component → client). */
+  events: TeamEvent[];
+};
 
 type RsvpMap = Record<string, RsvpStatus>;
 
-export default function EventList({ events }: Props) {
+/**
+ * RSVP-lijst per wedstrijd: tellingen, eigen status (ingelogd), optionele namenlijsten
+ * in een `<details>` (lazy). Ververs bij focus, tab-zichtbaarheid en handmatige Refresh.
+ *
+ * Na terugkeren vanuit een andere app worden `lists` en `loadedLists` samen geleegd en
+ * open details opnieuw geladen, zodat namen niet “vast” leeg blijven.
+ *
+ * @param props - Componentprops.
+ * @param props.events - Te tonen events (chronologisch gesorteerd in de UI).
+ */
+export default function EventList({ events }: Props): React.JSX.Element {
   const [rsvpMap, setRsvpMap] = useState<RsvpMap>({});
   const [counts, setCounts] = useState<
     Record<string, { yes: number; no: number; maybe: number }>
@@ -30,6 +51,8 @@ export default function EventList({ events }: Props) {
     >
   >({});
   const [loadedLists, setLoadedLists] = useState<Record<string, boolean>>({});
+  /** Event-ids waarvan de RSVP-details nu open staan (voor refetch na loadAll). */
+  const openRsvpDetailIdsRef = useRef<Set<string>>(new Set());
   const [mounted, setMounted] = useState(false);
   const [nowTs, setNowTs] = useState<number>(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -38,56 +61,108 @@ export default function EventList({ events }: Props) {
   const authChecked = !session.loading;
   const [notice, setNotice] = useState<string | null>(null);
 
+  const loadedListsRef = useRef<Record<string, boolean>>({});
+  useEffect(() => {
+    loadedListsRef.current = loadedLists;
+  }, [loadedLists]);
+
+  /**
+   * Haalt volledige RSVP-data voor één event (tellingen + yes/maybe/no-namen).
+   *
+   * @param id - `eventId` (Sportlink/event-sleutel).
+   * @param opts - Opties; `force: true` slaat de “al geladen”-cache over (nodig na `loadAll`).
+   */
+  const loadRsvpListDetail = useCallback(
+    async (id: string, opts?: { force?: boolean }) => {
+      if (!opts?.force && loadedListsRef.current[id]) return;
+      try {
+        const res = await fetch(
+          `/api/rsvp/list?eventId=${encodeURIComponent(id)}`,
+          { cache: "no-store" },
+        );
+        if (!res.ok) return;
+
+        const data = await res.json();
+        setCounts((prev) => ({ ...prev, [id]: data.counts }));
+        setLists((prev) => ({ ...prev, [id]: data.lists }));
+        setLoadedLists((prev) => ({ ...prev, [id]: true }));
+      } catch (error: unknown) {
+        Sentry.captureException(error);
+      }
+    },
+    [],
+  );
+
+  const isLoadAllInFlightRef = useRef(false);
+
+  /**
+   * Laadt publieke tellingen voor alle events; als de gebruiker ingelogd is ook eigen RSVP-status.
+   * Wis naamlijst-cache (`lists` + `loadedLists`) zodat die niet out-of-sync raakt met geleegde data.
+   * Open RSVP-details worden direct opnieuw opgehaald (mobiel / app-switch).
+   */
   const loadAll = useCallback(async () => {
+    if (isLoadAllInFlightRef.current) return;
+    isLoadAllInFlightRef.current = true;
     setIsRefreshing(true);
 
-    // Always load public counts
-    const countsEntries = await Promise.all(
-      events.map(async (e) => {
-        const res = await fetch(
-          `/api/rsvp/list?eventId=${encodeURIComponent(e.id)}&countsOnly=1`,
-          { cache: "no-store" },
-        );
-        if (!res.ok) return [e.id, { yes: 0, no: 0, maybe: 0 }] as const;
-        const data = await res.json();
-        return [
-          e.id,
-          data.counts as { yes: number; no: number; maybe: number },
-        ] as const;
-      }),
-    );
-    const cMap: Record<string, { yes: number; no: number; maybe: number }> = {};
-    for (const [id, c] of countsEntries) {
-      cMap[id] = c;
-    }
-    setCounts(cMap);
+    try {
+      const countsEntries = await Promise.all(
+        events.map(async (e) => {
+          const res = await fetch(
+            `/api/rsvp/list?eventId=${encodeURIComponent(e.id)}&countsOnly=1`,
+            { cache: "no-store" },
+          );
+          if (!res.ok) return [e.id, { yes: 0, no: 0, maybe: 0 }] as const;
+          const data = await res.json();
+          return [
+            e.id,
+            data.counts as { yes: number; no: number; maybe: number },
+          ] as const;
+        }),
+      );
+      const cMap: Record<string, { yes: number; no: number; maybe: number }> =
+        {};
+      for (const [id, c] of countsEntries) {
+        cMap[id] = c;
+      }
+      setCounts(cMap);
 
-    if (!loggedIn) {
-      // If not logged in, only show counts
-      setRsvpMap({});
+      if (!loggedIn) {
+        setRsvpMap({});
+        setLists({});
+        setLoadedLists({});
+        return;
+      }
+
+      const rsvpEntries = await Promise.all(
+        events.map(async (e) => {
+          const res = await fetch(
+            `/api/rsvp?eventId=${encodeURIComponent(e.id)}`,
+            { cache: "no-store" },
+          );
+          if (!res.ok) return [e.id, null] as const;
+          const data = await res.json();
+          return [e.id, (data?.status ?? null) as RsvpStatus] as const;
+        }),
+      );
+      const map: RsvpMap = {};
+      for (const [id, status] of rsvpEntries) map[id] = status;
+      setRsvpMap(map);
       setLists({});
+      setLoadedLists({});
+      const visibleEventIds = new Set(events.map((event) => event.id));
+      const openIds = [...openRsvpDetailIdsRef.current].filter((eventId) =>
+        visibleEventIds.has(eventId),
+      );
+      openRsvpDetailIdsRef.current = new Set(openIds);
+      await Promise.all(
+        openIds.map((id) => loadRsvpListDetail(id, { force: true })),
+      );
+    } finally {
+      isLoadAllInFlightRef.current = false;
       setIsRefreshing(false);
-      return;
     }
-
-    // If logged in, also load personal RSVP data and lists
-    const rsvpEntries = await Promise.all(
-      events.map(async (e) => {
-        const res = await fetch(
-          `/api/rsvp?eventId=${encodeURIComponent(e.id)}`,
-          { cache: "no-store" },
-        );
-        if (!res.ok) return [e.id, null] as const;
-        const data = await res.json();
-        return [e.id, (data?.status ?? null) as RsvpStatus] as const;
-      }),
-    );
-    const map: RsvpMap = {};
-    for (const [id, status] of rsvpEntries) map[id] = status;
-    setRsvpMap(map);
-    setLists({}); // Will be loaded on demand when user opens RSVP list
-    setIsRefreshing(false);
-  }, [events, loggedIn]);
+  }, [events, loggedIn, loadRsvpListDetail]);
 
   useEffect(() => {
     if (authChecked) {
@@ -105,6 +180,18 @@ export default function EventList({ events }: Props) {
     return () => window.removeEventListener("focus", onFocus);
   }, [authChecked, loadAll]);
 
+  /** Mobiel: bij terugkeren naar tab/PWA vaak wel visibilitychange, niet altijd window focus. */
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.visibilityState === "visible" && authChecked) {
+        void loadAll();
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [authChecked, loadAll]);
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -113,6 +200,12 @@ export default function EventList({ events }: Props) {
     setNowTs(Date.now());
   }, []);
 
+  /**
+   * Zet RSVP-status voor het huidige account (optimistische UI, daarna serverbevestiging).
+   *
+   * @param id - Event-id.
+   * @param status - Nieuwe status of `null` om te wissen.
+   */
   async function setRsvp(id: string, status: RsvpStatus) {
     const prev = rsvpMap[id] || null;
     setRsvpMap((p) => ({ ...p, [id]: status }));
@@ -145,18 +238,13 @@ export default function EventList({ events }: Props) {
     }
   }
 
-  async function ensureListsLoaded(id: string) {
-    if (loadedLists[id]) return;
-    const res = await fetch(
-      `/api/rsvp/list?eventId=${encodeURIComponent(id)}`,
-      { cache: "no-store" },
-    );
-    if (res.ok) {
-      const data = await res.json();
-      setCounts((prev) => ({ ...prev, [id]: data.counts }));
-      setLists((prev) => ({ ...prev, [id]: data.lists }));
-      setLoadedLists((prev) => ({ ...prev, [id]: true }));
-    }
+  /**
+   * Zorgt dat namenlijsten voor dit event geladen zijn (geen dubbele fetch als al in cache).
+   *
+   * @param id - Event-id.
+   */
+  function ensureListsLoaded(id: string) {
+    void loadRsvpListDetail(id);
   }
 
   const { recentPast, olderPast, future } = useMemo(
@@ -164,8 +252,7 @@ export default function EventList({ events }: Props) {
     [events, nowTs],
   );
 
-  const visibleCount =
-    recentPast.length + olderPast.length + future.length;
+  const visibleCount = recentPast.length + olderPast.length + future.length;
 
   function renderEventCard(evt: TeamEvent) {
     const start = new Date(evt.start);
@@ -188,13 +275,10 @@ export default function EventList({ events }: Props) {
               ) : null}
               {counts[evt.id] ? (
                 <span className="badge" aria-label="RSVP-overzicht">
-                  Ja <span className="count-yes">{counts[evt.id].yes}</span>{" "}
-                  · Misschien{" "}
-                  <span className="count-maybe">
-                    {counts[evt.id].maybe}
-                  </span>{" "}
-                  · Nee{" "}
-                  <span className="count-no">{counts[evt.id].no}</span>
+                  Ja <span className="count-yes">{counts[evt.id].yes}</span> ·
+                  Misschien{" "}
+                  <span className="count-maybe">{counts[evt.id].maybe}</span> ·
+                  Nee <span className="count-no">{counts[evt.id].no}</span>
                 </span>
               ) : null}
             </div>
@@ -207,9 +291,7 @@ export default function EventList({ events }: Props) {
               <button
                 className={status === "yes" ? "active-yes" : ""}
                 aria-pressed={status === "yes"}
-                onClick={() =>
-                  setRsvp(evt.id, status === "yes" ? null : "yes")
-                }
+                onClick={() => setRsvp(evt.id, status === "yes" ? null : "yes")}
               >
                 Ja
               </button>
@@ -225,9 +307,7 @@ export default function EventList({ events }: Props) {
               <button
                 className={status === "no" ? "active-no" : ""}
                 aria-pressed={status === "no"}
-                onClick={() =>
-                  setRsvp(evt.id, status === "no" ? null : "no")
-                }
+                onClick={() => setRsvp(evt.id, status === "no" ? null : "no")}
               >
                 Nee
               </button>
@@ -261,7 +341,12 @@ export default function EventList({ events }: Props) {
             style={{ marginTop: 10 }}
             onToggle={(e) => {
               const el = e.currentTarget as HTMLDetailsElement;
-              if (el.open) void ensureListsLoaded(evt.id);
+              if (el.open) {
+                openRsvpDetailIdsRef.current.add(evt.id);
+                void ensureListsLoaded(evt.id);
+              } else {
+                openRsvpDetailIdsRef.current.delete(evt.id);
+              }
             }}
           >
             <summary className="muted">RSVP-lijst tonen</summary>
@@ -294,9 +379,7 @@ export default function EventList({ events }: Props) {
                   {(lists[evt.id]?.no || []).map((u) => (
                     <div key={u.id}>{u.name}</div>
                   ))}
-                  {(lists[evt.id]?.no || []).length === 0 ? (
-                    <div>—</div>
-                  ) : null}
+                  {(lists[evt.id]?.no || []).length === 0 ? <div>—</div> : null}
                 </div>
               </div>
             </div>

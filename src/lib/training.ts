@@ -17,7 +17,12 @@ function parseDdMmYyyy(input: string | undefined | null): Date | null {
   // JS Date months are 0-based
   const date = new Date(yyyy, mm - 1, dd);
   // Validate that Date did not overflow (e.g., 31-02-2025)
-  if (date.getFullYear() !== yyyy || date.getMonth() !== mm - 1 || date.getDate() !== dd) return null;
+  if (
+    date.getFullYear() !== yyyy ||
+    date.getMonth() !== mm - 1 ||
+    date.getDate() !== dd
+  )
+    return null;
   return date;
 }
 
@@ -60,8 +65,12 @@ export function defaultSeasonWindow(): { from: string; to: string } {
   const now = new Date();
   const year = now.getFullYear();
   const isBeforeJuly = now.getMonth() < 6; // 0-indexed months, 6 = July
-  const seasonStart = isBeforeJuly ? new Date(year - 1, 6, 1) : new Date(year, 6, 1);
-  const seasonEnd = isBeforeJuly ? new Date(year, 6, 1) : new Date(year + 1, 6, 1);
+  const seasonStart = isBeforeJuly
+    ? new Date(year - 1, 6, 1)
+    : new Date(year, 6, 1);
+  const seasonEnd = isBeforeJuly
+    ? new Date(year, 6, 1)
+    : new Date(year + 1, 6, 1);
   return { from: toYMD(seasonStart), to: toYMD(seasonEnd) };
 }
 
@@ -82,16 +91,10 @@ export function splitTrainingSessionDatesForDisplay(
   const past = sorted.filter((d) => d < todayYmd);
   const upcoming = sorted.filter((d) => d >= todayYmd);
   const recentPast =
-    past.length <= recentPastCount
-      ? past
-      : past.slice(-recentPastCount);
+    past.length <= recentPastCount ? past : past.slice(-recentPastCount);
   const olderPast =
     past.length > recentPastCount
       ? past.slice(0, past.length - recentPastCount)
       : [];
   return { recentPast, olderPast, upcoming };
 }
-
-
-
-
