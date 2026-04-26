@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { isPgPoolIdleDisconnectNoise } from "./pgPoolError";
 
 /**
  * Parses a positive integer from an env value, or returns `fallback`.
@@ -81,6 +82,15 @@ export function getPrismaPgAdapterOptions(): {
 } {
   return {
     onPoolError: (err: Error) => {
+      if (isPgPoolIdleDisconnectNoise(err)) {
+        Sentry.addBreadcrumb({
+          category: "postgres",
+          message: err.message,
+          level: "warning",
+          data: { component: "pg-pool", idleSocketClosed: true },
+        });
+        return;
+      }
       Sentry.captureException(err, { tags: { component: "pg-pool" } });
     },
   };
