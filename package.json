@@ -13,6 +13,7 @@
     "db:migrate:preview": "dotenv -e .env.preview.local -- prisma migrate deploy",
     "db:migrate:production": "dotenv -e .env.production.local -- prisma migrate deploy",
     "db:migrate:both": "npm run db:migrate:preview && npm run db:migrate:production",
+    "neon:cleanup-branches": "node scripts/neon-cleanup-branches.mjs",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:preview": "dotenv -e .env.preview.local -- tsx prisma/seed.ts",
     "build": "next build",
