@@ -1,4 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
+import ical from "ical";
+
 import { TeamEvent } from "../types";
 import { canonicalEventId } from "./eventId";
 import { kvGetJson, kvSetJson } from "./kv";
@@ -41,7 +43,6 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) throw new Error(`Failed to fetch iCal: ${res.status}`);
       const text = await res.text();
-      const ical = await import("node-ical");
       const data = ical.parseICS(text) as Record<string, ParsedVEvent>;
       parsed = Object.values(data)
         .filter((c): c is ParsedVEvent => c?.type === "VEVENT")
@@ -57,8 +58,7 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
             uid: evt.uid?.toString(),
             title,
             start: startIso,
-            end:
-              evt.end !== undefined ? icalDateToIso(evt.end) : undefined,
+            end: evt.end !== undefined ? icalDateToIso(evt.end) : undefined,
             location: evt.location?.toString(),
             description: evt.description?.toString(),
           } satisfies TeamEvent;
