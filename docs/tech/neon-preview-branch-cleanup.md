@@ -39,7 +39,7 @@ Het script verwijdert **alleen niet-primary** branches en begint bij **bladeren*
 
 ## Optioneel: geplande run in GitHub
 
-Workflow: `.github/workflows/neon-branch-cleanup.yml` (wekelijks maandag 06:00 UTC + **Actions → Neon branch cleanup → Run workflow**).
+Workflow: `.github/workflows/neon-branch-cleanup.yml` (dagelijks 06:00 UTC + **Actions → Neon branch cleanup → Run workflow**).
 
 Repository secrets (Settings → Secrets and variables → Actions):
 
