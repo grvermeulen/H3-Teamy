@@ -69,6 +69,41 @@ describe("fetchJsonOr", () => {
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });
 
+  it("returns fallback without Sentry when fetch rejects with Failed to fetch but signal is aborted", async () => {
+    const ac = new AbortController();
+    ac.abort();
+    const failedToFetch = new TypeError("Failed to fetch");
+    vi.spyOn(global, "fetch").mockRejectedValue(failedToFetch);
+    const fallback = { ok: false };
+    const result = await fetchJsonOr(
+      "/api/x",
+      { signal: ac.signal },
+      fallback,
+      "test-abort-failed-fetch",
+    );
+    expect(result).toEqual(fallback);
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
+  it("returns fallback without Sentry when error cause is AbortError", async () => {
+    const aborted = new DOMException(
+      "The user aborted a request.",
+      "AbortError",
+    );
+    const wrapped = new Error("wrapped");
+    Object.assign(wrapped, { cause: aborted });
+    vi.spyOn(global, "fetch").mockRejectedValue(wrapped);
+    const fallback = { ok: false };
+    const result = await fetchJsonOr(
+      "/api/x",
+      undefined,
+      fallback,
+      "test-abort-cause",
+    );
+    expect(result).toEqual(fallback);
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
   it("returns fallback and reports to Sentry when JSON is invalid", async () => {
     vi.spyOn(global, "fetch").mockResolvedValue(
       new Response("not json", {
