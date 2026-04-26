@@ -64,6 +64,7 @@ describe("fetchTeamEvents", () => {
   });
 
   it("falls back to cache if fetch fails", async () => {
+    vi.useFakeTimers();
     vi.spyOn(global, "fetch").mockRejectedValue(new Error("Network error"));
 
     vi.mocked(kvGetJson).mockResolvedValue([
@@ -74,12 +75,21 @@ describe("fetchTeamEvents", () => {
       },
     ]);
 
-    const events = await fetchTeamEvents();
+    const p = fetchTeamEvents();
+    await vi.advanceTimersByTimeAsync(5000);
+    const events = await p;
+    vi.useRealTimers();
 
     expect(events).toHaveLength(1);
     expect(events[0].title).toBe("Cached Match");
     expect(kvSetJson).not.toHaveBeenCalled();
-    expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error));
+    expect(Sentry.captureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: { source: "sportlink_ical" },
+        fingerprint: ["sportlink-ical-fetch"],
+      }),
+    );
   });
 
   it("reports to Sentry when HTTP response is not ok", async () => {
@@ -100,7 +110,13 @@ describe("fetchTeamEvents", () => {
 
     expect(events).toHaveLength(1);
     expect(events[0].title).toBe("Cached Match");
-    expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error));
+    expect(Sentry.captureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: { source: "sportlink_ical" },
+        fingerprint: ["sportlink-ical-fetch"],
+      }),
+    );
   });
 
   it("merges new data with cache", async () => {
