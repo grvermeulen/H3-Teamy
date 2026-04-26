@@ -1,12 +1,48 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { splitTrainingSessionDatesForDisplay, toYMD } from "../../../lib/training";
 
 type Session = { date: string };
+
+function SessionRow({ date }: { date: string }) {
+  return (
+    <Link
+      className="card"
+      href={`/trainer/attendance/${date}`}
+      style={{ textDecoration: "none" }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <div>
+          <div style={{ fontWeight: 600 }}>{date}</div>
+          <div className="muted" style={{ fontSize: 13 }}>
+            Training op{" "}
+            {new Date(date + "T12:00:00").toLocaleDateString("nl-NL", {
+              weekday: "long",
+            })}
+          </div>
+        </div>
+        <div className="badge">Open</div>
+      </div>
+    </Link>
+  );
+}
 
 export default function TrainerAttendanceList() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isTrainer, setIsTrainer] = useState<boolean | null>(null);
+
+  const { recentPast, olderPast, upcoming } = useMemo(() => {
+    const dates = sessions.map((s) => s.date);
+    return splitTrainingSessionDatesForDisplay(dates, toYMD(new Date()), 3);
+  }, [sessions]);
 
   useEffect(() => {
     let mounted = true;
@@ -43,41 +79,43 @@ export default function TrainerAttendanceList() {
     );
   }
 
+  const total = sessions.length;
+
   return (
     <main>
       <div className="container">
         <h1 style={{ marginBottom: 8 }}>Trainingsopkomst</h1>
 
         <div className="list">
-          {sessions.map((s) => (
-            <a
-              className="card"
-              key={s.date}
-              href={`/trainer/attendance/${s.date}`}
-              style={{ textDecoration: "none" }}
-            >
+          {recentPast.map((date) => (
+            <SessionRow key={date} date={date} />
+          ))}
+          {olderPast.length > 0 ? (
+            <details style={{ marginBottom: 4 }}>
+              <summary
+                className="muted"
+                style={{ cursor: "pointer", fontWeight: 600 }}
+              >
+                Eerdere trainingen dit seizoen ({olderPast.length})
+              </summary>
               <div
                 style={{
+                  marginTop: 12,
                   display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
+                  flexDirection: "column",
+                  gap: 12,
                 }}
               >
-                <div>
-                  <div style={{ fontWeight: 600 }}>{s.date}</div>
-                  <div className="muted" style={{ fontSize: 13 }}>
-                    Training op{" "}
-                    {new Date(s.date + "T00:00:00").toLocaleDateString(
-                      "nl-NL",
-                      { weekday: "long" },
-                    )}
-                  </div>
-                </div>
-                <div className="badge">Open</div>
+                {olderPast.map((date) => (
+                  <SessionRow key={date} date={date} />
+                ))}
               </div>
-            </a>
+            </details>
+          ) : null}
+          {upcoming.map((date) => (
+            <SessionRow key={date} date={date} />
           ))}
-          {sessions.length === 0 ? (
+          {total === 0 ? (
             <div className="muted">Nog geen sessies.</div>
           ) : null}
         </div>
