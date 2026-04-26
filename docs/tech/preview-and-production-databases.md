@@ -84,6 +84,11 @@ DB gedeeld hebben kunnen.
 3. `npm run db:migrate:preview` — schema bijgewerkt?
 4. `npm run db:seed:preview` — dummy data aanwezig?
 
+## Neon preview branches (limiet / Vercel-provisioning)
+
+Als Vercel faalt met **“Branch limit reached”** bij de preview-database: zie
+[Neon preview branch cleanup](./neon-preview-branch-cleanup.md) voor beleid en `npm run neon:cleanup-branches`.
+
 ## Veiligheidsregels
 
 - `prisma/seed.ts` weigert te draaien tegen production-achtige URLs (env-check)
