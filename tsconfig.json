@@ -25,6 +25,7 @@
   },
   "include": [
     "next-env.d.ts",
+    "src/types/ical.d.ts",
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",

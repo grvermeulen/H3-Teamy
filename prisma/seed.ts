@@ -160,13 +160,13 @@ async function fetchSportlinkEvents(): Promise<SeedEvent[]> {
       return [];
     }
     const text = await res.text();
-    const icalMod = (await import("node-ical")) as unknown as {
+    const icalMod = (await import("ical")) as unknown as {
       parseICS?: (s: string) => unknown;
       default?: { parseICS: (s: string) => unknown };
     };
     const parseICS = icalMod.parseICS ?? icalMod.default?.parseICS;
     if (!parseICS) {
-      console.warn("node-ical.parseICS not available; skipping RSVP seed.");
+      console.warn("ical.parseICS not available; skipping RSVP seed.");
       return [];
     }
     const data = parseICS(text) as Record<
