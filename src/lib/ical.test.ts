@@ -1,15 +1,19 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as Sentry from "@sentry/nextjs";
 import { fetchTeamEvents } from "./ical";
 import { kvGetJson, kvSetJson } from "./kv";
 
-// Mock dependencies
+vi.mock("@sentry/nextjs", () => ({
+  captureException: vi.fn(),
+}));
+
 vi.mock("./kv", () => ({
   kvGetJson: vi.fn(),
-  kvSetJson: vi.fn().mockReturnValue(Promise.resolve()),
+  kvSetJson: vi.fn().mockResolvedValue(undefined),
 }));
 
 const now = new Date();
-const futureDate = new Date(now.getTime() + 1000 * 60 * 60 * 24); // Tomorrow
+const futureDate = new Date(now.getTime() + 1000 * 60 * 60 * 24);
 const isoFuture =
   futureDate.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
 const isoEnd =
@@ -18,34 +22,38 @@ const isoEnd =
     .replace(/[-:]/g, "")
     .split(".")[0] + "Z";
 
-const mockICS = `BEGIN:VCALENDAR
+function buildMockICS(dtStart: string, dtEnd: string, summary = "Match 1") {
+  return `BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//Sportlink//NONSGML//NL
 BEGIN:VEVENT
 UID:12345
-DTSTART:${isoFuture}
-DTEND:${isoEnd}
-SUMMARY:Match 1
+DTSTART:${dtStart}
+DTEND:${dtEnd}
+SUMMARY:${summary}
 LOCATION:Pool A
 END:VEVENT
 END:VCALENDAR`;
+}
 
 describe("fetchTeamEvents", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.SPORTLINK_ICAL_URL = "http://example.com/calendar.ics";
+    vi.stubEnv("SPORTLINK_ICAL_URL", "http://example.com/calendar.ics");
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve(buildMockICS(isoFuture, isoEnd)),
+    } as Response);
+  });
 
-    // Mock fetch
-    global.fetch = vi.fn(() =>
-      Promise.resolve({
-        ok: true,
-        text: () => Promise.resolve(mockICS),
-      } as Response),
-    );
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
   it("fetches and parses ical data", async () => {
-    (kvGetJson as any).mockResolvedValue([]);
+    vi.mocked(kvGetJson).mockResolvedValue([]);
 
     const events = await fetchTeamEvents();
 
@@ -56,11 +64,9 @@ describe("fetchTeamEvents", () => {
   });
 
   it("falls back to cache if fetch fails", async () => {
-    // Mock fetch failure
-    global.fetch = vi.fn(() => Promise.reject("Network error"));
+    vi.spyOn(global, "fetch").mockRejectedValue(new Error("Network error"));
 
-    // Mock cache hit
-    (kvGetJson as any).mockResolvedValue([
+    vi.mocked(kvGetJson).mockResolvedValue([
       {
         id: "cached-1",
         title: "Cached Match",
@@ -72,51 +78,93 @@ describe("fetchTeamEvents", () => {
 
     expect(events).toHaveLength(1);
     expect(events[0].title).toBe("Cached Match");
-    // Should NOT update cache if fetch failed
     expect(kvSetJson).not.toHaveBeenCalled();
+    expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error));
+  });
+
+  it("reports to Sentry when HTTP response is not ok", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: false,
+      status: 503,
+      text: () => Promise.resolve(""),
+    } as Response);
+    vi.mocked(kvGetJson).mockResolvedValue([
+      {
+        id: "cached-1",
+        title: "Cached Match",
+        start: new Date().toISOString(),
+      },
+    ]);
+
+    const events = await fetchTeamEvents();
+
+    expect(events).toHaveLength(1);
+    expect(events[0].title).toBe("Cached Match");
+    expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error));
   });
 
   it("merges new data with cache", async () => {
     const pastDate = new Date(Date.now() - 100000).toISOString();
-    const futureDate = new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(); // Tomorrow (same as mockICS)
+    const futureDateIso = new Date(
+      Date.now() + 1000 * 60 * 60 * 24,
+    ).toISOString();
 
-    // Need to match the ID generation logic: YYYYMMDD--slug
-    const d = new Date(futureDate);
+    const d = new Date(futureDateIso);
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
     const id = `${y}${m}${day}--match-1`;
 
-    // Cache has one old event and one that will be updated
-    (kvGetJson as any).mockResolvedValue([
+    vi.mocked(kvGetJson).mockResolvedValue([
       { id: "old-1", title: "Old Match", start: pastDate },
-      { id: id, title: "Match 1 (Old)", start: futureDate }, // ID matches the one from mockICS
+      { id, title: "Match 1 (Old)", start: futureDateIso },
     ]);
 
     const events = await fetchTeamEvents();
 
-    // Should have 2 events: Old Match (preserved) and Match 1 (updated from ICS)
     expect(events).toHaveLength(2);
 
     const updatedMatch = events.find((e) => e.title === "Match 1");
     expect(updatedMatch).toBeDefined();
 
-    // Verify sorting (oldest first)
     expect(events[0].title).toBe("Old Match");
   });
 
   it("handles invalid ical data gracefully", async () => {
-    // Mock fetch with bad data
-    global.fetch = vi.fn(() =>
-      Promise.resolve({
-        ok: true,
-        text: () => Promise.resolve("INVALID ICAL DATA"),
-      } as Response),
-    );
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve("INVALID ICAL DATA"),
+    } as Response);
 
-    // Should return empty array or cache if parsing fails
-    (kvGetJson as any).mockResolvedValue([]);
+    vi.mocked(kvGetJson).mockResolvedValue([]);
     const events = await fetchTeamEvents();
     expect(events).toHaveLength(0);
+  });
+
+  it("keeps matches more than 365 days in the future (Sportlink season feed)", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-26T12:00:00.000Z"));
+    const farFuture = new Date("2027-08-15T14:00:00.000Z");
+    const isoFar =
+      farFuture.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const isoFarEnd =
+      new Date(farFuture.getTime() + 3600000)
+        .toISOString()
+        .replace(/[-:]/g, "")
+        .split(".")[0] + "Z";
+
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve(buildMockICS(isoFar, isoFarEnd, "Away game")),
+    } as Response);
+    vi.mocked(kvGetJson).mockResolvedValue([]);
+
+    const events = await fetchTeamEvents();
+
+    expect(events).toHaveLength(1);
+    expect(events[0].title).toBe("Away game");
+    vi.useRealTimers();
   });
 });
