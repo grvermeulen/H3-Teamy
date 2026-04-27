@@ -96,8 +96,19 @@ function isRawEvent(value: unknown): value is RawEvent {
     return false;
   if (team !== "home" && team !== "away") return false;
   if (type !== "goal" && type !== "personal_foul") return false;
-  if (value.time !== undefined && typeof value.time !== "string") return false;
-  if (value.player !== undefined && typeof value.player !== "string")
+  // The extract provider now emits `null` instead of omitting fields (required
+  // by OpenAI strict structured-output mode). Treat null the same as missing.
+  if (
+    value.time !== undefined &&
+    value.time !== null &&
+    typeof value.time !== "string"
+  )
+    return false;
+  if (
+    value.player !== undefined &&
+    value.player !== null &&
+    typeof value.player !== "string"
+  )
     return false;
   return true;
 }

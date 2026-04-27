@@ -1,21 +1,27 @@
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 
+// OpenAI's structured-output (strict mode) via the Vercel AI Gateway requires
+// every property listed in `properties` to also appear in `required`. Optional
+// fields therefore have to be expressed as `.nullable()` (string | null), not
+// `.optional()` (omittable from the JSON entirely). See Sentry incident on
+// `/api/report/extract` 502 with "Invalid schema for response_format 'response'
+// ... Missing 'time'".
 const ExtractEventSchema = z.object({
   quarter: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]),
-  time: z.string().optional(),
+  time: z.string().nullable(),
   team: z.enum(["home", "away"]),
   type: z.enum(["goal", "personal_foul"]),
-  player: z.string().optional(),
+  player: z.string().nullable(),
 });
 
 const ExtractResultSchema = z.object({
-  homeTeam: z.string().optional(),
-  awayTeam: z.string().optional(),
-  homeScore: z.number().optional(),
-  awayScore: z.number().optional(),
-  date: z.string().optional(),
-  events: z.array(ExtractEventSchema).optional(),
+  homeTeam: z.string().nullable(),
+  awayTeam: z.string().nullable(),
+  homeScore: z.number().nullable(),
+  awayScore: z.number().nullable(),
+  date: z.string().nullable(),
+  events: z.array(ExtractEventSchema).nullable(),
 });
 
 type ExtractEvent = z.infer<typeof ExtractEventSchema>;
