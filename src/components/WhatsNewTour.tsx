@@ -31,7 +31,10 @@ function spotlightFor(target: string | undefined): Spotlight {
  * current `APP_VERSION` once. On mount it asks `/api/whats-new` whether the
  * tour should run; if so it renders a stepper, drawing a fixed-position
  * spotlight box around each step's `target` selector. Dismiss / "Done"
- * acknowledges the version via `POST /api/whats-new/ack`.
+ * acknowledges the version via `POST /api/whats-new/ack`. The initial fetch is
+ * not aborted on unmount: some browsers report cancellation as
+ * `TypeError: Failed to fetch`, which would otherwise be sent to Sentry as a
+ * false positive; state updates after unmount are skipped via a flag instead.
  */
 export default function WhatsNewTour(): React.JSX.Element | null {
   const [entry, setEntry] = useState<ChangelogEntry | null>(null);
@@ -41,7 +44,6 @@ export default function WhatsNewTour(): React.JSX.Element | null {
 
   useEffect(() => {
     let alive = true;
-    const ac = new AbortController();
     type WhatsNewResponse = {
       show: boolean;
       version: string;
@@ -51,7 +53,7 @@ export default function WhatsNewTour(): React.JSX.Element | null {
     void (async () => {
       const data = await fetchJsonOr<WhatsNewResponse>(
         "/api/whats-new",
-        { cache: "no-store", signal: ac.signal },
+        { cache: "no-store" },
         empty,
         "whats-new-tour",
       );
@@ -64,7 +66,6 @@ export default function WhatsNewTour(): React.JSX.Element | null {
     })();
     return () => {
       alive = false;
-      ac.abort();
     };
   }, []);
 
