@@ -4,6 +4,7 @@ import {
   extractReportFromImage,
   ExtractProviderError,
   getExtractProviderConfig,
+  resolveReportExtractOpenAiModel,
 } from "./reportExtractProvider";
 import { generateObject } from "./ai/client";
 
@@ -78,17 +79,42 @@ describe("reportExtractProvider", () => {
       );
     });
 
-    it("throws a typed config error when REPORT_EXTRACT_OPENAI_MODEL is missing", () => {
+    it("defaults REPORT_EXTRACT_OPENAI_MODEL to gpt-4o when unset", () => {
       delete process.env.REPORT_EXTRACT_OPENAI_MODEL;
-      try {
-        getExtractProviderConfig();
-        throw new Error("expected config error");
-      } catch (error) {
-        expect(error).toBeInstanceOf(ExtractProviderError);
-        const typed = error as ExtractProviderError;
-        expect(typed.code).toBe("extract_provider_config_invalid");
-        expect(typed.status).toBe(500);
-      }
+      const cfg = getExtractProviderConfig();
+      expect(cfg.openAiModel).toBe("gpt-4o");
+      expect(cfg.openAiModelSubstitutedFrom).toBeUndefined();
+    });
+
+    it("remaps removed gateway snapshot gpt-5.2-2025-12-11 to gpt-4o", () => {
+      process.env.REPORT_EXTRACT_OPENAI_MODEL = "gpt-5.2-2025-12-11";
+      const cfg = getExtractProviderConfig();
+      expect(cfg.openAiModel).toBe("gpt-4o");
+      expect(cfg.openAiModelSubstitutedFrom).toBe("gpt-5.2-2025-12-11");
+    });
+  });
+
+  describe("resolveReportExtractOpenAiModel", () => {
+    it("returns gpt-4o for empty input", () => {
+      expect(resolveReportExtractOpenAiModel("")).toEqual({
+        model: "gpt-4o",
+      });
+      expect(resolveReportExtractOpenAiModel("  ")).toEqual({
+        model: "gpt-4o",
+      });
+    });
+
+    it("remaps openai/-prefixed removed snapshot id", () => {
+      expect(resolveReportExtractOpenAiModel("openai/gpt-5.2-2025-12-11")).toEqual({
+        model: "gpt-4o",
+        substitutedFrom: "openai/gpt-5.2-2025-12-11",
+      });
+    });
+
+    it("passes through other model ids unchanged", () => {
+      expect(resolveReportExtractOpenAiModel("gpt-4o-mini")).toEqual({
+        model: "gpt-4o-mini",
+      });
     });
   });
 
@@ -123,6 +149,7 @@ describe("reportExtractProvider", () => {
       expect(out.providerUsed).toBe("vlm");
       expect(out.fallbackUsed).toBe(false);
       expect(out.rawText).toBe("");
+      expect(out.openAiModelSubstitutedFrom).toBeUndefined();
       expect(out.result.homeTeam).toBe("De Rijn H3");
       expect(out.result.events).toHaveLength(1);
     });
@@ -156,6 +183,30 @@ describe("reportExtractProvider", () => {
       expect(out.fallbackUsed).toBe(false);
       expect(out.rawText).toBe("RAW OCR TEXT");
       expect(out.result.homeScore).toBe(5);
+    });
+
+    it("uses gpt-4o gateway id when extract model env was a removed snapshot", async () => {
+      process.env.REPORT_EXTRACT_OPENAI_MODEL = "gpt-5.2-2025-12-11";
+      mockedGenerateObject.mockResolvedValueOnce({
+        object: {
+          homeTeam: "A",
+          awayTeam: "B",
+        },
+      } as never);
+
+      const out = await extractReportFromImage(makeImageFile());
+      expect(mockedGenerateObject).toHaveBeenCalledTimes(1);
+      const args = mockedGenerateObject.mock.calls[0][0] as {
+        model: string;
+        messages: Array<{ content: Array<{ type: string }> }>;
+      };
+      expect(args.model).toBe("openai/gpt-4o");
+      expect(args.messages[0].content[1].type).toBe("image");
+      expect(out.providerUsed).toBe("vlm");
+      expect(out.fallbackUsed).toBe(false);
+      expect(out.rawText).toBe("");
+      expect(out.openAiModelSubstitutedFrom).toBe("gpt-5.2-2025-12-11");
+      expect(out.result.homeTeam).toBe("A");
     });
 
     it("falls back to OCR in hybrid mode when VLM fails and reports the failure to Sentry", async () => {

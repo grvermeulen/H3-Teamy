@@ -27,6 +27,8 @@ type ConcreteProvider = "vlm" | "ocr";
 export type ExtractProviderConfig = {
   provider: ExtractProvider;
   openAiModel: string;
+  /** Present when `REPORT_EXTRACT_OPENAI_MODEL` was rewritten (e.g. removed gateway snapshot). */
+  openAiModelSubstitutedFrom?: string;
   ocrWorkerUrl?: string;
   ocrWorkerToken?: string;
 };
@@ -36,6 +38,8 @@ export type ExtractProviderSuccess = {
   rawText: string;
   providerUsed: ConcreteProvider;
   model: string;
+  /** Echo of {@link ExtractProviderConfig.openAiModelSubstitutedFrom} for structured logs. */
+  openAiModelSubstitutedFrom?: string;
   fallbackUsed: boolean;
   latencyMs: number;
 };
@@ -101,6 +105,47 @@ function gatewayModelString(rawModel: string): string {
   return rawModel.includes("/") ? rawModel : `openai/${rawModel}`;
 }
 
+/** Vision-capable default when env is unset or points at a removed gateway model. */
+const DEFAULT_REPORT_EXTRACT_OPENAI_MODEL = "gpt-4o";
+
+/**
+ * Strips a leading `openai/` prefix for comparisons only.
+ */
+function openAiModelIdWithoutProvider(model: string): string {
+  const t = model.trim();
+  return t.startsWith("openai/") ? t.slice("openai/".length) : t;
+}
+
+export type ResolvedReportExtractOpenAiModel = {
+  model: string;
+  substitutedFrom?: string;
+};
+
+/**
+ * Resolves `REPORT_EXTRACT_OPENAI_MODEL` to a gateway-supported id. Uses
+ * {@link DEFAULT_REPORT_EXTRACT_OPENAI_MODEL} when unset, and remaps snapshot ids
+ * that the Vercel AI Gateway no longer serves (see Sentry JAVASCRIPT-NEXTJS-1F).
+ *
+ * @param raw - Value of `REPORT_EXTRACT_OPENAI_MODEL` (may be empty).
+ * @returns The model string to pass to `gatewayModelString` / `generateObject`, and the original env value when it was rewritten.
+ */
+export function resolveReportExtractOpenAiModel(
+  raw: string,
+): ResolvedReportExtractOpenAiModel {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { model: DEFAULT_REPORT_EXTRACT_OPENAI_MODEL };
+  }
+  const id = openAiModelIdWithoutProvider(trimmed);
+  if (id === "gpt-5.2-2025-12-11") {
+    return {
+      model: DEFAULT_REPORT_EXTRACT_OPENAI_MODEL,
+      substitutedFrom: trimmed,
+    };
+  }
+  return { model: trimmed };
+}
+
 /**
  * Reads and validates the report-extract environment configuration. Throws an
  * `ExtractProviderError` when required variables are missing so route
@@ -108,15 +153,21 @@ function gatewayModelString(rawModel: string): string {
  * `TypeError`. `OPENAI_API_KEY` is no longer required here: AI calls go
  * through the Vercel AI Gateway, which handles upstream auth via OIDC in
  * production or `AI_GATEWAY_API_KEY` locally.
+ *
+ * When `REPORT_EXTRACT_OPENAI_MODEL` is unset, defaults to
+ * `gpt-4o` (vision). A removed snapshot (`gpt-5.2-2025-12-11`) is remapped to
+ * the same default so production does not depend on stale Vercel env values.
  */
 export function getExtractProviderConfig(): ExtractProviderConfig {
   const provider = parseProvider(process.env.REPORT_EXTRACT_PROVIDER);
-  const openAiModel = (process.env.REPORT_EXTRACT_OPENAI_MODEL || "").trim();
+  const { model: openAiModel, substitutedFrom: openAiModelSubstitutedFrom } =
+    resolveReportExtractOpenAiModel(
+      process.env.REPORT_EXTRACT_OPENAI_MODEL || "",
+    );
   const ocrWorkerUrl = (process.env.OCR_WORKER_URL || "").trim();
   const ocrWorkerToken = (process.env.OCR_WORKER_TOKEN || "").trim();
 
   const missing: string[] = [];
-  if (!openAiModel) missing.push("REPORT_EXTRACT_OPENAI_MODEL");
   if ((provider === "ocr" || provider === "hybrid") && !ocrWorkerUrl) {
     missing.push("OCR_WORKER_URL");
   }
@@ -138,6 +189,7 @@ export function getExtractProviderConfig(): ExtractProviderConfig {
   return {
     provider,
     openAiModel,
+    openAiModelSubstitutedFrom,
     ocrWorkerUrl: ocrWorkerUrl || undefined,
     ocrWorkerToken: ocrWorkerToken || undefined,
   };
@@ -306,6 +358,7 @@ async function runVlm(
     rawText: "",
     providerUsed: "vlm",
     model: config.openAiModel,
+    openAiModelSubstitutedFrom: config.openAiModelSubstitutedFrom,
     fallbackUsed: false,
     latencyMs: nowMs() - startedAt,
   };
@@ -330,6 +383,7 @@ async function runOcr(
     rawText,
     providerUsed: "ocr",
     model: config.openAiModel,
+    openAiModelSubstitutedFrom: config.openAiModelSubstitutedFrom,
     fallbackUsed: false,
     latencyMs: nowMs() - startedAt,
   };
