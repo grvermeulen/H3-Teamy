@@ -32,9 +32,23 @@ describe("fetchJsonOr", () => {
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });
 
-  it("returns fallback and reports to Sentry when fetch rejects", async () => {
+  it("returns fallback without Sentry when WebKit rejects with Load failed", async () => {
     const loadFailed = new TypeError("Load failed");
     vi.spyOn(global, "fetch").mockRejectedValue(loadFailed);
+    const fallback = { user: null as null };
+    const result = await fetchJsonOr(
+      "/api/me",
+      undefined,
+      fallback,
+      "test-webkit-load-failed",
+    );
+    expect(result).toBe(fallback);
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
+  it("returns fallback and reports to Sentry when fetch rejects with other TypeError", async () => {
+    const other = new TypeError("NetworkError when attempting to fetch resource.");
+    vi.spyOn(global, "fetch").mockRejectedValue(other);
     const fallback = { user: null as null };
     const result = await fetchJsonOr(
       "/api/me",
@@ -44,12 +58,25 @@ describe("fetchJsonOr", () => {
     );
     expect(result).toBe(fallback);
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
-      loadFailed,
-      {
-        tags: { clientFetch: "test-reject" },
-      },
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(other, {
+      tags: { clientFetch: "test-reject" },
+    });
+  });
+
+  it("returns fallback without Sentry when Load failed is nested in error cause", async () => {
+    const loadFailed = new TypeError("Load failed");
+    const wrapped = new Error("wrapped");
+    Object.assign(wrapped, { cause: loadFailed });
+    vi.spyOn(global, "fetch").mockRejectedValue(wrapped);
+    const fallback = { ok: false };
+    const result = await fetchJsonOr(
+      "/api/x",
+      undefined,
+      fallback,
+      "test-load-failed-cause",
     );
+    expect(result).toEqual(fallback);
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });
 
   it("returns fallback without Sentry when fetch aborts", async () => {

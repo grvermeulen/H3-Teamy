@@ -27,6 +27,23 @@ function isCancelledClientFetch(
 }
 
 /**
+ * WebKit (Safari, iOS) often throws `TypeError` with message `"Load failed"` for
+ * transient network conditions (spotty connectivity, tab suspension) where
+ * Chromium would use `"Failed to fetch"`. For optional client calls that already
+ * have a safe fallback, reporting these duplicates Sentry noise without
+ * indicating an application bug.
+ */
+function isBenignWebKitLoadFailed(error: unknown): boolean {
+  if (error instanceof TypeError && error.message.trim() === "Load failed") {
+    return true;
+  }
+  if (error instanceof Error && error.cause !== undefined) {
+    return isBenignWebKitLoadFailed(error.cause);
+  }
+  return false;
+}
+
+/**
  * Performs a browser `fetch`, parses JSON, and never throws: network failures
  * (e.g. `TypeError: Failed to fetch`, WebKit `TypeError: Load failed`) and
  * invalid JSON are reported to Sentry and the caller receives `fallback`
@@ -34,6 +51,8 @@ function isCancelledClientFetch(
  * without reporting — they are expected during navigation. Some browsers
  * surface cancellation as `TypeError: Failed to fetch` while the
  * `AbortSignal` is already aborted; those are treated as cancellation too.
+ * WebKit `TypeError: Load failed` for the same optional fetches is treated as
+ * a benign network condition and does not create a Sentry event.
  *
  * @param url - Request URL (same as `fetch` first argument).
  * @param init - Optional `fetch` init; pass `undefined` when not needed.
@@ -52,7 +71,10 @@ export async function fetchJsonOr<T>(
     const data = (await res.json()) as T;
     return data;
   } catch (error: unknown) {
-    if (!isCancelledClientFetch(error, init?.signal ?? undefined)) {
+    if (
+      !isCancelledClientFetch(error, init?.signal ?? undefined) &&
+      !isBenignWebKitLoadFailed(error)
+    ) {
       Sentry.captureException(error, {
         tags: { clientFetch: context },
       });
