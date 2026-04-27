@@ -11,7 +11,10 @@ let cachedSdk: typeof ai | null = null;
  * `BRAINTRUST_API_KEY` is available. Without the key it returns the bare AI
  * SDK so preview/local environments without Braintrust still function.
  *
- * Memoized per process — `initLogger` and `wrapAISDK` only run on first use.
+ * Project resolution prefers `BRAINTRUST_PROJECT_ID` (precise UUID supplied
+ * by the Vercel marketplace integration or set manually) and falls back to
+ * `BRAINTRUST_PROJECT_NAME` then a hardcoded default. Memoized per process —
+ * `initLogger` and `wrapAISDK` only run on first use.
  */
 function getSdk(): typeof ai {
   if (cachedSdk) return cachedSdk;
@@ -22,10 +25,11 @@ function getSdk(): typeof ai {
     return cachedSdk;
   }
 
-  initLogger({
-    projectName: process.env.BRAINTRUST_PROJECT_NAME ?? DEFAULT_PROJECT_NAME,
-    apiKey,
-  });
+  const projectId = process.env.BRAINTRUST_PROJECT_ID;
+  const projectName =
+    process.env.BRAINTRUST_PROJECT_NAME ?? DEFAULT_PROJECT_NAME;
+
+  initLogger(projectId ? { projectId, apiKey } : { projectName, apiKey });
   cachedSdk = wrapAISDK(ai) as unknown as typeof ai;
   return cachedSdk;
 }
