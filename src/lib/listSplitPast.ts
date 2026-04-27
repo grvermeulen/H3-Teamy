@@ -14,9 +14,7 @@ export function splitPastAndFutureByStart<T extends { start: string }>(
 ): { recentPast: T[]; olderPast: T[]; future: T[] } {
   const allSorted = items
     .slice()
-    .sort(
-      (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
-    );
+    .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
   const idx = allSorted.findIndex((e) => new Date(e.start).getTime() >= nowMs);
   const pastAll = idx === -1 ? allSorted : allSorted.slice(0, idx);
   const future = idx === -1 ? [] : allSorted.slice(idx);

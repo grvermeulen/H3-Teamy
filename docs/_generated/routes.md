@@ -43,7 +43,7 @@
 
 ## Pages
 
-- 
+-
 - /admin
 - /admin/feedback
 - /attendance

@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { splitTrainingSessionDatesForDisplay, toYMD } from "../../../lib/training";
+import {
+  splitTrainingSessionDatesForDisplay,
+  toYMD,
+} from "../../../lib/training";
 
 type Session = { date: string };
 
@@ -115,9 +118,7 @@ export default function TrainerAttendanceList() {
           {upcoming.map((date) => (
             <SessionRow key={date} date={date} />
           ))}
-          {total === 0 ? (
-            <div className="muted">Nog geen sessies.</div>
-          ) : null}
+          {total === 0 ? <div className="muted">Nog geen sessies.</div> : null}
         </div>
       </div>
     </main>

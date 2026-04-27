@@ -79,11 +79,8 @@ describe("splitTrainingSessionDatesForDisplay", () => {
       "2026-06-05",
       "2026-06-17",
     ];
-    const { recentPast, olderPast, upcoming } = splitTrainingSessionDatesForDisplay(
-      dates,
-      today,
-      3,
-    );
+    const { recentPast, olderPast, upcoming } =
+      splitTrainingSessionDatesForDisplay(dates, today, 3);
     expect(olderPast).toEqual(["2026-05-06", "2026-05-08", "2026-05-13"]);
     expect(recentPast).toEqual(["2026-05-15", "2026-06-03", "2026-06-05"]);
     expect(upcoming).toEqual(["2026-06-17"]);

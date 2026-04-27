@@ -5,8 +5,7 @@ export const NEXT_RSC_HEADER = "rsc" as const;
 /** App Router RSC-union query key (`?_rsc=...`). */
 export const NEXT_RSC_UNION_QUERY = "_rsc" as const;
 /** Serialized flight router state (kan stale zijn na deploy, zie vercel/next.js#92907). */
-export const NEXT_ROUTER_STATE_TREE_HEADER =
-  "next-router-state-tree" as const;
+export const NEXT_ROUTER_STATE_TREE_HEADER = "next-router-state-tree" as const;
 
 export type FlightRequestParts = {
   pathname: string;

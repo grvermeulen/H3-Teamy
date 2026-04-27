@@ -26,10 +26,11 @@ function getOriginalExceptionMessage(original: unknown): string | null {
   return null;
 }
 
-function isChromeExtensionRuntimeSendMessageTabNotFound(message: string): boolean {
+function isChromeExtensionRuntimeSendMessageTabNotFound(
+  message: string,
+): boolean {
   const lower = message.toLowerCase();
   return (
-    lower.includes("runtime.sendmessage") &&
-    lower.includes("tab not found")
+    lower.includes("runtime.sendmessage") && lower.includes("tab not found")
   );
 }

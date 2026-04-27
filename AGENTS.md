@@ -26,7 +26,8 @@
 - API routes should be thin handlers: parse request, check auth via `getServerSession(authOptions)`, validate with Zod, delegate to service, return response.
 - Shared utilities live in `src/lib/` — `userUtils.ts` (display names), `badges.ts` (attendance badges), `kv.ts` (Redis cache), `eventId.ts` (date-based IDs), `training.ts` (training logic).
 - Validation schemas live in `src/lib/schemas/`.
-- External services: OpenAI (report generation/vision), WaAPI (WhatsApp), Resend (email), Sportlink (iCal events), OCR worker (FastAPI/EasyOCR).
+- External services: OpenAI/Anthropic via the Vercel AI Gateway (report generation/vision, idea triage), WaAPI (WhatsApp), Resend (email), Sportlink (iCal events), OCR worker (FastAPI/EasyOCR).
+- All AI calls go through `src/lib/ai/client.ts`, which wraps the Vercel AI SDK v6 with Braintrust tracing. Env vars: `BRAINTRUST_API_KEY` enables tracing (no-op when absent), `BRAINTRUST_PROJECT_NAME` (default `"H3-Teamy"`). Run `npm run eval` to execute Braintrust evals in `evals/`.
 - Cache (ioredis) failures must never propagate to the caller — wrap in try/catch, log with Sentry, continue.
 - Pre-commit hooks run Prettier, ESLint, `tsc --noEmit`, and `vitest run`.
 - The `.cursor/rules/` directory contains agent-agnostic coding rules adapted from ECC (everything-claude-code) covering: security, API design, frontend/backend patterns, database migrations, verification loops, search-first workflow, code review, and de-slop cleanup.

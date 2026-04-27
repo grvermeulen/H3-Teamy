@@ -31,9 +31,7 @@ export async function fetchWithTimeoutAndRetries(
     } catch (err: unknown) {
       lastError = err instanceof Error ? err : new Error(String(err));
       if (attempt < attempts - 1) {
-        await new Promise((r) =>
-          setTimeout(r, Math.pow(2, attempt) * 500),
-        );
+        await new Promise((r) => setTimeout(r, Math.pow(2, attempt) * 500));
       }
     }
   }

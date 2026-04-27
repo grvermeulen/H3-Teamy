@@ -23,8 +23,8 @@ vi.mock("../../../../lib/badges", () => ({
 }));
 
 vi.mock("../../../../lib/dbMetrics", () => ({
-  withDbRequestMetrics: vi.fn(async (_endpoint: string, fn: () => Promise<unknown>) =>
-    fn(),
+  withDbRequestMetrics: vi.fn(
+    async (_endpoint: string, fn: () => Promise<unknown>) => fn(),
   ),
 }));
 
@@ -46,7 +46,9 @@ describe("GET /api/rsvp/list", () => {
     ]);
 
     const response = await GET(
-      makeRequest("http://localhost/api/rsvp/list?eventId=wedstrijd-1&countsOnly=1"),
+      makeRequest(
+        "http://localhost/api/rsvp/list?eventId=wedstrijd-1&countsOnly=1",
+      ),
     );
 
     expect(response.status).toBe(200);

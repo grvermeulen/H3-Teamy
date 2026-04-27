@@ -50,7 +50,8 @@ export async function GET(req: NextRequest) {
         continue;
       }
       const profile = profilesById[userId];
-      const resolvedDisplayName = displayName(profile ?? {}) || UNKNOWN_RSVP_NAME;
+      const resolvedDisplayName =
+        displayName(profile ?? {}) || UNKNOWN_RSVP_NAME;
       // Compute simple attendance percentage as Yes/(Yes+No+Maybe) across all events (kept for potential future use)
       try {
         const stats = statsById[userId] || { total: 0, yes: 0 };

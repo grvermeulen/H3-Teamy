@@ -13,6 +13,7 @@ export default defineConfig({
       "ecc-reference/**",
       ".next/**",
       "e2e/**",
+      "evals/**",
       "**/.opencode/**",
     ],
     alias: {
