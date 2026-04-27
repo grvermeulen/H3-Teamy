@@ -13,6 +13,18 @@ type RawEvent = {
   player?: string;
 };
 
+// The extract provider emits `null` for absent string fields (required by
+// OpenAI strict structured-output mode). `RawEvent` keeps the strict
+// `string | undefined` shape, so we normalize at the boundary in
+// `toRawEvents` after validating with `isRawEventInput`.
+type RawEventInput = {
+  quarter: 1 | 2 | 3 | 4;
+  time?: string | null;
+  team: "home" | "away";
+  type: "goal" | "personal_foul";
+  player?: string | null;
+};
+
 type ReportBody = {
   eventId?: unknown;
   homeTeam?: unknown;
@@ -87,7 +99,7 @@ function toNumberValue(value: unknown): number | undefined {
     : undefined;
 }
 
-function isRawEvent(value: unknown): value is RawEvent {
+function isRawEventInput(value: unknown): value is RawEventInput {
   if (!isRecord(value)) return false;
   const quarter = value.quarter;
   const team = value.team;
@@ -96,8 +108,6 @@ function isRawEvent(value: unknown): value is RawEvent {
     return false;
   if (team !== "home" && team !== "away") return false;
   if (type !== "goal" && type !== "personal_foul") return false;
-  // The extract provider now emits `null` instead of omitting fields (required
-  // by OpenAI strict structured-output mode). Treat null the same as missing.
   if (
     value.time !== undefined &&
     value.time !== null &&
@@ -115,7 +125,13 @@ function isRawEvent(value: unknown): value is RawEvent {
 
 function toRawEvents(value: unknown): RawEvent[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const events = value.filter(isRawEvent);
+  const events: RawEvent[] = value.filter(isRawEventInput).map((evt) => ({
+    quarter: evt.quarter,
+    team: evt.team,
+    type: evt.type,
+    time: evt.time ?? undefined,
+    player: evt.player ?? undefined,
+  }));
   return events.length ? events : undefined;
 }
 
