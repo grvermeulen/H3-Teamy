@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
     console.info("report_extract_completed", {
       providerUsed: extracted.providerUsed,
       model: extracted.model,
+      openAiModelSubstitutedFrom: extracted.openAiModelSubstitutedFrom,
       fallbackUsed: extracted.fallbackUsed,
       latencyMs: extracted.latencyMs,
     });
