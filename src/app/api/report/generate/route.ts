@@ -453,11 +453,10 @@ Regels:
       });
       content = text.trim();
     } catch (aiError: unknown) {
-      const info = aiError instanceof Error ? aiError.message : String(aiError);
-      return NextResponse.json(
-        { error: "openai_failed", info },
-        { status: 502 },
-      );
+      Sentry.captureException(aiError, {
+        tags: { module: "report_generate", operation: "generateText" },
+      });
+      return NextResponse.json({ error: "openai_failed" }, { status: 502 });
     }
     if (!content)
       return NextResponse.json({ error: "no_content" }, { status: 500 });

@@ -6,6 +6,10 @@ import {
 } from "./reportExtractProvider";
 import { generateObject } from "./ai/client";
 
+vi.mock("@sentry/nextjs", () => ({
+  captureException: vi.fn(),
+}));
+
 vi.mock("./ai/client", () => ({
   generateObject: vi.fn(),
 }));

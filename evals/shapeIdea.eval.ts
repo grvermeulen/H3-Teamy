@@ -16,9 +16,8 @@ type EvalCase = {
   expected: ExpectedShape;
 };
 
-// TODO: replace these synthetic placeholders with a real golden set sourced
-// from `feedback` rows where `type = "IDEA"`. See AGENTS.md learned facts on
-// where ideas live in the database. Keep ~20-50 examples once seeded.
+// Synthetic placeholders. Replace with a golden set sourced from `feedback`
+// rows where `type = "IDEA"` once one is curated (~20-50 examples).
 const placeholderCases: EvalCase[] = [
   {
     input: {

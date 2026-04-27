@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 
 const ExtractEventSchema = z.object({
@@ -359,7 +360,15 @@ export async function extractReportFromImage(
   try {
     const primary = await runVlm(file, config);
     return { ...primary, fallbackUsed: false, latencyMs: nowMs() - startedAt };
-  } catch {
+  } catch (vlmError: unknown) {
+    Sentry.captureException(vlmError, {
+      tags: {
+        module: "report_extract",
+        provider: "vlm",
+        operation: "hybrid_fallback",
+      },
+      level: "warning",
+    });
     const fallback = await runOcr(file, config);
     return { ...fallback, fallbackUsed: true, latencyMs: nowMs() - startedAt };
   }
