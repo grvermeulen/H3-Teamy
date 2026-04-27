@@ -435,9 +435,9 @@ Regels:
 - Sluit altijd af met de stand in de vorm ourScore-opponentScore en sluit af met exact deze zin op een eigen regel: "${MVP_PLACEHOLDER}"
 - Gebruik uitsluitend de gegevens uit de JSON; geen eigen aannames of extra bronnen.`;
 
-    const { generateText } = await import("../../../../lib/ai/client");
     let content = "";
     try {
+      const { generateText } = await import("../../../../lib/ai/client");
       const { text } = await generateText({
         model: "openai/gpt-5-chat-latest",
         temperature: 0.2,

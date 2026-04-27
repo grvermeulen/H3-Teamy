@@ -1,4 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import * as Sentry from "@sentry/nextjs";
 import {
   extractReportFromImage,
   ExtractProviderError,
@@ -15,6 +16,7 @@ vi.mock("./ai/client", () => ({
 }));
 
 const mockedGenerateObject = vi.mocked(generateObject);
+const mockedSentryCapture = vi.mocked(Sentry.captureException);
 
 function mockJsonResponse(payload: unknown, ok = true): Response {
   return {
@@ -41,17 +43,18 @@ describe("reportExtractProvider", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.restoreAllMocks();
     mockedGenerateObject.mockReset();
+    mockedSentryCapture.mockReset();
     process.env = { ...originalEnv };
-    process.env.OPENAI_API_KEY = "test-key";
     process.env.REPORT_EXTRACT_OPENAI_MODEL = "gpt-4o";
+    delete process.env.OPENAI_API_KEY;
     delete process.env.OCR_WORKER_URL;
     delete process.env.OCR_WORKER_TOKEN;
     delete process.env.REPORT_EXTRACT_PROVIDER;
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     process.env = { ...originalEnv };
   });
 
@@ -62,6 +65,12 @@ describe("reportExtractProvider", () => {
       expect(cfg.openAiModel).toBe("gpt-4o");
     });
 
+    it("does not require OPENAI_API_KEY (gateway handles auth)", () => {
+      // OPENAI_API_KEY is intentionally unset in beforeEach.
+      const cfg = getExtractProviderConfig();
+      expect(cfg.provider).toBe("vlm");
+    });
+
     it("validates OCR env vars when provider is ocr", () => {
       process.env.REPORT_EXTRACT_PROVIDER = "ocr";
       expect(() => getExtractProviderConfig()).toThrowError(
@@ -69,8 +78,7 @@ describe("reportExtractProvider", () => {
       );
     });
 
-    it("throws a typed config error when required env vars are missing", () => {
-      delete process.env.OPENAI_API_KEY;
+    it("throws a typed config error when REPORT_EXTRACT_OPENAI_MODEL is missing", () => {
       delete process.env.REPORT_EXTRACT_OPENAI_MODEL;
       try {
         getExtractProviderConfig();
@@ -124,10 +132,9 @@ describe("reportExtractProvider", () => {
       process.env.OCR_WORKER_URL = "https://ocr.example.com";
       process.env.OCR_WORKER_TOKEN = "ocr-token";
 
-      const fetchMock = vi
-        .fn()
+      const fetchSpy = vi
+        .spyOn(global, "fetch")
         .mockResolvedValueOnce(mockJsonResponse({ raw_text: "RAW OCR TEXT" }));
-      global.fetch = fetchMock as unknown as typeof fetch;
 
       mockedGenerateObject.mockResolvedValueOnce({
         object: {
@@ -139,7 +146,7 @@ describe("reportExtractProvider", () => {
       } as never);
 
       const out = await extractReportFromImage(makeImageFile());
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
       expect(mockedGenerateObject).toHaveBeenCalledTimes(1);
       const normalizationArgs = mockedGenerateObject.mock.calls[0][0] as {
         prompt: string;
@@ -151,7 +158,7 @@ describe("reportExtractProvider", () => {
       expect(out.result.homeScore).toBe(5);
     });
 
-    it("falls back to OCR in hybrid mode when VLM fails", async () => {
+    it("falls back to OCR in hybrid mode when VLM fails and reports the failure to Sentry", async () => {
       process.env.REPORT_EXTRACT_PROVIDER = "hybrid";
       process.env.OCR_WORKER_URL = "https://ocr.example.com";
       process.env.OCR_WORKER_TOKEN = "ocr-token";
@@ -165,18 +172,28 @@ describe("reportExtractProvider", () => {
           },
         } as never);
 
-      const fetchMock = vi
-        .fn()
+      const fetchSpy = vi
+        .spyOn(global, "fetch")
         .mockResolvedValueOnce(mockJsonResponse({ raw_text: "OCR RAW" }));
-      global.fetch = fetchMock as unknown as typeof fetch;
 
       const out = await extractReportFromImage(makeImageFile());
       expect(mockedGenerateObject).toHaveBeenCalledTimes(2);
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
       expect(out.providerUsed).toBe("ocr");
       expect(out.fallbackUsed).toBe(true);
       expect(out.rawText).toBe("OCR RAW");
       expect(out.result.homeTeam).toBe("Fallback Home");
+      expect(mockedSentryCapture).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({
+          level: "warning",
+          tags: expect.objectContaining({
+            module: "report_extract",
+            provider: "vlm",
+            operation: "hybrid_fallback",
+          }),
+        }),
+      );
     });
 
     it("surfaces OpenAI errors as typed provider errors", async () => {
@@ -195,9 +212,9 @@ describe("reportExtractProvider", () => {
       process.env.REPORT_EXTRACT_PROVIDER = "ocr";
       process.env.OCR_WORKER_URL = "https://ocr.example.com";
       process.env.OCR_WORKER_TOKEN = "ocr-token";
-      global.fetch = vi.fn(async () =>
+      vi.spyOn(global, "fetch").mockResolvedValueOnce(
         mockTextResponse("ocr down", false),
-      ) as unknown as typeof fetch;
+      );
 
       await expect(
         extractReportFromImage(makeImageFile()),

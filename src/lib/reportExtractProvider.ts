@@ -27,7 +27,6 @@ type ConcreteProvider = "vlm" | "ocr";
 export type ExtractProviderConfig = {
   provider: ExtractProvider;
   openAiModel: string;
-  openAiApiKey: string;
   ocrWorkerUrl?: string;
   ocrWorkerToken?: string;
 };
@@ -106,20 +105,17 @@ function gatewayModelString(rawModel: string): string {
  * Reads and validates the report-extract environment configuration. Throws an
  * `ExtractProviderError` when required variables are missing so route
  * handlers can return a structured 500 instead of crashing with a generic
- * `TypeError`.
- *
- * `OPENAI_API_KEY` is still required: it is forwarded as the AI Gateway
- * upstream credential when local development bypasses Vercel OIDC.
+ * `TypeError`. `OPENAI_API_KEY` is no longer required here: AI calls go
+ * through the Vercel AI Gateway, which handles upstream auth via OIDC in
+ * production or `AI_GATEWAY_API_KEY` locally.
  */
 export function getExtractProviderConfig(): ExtractProviderConfig {
   const provider = parseProvider(process.env.REPORT_EXTRACT_PROVIDER);
   const openAiModel = (process.env.REPORT_EXTRACT_OPENAI_MODEL || "").trim();
-  const openAiApiKey = (process.env.OPENAI_API_KEY || "").trim();
   const ocrWorkerUrl = (process.env.OCR_WORKER_URL || "").trim();
   const ocrWorkerToken = (process.env.OCR_WORKER_TOKEN || "").trim();
 
   const missing: string[] = [];
-  if (!openAiApiKey) missing.push("OPENAI_API_KEY");
   if (!openAiModel) missing.push("REPORT_EXTRACT_OPENAI_MODEL");
   if ((provider === "ocr" || provider === "hybrid") && !ocrWorkerUrl) {
     missing.push("OCR_WORKER_URL");
@@ -142,7 +138,6 @@ export function getExtractProviderConfig(): ExtractProviderConfig {
   return {
     provider,
     openAiModel,
-    openAiApiKey,
     ocrWorkerUrl: ocrWorkerUrl || undefined,
     ocrWorkerToken: ocrWorkerToken || undefined,
   };
