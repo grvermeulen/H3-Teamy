@@ -4,6 +4,13 @@ import {
   ExtractProviderError,
   getExtractProviderConfig,
 } from "./reportExtractProvider";
+import { generateObject } from "./ai/client";
+
+vi.mock("./ai/client", () => ({
+  generateObject: vi.fn(),
+}));
+
+const mockedGenerateObject = vi.mocked(generateObject);
 
 function mockJsonResponse(payload: unknown, ok = true): Response {
   return {
@@ -29,7 +36,9 @@ describe("reportExtractProvider", () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.restoreAllMocks();
+    mockedGenerateObject.mockReset();
     process.env = { ...originalEnv };
     process.env.OPENAI_API_KEY = "test-key";
     process.env.REPORT_EXTRACT_OPENAI_MODEL = "gpt-4o";
@@ -72,42 +81,33 @@ describe("reportExtractProvider", () => {
   });
 
   describe("extractReportFromImage", () => {
-    it("uses VLM flow by default and returns normalized result", async () => {
-      const fetchMock = vi.fn(async () =>
-        mockJsonResponse({
-          choices: [
+    it("uses VLM flow by default and returns parsed result via the AI SDK", async () => {
+      mockedGenerateObject.mockResolvedValueOnce({
+        object: {
+          homeTeam: "De Rijn H3",
+          awayTeam: "Opponent",
+          homeScore: 12,
+          awayScore: 9,
+          events: [
             {
-              message: {
-                content: JSON.stringify({
-                  homeTeam: "De Rijn H3",
-                  awayTeam: "Opponent",
-                  homeScore: 12,
-                  awayScore: 9,
-                  events: [
-                    {
-                      quarter: 1,
-                      time: "07:12",
-                      team: "home",
-                      type: "goal",
-                      player: "Player A",
-                    },
-                    {
-                      quarter: 7,
-                      time: 123,
-                      team: "bad",
-                      type: "unknown",
-                    },
-                  ],
-                }),
-              },
+              quarter: 1,
+              time: "07:12",
+              team: "home",
+              type: "goal",
+              player: "Player A",
             },
           ],
-        }),
-      );
-      global.fetch = fetchMock as unknown as typeof fetch;
+        },
+      } as never);
 
       const out = await extractReportFromImage(makeImageFile());
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(mockedGenerateObject).toHaveBeenCalledTimes(1);
+      const args = mockedGenerateObject.mock.calls[0][0] as {
+        model: string;
+        messages: Array<{ content: Array<{ type: string }> }>;
+      };
+      expect(args.model).toBe("openai/gpt-4o");
+      expect(args.messages[0].content[1].type).toBe("image");
       expect(out.providerUsed).toBe("vlm");
       expect(out.fallbackUsed).toBe(false);
       expect(out.rawText).toBe("");
@@ -122,27 +122,25 @@ describe("reportExtractProvider", () => {
 
       const fetchMock = vi
         .fn()
-        .mockResolvedValueOnce(mockJsonResponse({ raw_text: "RAW OCR TEXT" }))
-        .mockResolvedValueOnce(
-          mockJsonResponse({
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify({
-                    homeTeam: "Home",
-                    awayTeam: "Away",
-                    homeScore: 5,
-                    awayScore: 4,
-                  }),
-                },
-              },
-            ],
-          }),
-        );
+        .mockResolvedValueOnce(mockJsonResponse({ raw_text: "RAW OCR TEXT" }));
       global.fetch = fetchMock as unknown as typeof fetch;
 
+      mockedGenerateObject.mockResolvedValueOnce({
+        object: {
+          homeTeam: "Home",
+          awayTeam: "Away",
+          homeScore: 5,
+          awayScore: 4,
+        },
+      } as never);
+
       const out = await extractReportFromImage(makeImageFile());
-      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(mockedGenerateObject).toHaveBeenCalledTimes(1);
+      const normalizationArgs = mockedGenerateObject.mock.calls[0][0] as {
+        prompt: string;
+      };
+      expect(normalizationArgs.prompt).toContain("RAW OCR TEXT");
       expect(out.providerUsed).toBe("ocr");
       expect(out.fallbackUsed).toBe(false);
       expect(out.rawText).toBe("RAW OCR TEXT");
@@ -154,28 +152,23 @@ describe("reportExtractProvider", () => {
       process.env.OCR_WORKER_URL = "https://ocr.example.com";
       process.env.OCR_WORKER_TOKEN = "ocr-token";
 
+      mockedGenerateObject
+        .mockRejectedValueOnce(new Error("vlm down"))
+        .mockResolvedValueOnce({
+          object: {
+            homeTeam: "Fallback Home",
+            awayTeam: "Fallback Away",
+          },
+        } as never);
+
       const fetchMock = vi
         .fn()
-        .mockResolvedValueOnce(mockTextResponse("vlm failed", false))
-        .mockResolvedValueOnce(mockJsonResponse({ raw_text: "OCR RAW" }))
-        .mockResolvedValueOnce(
-          mockJsonResponse({
-            choices: [
-              {
-                message: {
-                  content: JSON.stringify({
-                    homeTeam: "Fallback Home",
-                    awayTeam: "Fallback Away",
-                  }),
-                },
-              },
-            ],
-          }),
-        );
+        .mockResolvedValueOnce(mockJsonResponse({ raw_text: "OCR RAW" }));
       global.fetch = fetchMock as unknown as typeof fetch;
 
       const out = await extractReportFromImage(makeImageFile());
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(mockedGenerateObject).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(out.providerUsed).toBe("ocr");
       expect(out.fallbackUsed).toBe(true);
       expect(out.rawText).toBe("OCR RAW");
@@ -184,9 +177,7 @@ describe("reportExtractProvider", () => {
 
     it("surfaces OpenAI errors as typed provider errors", async () => {
       process.env.REPORT_EXTRACT_PROVIDER = "vlm";
-      global.fetch = vi.fn(async () =>
-        mockTextResponse("openai down", false),
-      ) as unknown as typeof fetch;
+      mockedGenerateObject.mockRejectedValueOnce(new Error("openai down"));
 
       await expect(
         extractReportFromImage(makeImageFile()),
@@ -210,17 +201,6 @@ describe("reportExtractProvider", () => {
         code: "ocr_failed",
         status: 502,
       });
-    });
-
-    it("returns empty object when model response is non-JSON", async () => {
-      global.fetch = vi.fn(async () =>
-        mockJsonResponse({
-          choices: [{ message: { content: "not json" } }],
-        }),
-      ) as unknown as typeof fetch;
-
-      const out = await extractReportFromImage(makeImageFile());
-      expect(out.result).toEqual({});
     });
   });
 });

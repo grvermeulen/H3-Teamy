@@ -56,7 +56,7 @@ describe("shapeIdea", () => {
         questions: ["Mobile only?"],
       },
     }));
-    vi.doMock("ai", () => ({ generateObject }));
+    vi.doMock("./client", () => ({ generateObject }));
     const mod = await import("./productManager");
     const out = await mod.shapeIdea({
       title: "Bigger Yes button",
@@ -74,7 +74,7 @@ describe("shapeIdea", () => {
 
   // Smoke test that direct call rejects when SDK is unavailable in this env
   it("propagates errors from the SDK", async () => {
-    vi.doMock("ai", () => ({
+    vi.doMock("./client", () => ({
       generateObject: () => {
         throw new Error("boom");
       },

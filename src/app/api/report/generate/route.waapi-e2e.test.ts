@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { POST } from "./route";
 import { getReport, kvGetJson, setReport } from "../../../../lib/kv";
+import { generateText } from "../../../../lib/ai/client";
 import screenshotOne from "./__fixtures__/waapi-e2e-screenshot-1.json";
 import screenshotTwo from "./__fixtures__/waapi-e2e-screenshot-2.json";
 import screenshotThree from "./__fixtures__/waapi-e2e-screenshot-3.json";
@@ -17,6 +18,12 @@ vi.mock("../../../../lib/kv", () => ({
   kvGetJson: vi.fn(),
   setReport: vi.fn(),
 }));
+
+vi.mock("../../../../lib/ai/client", () => ({
+  generateText: vi.fn(),
+}));
+
+const mockedGenerateText = vi.mocked(generateText);
 
 type RawEvent = {
   quarter: 1 | 2 | 3 | 4;
@@ -118,21 +125,12 @@ describe("POST /api/report/generate WAAPI e2e", () => {
   it("generates reports and sends WAAPI notifications for all 3 screenshot fixtures safely", async () => {
     const waapiBodies: Array<{ chatId?: string; message?: string }> = [];
 
+    mockedGenerateText.mockResolvedValue({
+      text: "Sterk teamverslag voor de testflow.\nDe MVP-stemming staat nog open via de knop hieronder!",
+    } as never);
+
     vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
       const url = typeof input === "string" ? input : input.url;
-      if (url === "https://api.openai.com/v1/responses") {
-        return new Response(
-          JSON.stringify({
-            output_text:
-              "Sterk teamverslag voor de testflow.\nDe MVP-stemming staat nog open via de knop hieronder!",
-          }),
-          {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          },
-        );
-      }
-
       if (url.includes("/client/action/send-message")) {
         const payload =
           typeof init?.body === "string"
@@ -179,22 +177,14 @@ describe("POST /api/report/generate WAAPI e2e", () => {
   it("captures a Sentry signal when notification is not sent", async () => {
     vi.stubEnv("WAAPI_NOTIFICATIONS_ENABLED", "false");
 
+    mockedGenerateText.mockResolvedValue({
+      text: "Verslag zonder WAAPI-send.\nDe MVP-stemming staat nog open via de knop hieronder!",
+    } as never);
+
     const fetchSpy = vi
       .spyOn(global, "fetch")
       .mockImplementation(async (input) => {
         const url = typeof input === "string" ? input : input.url;
-        if (url === "https://api.openai.com/v1/responses") {
-          return new Response(
-            JSON.stringify({
-              output_text:
-                "Verslag zonder WAAPI-send.\nDe MVP-stemming staat nog open via de knop hieronder!",
-            }),
-            {
-              status: 200,
-              headers: { "content-type": "application/json" },
-            },
-          );
-        }
         throw new Error(`Unexpected fetch URL in e2e test: ${url}`);
       });
 
@@ -208,7 +198,8 @@ describe("POST /api/report/generate WAAPI e2e", () => {
     const response = await POST(req as NextRequest);
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({ ok: true });
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(0);
+    expect(mockedGenerateText).toHaveBeenCalledTimes(1);
     expect(vi.mocked(setReport)).toHaveBeenCalledWith(
       expect.stringMatching(/^e2e-waapi-/),
       expect.any(Object),

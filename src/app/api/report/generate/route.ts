@@ -385,13 +385,6 @@ export async function POST(req: NextRequest) {
 
     // Always (re)generate a fresh report on request
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey)
-      return NextResponse.json(
-        { error: "OPENAI_API_KEY not configured" },
-        { status: 500 },
-      );
-
     // Validate that we actually have meaningful JSON for the model
     const hasScores =
       typeof input.homeScore === "number" &&
@@ -442,55 +435,30 @@ Regels:
 - Sluit altijd af met de stand in de vorm ourScore-opponentScore en sluit af met exact deze zin op een eigen regel: "${MVP_PLACEHOLDER}"
 - Gebruik uitsluitend de gegevens uit de JSON; geen eigen aannames of extra bronnen.`;
 
-    const resp = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-5-chat-latest",
+    const { generateText } = await import("../../../../lib/ai/client");
+    let content = "";
+    try {
+      const { text } = await generateText({
+        model: "openai/gpt-5-chat-latest",
         temperature: 0.2,
-        input: [
-          {
-            role: "system",
-            content: [
-              {
-                type: "input_text",
-                text: "You are an enthusiastic, pro–De Rijn Heren 3 reporter. Write energetic, respectful Dutch match reports using only the provided JSON.",
-              },
-            ],
-          },
+        system:
+          "You are an enthusiastic, pro–De Rijn Heren 3 reporter. Write energetic, respectful Dutch match reports using only the provided JSON.",
+        messages: [
+          { role: "user", content: prompt },
           {
             role: "user",
-            content: [{ type: "input_text", text: prompt }],
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "input_text",
-                text: `JSON:\n${JSON.stringify(narrativeInput)}`,
-              },
-            ],
+            content: `JSON:\n${JSON.stringify(narrativeInput)}`,
           },
         ],
-      }),
-    });
-    if (!resp.ok) {
-      const text = await resp.text();
+      });
+      content = text.trim();
+    } catch (aiError: unknown) {
+      const info = aiError instanceof Error ? aiError.message : String(aiError);
       return NextResponse.json(
-        { error: "openai_failed", info: text },
+        { error: "openai_failed", info },
         { status: 502 },
       );
     }
-    const data = await resp.json();
-    const content =
-      (
-        data?.output_text ||
-        data?.output?.[0]?.content?.[0]?.text ||
-        ""
-      ).trim?.() || "";
     if (!content)
       return NextResponse.json({ error: "no_content" }, { status: 500 });
 
