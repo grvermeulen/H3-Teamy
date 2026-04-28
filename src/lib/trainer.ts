@@ -4,6 +4,7 @@ import { getActiveUser } from "./activeUser";
 import { isDbUnavailableError } from "./dbUnavailableError";
 import { prisma } from "./db";
 import { getUserRoles, type UserRoles } from "./kv";
+import { isTransientPostgresConnectError, withPgConnectRetry } from "./prismaConnectRetry";
 import { USER_CORE_SELECT } from "./userPrismaSelect";
 
 function norm(s: string) {
@@ -17,7 +18,8 @@ function norm(s: string) {
  * @param req - The incoming Next.js request.
  * @returns An object containing `isTrainer` boolean and the user's identity `me`.
  *   When user resolution fails (e.g. database connection timeout), returns `isTrainer: false`
- *   and an empty `me` after logging to Sentry.
+ *   and an empty `me`. Tijdelijke DB-connectiefouten worden niet dubbel naar Sentry gestuurd
+ *   (retry + één geaggregeerde melding bij uitputting).
  */
 export async function isTrainer(
   req: NextRequest,
@@ -26,7 +28,10 @@ export async function isTrainer(
   try {
     ({ userId } = await getActiveUser(req));
   } catch (err: unknown) {
-    if (!isDbUnavailableError(err)) {
+    if (
+      !isDbUnavailableError(err) &&
+      !isTransientPostgresConnectError(err)
+    ) {
       Sentry.captureException(err, {
         tags: { component: "trainer" },
         extra: { context: "getActiveUser_isTrainer" },
@@ -35,10 +40,12 @@ export async function isTrainer(
     return { isTrainer: false, me: { id: "", name: "" } };
   }
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: USER_CORE_SELECT,
-    });
+    const user = await withPgConnectRetry("isTrainer_loadUser", () =>
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: USER_CORE_SELECT,
+      }),
+    );
     const full = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
     const admin = process.env.ADMIN_FULL_NAME || "";
     const trainers = (process.env.TRAINER_FULL_NAMES || "")
@@ -62,10 +69,15 @@ export async function isTrainer(
       me: { id: userId, name: full },
     };
   } catch (err: unknown) {
-    Sentry.captureException(err, {
-      tags: { component: "trainer" },
-      extra: { context: "isTrainer", userId },
-    });
+    if (
+      !isDbUnavailableError(err) &&
+      !isTransientPostgresConnectError(err)
+    ) {
+      Sentry.captureException(err, {
+        tags: { component: "trainer" },
+        extra: { context: "isTrainer", userId },
+      });
+    }
     return { isTrainer: false, me: { id: userId, name: "" } };
   }
 }
@@ -77,7 +89,7 @@ export async function isTrainer(
  * @param req - The incoming Next.js request.
  * @returns An object containing `isAdmin` boolean and the user's identity `me`.
  *   When user resolution fails (e.g. database connection timeout), returns `isAdmin: false`
- *   and an empty `me` after logging to Sentry.
+ *   and an empty `me`. Tijdelijke DB-connectiefouten worden niet dubbel naar Sentry gestuurd.
  */
 export async function isAdminUser(
   req: NextRequest,
@@ -86,7 +98,10 @@ export async function isAdminUser(
   try {
     ({ userId } = await getActiveUser(req));
   } catch (err: unknown) {
-    if (!isDbUnavailableError(err)) {
+    if (
+      !isDbUnavailableError(err) &&
+      !isTransientPostgresConnectError(err)
+    ) {
       Sentry.captureException(err, {
         tags: { component: "trainer" },
         extra: { context: "getActiveUser_isAdminUser" },
@@ -95,10 +110,12 @@ export async function isAdminUser(
     return { isAdmin: false, me: { id: "", name: "" } };
   }
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: USER_CORE_SELECT,
-    });
+    const user = await withPgConnectRetry("isAdminUser_loadUser", () =>
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: USER_CORE_SELECT,
+      }),
+    );
     const full = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
     const admin = process.env.ADMIN_FULL_NAME || "";
     const envAdmin = norm(full) === norm(admin);
@@ -117,10 +134,15 @@ export async function isAdminUser(
       me: { id: userId, name: full },
     };
   } catch (err: unknown) {
-    Sentry.captureException(err, {
-      tags: { component: "trainer" },
-      extra: { context: "isAdminUser", userId },
-    });
+    if (
+      !isDbUnavailableError(err) &&
+      !isTransientPostgresConnectError(err)
+    ) {
+      Sentry.captureException(err, {
+        tags: { component: "trainer" },
+        extra: { context: "isAdminUser", userId },
+      });
+    }
     return { isAdmin: false, me: { id: userId, name: "" } };
   }
 }

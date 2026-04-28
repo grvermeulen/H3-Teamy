@@ -21,6 +21,18 @@ vi.mock("./db", () => ({
   },
 }));
 
+vi.mock("./prismaConnectRetry", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./prismaConnectRetry")>();
+  return {
+    ...actual,
+    withPgConnectRetry: async <T>(
+      _operationName: string,
+      fn: () => Promise<T>,
+    ): Promise<T> => fn(),
+  };
+});
+
 vi.mock("./activeUser", () => ({
   getActiveUser: vi.fn(),
 }));
@@ -40,12 +52,12 @@ describe("trainer permissions", () => {
 
   describe("isTrainer", () => {
     it("returns true if user is listed in TRAINER_FULL_NAMES", async () => {
-      (getActiveUser as any).mockResolvedValue({ userId: "1" });
-      (prisma.user.findUnique as any).mockResolvedValue({
+      vi.mocked(getActiveUser).mockResolvedValue({ userId: "1" });
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
         firstName: "Trainer",
         lastName: "One",
       });
-      (getUserRoles as any).mockResolvedValue({});
+      vi.mocked(getUserRoles).mockResolvedValue({});
 
       const result = await isTrainer(mockReq);
       expect(result.isTrainer).toBe(true);
@@ -56,44 +68,44 @@ describe("trainer permissions", () => {
     });
 
     it("returns true if user is Admin", async () => {
-      (getActiveUser as any).mockResolvedValue({ userId: "2" });
-      (prisma.user.findUnique as any).mockResolvedValue({
+      vi.mocked(getActiveUser).mockResolvedValue({ userId: "2" });
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
         firstName: "Super",
         lastName: "Admin",
       });
-      (getUserRoles as any).mockResolvedValue({});
+      vi.mocked(getUserRoles).mockResolvedValue({});
 
       const result = await isTrainer(mockReq);
       expect(result.isTrainer).toBe(true);
     });
 
     it("returns true if user has trainer role", async () => {
-      (getActiveUser as any).mockResolvedValue({ userId: "3" });
-      (prisma.user.findUnique as any).mockResolvedValue({
+      vi.mocked(getActiveUser).mockResolvedValue({ userId: "3" });
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
         firstName: "Random",
         lastName: "Guy",
       });
-      (getUserRoles as any).mockResolvedValue({ trainer: true });
+      vi.mocked(getUserRoles).mockResolvedValue({ trainer: true });
 
       const result = await isTrainer(mockReq);
       expect(result.isTrainer).toBe(true);
     });
 
     it("returns false for regular users", async () => {
-      (getActiveUser as any).mockResolvedValue({ userId: "4" });
-      (prisma.user.findUnique as any).mockResolvedValue({
+      vi.mocked(getActiveUser).mockResolvedValue({ userId: "4" });
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
         firstName: "Regular",
         lastName: "Joe",
       });
-      (getUserRoles as any).mockResolvedValue({});
+      vi.mocked(getUserRoles).mockResolvedValue({});
 
       const result = await isTrainer(mockReq);
       expect(result.isTrainer).toBe(false);
     });
 
     it("returns false if DB query fails", async () => {
-      (getActiveUser as any).mockResolvedValue({ userId: "5" });
-      (prisma.user.findUnique as any).mockRejectedValue(new Error("DB Error"));
+      vi.mocked(getActiveUser).mockResolvedValue({ userId: "5" });
+      vi.mocked(prisma.user.findUnique).mockRejectedValue(new Error("DB Error"));
 
       const result = await isTrainer(mockReq);
       expect(result.isTrainer).toBe(false);
@@ -125,6 +137,42 @@ describe("trainer permissions", () => {
       );
     });
 
+    it("returns false if getActiveUser fails with transient DB error without Sentry noise", async () => {
+      const connectErr = new Error("timeout exceeded when trying to connect");
+      vi.mocked(getActiveUser).mockRejectedValueOnce(connectErr);
+
+      const result = await isTrainer(mockReq);
+      expect(result.isTrainer).toBe(false);
+      expect(result.me).toEqual({ id: "", name: "" });
+      expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+    });
+
+    it("returns false if getActiveUser fails with Prisma upstream message without Sentry noise", async () => {
+      vi.mocked(getActiveUser).mockRejectedValueOnce(
+        new Error(
+          "Failed to connect to upstream database. Please contact Prisma support if the problem persists.",
+        ),
+      );
+
+      const result = await isTrainer(mockReq);
+      expect(result.isTrainer).toBe(false);
+      expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+    });
+
+    it("returns false if user load fails with upstream DB error without Sentry noise", async () => {
+      vi.mocked(getActiveUser).mockResolvedValue({ userId: "9" });
+      vi.mocked(prisma.user.findUnique).mockRejectedValue(
+        new Error(
+          "Failed to connect to upstream database. Please contact Prisma support if the problem persists.",
+        ),
+      );
+
+      const result = await isTrainer(mockReq);
+      expect(result.isTrainer).toBe(false);
+      expect(result.me).toEqual({ id: "9", name: "" });
+      expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+    });
+
     it("does not double-report Sentry when getActiveUser throws DbUnavailableError", async () => {
       vi.mocked(getActiveUser).mockRejectedValueOnce(new DbUnavailableError());
       const result = await isTrainer(mockReq);
@@ -135,44 +183,44 @@ describe("trainer permissions", () => {
 
   describe("isAdminUser", () => {
     it("returns true if user matches ADMIN_FULL_NAME", async () => {
-      (getActiveUser as any).mockResolvedValue({ userId: "1" });
-      (prisma.user.findUnique as any).mockResolvedValue({
+      vi.mocked(getActiveUser).mockResolvedValue({ userId: "1" });
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
         firstName: "Super",
         lastName: "Admin",
       });
-      (getUserRoles as any).mockResolvedValue({});
+      vi.mocked(getUserRoles).mockResolvedValue({});
 
       const result = await isAdminUser(mockReq);
       expect(result.isAdmin).toBe(true);
     });
 
     it("returns true if user has admin role", async () => {
-      (getActiveUser as any).mockResolvedValue({ userId: "2" });
-      (prisma.user.findUnique as any).mockResolvedValue({
+      vi.mocked(getActiveUser).mockResolvedValue({ userId: "2" });
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
         firstName: "Role",
         lastName: "Admin",
       });
-      (getUserRoles as any).mockResolvedValue({ admin: true });
+      vi.mocked(getUserRoles).mockResolvedValue({ admin: true });
 
       const result = await isAdminUser(mockReq);
       expect(result.isAdmin).toBe(true);
     });
 
     it("returns false if only trainer", async () => {
-      (getActiveUser as any).mockResolvedValue({ userId: "3" });
-      (prisma.user.findUnique as any).mockResolvedValue({
+      vi.mocked(getActiveUser).mockResolvedValue({ userId: "3" });
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
         firstName: "Trainer",
         lastName: "One",
       });
-      (getUserRoles as any).mockResolvedValue({ trainer: true }); // Trainer but not admin
+      vi.mocked(getUserRoles).mockResolvedValue({ trainer: true }); // Trainer but not admin
 
       const result = await isAdminUser(mockReq);
       expect(result.isAdmin).toBe(false);
     });
 
     it("returns false if DB query fails", async () => {
-      (getActiveUser as any).mockResolvedValue({ userId: "5" });
-      (prisma.user.findUnique as any).mockRejectedValue(new Error("DB Error"));
+      vi.mocked(getActiveUser).mockResolvedValue({ userId: "5" });
+      vi.mocked(prisma.user.findUnique).mockRejectedValue(new Error("DB Error"));
 
       const result = await isAdminUser(mockReq);
       expect(result.isAdmin).toBe(false);
@@ -205,6 +253,28 @@ describe("trainer permissions", () => {
           }),
         }),
       );
+    });
+
+    it("returns false if getActiveUser fails with transient DB error without Sentry noise", async () => {
+      const connectErr = new Error("timeout exceeded when trying to connect");
+      vi.mocked(getActiveUser).mockRejectedValueOnce(connectErr);
+
+      const result = await isAdminUser(mockReq);
+      expect(result.isAdmin).toBe(false);
+      expect(result.me).toEqual({ id: "", name: "" });
+      expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+    });
+
+    it("returns false if getActiveUser fails with Prisma upstream message without Sentry noise", async () => {
+      vi.mocked(getActiveUser).mockRejectedValueOnce(
+        new Error(
+          "Failed to connect to upstream database. Please contact Prisma support if the problem persists.",
+        ),
+      );
+
+      const result = await isAdminUser(mockReq);
+      expect(result.isAdmin).toBe(false);
+      expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
     });
 
     it("does not double-report Sentry when getActiveUser throws DbUnavailableError", async () => {

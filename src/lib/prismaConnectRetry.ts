@@ -28,7 +28,9 @@ export function isTransientPostgresConnectError(error: unknown): boolean {
       msg.includes("econnreset") ||
       msg.includes("read econnreset") ||
       msg.includes("upstream database") ||
-      msg.includes("failed to connect")
+      msg.includes("failed to connect") ||
+      msg.includes("can't reach database server") ||
+      msg.includes("could not connect to server")
     );
   }
   return false;
