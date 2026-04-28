@@ -473,6 +473,7 @@ Regels:
 - "Wij/ons" = De Rijn Heren 3, ongeacht of we thuis of uit spelen.
 - Baseer het resultaat uitsluitend op ourScore versus opponentScore. Benoem expliciet dat wij gewonnen hebben bij ourScore > opponentScore, verloren bij ourScore < opponentScore, of dat het gelijkspel was wanneer de scores gelijk zijn.
 - Gebruik alleen spelersnamen die voorkomen bij events met "team": "us". Als er geen naam staat, omschrijf de actie algemeen ("een van onze schutters") maar verzin geen namen.
+- Tel vóór het schrijven per speler hoe vaak die voorkomt in events met "type": "goal" en "team": "us". Gebruik deze telling exact: noem elke scorer precies even vaak als het getelde aantal doelpunten (niet minder, niet meer). Laat geen scorer weg en verzin geen extra goal-vermeldingen.
 - Noem nooit namen van individuele tegenstanders. Je mag de teamnaam (${narrativeInput.opponentTeam}) gebruiken, maar spreek verder over "de tegenstander".
 - Meld opponent-events hooguit kort en zonder namen (bijv. "de tegenstander kwam nog even terug").
 - Schrijf energiek en sportief, maximaal 2 uitroeptekens, en blijf positief vanuit ons perspectief.
