@@ -27,32 +27,35 @@ function isCancelledClientFetch(
 }
 
 /**
- * WebKit (Safari, iOS) often throws `TypeError` with message `"Load failed"` for
- * transient network conditions (spotty connectivity, tab suspension) where
- * Chromium would use `"Failed to fetch"`. For optional client calls that already
- * have a safe fallback, reporting these duplicates Sentry noise without
- * indicating an application bug.
+ * Browsers use different `TypeError` messages for transient fetch failures on
+ * unreliable networks (offline, tab suspension, connection reset): WebKit uses
+ * `"Load failed"`, Chromium uses `"Failed to fetch"`. Optional client helpers
+ * already return a safe fallback; reporting every occurrence duplicates Sentry
+ * noise without indicating an application bug.
  */
-function isBenignWebKitLoadFailed(error: unknown): boolean {
-  if (error instanceof TypeError && error.message.trim() === "Load failed") {
-    return true;
+function isBenignTransientFetchTypeError(error: unknown): boolean {
+  if (error instanceof TypeError) {
+    const msg = error.message.trim();
+    if (msg === "Load failed" || msg === "Failed to fetch") {
+      return true;
+    }
   }
   if (error instanceof Error && error.cause !== undefined) {
-    return isBenignWebKitLoadFailed(error.cause);
+    return isBenignTransientFetchTypeError(error.cause);
   }
   return false;
 }
 
 /**
- * Performs a browser `fetch`, parses JSON, and never throws: network failures
- * (e.g. `TypeError: Failed to fetch`, WebKit `TypeError: Load failed`) and
- * invalid JSON are reported to Sentry and the caller receives `fallback`
- * instead. Aborted requests (`AbortSignal`, React unmount) return `fallback`
- * without reporting — they are expected during navigation. Some browsers
- * surface cancellation as `TypeError: Failed to fetch` while the
- * `AbortSignal` is already aborted; those are treated as cancellation too.
- * WebKit `TypeError: Load failed` for the same optional fetches is treated as
- * a benign network condition and does not create a Sentry event.
+ * Performs a browser `fetch`, parses JSON, and never throws: unexpected failures
+ * (network errors other than known benign transient `TypeError`s, invalid JSON)
+ * are reported to Sentry and the caller receives `fallback` instead. Aborted
+ * requests (`AbortSignal`, React unmount) return `fallback` without reporting —
+ * they are expected during navigation. Some browsers surface cancellation as
+ * `TypeError: Failed to fetch` while the `AbortSignal` is already aborted; those
+ * are treated as cancellation too. Chromium `TypeError: Failed to fetch` and
+ * WebKit `TypeError: Load failed` from transient connectivity are treated as
+ * benign and do not create a Sentry event.
  *
  * @param url - Request URL (same as `fetch` first argument).
  * @param init - Optional `fetch` init; pass `undefined` when not needed.
@@ -73,7 +76,7 @@ export async function fetchJsonOr<T>(
   } catch (error: unknown) {
     if (
       !isCancelledClientFetch(error, init?.signal ?? undefined) &&
-      !isBenignWebKitLoadFailed(error)
+      !isBenignTransientFetchTypeError(error)
     ) {
       Sentry.captureException(error, {
         tags: { clientFetch: context },
@@ -86,7 +89,8 @@ export async function fetchJsonOr<T>(
 /**
  * Browser `fetch` plus JSON parse when `response.ok`; returns `null` if the
  * request fails, the response is not OK, or JSON is invalid. Same Sentry and
- * WebKit “Load failed” behaviour as {@link fetchJsonOr}. Use this when the
+ * Chromium/WebKit transient fetch `TypeError` behaviour as {@link fetchJsonOr}.
+ * Use this when the
  * caller distinguishes failure from success via HTTP status (unlike
  * `fetchJsonOr`, which parses even error bodies).
  *
@@ -109,7 +113,7 @@ export async function fetchJsonIfOkOr<T>(
   } catch (error: unknown) {
     if (
       !isCancelledClientFetch(error, init?.signal ?? undefined) &&
-      !isBenignWebKitLoadFailed(error)
+      !isBenignTransientFetchTypeError(error)
     ) {
       Sentry.captureException(error, {
         tags: { clientFetch: context },
