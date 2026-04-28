@@ -302,13 +302,56 @@ async function callAiTextNormalization(args: {
   }
 }
 
+/**
+ * Anthropic vision models reject images where any dimension exceeds 8000 px.
+ * `sharp` downscales the longest side to fit so a single stitched screenshot
+ * (often very tall) doesn't break extraction with Claude/Sonnet, while gpt-4o
+ * keeps working unchanged. PNG is preserved so text rendering stays sharp.
+ */
+async function fitImageForVisionLimits(
+  buffer: Buffer,
+  mimeType: string,
+): Promise<{ buffer: Buffer; mimeType: string }> {
+  const MAX_DIMENSION = 7800;
+  try {
+    const sharpModule = await import("sharp");
+    const sharp = sharpModule.default;
+    const meta = await sharp(buffer).metadata();
+    const width = meta.width ?? 0;
+    const height = meta.height ?? 0;
+    if (!width || !height) return { buffer, mimeType };
+    if (width <= MAX_DIMENSION && height <= MAX_DIMENSION) {
+      return { buffer, mimeType };
+    }
+    const resized = await sharp(buffer)
+      .resize({
+        width: width >= height ? MAX_DIMENSION : undefined,
+        height: height > width ? MAX_DIMENSION : undefined,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .png()
+      .toBuffer();
+    return { buffer: resized, mimeType: "image/png" };
+  } catch {
+    // sharp could not read the buffer (e.g. unrecognized format in tests).
+    // Fall through with the original payload — the VLM call will surface any
+    // real client/provider error.
+    return { buffer, mimeType };
+  }
+}
+
 async function callAiVisionExtraction(args: {
   model: string;
   file: File;
 }): Promise<ExtractResult> {
   const { generateObject } = await import("./ai/client");
-  const buffer = Buffer.from(await args.file.arrayBuffer());
-  const mimeType = args.file.type || "image/png";
+  const rawBuffer = Buffer.from(await args.file.arrayBuffer());
+  const rawMimeType = args.file.type || "image/png";
+  const { buffer, mimeType } = await fitImageForVisionLimits(
+    rawBuffer,
+    rawMimeType,
+  );
   try {
     const { object } = await generateObject({
       model: gatewayModelString(args.model),
