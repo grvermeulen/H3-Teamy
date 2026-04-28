@@ -1,6 +1,5 @@
 "use client";
 
-import * as Sentry from "@sentry/nextjs";
 import React, {
   useCallback,
   useEffect,
@@ -16,6 +15,7 @@ import MvpVoteButton from "./MvpVoteButton";
 import SpaceInvadersLauncher from "./spaceInvaders/SpaceInvadersLauncher";
 import { useSession } from "./SessionContext";
 import { formatEventDate, formatEventTime } from "../lib/datetime";
+import { fetchJsonIfOkOr } from "../lib/safeClientJson";
 
 /** Props voor {@link EventList}. */
 type Props = {
@@ -75,20 +75,24 @@ export default function EventList({ events }: Props): React.JSX.Element {
   const loadRsvpListDetail = useCallback(
     async (id: string, opts?: { force?: boolean }) => {
       if (!opts?.force && loadedListsRef.current[id]) return;
-      try {
-        const res = await fetch(
-          `/api/rsvp/list?eventId=${encodeURIComponent(id)}`,
-          { cache: "no-store" },
-        );
-        if (!res.ok) return;
+      type ListPayload = {
+        counts: { yes: number; no: number; maybe: number };
+        lists: {
+          yes: { id: string; name: string }[];
+          no: { id: string; name: string }[];
+          maybe: { id: string; name: string }[];
+        };
+      };
+      const data = await fetchJsonIfOkOr<ListPayload>(
+        `/api/rsvp/list?eventId=${encodeURIComponent(id)}`,
+        { cache: "no-store" },
+        `event-list-rsvp-detail-${id}`,
+      );
+      if (!data) return;
 
-        const data = await res.json();
-        setCounts((prev) => ({ ...prev, [id]: data.counts }));
-        setLists((prev) => ({ ...prev, [id]: data.lists }));
-        setLoadedLists((prev) => ({ ...prev, [id]: true }));
-      } catch (error: unknown) {
-        Sentry.captureException(error);
-      }
+      setCounts((prev) => ({ ...prev, [id]: data.counts }));
+      setLists((prev) => ({ ...prev, [id]: data.lists }));
+      setLoadedLists((prev) => ({ ...prev, [id]: true }));
     },
     [],
   );
@@ -108,16 +112,16 @@ export default function EventList({ events }: Props): React.JSX.Element {
     try {
       const countsEntries = await Promise.all(
         events.map(async (e) => {
-          const res = await fetch(
+          type CountsPayload = {
+            counts: { yes: number; no: number; maybe: number };
+          };
+          const data = await fetchJsonIfOkOr<CountsPayload>(
             `/api/rsvp/list?eventId=${encodeURIComponent(e.id)}&countsOnly=1`,
             { cache: "no-store" },
+            `event-list-rsvp-counts-${e.id}`,
           );
-          if (!res.ok) return [e.id, { yes: 0, no: 0, maybe: 0 }] as const;
-          const data = await res.json();
-          return [
-            e.id,
-            data.counts as { yes: number; no: number; maybe: number },
-          ] as const;
+          const counts = data?.counts ?? { yes: 0, no: 0, maybe: 0 };
+          return [e.id, counts] as const;
         }),
       );
       const cMap: Record<string, { yes: number; no: number; maybe: number }> =
@@ -136,12 +140,11 @@ export default function EventList({ events }: Props): React.JSX.Element {
 
       const rsvpEntries = await Promise.all(
         events.map(async (e) => {
-          const res = await fetch(
+          const data = await fetchJsonIfOkOr<{ status: RsvpStatus }>(
             `/api/rsvp?eventId=${encodeURIComponent(e.id)}`,
             { cache: "no-store" },
+            `event-list-rsvp-me-${e.id}`,
           );
-          if (!res.ok) return [e.id, null] as const;
-          const data = await res.json();
           return [e.id, (data?.status ?? null) as RsvpStatus] as const;
         }),
       );
@@ -226,14 +229,22 @@ export default function EventList({ events }: Props): React.JSX.Element {
       return;
     }
     // Refresh counts/lists for this event
-    const listRes = await fetch(
+    type ListPayload = {
+      counts: { yes: number; no: number; maybe: number };
+      lists: {
+        yes: { id: string; name: string }[];
+        no: { id: string; name: string }[];
+        maybe: { id: string; name: string }[];
+      };
+    };
+    const listData = await fetchJsonIfOkOr<ListPayload>(
       `/api/rsvp/list?eventId=${encodeURIComponent(id)}`,
       { cache: "no-store" },
+      `event-list-rsvp-after-post-${id}`,
     );
-    if (listRes.ok) {
-      const data = await listRes.json();
-      setCounts((p) => ({ ...p, [id]: data.counts }));
-      setLists((p) => ({ ...p, [id]: data.lists }));
+    if (listData) {
+      setCounts((p) => ({ ...p, [id]: listData.counts }));
+      setLists((p) => ({ ...p, [id]: listData.lists }));
       setLoadedLists((p) => ({ ...p, [id]: true }));
     }
   }

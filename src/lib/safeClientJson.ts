@@ -82,3 +82,39 @@ export async function fetchJsonOr<T>(
     return fallback;
   }
 }
+
+/**
+ * Browser `fetch` plus JSON parse when `response.ok`; returns `null` if the
+ * request fails, the response is not OK, or JSON is invalid. Same Sentry and
+ * WebKit “Load failed” behaviour as {@link fetchJsonOr}. Use this when the
+ * caller distinguishes failure from success via HTTP status (unlike
+ * `fetchJsonOr`, which parses even error bodies).
+ *
+ * @param url - Request URL (same as `fetch` first argument).
+ * @param init - Optional `fetch` init; pass `undefined` when not needed.
+ * @param context - Short label for Sentry tags (e.g. `event-list-rsvp-counts`).
+ * @returns Parsed JSON when status is 2xx, otherwise `null`.
+ */
+export async function fetchJsonIfOkOr<T>(
+  url: string,
+  init: RequestInit | undefined,
+  context: string,
+): Promise<T | null> {
+  try {
+    const res = await fetch(url, init);
+    if (!res.ok) {
+      return null;
+    }
+    return (await res.json()) as T;
+  } catch (error: unknown) {
+    if (
+      !isCancelledClientFetch(error, init?.signal ?? undefined) &&
+      !isBenignWebKitLoadFailed(error)
+    ) {
+      Sentry.captureException(error, {
+        tags: { clientFetch: context },
+      });
+    }
+    return null;
+  }
+}
