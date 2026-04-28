@@ -358,8 +358,23 @@ function prepareNarrativeInput(
   };
 }
 
-// Simplified generation: consume provided JSON and let the model write the report.
-
+/**
+ * Genereert een Nederlandstalig wedstrijdverslag uit de geleverde JSON en
+ * verstuurt een notificatie naar de WhatsApp-groep.
+ *
+ * Verwacht een `ReportBody` met `eventId`, scores en events. Spelersnamen in
+ * "us"-events worden gematcht tegen de actuele roster (fuzzy via Levenshtein,
+ * drempel 0.72); bij een onmatchbare naam vervalt deze, zodat het AI-prompt
+ * algemene formuleringen gebruikt. Een geslaagde generatie cachet het verslag
+ * via `setReport` en vuurt `sendMatchReportToWhatsAppGroup`.
+ *
+ * @param req - Next.js request met JSON-body (`ReportBody`).
+ * @returns 200 met `{ ok, report, whatsappNotification }`,
+ *   400 bij ongeldige JSON of ontbrekende `eventId`,
+ *   422 wanneer scores of events ontbreken,
+ *   502 wanneer het AI-model faalt,
+ *   500 bij een onverwachte fout.
+ */
 export async function POST(req: NextRequest) {
   try {
     let body: ReportBody;
