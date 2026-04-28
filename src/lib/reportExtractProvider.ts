@@ -220,9 +220,17 @@ function buildNormalizationPrompt(rawText: string): string {
 Regels:
 - Home/away: in de header staat altijd een scoreblok "TEAM A 12-23 TEAM B". Het eerste team links (bovenaan) is altijd homeTeam; het team rechts op exact dezelfde hoogte is awayTeam.
 - Bepaal het kwart uit sectiekoppen zoals "1e periode", "2e periode", enz. (1..4).
-- Icoon doelpunt = "goal"; "U20" = "personal_foul".
+- Een event is uitsluitend "goal" als er in de regel een nieuwe stand staat in het formaat "X-Y" (bv. "0-1", "2-3"). Het doelpunt-icoon op zichzelf is niet voldoende.
+- De volgende codes/iconen markeren altijd "personal_foul", ongeacht eventuele andere iconen:
+  - "U18" — persoonlijke fout
+  - "S" — strafworp veroorzaakt
+  - "Umv" — uitsluiting met vervanging
+  - "Umv4" — uitsluiting zonder vervanging
+  - geel of rood kaart-icoon — gele/rode kaart
+- "T" markeert een time-out: NEEM DEZE NIET OP in de events-array.
+- Regels met andere codes of iconen die niet in deze lijst staan: laat weg.
 - "team" is relatief: "home" verwijst naar homeTeam, "away" naar awayTeam.
-- Neem namen en tijden exact over; laat velden weg als ze onleesbaar zijn.
+- Neem namen en tijden exact over; zet "time" en "player" op null wanneer ze onleesbaar zijn (niet weglaten — het schema verwacht expliciet null).
 - Sorteer events op quarter (1..4), daarna tijd oplopend.
 - Geef uitsluitend het JSON-object terug, zonder extra tekst.
 
@@ -251,9 +259,17 @@ function buildVisionPrompt(): string {
 Regels:
 - Home/away: in de header staat altijd een scoreblok "TEAM A 12-23 TEAM B". Het eerste team links (bovenaan) is altijd homeTeam; het team rechts op exact dezelfde hoogte is awayTeam.
 - Bepaal het kwart uit sectiekoppen zoals "1e periode", "2e periode", enz. (1..4).
-- Icoon doelpunt = "goal"; "U20" = "personal_foul".
+- Een event is uitsluitend "goal" als er in de regel een nieuwe stand staat in het formaat "X-Y" (bv. "0-1", "2-3"). Het doelpunt-icoon op zichzelf is niet voldoende.
+- De volgende codes/iconen markeren altijd "personal_foul", ongeacht eventuele andere iconen:
+  - "U18" — persoonlijke fout
+  - "S" — strafworp veroorzaakt
+  - "Umv" — uitsluiting met vervanging
+  - "Umv4" — uitsluiting zonder vervanging
+  - geel of rood kaart-icoon — gele/rode kaart
+- "T" markeert een time-out: NEEM DEZE NIET OP in de events-array.
+- Regels met andere codes of iconen die niet in deze lijst staan: laat weg.
 - "team" is relatief: "home" verwijst naar homeTeam, "away" naar awayTeam.
-- Neem namen en tijden exact over; laat velden weg als ze onleesbaar zijn.
+- Neem namen en tijden exact over; zet "time" en "player" op null wanneer ze onleesbaar zijn (niet weglaten — het schema verwacht expliciet null).
 - Sorteer events op quarter (1..4), daarna tijd oplopend.
 - Geef uitsluitend het JSON-object terug, zonder extra tekst.`;
 }
