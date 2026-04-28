@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { getReport, setReport, kvGetJson } from "../../../../lib/kv";
 import { MVP_PLACEHOLDER } from "../../../../lib/mvpNarrative";
 import { sendMatchReportToWhatsAppGroup } from "../../../../lib/services/waapiService";
+import { getActiveUsers } from "../../../../lib/services/userService";
 import type { TeamEvent } from "../../../../types";
 
 type RawEvent = {
@@ -182,13 +183,14 @@ function similarity(a: string, b: string): number {
 
 async function getRosterNames(): Promise<string[]> {
   try {
-    const cached =
-      await kvGetJson<{ id: string; name: string }[]>("users:roster:v2");
-    if (Array.isArray(cached) && cached.length) {
-      return cached.map((u) => u.name).filter(Boolean);
-    }
-  } catch {}
-  return [];
+    const users = await getActiveUsers();
+    return users.map((u) => u.name).filter(Boolean);
+  } catch (error: unknown) {
+    Sentry.captureException(error, {
+      tags: { module: "report_generate", operation: "getRosterNames" },
+    });
+    return [];
+  }
 }
 
 function canonicalizePlayer(
