@@ -15,6 +15,7 @@ export default defineConfig({
       "e2e/**",
       "evals/**",
       "**/.opencode/**",
+      ".claude/**",
     ],
     alias: {
       "@": resolve(__dirname, "./src"),

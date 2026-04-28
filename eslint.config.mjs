@@ -7,6 +7,7 @@ const config = [
       ".next/**",
       "node_modules/**",
       ".cursor/**",
+      ".claude/**",
       "ecc-reference/**",
       "e2e/**",
     ],
