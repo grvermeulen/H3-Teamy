@@ -37,7 +37,7 @@ describe("isTransientPostgresConnectError", () => {
     ).toBe(true);
   });
 
-  it("returns true for Prisma upstream database connect message", () => {
+  it("returns true for Prisma adapter upstream database message (JAVASCRIPT-NEXTJS-1M)", () => {
     expect(
       isTransientPostgresConnectError(
         new Error(

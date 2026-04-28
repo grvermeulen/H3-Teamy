@@ -119,6 +119,24 @@ describe("trainer permissions", () => {
       );
     });
 
+    it("returns false if getActiveUser fails with unexpected error (reports Sentry)", async () => {
+      const err = new Error("onverwachte fout bij sessie");
+      vi.mocked(getActiveUser).mockRejectedValueOnce(err);
+
+      const result = await isTrainer(mockReq);
+      expect(result.isTrainer).toBe(false);
+      expect(result.me).toEqual({ id: "", name: "" });
+      expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+        err,
+        expect.objectContaining({
+          tags: { component: "trainer" },
+          extra: expect.objectContaining({
+            context: "getActiveUser_isTrainer",
+          }),
+        }),
+      );
+    });
+
     it("returns false if getActiveUser fails with transient DB error without Sentry noise", async () => {
       const connectErr = new Error("timeout exceeded when trying to connect");
       vi.mocked(getActiveUser).mockRejectedValueOnce(connectErr);
@@ -219,6 +237,24 @@ describe("trainer permissions", () => {
       );
     });
 
+    it("returns false if getActiveUser fails with unexpected error (reports Sentry)", async () => {
+      const err = new Error("onverwachte fout bij sessie");
+      vi.mocked(getActiveUser).mockRejectedValueOnce(err);
+
+      const result = await isAdminUser(mockReq);
+      expect(result.isAdmin).toBe(false);
+      expect(result.me).toEqual({ id: "", name: "" });
+      expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+        err,
+        expect.objectContaining({
+          tags: { component: "trainer" },
+          extra: expect.objectContaining({
+            context: "getActiveUser_isAdminUser",
+          }),
+        }),
+      );
+    });
+
     it("returns false if getActiveUser fails with transient DB error without Sentry noise", async () => {
       const connectErr = new Error("timeout exceeded when trying to connect");
       vi.mocked(getActiveUser).mockRejectedValueOnce(connectErr);
@@ -226,6 +262,18 @@ describe("trainer permissions", () => {
       const result = await isAdminUser(mockReq);
       expect(result.isAdmin).toBe(false);
       expect(result.me).toEqual({ id: "", name: "" });
+      expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+    });
+
+    it("returns false if getActiveUser fails with Prisma upstream message without Sentry noise", async () => {
+      vi.mocked(getActiveUser).mockRejectedValueOnce(
+        new Error(
+          "Failed to connect to upstream database. Please contact Prisma support if the problem persists.",
+        ),
+      );
+
+      const result = await isAdminUser(mockReq);
+      expect(result.isAdmin).toBe(false);
       expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
     });
 
