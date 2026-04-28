@@ -37,6 +37,16 @@ describe("isTransientPostgresConnectError", () => {
     ).toBe(true);
   });
 
+  it("returns true for Prisma upstream database connect message", () => {
+    expect(
+      isTransientPostgresConnectError(
+        new Error(
+          "Failed to connect to upstream database. Please contact Prisma support if the problem persists.",
+        ),
+      ),
+    ).toBe(true);
+  });
+
   it("returns false for unrelated errors", () => {
     expect(isTransientPostgresConnectError(new Error("unique violation"))).toBe(
       false,
