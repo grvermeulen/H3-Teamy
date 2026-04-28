@@ -230,7 +230,7 @@ Regels:
 - "T" markeert een time-out: NEEM DEZE NIET OP in de events-array.
 - Regels met andere codes of iconen die niet in deze lijst staan: laat weg.
 - "team" is relatief: "home" verwijst naar homeTeam, "away" naar awayTeam.
-- Neem namen en tijden exact over; laat velden weg als ze onleesbaar zijn.
+- Neem namen en tijden exact over; zet "time" en "player" op null wanneer ze onleesbaar zijn (niet weglaten — het schema verwacht expliciet null).
 - Sorteer events op quarter (1..4), daarna tijd oplopend.
 - Geef uitsluitend het JSON-object terug, zonder extra tekst.
 
@@ -269,7 +269,7 @@ Regels:
 - "T" markeert een time-out: NEEM DEZE NIET OP in de events-array.
 - Regels met andere codes of iconen die niet in deze lijst staan: laat weg.
 - "team" is relatief: "home" verwijst naar homeTeam, "away" naar awayTeam.
-- Neem namen en tijden exact over; laat velden weg als ze onleesbaar zijn.
+- Neem namen en tijden exact over; zet "time" en "player" op null wanneer ze onleesbaar zijn (niet weglaten — het schema verwacht expliciet null).
 - Sorteer events op quarter (1..4), daarna tijd oplopend.
 - Geef uitsluitend het JSON-object terug, zonder extra tekst.`;
 }
