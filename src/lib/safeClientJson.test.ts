@@ -125,6 +125,22 @@ describe("fetchJsonOr", () => {
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });
 
+  it("returns fallback without Sentry when Failed to fetch is nested in error cause", async () => {
+    const inner = new TypeError("Failed to fetch");
+    const wrapped = new Error("wrapped");
+    Object.assign(wrapped, { cause: inner });
+    vi.spyOn(global, "fetch").mockRejectedValue(wrapped);
+    const fallback = { ok: false };
+    const result = await fetchJsonOr(
+      "/api/x",
+      undefined,
+      fallback,
+      "test-failed-to-fetch-cause",
+    );
+    expect(result).toEqual(fallback);
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
   it("returns fallback without Sentry when error cause is AbortError", async () => {
     const aborted = new DOMException(
       "The user aborted a request.",
@@ -178,11 +194,9 @@ describe("fetchJsonIfOkOr", () => {
         headers: { "content-type": "application/json" },
       }),
     );
-    const result = await fetchJsonIfOkOr<{ counts: { yes: number; no: number; maybe: number } }>(
-      "/api/rsvp/list?eventId=e1",
-      { cache: "no-store" },
-      "test-ifok",
-    );
+    const result = await fetchJsonIfOkOr<{
+      counts: { yes: number; no: number; maybe: number };
+    }>("/api/rsvp/list?eventId=e1", { cache: "no-store" }, "test-ifok");
     expect(result).toEqual({ counts: { yes: 1, no: 0, maybe: 0 } });
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });
@@ -218,7 +232,7 @@ describe("fetchJsonIfOkOr", () => {
     vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
     const result = await fetchJsonIfOkOr<{ x: number }>(
       "/api/x",
-      undefined,
+      { cache: "no-store" },
       "test-ifok-chromium",
     );
     expect(result).toBeNull();

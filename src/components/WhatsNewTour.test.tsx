@@ -43,6 +43,17 @@ describe("WhatsNewTour", () => {
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });
 
+  it("does not report Chromium Failed to fetch for /api/whats-new (benign transient)", async () => {
+    vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    render(<WhatsNewTour />);
+    await vi.waitFor(
+      () => {
+        expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+      },
+      { timeout: 500 },
+    );
+  });
+
   it("reports to Sentry when /api/whats-new fetch rejects with an unexpected error", async () => {
     const err = new TypeError("Unexpected fetch failure");
     vi.spyOn(global, "fetch").mockRejectedValue(err);
@@ -55,14 +66,20 @@ describe("WhatsNewTour", () => {
     });
   });
 
-  it("does not report Chromium Failed to fetch for /api/whats-new (benign transient)", async () => {
-    vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+  it("reports to Sentry when /api/whats-new returns invalid JSON on 200", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("not json", {
+        status: 200,
+        headers: { "Content-Type": "text/plain" },
+      }),
+    );
     render(<WhatsNewTour />);
-    await vi.waitFor(
-      () => {
-        expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
-      },
-      { timeout: 500 },
+    await waitFor(() => {
+      expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
+    });
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(SyntaxError),
+      { tags: { clientFetch: "whats-new-tour" } },
     );
   });
 
