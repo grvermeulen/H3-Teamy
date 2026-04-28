@@ -47,7 +47,7 @@ describe("fetchJsonOr", () => {
   });
 
   it("returns fallback and reports to Sentry when fetch rejects with other TypeError", async () => {
-    const other = new TypeError("NetworkError when attempting to fetch resource.");
+    const other = new TypeError("Network request failed");
     vi.spyOn(global, "fetch").mockRejectedValue(other);
     const fallback = { user: null as null };
     const result = await fetchJsonOr(
@@ -107,6 +107,35 @@ describe("fetchJsonOr", () => {
       { signal: ac.signal },
       fallback,
       "test-abort-failed-fetch",
+    );
+    expect(result).toEqual(fallback);
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
+  it("returns fallback without Sentry when Chromium rejects with Failed to fetch", async () => {
+    vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    const fallback = { ok: false };
+    const result = await fetchJsonOr(
+      "/api/x",
+      { cache: "no-store" },
+      fallback,
+      "test-chromium-failed-to-fetch",
+    );
+    expect(result).toEqual(fallback);
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
+  it("returns fallback without Sentry when Failed to fetch is nested in error cause", async () => {
+    const inner = new TypeError("Failed to fetch");
+    const wrapped = new Error("wrapped");
+    Object.assign(wrapped, { cause: inner });
+    vi.spyOn(global, "fetch").mockRejectedValue(wrapped);
+    const fallback = { ok: false };
+    const result = await fetchJsonOr(
+      "/api/x",
+      undefined,
+      fallback,
+      "test-failed-to-fetch-cause",
     );
     expect(result).toEqual(fallback);
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
@@ -202,7 +231,7 @@ describe("fetchJsonIfOkOr", () => {
   });
 
   it("returns null and reports to Sentry when fetch rejects with other error", async () => {
-    const err = new TypeError("NetworkError when attempting to fetch resource.");
+    const err = new TypeError("Network request failed");
     vi.spyOn(global, "fetch").mockRejectedValue(err);
     const result = await fetchJsonIfOkOr<{ x: number }>(
       "/api/x",
@@ -214,6 +243,17 @@ describe("fetchJsonIfOkOr", () => {
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(err, {
       tags: { clientFetch: "test-ifok-reject" },
     });
+  });
+
+  it("returns null without Sentry when Chromium rejects with Failed to fetch", async () => {
+    vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    const result = await fetchJsonIfOkOr<{ x: number }>(
+      "/api/x",
+      { cache: "no-store" },
+      "test-ifok-chromium",
+    );
+    expect(result).toBeNull();
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });
 
   it("returns null and reports to Sentry when JSON is invalid on OK response", async () => {
