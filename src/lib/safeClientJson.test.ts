@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Sentry from "@sentry/nextjs";
-import { fetchJsonOr } from "./safeClientJson";
+import { fetchJsonIfOkOr, fetchJsonOr } from "./safeClientJson";
 
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
@@ -145,6 +145,94 @@ describe("fetchJsonOr", () => {
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(SyntaxError),
       { tags: { clientFetch: "test-bad-json" } },
+    );
+  });
+});
+
+describe("fetchJsonIfOkOr", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("returns parsed JSON when status is OK", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ counts: { yes: 1, no: 0, maybe: 0 } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const result = await fetchJsonIfOkOr<{ counts: { yes: number; no: number; maybe: number } }>(
+      "/api/rsvp/list?eventId=e1",
+      { cache: "no-store" },
+      "test-ifok",
+    );
+    expect(result).toEqual({ counts: { yes: 1, no: 0, maybe: 0 } });
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
+  it("returns null without Sentry when response is not OK", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ error: "list_failed" }), {
+        status: 500,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const result = await fetchJsonIfOkOr<{ counts: { yes: number } }>(
+      "/api/rsvp/list?eventId=e1",
+      undefined,
+      "test-not-ok",
+    );
+    expect(result).toBeNull();
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
+  it("returns null without Sentry when WebKit rejects with Load failed", async () => {
+    vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("Load failed"));
+    const result = await fetchJsonIfOkOr<{ x: number }>(
+      "/api/x",
+      undefined,
+      "test-ifok-webkit",
+    );
+    expect(result).toBeNull();
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
+  it("returns null and reports to Sentry when fetch rejects with other error", async () => {
+    const err = new TypeError("NetworkError when attempting to fetch resource.");
+    vi.spyOn(global, "fetch").mockRejectedValue(err);
+    const result = await fetchJsonIfOkOr<{ x: number }>(
+      "/api/x",
+      undefined,
+      "test-ifok-reject",
+    );
+    expect(result).toBeNull();
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(err, {
+      tags: { clientFetch: "test-ifok-reject" },
+    });
+  });
+
+  it("returns null and reports to Sentry when JSON is invalid on OK response", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("not json", {
+        status: 200,
+        headers: { "content-type": "text/plain" },
+      }),
+    );
+    const result = await fetchJsonIfOkOr<{ ok: boolean }>(
+      "/x",
+      {},
+      "test-ifok-bad-json",
+    );
+    expect(result).toBeNull();
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(SyntaxError),
+      { tags: { clientFetch: "test-ifok-bad-json" } },
     );
   });
 });
