@@ -107,15 +107,15 @@ describe("trainer permissions", () => {
       );
     });
 
-    it("returns false if getActiveUser fails (e.g. DB connect timeout)", async () => {
-      const connectErr = new Error("timeout exceeded when trying to connect");
-      vi.mocked(getActiveUser).mockRejectedValueOnce(connectErr);
+    it("returns false if getActiveUser fails with unexpected error (reports Sentry)", async () => {
+      const err = new Error("onverwachte fout bij sessie");
+      vi.mocked(getActiveUser).mockRejectedValueOnce(err);
 
       const result = await isTrainer(mockReq);
       expect(result.isTrainer).toBe(false);
       expect(result.me).toEqual({ id: "", name: "" });
       expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
-        connectErr,
+        err,
         expect.objectContaining({
           tags: { component: "trainer" },
           extra: expect.objectContaining({
@@ -189,15 +189,15 @@ describe("trainer permissions", () => {
       );
     });
 
-    it("returns false if getActiveUser fails (e.g. DB connect timeout)", async () => {
-      const connectErr = new Error("timeout exceeded when trying to connect");
-      vi.mocked(getActiveUser).mockRejectedValueOnce(connectErr);
+    it("returns false if getActiveUser fails with unexpected error (reports Sentry)", async () => {
+      const err = new Error("onverwachte fout bij sessie");
+      vi.mocked(getActiveUser).mockRejectedValueOnce(err);
 
       const result = await isAdminUser(mockReq);
       expect(result.isAdmin).toBe(false);
       expect(result.me).toEqual({ id: "", name: "" });
       expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
-        connectErr,
+        err,
         expect.objectContaining({
           tags: { component: "trainer" },
           extra: expect.objectContaining({

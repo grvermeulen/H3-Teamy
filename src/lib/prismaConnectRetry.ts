@@ -20,12 +20,15 @@ export function isTransientPostgresConnectError(error: unknown): boolean {
   }
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
+    // Prisma adapter / serverless: upstream Postgres unreachable (often transient).
     return (
       msg.includes("timeout exceeded when trying to connect") ||
       msg.includes("connection terminated") ||
       msg.includes("econnrefused") ||
       msg.includes("econnreset") ||
-      msg.includes("read econnreset")
+      msg.includes("read econnreset") ||
+      msg.includes("upstream database") ||
+      msg.includes("failed to connect")
     );
   }
   return false;
