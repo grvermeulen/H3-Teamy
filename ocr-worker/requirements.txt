@@ -1,5 +1,5 @@
 fastapi==0.136.0
-uvicorn[standard]==0.45.0
+uvicorn[standard]==0.46.0
 
 # Use PyTorch CPU wheels
 --extra-index-url https://download.pytorch.org/whl/cpu
