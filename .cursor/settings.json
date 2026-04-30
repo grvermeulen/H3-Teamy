@@ -7,9 +7,6 @@
     "vercel": {
       "enabled": true
     },
-    "prisma": {
-      "enabled": true
-    },
     "continual-learning": {
       "enabled": true
     }

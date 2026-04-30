@@ -39,17 +39,17 @@ jobs:
           fi
 
       - name: Setup Node
-        if: steps.risk.outputs.risk == 'true'
+        if: steps.risk.outputs.risk == 'true' && hashFiles('package.json') != ''
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
       - name: Install deps
-        if: steps.risk.outputs.risk == 'true'
+        if: steps.risk.outputs.risk == 'true' && hashFiles('package.json') != ''
         run: npm install --no-audit --no-fund --legacy-peer-deps --ignore-scripts
 
       - name: AI Review
-        if: steps.risk.outputs.risk == 'true'
+        if: steps.risk.outputs.risk == 'true' && hashFiles('scripts/ai-review.js') != ''
         run: node scripts/ai-review.js
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

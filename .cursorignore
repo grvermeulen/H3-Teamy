@@ -17,7 +17,6 @@ coverage/
 **/*.gif
 **/*.webp
 **/*.svg
-public/sw.js
 prisma/dev.db*
 .env*
 .git/

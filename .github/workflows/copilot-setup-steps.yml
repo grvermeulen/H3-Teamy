@@ -20,12 +20,15 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
+        if: ${{ hashFiles('package.json') != '' }}
         run: npm ci --legacy-peer-deps --ignore-scripts
 
       - name: Generate Prisma Client
+        if: ${{ hashFiles('prisma/schema.prisma') != '' }}
         env:
           DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
         run: npx prisma generate
 
       - name: Verify environment
+        if: ${{ hashFiles('tsconfig.json') != '' }}
         run: npx tsc --noEmit

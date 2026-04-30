@@ -18,9 +18,6 @@ coverage/
 dist/
 build/
 
-# Custom
-/.env.n8n
-
 # Env
 .env
 .env.*
@@ -35,9 +32,6 @@ build/
 .vscode/
 tsconfig.tsbuildinfo
 .vercel
-
-# ECC reference (cloned for analysis, not part of project)
-ecc-reference/
 
 # Temporary files
 tmp-*

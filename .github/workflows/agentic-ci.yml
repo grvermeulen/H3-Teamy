@@ -25,8 +25,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect:
+    name: Detect project
+    runs-on: ubuntu-latest
+    outputs:
+      has_package_json: ${{ steps.check.outputs.has_package_json }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          if [ -f package.json ]; then
+            echo "has_package_json=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_package_json=false" >> "$GITHUB_OUTPUT"
+          fi
+
   verify:
     name: Verify (Lint, Typecheck, Build, Test)
+    needs: detect
+    if: needs.detect.outputs.has_package_json == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -46,21 +63,22 @@ jobs:
 
       # Prisma 7 laadt prisma.config.ts en verwacht DATABASE_URL; generate gebruikt geen echte connectie.
       - name: Generate Prisma Client
+        if: ${{ hashFiles('prisma/schema.prisma') != '' }}
         env:
           DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
         run: npx prisma generate
 
       - name: Check for merge conflict markers in src/
-        run: npm run check:merge-conflicts
+        run: npm run check:merge-conflicts --if-present
 
       - name: Lint
-        run: npm run lint
+        run: npm run lint --if-present
 
       - name: Typecheck
         run: npx tsc --noEmit
 
       - name: Build
-        run: npm run build
+        run: npm run build --if-present
 
       - name: Run Tests
         run: npx vitest run

@@ -19,8 +19,25 @@ permissions:
   contents: read
 
 jobs:
+  detect:
+    name: Detect project
+    runs-on: ubuntu-latest
+    outputs:
+      has_package_json: ${{ steps.check.outputs.has_package_json }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          if [ -f package.json ]; then
+            echo "has_package_json=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_package_json=false" >> "$GITHUB_OUTPUT"
+          fi
+
   verify-production-readonly:
     name: Production smoke (read-only)
+    needs: detect
+    if: needs.detect.outputs.has_package_json == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read

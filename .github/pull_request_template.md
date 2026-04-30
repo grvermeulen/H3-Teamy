@@ -2,10 +2,7 @@
 
 Describe the change.
 
-## Docs
+## Test plan
 
-- [ ] Updated relevant feature docs under `docs/tech/...`
-- [ ] `npm run docs:generate` succeeds locally
-- Links:
-  - Feature doc(s):
-  - Functional spec section(s):
+- [ ] Lint, typecheck, build, and unit tests pass locally
+- [ ] Relevant feature docs updated (if applicable)
