@@ -135,12 +135,13 @@ describe("getOrCreateNudge", () => {
     expect(kvSetJson).not.toHaveBeenCalled();
   });
 
-  it("invokes the LLM and caches the result on a miss", async () => {
+  it("invokes the LLM and caches the result on a miss, passing the next-training label", async () => {
     kvGetJson.mockResolvedValue(null);
     generateAttendanceNudge.mockResolvedValue({
       tone: "encourage",
       message: "Fresh AI message.",
     });
+    // 2025-09-10 is a Wednesday, so next training is "vandaag".
     const out = await getOrCreateNudge("u1", bucket, {
       firstName: "Joost",
       today,
@@ -151,17 +152,65 @@ describe("getOrCreateNudge", () => {
       attended: 1,
       total: 4,
       firstName: "Joost",
+      nextTrainingLabel: "vandaag",
     });
     expect(kvSetJson).toHaveBeenCalledTimes(1);
     const [key] = kvSetJson.mock.calls[0];
-    expect(key).toContain("nudge:v1:u1:2025-09-10:encourage:1of4");
+    expect(key).toContain("nudge:v2:u1:2025-09-10:encourage:1of4");
   });
 
-  it("falls back to a static Dutch encourage message when the LLM throws", async () => {
+  it("passes 'woensdag' when today is the preceding Saturday", async () => {
+    kvGetJson.mockResolvedValue(null);
+    generateAttendanceNudge.mockResolvedValue({
+      tone: "encourage",
+      message: "Tot woensdag!",
+    });
+    // Saturday 2025-09-06; next training is Wednesday 2025-09-10.
+    await getOrCreateNudge("u1", bucket, {
+      today: new Date(2025, 8, 6),
+    });
+    const args = generateAttendanceNudge.mock.calls[0][0];
+    expect(args.nextTrainingLabel).toBe("woensdag");
+  });
+
+  it("passes 'morgen' the day before a training day", async () => {
+    kvGetJson.mockResolvedValue(null);
+    generateAttendanceNudge.mockResolvedValue({
+      tone: "encourage",
+      message: "Tot morgen!",
+    });
+    // Tuesday 2025-09-09; next training is Wednesday 2025-09-10 → "morgen".
+    await getOrCreateNudge("u1", bucket, {
+      today: new Date(2025, 8, 9),
+    });
+    const args = generateAttendanceNudge.mock.calls[0][0];
+    expect(args.nextTrainingLabel).toBe("morgen");
+  });
+
+  it("does not pass a next-training label for cheer tone", async () => {
+    kvGetJson.mockResolvedValue(null);
+    generateAttendanceNudge.mockResolvedValue({
+      tone: "cheer",
+      message: "Top!",
+    });
+    await getOrCreateNudge(
+      "u1",
+      { tone: "cheer", attended: 4, total: 4, pct: 100 },
+      { today },
+    );
+    const args = generateAttendanceNudge.mock.calls[0][0];
+    expect(args.nextTrainingLabel).toBeUndefined();
+  });
+
+  it("falls back to a static Dutch encourage message that names the next training day when the LLM throws", async () => {
     kvGetJson.mockResolvedValue(null);
     generateAttendanceNudge.mockRejectedValue(new Error("ai down"));
-    const out = await getOrCreateNudge("u1", bucket, { today });
+    // Saturday → next training is Wednesday.
+    const out = await getOrCreateNudge("u1", bucket, {
+      today: new Date(2025, 8, 6),
+    });
     expect(out.tone).toBe("encourage");
+    expect(out.message).toContain("woensdag");
     expect(out.message).toMatch(/bak ligt klaar/);
     expect(kvSetJson).not.toHaveBeenCalled();
   });

@@ -4,7 +4,12 @@ import {
   type AttendanceNudge,
 } from "../ai/attendanceNudge";
 import { kvGetJson, kvSetJson, getAttendanceForDates } from "../kv";
-import { generateTrainingDates, toYMD } from "../training";
+import {
+  describeRelativeDay,
+  generateTrainingDates,
+  nextTrainingDate,
+  toYMD,
+} from "../training";
 
 /** Bucket the player's last-14-day attendance falls into, with raw counts. */
 export type NudgeBucket = {
@@ -64,7 +69,10 @@ export async function computeRecentAttendance(
   return { attended, total: dates.length };
 }
 
-function staticFallback(bucket: NudgeBucket): AttendanceNudge {
+function staticFallback(
+  bucket: NudgeBucket,
+  nextTrainingLabel?: string,
+): AttendanceNudge {
   if (bucket.tone === "cheer") {
     return {
       tone: "cheer",
@@ -72,15 +80,17 @@ function staticFallback(bucket: NudgeBucket): AttendanceNudge {
         "Alle trainingen erop zitten in twee weken — dat zien we. Ga zo door.",
     };
   }
+  const dayPart = nextTrainingLabel
+    ? `De bak ligt klaar ${nextTrainingLabel} — kom je weer aansluiten?`
+    : "De bak ligt klaar — kom je weer aansluiten?";
   return {
     tone: "encourage",
-    message:
-      "Druk gehad? Geen ramp. De bak ligt klaar — kom je weer aansluiten?",
+    message: `Druk gehad? Geen ramp. ${dayPart}`,
   };
 }
 
 function cacheKey(userId: string, today: Date, bucket: NudgeBucket): string {
-  return `nudge:v1:${userId}:${toYMD(today)}:${bucket.tone}:${bucket.attended}of${bucket.total}`;
+  return `nudge:v2:${userId}:${toYMD(today)}:${bucket.tone}:${bucket.attended}of${bucket.total}`;
 }
 
 /**
@@ -99,12 +109,20 @@ export async function getOrCreateNudge(
   if (cached && cached.tone === bucket.tone && cached.message) {
     return cached;
   }
+
+  let nextTrainingLabel: string | undefined;
+  if (bucket.tone === "encourage") {
+    const nextDate = nextTrainingDate(today);
+    if (nextDate) nextTrainingLabel = describeRelativeDay(nextDate, today);
+  }
+
   try {
     const fresh = await generateAttendanceNudge({
       tone: bucket.tone,
       attended: bucket.attended,
       total: bucket.total,
       firstName: opts.firstName,
+      nextTrainingLabel,
     });
     await kvSetJson(key, fresh).catch(() => {});
     return fresh;
@@ -113,6 +131,6 @@ export async function getOrCreateNudge(
       tags: { component: "attendance-nudge" },
       extra: { userId, bucket: bucket.tone },
     });
-    return staticFallback(bucket);
+    return staticFallback(bucket, nextTrainingLabel);
   }
 }

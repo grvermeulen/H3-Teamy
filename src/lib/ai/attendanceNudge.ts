@@ -25,6 +25,8 @@ Twee tones:
 - "encourage": speler kwam minder dan de helft van de trainingen. Wees warm, nooit beschamend, nooit moraliserend. Erken dat het leven druk is. Eindig met een concrete uitnodiging voor de eerstvolgende training. Geen verwijten, geen percentages opnoemen.
 - "cheer": speler was bij ALLE trainingen. Wees blij en concreet. Eén korte zin van waardering, één zin met positieve impact op het team.
 
+Bij encourage krijg je een veld "Eerstvolgende training". Gebruik EXACT dat label in je uitnodiging (bv. "vandaag", "morgen", "overmorgen", "woensdag", "vrijdag"). Verzin NOOIT zelf een dag — niet "donderdag" of "zaterdag" of een andere dag dan wat is meegegeven. De club traint alleen op woensdag en vrijdag.
+
 Schrijf in spreektaal, "je"-vorm. Maximaal 2 zinnen, samen onder 220 karakters. Geen emoji-spam (max 1).
 Geef JSON terug met velden { tone, message }. Houd "tone" gelijk aan de meegegeven tone.`;
 
@@ -34,6 +36,13 @@ export type NudgeInput = {
   attended: number;
   total: number;
   firstName?: string;
+  /**
+   * Dutch label for the next training day, relative to "today" — e.g.
+   * `"vandaag"`, `"morgen"`, `"overmorgen"`, `"woensdag"`, `"vrijdag"`. Only
+   * meaningful for `tone === "encourage"`; the prompt tells the model to use
+   * this label verbatim and never invent a day.
+   */
+  nextTrainingLabel?: string;
 };
 
 /**
@@ -48,11 +57,16 @@ export async function generateAttendanceNudge(
 ): Promise<AttendanceNudge> {
   const { generateObject } = await import("./client");
   const namePart = input.firstName ? `Voornaam: ${input.firstName}\n` : "";
+  const nextPart =
+    input.tone === "encourage" && input.nextTrainingLabel
+      ? `Eerstvolgende training: ${input.nextTrainingLabel}\n`
+      : "";
   const { object } = await generateObject({
     model: "anthropic/claude-opus-4",
     schema: AttendanceNudgeSchema,
     system: NUDGE_SYSTEM_PROMPT,
-    prompt: `${namePart}Tone: ${input.tone}\nAanwezig: ${input.attended} van ${input.total} trainingen (laatste 14 dagen).`,
+    prompt:
+      `${namePart}Tone: ${input.tone}\nAanwezig: ${input.attended} van ${input.total} trainingen (laatste 14 dagen).\n${nextPart}`.trimEnd(),
   });
   return object;
 }

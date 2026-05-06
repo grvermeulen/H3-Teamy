@@ -75,6 +75,55 @@ export function defaultSeasonWindow(): { from: string; to: string } {
 }
 
 /**
+ * The next training date on or after `from`, looking up to 14 days ahead.
+ * Returns `null` if no Wed/Fri falls in that window (effectively never, but
+ * callers should still handle it).
+ *
+ * Inclusive of `from` itself: if `from` is a Wed or Fri, that same day is the
+ * answer. The bucket logic upstream already excludes mid-range users, so an
+ * encourage-bucket player on a training-day morning gets a "vandaag" nudge,
+ * which is the desired behavior.
+ */
+export function nextTrainingDate(from: Date = new Date()): Date | null {
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(from.getFullYear(), from.getMonth(), from.getDate() + i);
+    const wd = d.getDay();
+    if (wd === 3 || wd === 5) return d;
+  }
+  return null;
+}
+
+const NL_DAY_NAMES = [
+  "zondag",
+  "maandag",
+  "dinsdag",
+  "woensdag",
+  "donderdag",
+  "vrijdag",
+  "zaterdag",
+];
+
+/**
+ * Returns a Dutch day-of-week label for `date`, relative to `today`. Same day
+ * → `"vandaag"`, next day → `"morgen"`, day-after → `"overmorgen"`, otherwise
+ * the literal weekday name (e.g. `"woensdag"`). Comparison is on the calendar
+ * day, ignoring time-of-day.
+ */
+export function describeRelativeDay(
+  date: Date,
+  today: Date = new Date(),
+): string {
+  const d0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const d1 = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayMs = 24 * 60 * 60 * 1000;
+  const diff = Math.round((d1.getTime() - d0.getTime()) / dayMs);
+  if (diff === 0) return "vandaag";
+  if (diff === 1) return "morgen";
+  if (diff === 2) return "overmorgen";
+  return NL_DAY_NAMES[date.getDay()];
+}
+
+/**
  * Splits training session dates (YYYY-MM-DD) into recent past, older past, and today-or-future
  * for compact trainer UI. Dates are compared as strings on the calendar day.
  *

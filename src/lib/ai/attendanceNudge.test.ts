@@ -52,6 +52,11 @@ describe("NUDGE_SYSTEM_PROMPT", () => {
   it("forbids shaming", () => {
     expect(NUDGE_SYSTEM_PROMPT.toLowerCase()).toContain("nooit beschamend");
   });
+
+  it("instructs the model not to invent a training day", () => {
+    expect(NUDGE_SYSTEM_PROMPT).toContain("Eerstvolgende training");
+    expect(NUDGE_SYSTEM_PROMPT).toContain("Verzin NOOIT");
+  });
 });
 
 describe("generateAttendanceNudge", () => {
@@ -73,6 +78,7 @@ describe("generateAttendanceNudge", () => {
       attended: 1,
       total: 4,
       firstName: "Joost",
+      nextTrainingLabel: "woensdag",
     });
     expect(out.tone).toBe("encourage");
     expect(generateObject).toHaveBeenCalledTimes(1);
@@ -86,9 +92,10 @@ describe("generateAttendanceNudge", () => {
     expect(args.prompt).toContain("Joost");
     expect(args.prompt).toContain("1 van 4");
     expect(args.prompt).toContain("encourage");
+    expect(args.prompt).toContain("Eerstvolgende training: woensdag");
   });
 
-  it("omits the firstName line when no name is provided", async () => {
+  it("omits the firstName and next-training lines when not provided", async () => {
     const generateObject = vi.fn(async () => ({
       object: { tone: "cheer", message: "Top — alle trainingen erop zitten." },
     }));
@@ -97,6 +104,23 @@ describe("generateAttendanceNudge", () => {
     await mod.generateAttendanceNudge({ tone: "cheer", attended: 4, total: 4 });
     const args = generateObject.mock.calls[0][0] as { prompt: string };
     expect(args.prompt).not.toContain("Voornaam:");
+    expect(args.prompt).not.toContain("Eerstvolgende training");
+  });
+
+  it("does not pass the next-training label for cheer tone", async () => {
+    const generateObject = vi.fn(async () => ({
+      object: { tone: "cheer", message: "Twee weken full house — top." },
+    }));
+    vi.doMock("./client", () => ({ generateObject }));
+    const mod = await import("./attendanceNudge");
+    await mod.generateAttendanceNudge({
+      tone: "cheer",
+      attended: 4,
+      total: 4,
+      nextTrainingLabel: "woensdag",
+    });
+    const args = generateObject.mock.calls[0][0] as { prompt: string };
+    expect(args.prompt).not.toContain("Eerstvolgende training");
   });
 
   it("propagates errors from the SDK", async () => {
