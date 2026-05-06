@@ -31,3 +31,31 @@
 - Cache (ioredis) failures must never propagate to the caller — wrap in try/catch, log with Sentry, continue.
 - Pre-commit hooks run Prettier, ESLint, `tsc --noEmit`, and `vitest run`.
 - The `.cursor/rules/` directory contains agent-agnostic coding rules adapted from ECC (everything-claude-code) covering: security, API design, frontend/backend patterns, database migrations, verification loops, search-first workflow, code review, and de-slop cleanup.
+
+## Cursor Cloud specific instructions
+
+### Services
+
+- **Next.js dev server**: `npm run dev` (port 3000). Uses Turbopack.
+- **PostgreSQL**: required. In Cloud Agent VMs, start via Docker: `docker run --name pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=h3teamy -p 5432:5432 -d postgres:16`. The Docker daemon must be running first (`dockerd &`). After starting Postgres, run `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/h3teamy npx prisma migrate deploy` to apply migrations.
+- **Redis**: optional. The app falls back to an in-memory `Map` when `REDIS_URL` is unset. No Redis needed for basic dev.
+
+### Environment
+
+- Create `.env.local` with at minimum: `DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL=http://localhost:3000`.
+- `prisma.config.ts` reads `DATABASE_URL` via `dotenv/config` (loads `.env`, not `.env.local`), so pass `DATABASE_URL=...` as an env var prefix when running Prisma CLI commands directly.
+- Seeded test account: `trainer@example.test` / `preview123` (admin/trainer role).
+
+### Commands (see `package.json` scripts)
+
+- Lint: `npm run lint`
+- Typecheck: `npx tsc --noEmit`
+- Test: `npx vitest run` (314 tests, ~14s)
+- Build: `npm run build`
+- Seed DB: `DATABASE_URL=... npm run db:seed`
+
+### Gotchas
+
+- The `postinstall` script runs `prisma generate`, which needs a valid `prisma.config.ts`. If no database is reachable, generation still succeeds (it only needs the schema, not a live DB).
+- Pre-commit hooks (`husky`) run Prettier, ESLint, `tsc --noEmit`, and `vitest run`. For Cloud Agent commits, use `--no-verify` only when explicitly instructed; otherwise let hooks run.
+- Docker in the Cloud Agent VM requires `fuse-overlayfs`, `iptables-legacy`, and the `"storage-driver": "fuse-overlayfs"` daemon config. The update script handles Node.js and npm deps only; Docker + Postgres must be started manually per session.
