@@ -253,6 +253,70 @@ export async function kvDelete(key: string): Promise<void> {
   memoryTtl.delete(key);
 }
 
+const WEBAUTHN_CHALLENGE_TTL_SEC = 5 * 60;
+
+/**
+ * Bewaar een tijdelijke WebAuthn-challenge (registratie of login), Redis-first met TTL.
+ * Bij ontbrekende Redis: geheugenfallback met expiry (zoals wachtwoord-reset tokens).
+ *
+ * @param kind - Registratie onder ingelogde gebruiker of anonieme authenticatie-flow.
+ * @param sessionKey - Unieke sleutel (`userId` bij registratie, willekeurige sessie-id bij login).
+ * @param challenge - Base64url challenge-string uit SimpleWebAuthn.
+ */
+export async function webAuthnStoreChallenge(
+  kind: "registration" | "authentication",
+  sessionKey: string,
+  challenge: string,
+): Promise<void> {
+  const key = `webauthn:${kind}:${sessionKey}`;
+  const redis = await getRedis();
+  if (redis) {
+    await redis.set(key, challenge, "EX", WEBAUTHN_CHALLENGE_TTL_SEC);
+    return;
+  }
+  memoryJson.set(key, JSON.stringify({ challenge }));
+  memoryTtl.set(key, Date.now() + WEBAUTHN_CHALLENGE_TTL_SEC * 1000);
+}
+
+/**
+ * Haalt een challenge op en verwijdert deze (eenmalig gebruik).
+ *
+ * @param kind - Zelfde scope als bij {@link webAuthnStoreChallenge}.
+ * @param sessionKey - Zelfde sleutel als bij opslag.
+ * @returns De challenge-string of `null` bij ontbreken of expiry.
+ */
+export async function webAuthnConsumeChallenge(
+  kind: "registration" | "authentication",
+  sessionKey: string,
+): Promise<string | null> {
+  const key = `webauthn:${kind}:${sessionKey}`;
+  const redis = await getRedis();
+  if (redis) {
+    const pipeline = redis.pipeline();
+    pipeline.get(key);
+    pipeline.del(key);
+    const results = await pipeline.exec();
+    const raw = results?.[0]?.[1];
+    return typeof raw === "string" ? raw : null;
+  }
+  const exp = memoryTtl.get(key);
+  if (typeof exp === "number" && Date.now() > exp) {
+    memoryJson.delete(key);
+    memoryTtl.delete(key);
+    return null;
+  }
+  const val = memoryJson.get(key);
+  memoryJson.delete(key);
+  memoryTtl.delete(key);
+  if (!val) return null;
+  try {
+    const parsed = JSON.parse(val) as { challenge?: string };
+    return typeof parsed.challenge === "string" ? parsed.challenge : null;
+  } catch {
+    return null;
+  }
+}
+
 function makeToken(): string {
   // short code for dev; can switch to uuid if preferred
   return Math.random().toString(36).slice(2, 10).toUpperCase();

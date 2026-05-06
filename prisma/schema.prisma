@@ -21,6 +21,27 @@ model User {
   identities Identity[]
   attendances Attendance[]
   feedback  Feedback[]
+  passkeys  Passkey[]
+}
+
+/** WebAuthn-passkey (Touch ID, Face ID, Windows Hello, enz.) gekoppeld aan een gebruiker. */
+model Passkey {
+  id           String   @id @default(cuid())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  userId       String
+  /** Base64url credential-id (WebAuthn). */
+  credentialId String   @unique
+  publicKey    Bytes
+  counter      Int      @default(0)
+  /** JSON-array van transports, zoals door de browser gerapporteerd. */
+  transports   String?
+  /** Optionele korte weergavenaam voor de gebruiker. */
+  label        String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Event {
