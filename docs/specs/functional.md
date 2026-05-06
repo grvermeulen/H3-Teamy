@@ -84,6 +84,7 @@ This document reflects the features that exist in the code today. Planned or fut
 - /api/test-image
 - /api/trainer/status
 - /api/training/attendance
+- /api/training/nudge
 - /api/training/overview
 - /api/training/sessions
 - /api/users

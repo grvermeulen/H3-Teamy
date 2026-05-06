@@ -40,6 +40,7 @@
 - /api/test-image
 - /api/trainer/status
 - /api/training/attendance
+- /api/training/nudge
 - /api/training/overview
 - /api/training/sessions
 - /api/users
