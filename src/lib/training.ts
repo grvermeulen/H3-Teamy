@@ -88,22 +88,39 @@ export const TRAINING_START_BY_WEEKDAY: Record<
 
 const AMSTERDAM_TZ = "Europe/Amsterdam";
 
+function numberPart(parts: Intl.DateTimeFormatPart[], type: string): number {
+  return Number(parts.find((p) => p.type === type)?.value ?? "0");
+}
+
 /**
- * Returns the hour and minute (24h) of `d` in Europe/Amsterdam, regardless of
+ * Returns calendar and time parts for `d` in Europe/Amsterdam, regardless of
  * the server's timezone. Used to decide whether a same-day training is still
  * joinable.
  */
-function amsterdamHourMinute(d: Date): { hour: number; minute: number } {
+function amsterdamDateTimeParts(d: Date): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+} {
   const fmt = new Intl.DateTimeFormat("en-GB", {
     timeZone: AMSTERDAM_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
   });
   const parts = fmt.formatToParts(d);
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-  return { hour, minute };
+  return {
+    year: numberPart(parts, "year"),
+    month: numberPart(parts, "month"),
+    day: numberPart(parts, "day"),
+    hour: numberPart(parts, "hour"),
+    minute: numberPart(parts, "minute"),
+  };
 }
 
 /**
@@ -116,13 +133,9 @@ function amsterdamHourMinute(d: Date): { hour: number; minute: number } {
  * nudge would arrive too late.
  */
 export function nextTrainingDate(from: Date = new Date()): Date | null {
-  const { hour, minute } = amsterdamHourMinute(from);
+  const { year, month, day, hour, minute } = amsterdamDateTimeParts(from);
   for (let i = 0; i < 14; i++) {
-    const candidate = new Date(
-      from.getFullYear(),
-      from.getMonth(),
-      from.getDate() + i,
-    );
+    const candidate = new Date(year, month - 1, day + i);
     const wd = candidate.getDay();
     const start = TRAINING_START_BY_WEEKDAY[wd];
     if (!start) continue;
