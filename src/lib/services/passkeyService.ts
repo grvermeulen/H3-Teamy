@@ -25,6 +25,7 @@ import { getWebAuthnRpConfig } from "../webAuthnEnv";
  *
  * @param userId - Actieve gebruiker (sessie).
  * @throws Error `user_not_found` als de gebruiker niet bestaat.
+ * @throws DbUnavailableError wanneer het Passkey-schema ontbreekt (P2021/P2022).
  */
 export async function startPasskeyRegistration(userId: string): Promise<{
   optionsJSON: Awaited<ReturnType<typeof generateRegistrationOptions>>;
@@ -52,7 +53,9 @@ export async function startPasskeyRegistration(userId: string): Promise<{
       let transports: AuthenticatorTransportFuture[] | undefined;
       if (row.transports) {
         try {
-          transports = JSON.parse(row.transports) as AuthenticatorTransportFuture[];
+          transports = JSON.parse(
+            row.transports,
+          ) as AuthenticatorTransportFuture[];
         } catch {
           transports = undefined;
         }
@@ -93,6 +96,7 @@ export async function startPasskeyRegistration(userId: string): Promise<{
  * @param userId - Dezelfde gebruiker als bij {@link startPasskeyRegistration}.
  * @param response - Ruwe browser-response (`startRegistration`).
  * @param expectedOrigins - Toegestane origins voor clientDataJSON (zie {@link ../webAuthnEnv.getWebAuthnAllowedOrigins}).
+ * @throws DbUnavailableError wanneer het Passkey-schema ontbreekt.
  */
 export async function finishPasskeyRegistration(
   userId: string,
@@ -182,6 +186,7 @@ export async function startPasskeyLogin(): Promise<{
  * @param response - Ruwe browser-response (`startAuthentication`).
  * @param loginSessionId - Id uit {@link startPasskeyLogin}.
  * @param expectedOrigins - Zie {@link finishPasskeyRegistration}.
+ * @throws DbUnavailableError wanneer het Passkey-schema ontbreekt.
  */
 export async function finishPasskeyLogin(
   response: AuthenticationResponseJSON,
@@ -255,6 +260,7 @@ export type PasskeyListItem = {
  * Lijst passkeys voor profielbeheer (geen gevoelige velden).
  *
  * @param userId - Gebruiker waarvan passkeys worden opgevraagd.
+ * @throws DbUnavailableError wanneer het Passkey-schema ontbreekt.
  */
 export async function listPasskeysForUser(
   userId: string,
@@ -272,6 +278,7 @@ export async function listPasskeysForUser(
  * Verwijdert een passkey als die aan `userId` toebehoort.
  *
  * @returns `true` als er een rij is verwijderd.
+ * @throws DbUnavailableError wanneer het Passkey-schema ontbreekt.
  */
 export async function deletePasskeyForUser(
   userId: string,
