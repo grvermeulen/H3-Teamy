@@ -75,6 +75,111 @@ export function defaultSeasonWindow(): { from: string; to: string } {
 }
 
 /**
+ * Wall-clock training start times, keyed by `Date.getDay()` weekday number
+ * (0=Sun, 3=Wed, 5=Fri). Interpreted in Europe/Amsterdam.
+ */
+export const TRAINING_START_BY_WEEKDAY: Record<
+  number,
+  { hour: number; minute: number }
+> = {
+  3: { hour: 19, minute: 20 },
+  5: { hour: 20, minute: 15 },
+};
+
+const AMSTERDAM_TZ = "Europe/Amsterdam";
+
+function numberPart(parts: Intl.DateTimeFormatPart[], type: string): number {
+  return Number(parts.find((p) => p.type === type)?.value ?? "0");
+}
+
+/**
+ * Returns calendar and time parts for `d` in Europe/Amsterdam, regardless of
+ * the server's timezone. Used to decide whether a same-day training is still
+ * joinable.
+ */
+function amsterdamDateTimeParts(d: Date): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+} {
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: AMSTERDAM_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = fmt.formatToParts(d);
+  return {
+    year: numberPart(parts, "year"),
+    month: numberPart(parts, "month"),
+    day: numberPart(parts, "day"),
+    hour: numberPart(parts, "hour"),
+    minute: numberPart(parts, "minute"),
+  };
+}
+
+/**
+ * The next *joinable* training date on or after `from`, looking up to 14 days
+ * ahead. Returns `null` if none is found (effectively never).
+ *
+ * Inclusive of `from`'s calendar day, but only if the Amsterdam wall-clock
+ * time of `from` is still before that day's training start (Wed 19:20, Fri
+ * 20:15). After the start time, the same day is skipped — a "kom je vandaag"
+ * nudge would arrive too late.
+ */
+export function nextTrainingDate(from: Date = new Date()): Date | null {
+  const { year, month, day, hour, minute } = amsterdamDateTimeParts(from);
+  for (let i = 0; i < 14; i++) {
+    const candidate = new Date(year, month - 1, day + i);
+    const wd = candidate.getDay();
+    const start = TRAINING_START_BY_WEEKDAY[wd];
+    if (!start) continue;
+    if (i === 0) {
+      const past =
+        hour > start.hour || (hour === start.hour && minute >= start.minute);
+      if (past) continue;
+    }
+    return candidate;
+  }
+  return null;
+}
+
+const NL_DAY_NAMES = [
+  "zondag",
+  "maandag",
+  "dinsdag",
+  "woensdag",
+  "donderdag",
+  "vrijdag",
+  "zaterdag",
+];
+
+/**
+ * Returns a Dutch day-of-week label for `date`, relative to `today`. Same day
+ * → `"vandaag"`, next day → `"morgen"`, day-after → `"overmorgen"`, otherwise
+ * the literal weekday name (e.g. `"woensdag"`). Comparison is on the calendar
+ * day, ignoring time-of-day.
+ */
+export function describeRelativeDay(
+  date: Date,
+  today: Date = new Date(),
+): string {
+  const d0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const d1 = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayMs = 24 * 60 * 60 * 1000;
+  const diff = Math.round((d1.getTime() - d0.getTime()) / dayMs);
+  if (diff === 0) return "vandaag";
+  if (diff === 1) return "morgen";
+  if (diff === 2) return "overmorgen";
+  return NL_DAY_NAMES[date.getDay()];
+}
+
+/**
  * Splits training session dates (YYYY-MM-DD) into recent past, older past, and today-or-future
  * for compact trainer UI. Dates are compared as strings on the calendar day.
  *
