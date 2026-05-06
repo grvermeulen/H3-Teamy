@@ -15,7 +15,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     const { userId } = await getActiveUser(req);
     let payload;
     try {
-      payload = await startPasskeyRegistration(userId);
+      payload = await startPasskeyRegistration(userId, req);
     } catch (error: unknown) {
       if (error instanceof Error && error.message === "user_not_found") {
         return NextResponse.json(

@@ -31,7 +31,12 @@ export async function POST(req: NextRequest): Promise<Response> {
     const origins = resolveWebAuthnExpectedOrigins(req);
     const credential = parsed.data
       .credential as unknown as RegistrationResponseJSON;
-    const result = await finishPasskeyRegistration(userId, credential, origins);
+    const result = await finishPasskeyRegistration(
+      userId,
+      credential,
+      origins,
+      req,
+    );
     if (!result.ok) {
       const map: Record<string, string> = {
         challenge_missing:
