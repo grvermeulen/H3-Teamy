@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { getBadgeForAttendance, type AttendanceBadge } from "../../lib/badges";
 import { APP_VERSION } from "../../lib/version";
 import { Button, Card, Input, Stack, showToast } from "../../components/ui";
+import { isBenignWebAuthnClientError } from "../../lib/webAuthnClientErrors";
 
 type Profile = {
   id: string;
@@ -195,7 +196,17 @@ export default function ProfilePage() {
       showToast("Passkey toegevoegd", "success");
       await load();
     } catch (error: unknown) {
-      Sentry.captureException(error, { tags: { flow: "profile-passkey-add" } });
+      if (isBenignWebAuthnClientError(error)) {
+        Sentry.addBreadcrumb({
+          category: "webauthn",
+          message: "Passkey-registratie geannuleerd of niet toegestaan",
+          level: "info",
+        });
+      } else {
+        Sentry.captureException(error, {
+          tags: { flow: "profile-passkey-add" },
+        });
+      }
       showToast("Passkey toevoegen onderbroken.", "error");
     } finally {
       setPasskeyAdding(false);
