@@ -12,6 +12,7 @@ import {
 import { isoUint8Array } from "@simplewebauthn/server/helpers";
 import { randomBytes } from "crypto";
 import { prisma } from "../db";
+import { throwIfPasskeyTableMissing } from "../passkeyPrismaErrors";
 import { webAuthnConsumeChallenge, webAuthnStoreChallenge } from "../kv";
 import { getWebAuthnRpConfig } from "../webAuthnEnv";
 
@@ -20,6 +21,7 @@ import { getWebAuthnRpConfig } from "../webAuthnEnv";
  *
  * @param userId - Actieve gebruiker (sessie).
  * @throws Error `user_not_found` als de gebruiker niet bestaat.
+ * @throws DbUnavailableError wanneer de Passkey-tabel ontbreekt (migratie niet toegepast).
  */
 export async function startPasskeyRegistration(userId: string): Promise<{
   optionsJSON: Awaited<ReturnType<typeof generateRegistrationOptions>>;
@@ -32,10 +34,16 @@ export async function startPasskeyRegistration(userId: string): Promise<{
     throw new Error("user_not_found");
   }
 
-  const existing = await prisma.passkey.findMany({
-    where: { userId },
-    select: { credentialId: true, transports: true },
-  });
+  let existing;
+  try {
+    existing = await prisma.passkey.findMany({
+      where: { userId },
+      select: { credentialId: true, transports: true },
+    });
+  } catch (error: unknown) {
+    throwIfPasskeyTableMissing(error);
+    throw error;
+  }
 
   const { rpID, rpName } = getWebAuthnRpConfig();
   const userName = user.email ?? user.id;
@@ -46,7 +54,9 @@ export async function startPasskeyRegistration(userId: string): Promise<{
     let transports: AuthenticatorTransportFuture[] | undefined;
     if (row.transports) {
       try {
-        transports = JSON.parse(row.transports) as AuthenticatorTransportFuture[];
+        transports = JSON.parse(
+          row.transports,
+        ) as AuthenticatorTransportFuture[];
       } catch {
         transports = undefined;
       }
@@ -86,6 +96,7 @@ export async function startPasskeyRegistration(userId: string): Promise<{
  * @param userId - Dezelfde gebruiker als bij {@link startPasskeyRegistration}.
  * @param response - Ruwe browser-response (`startRegistration`).
  * @param expectedOrigins - Toegestane origins voor clientDataJSON (zie {@link ../webAuthnEnv.getWebAuthnAllowedOrigins}).
+ * @throws DbUnavailableError wanneer de Passkey-tabel ontbreekt (migratie niet toegepast).
  */
 export async function finishPasskeyRegistration(
   userId: string,
@@ -135,7 +146,8 @@ export async function finishPasskeyRegistration(
         transports: transportsJson,
       },
     });
-  } catch {
+  } catch (error: unknown) {
+    throwIfPasskeyTableMissing(error);
     return { ok: false, error: "duplicate_or_db" };
   }
 
@@ -172,6 +184,7 @@ export async function startPasskeyLogin(): Promise<{
  * @param response - Ruwe browser-response (`startAuthentication`).
  * @param loginSessionId - Id uit {@link startPasskeyLogin}.
  * @param expectedOrigins - Zie {@link finishPasskeyRegistration}.
+ * @throws DbUnavailableError wanneer de Passkey-tabel ontbreekt (migratie niet toegepast).
  */
 export async function finishPasskeyLogin(
   response: AuthenticationResponseJSON,
@@ -187,15 +200,21 @@ export async function finishPasskeyLogin(
   }
 
   const credentialId = response.id;
-  const passkey = await prisma.passkey.findUnique({
-    where: { credentialId },
-    select: {
-      userId: true,
-      credentialId: true,
-      publicKey: true,
-      counter: true,
-    },
-  });
+  let passkey;
+  try {
+    passkey = await prisma.passkey.findUnique({
+      where: { credentialId },
+      select: {
+        userId: true,
+        credentialId: true,
+        publicKey: true,
+        counter: true,
+      },
+    });
+  } catch (error: unknown) {
+    throwIfPasskeyTableMissing(error);
+    throw error;
+  }
   if (!passkey) {
     return { error: "credential_unknown" };
   }
@@ -225,10 +244,15 @@ export async function finishPasskeyLogin(
   }
 
   const newCounter = verification.authenticationInfo.newCounter;
-  await prisma.passkey.update({
-    where: { credentialId: passkey.credentialId },
-    data: { counter: newCounter },
-  });
+  try {
+    await prisma.passkey.update({
+      where: { credentialId: passkey.credentialId },
+      data: { counter: newCounter },
+    });
+  } catch (error: unknown) {
+    throwIfPasskeyTableMissing(error);
+    throw error;
+  }
 
   return { userId: passkey.userId };
 }
@@ -243,28 +267,40 @@ export type PasskeyListItem = {
  * Lijst passkeys voor profielbeheer (geen gevoelige velden).
  *
  * @param userId - Gebruiker waarvan passkeys worden opgevraagd.
+ * @throws DbUnavailableError wanneer de Passkey-tabel ontbreekt (migratie niet toegepast).
  */
 export async function listPasskeysForUser(
   userId: string,
 ): Promise<PasskeyListItem[]> {
-  return prisma.passkey.findMany({
-    where: { userId },
-    select: { id: true, createdAt: true, label: true },
-    orderBy: { createdAt: "desc" },
-  });
+  try {
+    return await prisma.passkey.findMany({
+      where: { userId },
+      select: { id: true, createdAt: true, label: true },
+      orderBy: { createdAt: "desc" },
+    });
+  } catch (error: unknown) {
+    throwIfPasskeyTableMissing(error);
+    throw error;
+  }
 }
 
 /**
  * Verwijdert een passkey als die aan `userId` toebehoort.
  *
  * @returns `true` als er een rij is verwijderd.
+ * @throws DbUnavailableError wanneer de Passkey-tabel ontbreekt (migratie niet toegepast).
  */
 export async function deletePasskeyForUser(
   userId: string,
   passkeyId: string,
 ): Promise<boolean> {
-  const res = await prisma.passkey.deleteMany({
-    where: { id: passkeyId, userId },
-  });
-  return res.count > 0;
+  try {
+    const res = await prisma.passkey.deleteMany({
+      where: { id: passkeyId, userId },
+    });
+    return res.count > 0;
+  } catch (error: unknown) {
+    throwIfPasskeyTableMissing(error);
+    throw error;
+  }
 }
