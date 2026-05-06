@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { startPasskeyLogin } from "../../../../../lib/services/passkeyService";
 import {
@@ -9,9 +9,9 @@ import {
 /**
  * POST — start passkey-login (biometrie / apparaatslot).
  */
-export async function POST(): Promise<Response> {
+export async function POST(req: NextRequest): Promise<Response> {
   try {
-    const payload = await startPasskeyLogin();
+    const payload = await startPasskeyLogin(req);
     return NextResponse.json(payload);
   } catch (error: unknown) {
     if (isDbUnavailableError(error)) {

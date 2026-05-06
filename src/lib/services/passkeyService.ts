@@ -11,17 +11,22 @@ import {
 } from "@simplewebauthn/server";
 import { isoUint8Array } from "@simplewebauthn/server/helpers";
 import { randomBytes } from "crypto";
+import type { NextRequest } from "next/server";
 import { prisma } from "../db";
 import { webAuthnConsumeChallenge, webAuthnStoreChallenge } from "../kv";
-import { getWebAuthnRpConfig } from "../webAuthnEnv";
+import { resolveWebAuthnRpConfig } from "../webAuthnEnv";
 
 /**
  * Start WebAuthn-registratie voor een ingelogde gebruiker; slaat de challenge op onder `userId`.
  *
  * @param userId - Actieve gebruiker (sessie).
+ * @param req - Inkomend API-verzoek (RP-ID volgt host/preview).
  * @throws Error `user_not_found` als de gebruiker niet bestaat.
  */
-export async function startPasskeyRegistration(userId: string): Promise<{
+export async function startPasskeyRegistration(
+  userId: string,
+  req: NextRequest,
+): Promise<{
   optionsJSON: Awaited<ReturnType<typeof generateRegistrationOptions>>;
 }> {
   const user = await prisma.user.findUnique({
@@ -37,7 +42,7 @@ export async function startPasskeyRegistration(userId: string): Promise<{
     select: { credentialId: true, transports: true },
   });
 
-  const { rpID, rpName } = getWebAuthnRpConfig();
+  const { rpID, rpName } = resolveWebAuthnRpConfig(req);
   const userName = user.email ?? user.id;
   const userDisplayName =
     `${user.firstName} ${user.lastName}`.trim() || userName;
@@ -86,11 +91,13 @@ export async function startPasskeyRegistration(userId: string): Promise<{
  * @param userId - Dezelfde gebruiker als bij {@link startPasskeyRegistration}.
  * @param response - Ruwe browser-response (`startRegistration`).
  * @param expectedOrigins - Toegestane origins voor clientDataJSON (zie {@link ../webAuthnEnv.getWebAuthnAllowedOrigins}).
+ * @param req - Inkomend API-verzoek (zelfde RP-ID als bij opties).
  */
 export async function finishPasskeyRegistration(
   userId: string,
   response: RegistrationResponseJSON,
   expectedOrigins: string[],
+  req: NextRequest,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const expectedChallenge = await webAuthnConsumeChallenge(
     "registration",
@@ -100,7 +107,7 @@ export async function finishPasskeyRegistration(
     return { ok: false, error: "challenge_missing" };
   }
 
-  const { rpID } = getWebAuthnRpConfig();
+  const { rpID } = resolveWebAuthnRpConfig(req);
 
   let verification;
   try {
@@ -144,12 +151,14 @@ export async function finishPasskeyRegistration(
 
 /**
  * Start passkey-login (discoverable credentials); retourneert een aparte `loginSessionId` voor challenge-lookup.
+ *
+ * @param req - Inkomend API-verzoek (RP-ID volgt host/preview).
  */
-export async function startPasskeyLogin(): Promise<{
+export async function startPasskeyLogin(req: NextRequest): Promise<{
   optionsJSON: Awaited<ReturnType<typeof generateAuthenticationOptions>>;
   loginSessionId: string;
 }> {
-  const { rpID } = getWebAuthnRpConfig();
+  const { rpID } = resolveWebAuthnRpConfig(req);
   const loginSessionId = randomBytes(24).toString("base64url");
   const options = await generateAuthenticationOptions({
     rpID,
@@ -172,11 +181,13 @@ export async function startPasskeyLogin(): Promise<{
  * @param response - Ruwe browser-response (`startAuthentication`).
  * @param loginSessionId - Id uit {@link startPasskeyLogin}.
  * @param expectedOrigins - Zie {@link finishPasskeyRegistration}.
+ * @param req - Inkomend API-verzoek (zelfde RP-ID als bij opties).
  */
 export async function finishPasskeyLogin(
   response: AuthenticationResponseJSON,
   loginSessionId: string,
   expectedOrigins: string[],
+  req: NextRequest,
 ): Promise<{ userId: string } | { error: string }> {
   const expectedChallenge = await webAuthnConsumeChallenge(
     "authentication",
@@ -200,7 +211,7 @@ export async function finishPasskeyLogin(
     return { error: "credential_unknown" };
   }
 
-  const { rpID } = getWebAuthnRpConfig();
+  const { rpID } = resolveWebAuthnRpConfig(req);
 
   let verification;
   try {

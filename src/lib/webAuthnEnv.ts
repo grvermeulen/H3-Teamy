@@ -1,3 +1,4 @@
+import type { NextRequest } from "next/server";
 import { resolveNextAuthUrl } from "./nextAuthUrl";
 
 export type WebAuthnRpConfig = {
@@ -6,8 +7,35 @@ export type WebAuthnRpConfig = {
 };
 
 /**
- * Leest RP-ID en weergavenaam voor WebAuthn.
- * `WEBAUTHN_RP_ID` overrult; anders hostname van `NEXTAUTH_URL` / `VERCEL_URL`, anders `localhost`.
+ * Bepaalt RP-ID voor WebAuthn op basis van dit HTTP-verzoek (aanbevolen).
+ * Gebruikt `WEBAUTHN_RP_ID` als die gezet is; anders de hostname uit
+ * `x-forwarded-host` / `host` zodat preview en 127.0.0.1 overeenkomen met de site in de browser.
+ * Valt terug op {@link getWebAuthnRpConfig} zonder Host-header (tests/batch).
+ *
+ * @param req - Inkomend API-verzoek (App Router route handler).
+ */
+export function resolveWebAuthnRpConfig(req: NextRequest): WebAuthnRpConfig {
+  const rpName = process.env.WEBAUTHN_RP_NAME ?? "H3 Teamy";
+  const explicit = process.env.WEBAUTHN_RP_ID?.trim();
+  if (explicit) {
+    return { rpID: explicit, rpName };
+  }
+  const forwarded = req.headers.get("x-forwarded-host");
+  const hostHeader = req.headers.get("host");
+  const raw = forwarded ?? hostHeader;
+  if (raw) {
+    const hostname = raw.split(":")[0]?.trim();
+    if (hostname) {
+      return { rpID: hostname, rpName };
+    }
+  }
+  return getWebAuthnRpConfig();
+}
+
+/**
+ * Fallback RP-configuratie zonder inkomend verzoek (tests, batch, scripts).
+ * `WEBAUTHN_RP_ID` heeft voorrang; anders hostname van `NEXTAUTH_URL` / `VERCEL_URL`, anders `localhost`
+ * (niet aanbevolen voor productie).
  *
  * @returns Configuratie voor SimpleWebAuthn `rpID` / `rpName`.
  */

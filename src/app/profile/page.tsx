@@ -328,7 +328,8 @@ export default function ProfilePage() {
         </Card>
 
         {passkeySupported ? (
-          <Card style={{ maxWidth: 520, marginTop: 12 }}>
+          <div data-tour="profile-passkeys">
+            <Card style={{ maxWidth: 520, marginTop: 12 }}>
             <Stack gap="3">
               <div>
                 <h3 style={{ marginTop: 0 }}>Snel inloggen</h3>
@@ -378,6 +379,7 @@ export default function ProfilePage() {
               )}
             </Stack>
           </Card>
+          </div>
         ) : null}
 
         <div
