@@ -1,14 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Prisma } from "@prisma/client";
 import * as Sentry from "@sentry/nextjs";
 import { prisma } from "./db";
 import { authOptions } from "./authOptions";
+import { createPasskeyExchangeToken } from "./passkeyExchangeToken";
 import { USER_CORE_SELECT, type UserCoreRow } from "./userPrismaSelect";
 
 vi.mock("./db", () => ({
   prisma: {
     user: {
       findFirst: vi.fn(),
+      findUnique: vi.fn(),
     },
   },
 }));
@@ -101,6 +103,74 @@ describe("Credentials authorize", () => {
     expect(Sentry.captureException).toHaveBeenCalledWith(err, {
       tags: { context: "credentials_authorize" },
       extra: { prismaCode: "P2022" },
+    });
+  });
+
+  describe("passkeyExchange credentials", () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it("returns user when passkey exchange token is valid", async () => {
+      vi.stubEnv("NEXTAUTH_SECRET", "unit-test-secret-passkey");
+      const token = createPasskeyExchangeToken("u-pass");
+      const row: UserCoreRow = {
+        id: "u-pass",
+        email: "p@b.nl",
+        passwordHash: null,
+        firstName: "P",
+        lastName: "Q",
+      };
+      vi.mocked(prisma.user.findUnique).mockResolvedValueOnce(row);
+
+      const result = await authorize?.({
+        passkeyExchange: token,
+        email: "",
+        password: "",
+      });
+
+      expect(result).toEqual({
+        id: "u-pass",
+        name: "P Q",
+        email: "p@b.nl",
+      });
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { id: "u-pass" },
+        select: USER_CORE_SELECT,
+      });
+    });
+
+    it("returns null when passkey exchange token is invalid", async () => {
+      vi.stubEnv("NEXTAUTH_SECRET", "unit-test-secret-passkey");
+      const result = await authorize?.({
+        passkeyExchange: "not-a-valid-token",
+        email: "",
+        password: "",
+      });
+      expect(result).toBeNull();
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it("returns null on Prisma error during passkey login and reports to Sentry", async () => {
+      vi.stubEnv("NEXTAUTH_SECRET", "unit-test-secret-passkey");
+      const token = createPasskeyExchangeToken("u-pass");
+      const err = new Prisma.PrismaClientKnownRequestError("boom", {
+        code: "P2002",
+        clientVersion: "7",
+      });
+      vi.mocked(prisma.user.findUnique).mockRejectedValueOnce(err);
+
+      const result = await authorize?.({
+        passkeyExchange: token,
+        email: "",
+        password: "",
+      });
+
+      expect(result).toBeNull();
+      expect(Sentry.captureException).toHaveBeenCalledWith(err, {
+        tags: { context: "credentials_authorize_passkey" },
+        extra: { prismaCode: "P2002" },
+      });
     });
   });
 });
