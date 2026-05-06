@@ -7,6 +7,7 @@ import { browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import { signIn } from "next-auth/react";
 import { useEffect, useState, type JSX } from "react";
 import { Button, Card, Input, Stack } from "../../components/ui";
+import { isBenignWebAuthnClientError } from "../../lib/webAuthnClientErrors";
 
 type LoginFormProps = {
   /** Veilig relatief redirect-pad na succesvolle login (server-gevalideerd). */
@@ -169,7 +170,15 @@ export default function LoginForm({
       }
       window.location.assign(result?.url || callbackUrl);
     } catch (error: unknown) {
-      Sentry.captureException(error, { tags: { flow: "login-passkey" } });
+      if (isBenignWebAuthnClientError(error)) {
+        Sentry.addBreadcrumb({
+          category: "webauthn",
+          message: "Passkey-prompt geannuleerd of niet toegestaan",
+          level: "info",
+        });
+      } else {
+        Sentry.captureException(error, { tags: { flow: "login-passkey" } });
+      }
       setNotice({
         tone: "error",
         text: "Passkey-inloggen onderbroken of niet ondersteund op dit apparaat.",
