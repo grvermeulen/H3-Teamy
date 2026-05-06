@@ -8,6 +8,11 @@
 - /api/admin/users
 - /api/auth/[...nextauth]
 - /api/auth/link
+- /api/auth/passkey/login-options
+- /api/auth/passkey/login-verify
+- /api/auth/passkey/register-options
+- /api/auth/passkey/register-verify
+- /api/auth/passkeys
 - /api/auth/password/reset-confirm
 - /api/auth/password/reset-request
 - /api/auth/register
