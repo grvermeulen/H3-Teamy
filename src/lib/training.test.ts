@@ -62,6 +62,44 @@ describe("nextTrainingDate", () => {
     const thu = new Date(2025, 8, 4);
     expect(toYMD(nextTrainingDate(thu)!)).toBe("2025-09-05");
   });
+
+  // 2025-09 is CEST (UTC+2). 17:20Z = 19:20 in Amsterdam (Wed start).
+  // 18:15Z = 20:15 in Amsterdam (Fri start).
+  it("returns today on a Wednesday before training starts (Amsterdam time)", () => {
+    expect(toYMD(nextTrainingDate(new Date("2025-09-10T17:19:00Z"))!)).toBe(
+      "2025-09-10",
+    );
+  });
+
+  it("skips to Friday on a Wednesday at training start", () => {
+    expect(toYMD(nextTrainingDate(new Date("2025-09-10T17:20:00Z"))!)).toBe(
+      "2025-09-12",
+    );
+  });
+
+  it("skips to Friday on a Wednesday well past training start", () => {
+    expect(toYMD(nextTrainingDate(new Date("2025-09-10T20:00:00Z"))!)).toBe(
+      "2025-09-12",
+    );
+  });
+
+  it("returns today on a Friday before training starts (Amsterdam time)", () => {
+    expect(toYMD(nextTrainingDate(new Date("2025-09-12T18:14:00Z"))!)).toBe(
+      "2025-09-12",
+    );
+  });
+
+  it("skips to next Wednesday on a Friday at training start", () => {
+    expect(toYMD(nextTrainingDate(new Date("2025-09-12T18:15:00Z"))!)).toBe(
+      "2025-09-17",
+    );
+  });
+
+  it("skips to next Wednesday on a Friday after training", () => {
+    expect(toYMD(nextTrainingDate(new Date("2025-09-12T22:00:00Z"))!)).toBe(
+      "2025-09-17",
+    );
+  });
 });
 
 describe("describeRelativeDay", () => {

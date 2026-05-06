@@ -156,7 +156,7 @@ describe("getOrCreateNudge", () => {
     });
     expect(kvSetJson).toHaveBeenCalledTimes(1);
     const [key] = kvSetJson.mock.calls[0];
-    expect(key).toContain("nudge:v2:u1:2025-09-10:encourage:1of4");
+    expect(key).toContain("nudge:v3:u1:2025-09-10:encourage:1of4");
   });
 
   it("passes 'woensdag' when today is the preceding Saturday", async () => {

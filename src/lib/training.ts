@@ -75,20 +75,63 @@ export function defaultSeasonWindow(): { from: string; to: string } {
 }
 
 /**
- * The next training date on or after `from`, looking up to 14 days ahead.
- * Returns `null` if no Wed/Fri falls in that window (effectively never, but
- * callers should still handle it).
+ * Wall-clock training start times, keyed by `Date.getDay()` weekday number
+ * (0=Sun, 3=Wed, 5=Fri). Interpreted in Europe/Amsterdam.
+ */
+export const TRAINING_START_BY_WEEKDAY: Record<
+  number,
+  { hour: number; minute: number }
+> = {
+  3: { hour: 19, minute: 20 },
+  5: { hour: 20, minute: 15 },
+};
+
+const AMSTERDAM_TZ = "Europe/Amsterdam";
+
+/**
+ * Returns the hour and minute (24h) of `d` in Europe/Amsterdam, regardless of
+ * the server's timezone. Used to decide whether a same-day training is still
+ * joinable.
+ */
+function amsterdamHourMinute(d: Date): { hour: number; minute: number } {
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: AMSTERDAM_TZ,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = fmt.formatToParts(d);
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  return { hour, minute };
+}
+
+/**
+ * The next *joinable* training date on or after `from`, looking up to 14 days
+ * ahead. Returns `null` if none is found (effectively never).
  *
- * Inclusive of `from` itself: if `from` is a Wed or Fri, that same day is the
- * answer. The bucket logic upstream already excludes mid-range users, so an
- * encourage-bucket player on a training-day morning gets a "vandaag" nudge,
- * which is the desired behavior.
+ * Inclusive of `from`'s calendar day, but only if the Amsterdam wall-clock
+ * time of `from` is still before that day's training start (Wed 19:20, Fri
+ * 20:15). After the start time, the same day is skipped — a "kom je vandaag"
+ * nudge would arrive too late.
  */
 export function nextTrainingDate(from: Date = new Date()): Date | null {
+  const { hour, minute } = amsterdamHourMinute(from);
   for (let i = 0; i < 14; i++) {
-    const d = new Date(from.getFullYear(), from.getMonth(), from.getDate() + i);
-    const wd = d.getDay();
-    if (wd === 3 || wd === 5) return d;
+    const candidate = new Date(
+      from.getFullYear(),
+      from.getMonth(),
+      from.getDate() + i,
+    );
+    const wd = candidate.getDay();
+    const start = TRAINING_START_BY_WEEKDAY[wd];
+    if (!start) continue;
+    if (i === 0) {
+      const past =
+        hour > start.hour || (hour === start.hour && minute >= start.minute);
+      if (past) continue;
+    }
+    return candidate;
   }
   return null;
 }

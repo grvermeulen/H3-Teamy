@@ -90,7 +90,7 @@ function staticFallback(
 }
 
 function cacheKey(userId: string, today: Date, bucket: NudgeBucket): string {
-  return `nudge:v2:${userId}:${toYMD(today)}:${bucket.tone}:${bucket.attended}of${bucket.total}`;
+  return `nudge:v3:${userId}:${toYMD(today)}:${bucket.tone}:${bucket.attended}of${bucket.total}`;
 }
 
 /**
