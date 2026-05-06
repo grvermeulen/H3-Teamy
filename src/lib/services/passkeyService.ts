@@ -11,8 +11,12 @@ import {
 } from "@simplewebauthn/server";
 import { isoUint8Array } from "@simplewebauthn/server/helpers";
 import { randomBytes } from "crypto";
+import { DbUnavailableError } from "../dbUnavailableError";
 import { prisma } from "../db";
-import { throwIfPasskeyTableMissing } from "../passkeyPrismaErrors";
+import {
+  isPrismaSchemaDriftError,
+  withPrismaSchemaDriftAsDbUnavailable,
+} from "../prismaSchemaDrift";
 import { webAuthnConsumeChallenge, webAuthnStoreChallenge } from "../kv";
 import { getWebAuthnRpConfig } from "../webAuthnEnv";
 
@@ -21,73 +25,69 @@ import { getWebAuthnRpConfig } from "../webAuthnEnv";
  *
  * @param userId - Actieve gebruiker (sessie).
  * @throws Error `user_not_found` als de gebruiker niet bestaat.
- * @throws DbUnavailableError wanneer de Passkey-tabel ontbreekt (migratie niet toegepast).
+ * @throws DbUnavailableError wanneer het Passkey-schema ontbreekt (P2021/P2022).
  */
 export async function startPasskeyRegistration(userId: string): Promise<{
   optionsJSON: Awaited<ReturnType<typeof generateRegistrationOptions>>;
 }> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true, email: true, firstName: true, lastName: true },
-  });
-  if (!user) {
-    throw new Error("user_not_found");
-  }
+  return withPrismaSchemaDriftAsDbUnavailable(async () => {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, firstName: true, lastName: true },
+    });
+    if (!user) {
+      throw new Error("user_not_found");
+    }
 
-  let existing;
-  try {
-    existing = await prisma.passkey.findMany({
+    const existing = await prisma.passkey.findMany({
       where: { userId },
       select: { credentialId: true, transports: true },
     });
-  } catch (error: unknown) {
-    throwIfPasskeyTableMissing(error);
-    throw error;
-  }
 
-  const { rpID, rpName } = getWebAuthnRpConfig();
-  const userName = user.email ?? user.id;
-  const userDisplayName =
-    `${user.firstName} ${user.lastName}`.trim() || userName;
+    const { rpID, rpName } = getWebAuthnRpConfig();
+    const userName = user.email ?? user.id;
+    const userDisplayName =
+      `${user.firstName} ${user.lastName}`.trim() || userName;
 
-  const excludeCredentials = existing.map((row) => {
-    let transports: AuthenticatorTransportFuture[] | undefined;
-    if (row.transports) {
-      try {
-        transports = JSON.parse(
-          row.transports,
-        ) as AuthenticatorTransportFuture[];
-      } catch {
-        transports = undefined;
+    const excludeCredentials = existing.map((row) => {
+      let transports: AuthenticatorTransportFuture[] | undefined;
+      if (row.transports) {
+        try {
+          transports = JSON.parse(
+            row.transports,
+          ) as AuthenticatorTransportFuture[];
+        } catch {
+          transports = undefined;
+        }
       }
+      return {
+        id: row.credentialId,
+        ...(transports ? { transports } : {}),
+      };
+    });
+
+    const userID = isoUint8Array.fromUTF8String(user.id);
+    if (userID.byteLength > 64) {
+      throw new Error("user_id_too_long");
     }
-    return {
-      id: row.credentialId,
-      ...(transports ? { transports } : {}),
-    };
+
+    const options = await generateRegistrationOptions({
+      rpName,
+      rpID,
+      userName,
+      userDisplayName,
+      userID,
+      excludeCredentials,
+      authenticatorSelection: {
+        residentKey: "preferred",
+        userVerification: "preferred",
+      },
+    });
+
+    await webAuthnStoreChallenge("registration", userId, options.challenge);
+
+    return { optionsJSON: options };
   });
-
-  const userID = isoUint8Array.fromUTF8String(user.id);
-  if (userID.byteLength > 64) {
-    throw new Error("user_id_too_long");
-  }
-
-  const options = await generateRegistrationOptions({
-    rpName,
-    rpID,
-    userName,
-    userDisplayName,
-    userID,
-    excludeCredentials,
-    authenticatorSelection: {
-      residentKey: "preferred",
-      userVerification: "preferred",
-    },
-  });
-
-  await webAuthnStoreChallenge("registration", userId, options.challenge);
-
-  return { optionsJSON: options };
 }
 
 /**
@@ -96,7 +96,7 @@ export async function startPasskeyRegistration(userId: string): Promise<{
  * @param userId - Dezelfde gebruiker als bij {@link startPasskeyRegistration}.
  * @param response - Ruwe browser-response (`startRegistration`).
  * @param expectedOrigins - Toegestane origins voor clientDataJSON (zie {@link ../webAuthnEnv.getWebAuthnAllowedOrigins}).
- * @throws DbUnavailableError wanneer de Passkey-tabel ontbreekt (migratie niet toegepast).
+ * @throws DbUnavailableError wanneer het Passkey-schema ontbreekt.
  */
 export async function finishPasskeyRegistration(
   userId: string,
@@ -147,7 +147,9 @@ export async function finishPasskeyRegistration(
       },
     });
   } catch (error: unknown) {
-    throwIfPasskeyTableMissing(error);
+    if (isPrismaSchemaDriftError(error)) {
+      throw new DbUnavailableError();
+    }
     return { ok: false, error: "duplicate_or_db" };
   }
 
@@ -184,25 +186,24 @@ export async function startPasskeyLogin(): Promise<{
  * @param response - Ruwe browser-response (`startAuthentication`).
  * @param loginSessionId - Id uit {@link startPasskeyLogin}.
  * @param expectedOrigins - Zie {@link finishPasskeyRegistration}.
- * @throws DbUnavailableError wanneer de Passkey-tabel ontbreekt (migratie niet toegepast).
+ * @throws DbUnavailableError wanneer het Passkey-schema ontbreekt.
  */
 export async function finishPasskeyLogin(
   response: AuthenticationResponseJSON,
   loginSessionId: string,
   expectedOrigins: string[],
 ): Promise<{ userId: string } | { error: string }> {
-  const expectedChallenge = await webAuthnConsumeChallenge(
-    "authentication",
-    loginSessionId,
-  );
-  if (!expectedChallenge) {
-    return { error: "challenge_missing" };
-  }
+  return withPrismaSchemaDriftAsDbUnavailable(async () => {
+    const expectedChallenge = await webAuthnConsumeChallenge(
+      "authentication",
+      loginSessionId,
+    );
+    if (!expectedChallenge) {
+      return { error: "challenge_missing" };
+    }
 
-  const credentialId = response.id;
-  let passkey;
-  try {
-    passkey = await prisma.passkey.findUnique({
+    const credentialId = response.id;
+    const passkey = await prisma.passkey.findUnique({
       where: { credentialId },
       select: {
         userId: true,
@@ -211,50 +212,42 @@ export async function finishPasskeyLogin(
         counter: true,
       },
     });
-  } catch (error: unknown) {
-    throwIfPasskeyTableMissing(error);
-    throw error;
-  }
-  if (!passkey) {
-    return { error: "credential_unknown" };
-  }
+    if (!passkey) {
+      return { error: "credential_unknown" };
+    }
 
-  const { rpID } = getWebAuthnRpConfig();
+    const { rpID } = getWebAuthnRpConfig();
 
-  let verification;
-  try {
-    verification = await verifyAuthenticationResponse({
-      response,
-      expectedChallenge,
-      expectedOrigin: expectedOrigins,
-      expectedRPID: rpID,
-      credential: {
-        id: passkey.credentialId,
-        publicKey: Buffer.from(passkey.publicKey),
-        counter: passkey.counter,
-      },
-      requireUserVerification: false,
-    });
-  } catch {
-    return { error: "verification_failed" };
-  }
+    let verification;
+    try {
+      verification = await verifyAuthenticationResponse({
+        response,
+        expectedChallenge,
+        expectedOrigin: expectedOrigins,
+        expectedRPID: rpID,
+        credential: {
+          id: passkey.credentialId,
+          publicKey: Buffer.from(passkey.publicKey),
+          counter: passkey.counter,
+        },
+        requireUserVerification: false,
+      });
+    } catch {
+      return { error: "verification_failed" };
+    }
 
-  if (!verification.verified) {
-    return { error: "verification_failed" };
-  }
+    if (!verification.verified) {
+      return { error: "verification_failed" };
+    }
 
-  const newCounter = verification.authenticationInfo.newCounter;
-  try {
+    const newCounter = verification.authenticationInfo.newCounter;
     await prisma.passkey.update({
       where: { credentialId: passkey.credentialId },
       data: { counter: newCounter },
     });
-  } catch (error: unknown) {
-    throwIfPasskeyTableMissing(error);
-    throw error;
-  }
 
-  return { userId: passkey.userId };
+    return { userId: passkey.userId };
+  });
 }
 
 export type PasskeyListItem = {
@@ -267,40 +260,34 @@ export type PasskeyListItem = {
  * Lijst passkeys voor profielbeheer (geen gevoelige velden).
  *
  * @param userId - Gebruiker waarvan passkeys worden opgevraagd.
- * @throws DbUnavailableError wanneer de Passkey-tabel ontbreekt (migratie niet toegepast).
+ * @throws DbUnavailableError wanneer het Passkey-schema ontbreekt.
  */
 export async function listPasskeysForUser(
   userId: string,
 ): Promise<PasskeyListItem[]> {
-  try {
-    return await prisma.passkey.findMany({
+  return withPrismaSchemaDriftAsDbUnavailable(() =>
+    prisma.passkey.findMany({
       where: { userId },
       select: { id: true, createdAt: true, label: true },
       orderBy: { createdAt: "desc" },
-    });
-  } catch (error: unknown) {
-    throwIfPasskeyTableMissing(error);
-    throw error;
-  }
+    }),
+  );
 }
 
 /**
  * Verwijdert een passkey als die aan `userId` toebehoort.
  *
  * @returns `true` als er een rij is verwijderd.
- * @throws DbUnavailableError wanneer de Passkey-tabel ontbreekt (migratie niet toegepast).
+ * @throws DbUnavailableError wanneer het Passkey-schema ontbreekt.
  */
 export async function deletePasskeyForUser(
   userId: string,
   passkeyId: string,
 ): Promise<boolean> {
-  try {
+  return withPrismaSchemaDriftAsDbUnavailable(async () => {
     const res = await prisma.passkey.deleteMany({
       where: { id: passkeyId, userId },
     });
     return res.count > 0;
-  } catch (error: unknown) {
-    throwIfPasskeyTableMissing(error);
-    throw error;
-  }
+  });
 }
