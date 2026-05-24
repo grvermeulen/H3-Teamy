@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import Providers from "../components/Providers";
 import BottomNav from "../components/BottomNav";
@@ -131,6 +132,7 @@ export default function RootLayout({
         `,
           }}
         />
+        <SpeedInsights />
       </body>
     </html>
   );
