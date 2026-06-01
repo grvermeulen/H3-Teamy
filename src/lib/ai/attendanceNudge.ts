@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getStructuredGatewayModel } from "./gatewayModels";
 
 /**
  * Schema for the structured nudge object the AI coach returns for a player's
@@ -46,8 +47,8 @@ export type NudgeInput = {
 };
 
 /**
- * Calls the AI SDK through the Vercel AI Gateway with model
- * `anthropic/claude-opus-4` and returns a structured attendance nudge.
+ * Calls the AI SDK through the Vercel AI Gateway (structured model from
+ * {@link getStructuredGatewayModel}) and returns a structured attendance nudge.
  *
  * Loaded dynamically so the Braintrust-wrapped client does not pull `ai` /
  * `braintrust` into the bundle of routes that don't need it (e.g. edge).
@@ -62,7 +63,7 @@ export async function generateAttendanceNudge(
       ? `Eerstvolgende training: ${input.nextTrainingLabel}\n`
       : "";
   const { object } = await generateObject({
-    model: "anthropic/claude-opus-4",
+    model: getStructuredGatewayModel(),
     schema: AttendanceNudgeSchema,
     system: NUDGE_SYSTEM_PROMPT,
     prompt:

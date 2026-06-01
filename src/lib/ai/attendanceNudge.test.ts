@@ -64,7 +64,7 @@ describe("generateAttendanceNudge", () => {
     vi.resetModules();
   });
 
-  it("calls the AI SDK with anthropic/claude-opus-4 and returns the parsed object", async () => {
+  it("calls the AI SDK with the structured gateway model and returns the parsed object", async () => {
     const generateObject = vi.fn(async () => ({
       object: {
         tone: "encourage",
@@ -87,7 +87,7 @@ describe("generateAttendanceNudge", () => {
       system: string;
       prompt: string;
     };
-    expect(args.model).toBe("anthropic/claude-opus-4");
+    expect(args.model).toBe("anthropic/claude-sonnet-4");
     expect(args.system).toBe(NUDGE_SYSTEM_PROMPT);
     expect(args.prompt).toContain("Joost");
     expect(args.prompt).toContain("1 van 4");
