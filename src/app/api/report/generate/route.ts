@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
+import { getReportGenerateGatewayModel } from "../../../../lib/ai/gatewayModels";
 import { getReport, setReport, kvGetJson } from "../../../../lib/kv";
 import { MVP_PLACEHOLDER } from "../../../../lib/mvpNarrative";
 import { sendMatchReportToWhatsAppGroup } from "../../../../lib/services/waapiService";
@@ -484,7 +485,7 @@ Regels:
     try {
       const { generateText } = await import("../../../../lib/ai/client");
       const { text } = await generateText({
-        model: "openai/gpt-5-chat-latest",
+        model: getReportGenerateGatewayModel(),
         temperature: 0.2,
         system:
           "You are an enthusiastic, pro–De Rijn Heren 3 reporter. Write energetic, respectful Dutch match reports using only the provided JSON.",

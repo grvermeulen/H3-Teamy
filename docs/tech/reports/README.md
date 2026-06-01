@@ -23,6 +23,7 @@ The app uses `await Promise.resolve(params)` for `eventId` so Next.js 15+ async 
 
 - `REPORT_EXTRACT_PROVIDER=vlm|ocr|hybrid` (default: `vlm`)
 - `REPORT_EXTRACT_OPENAI_MODEL=<model-name>` (optional; defaults to `gpt-4o` when unset. The removed gateway snapshot `gpt-5.2-2025-12-11` is remapped to `gpt-4o` in code.)
+- `REPORT_GENERATE_MODEL=<model-name>` (optional; defaults to `openai/gpt-4o` for `/api/report/generate`. Premium GPT-5 chat ids are remapped in code — see Sentry JAVASCRIPT-NEXTJS-1S.)
 - `OPENAI_API_KEY=<secret>` (required)
 - `OCR_WORKER_URL=<url>` (required for `ocr` and `hybrid`)
 - `OCR_WORKER_TOKEN=<token>` (required for `ocr` and `hybrid`)
