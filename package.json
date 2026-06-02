@@ -57,7 +57,7 @@
     "postcss": "^8.5.15",
     "prisma": "7.8.0",
     "react": "19.2.6",
-    "react-dom": "19.2.6",
+    "react-dom": "19.2.7",
     "resend": "^6.12.4",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.3.0",
