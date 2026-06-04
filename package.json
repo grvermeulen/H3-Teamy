@@ -47,7 +47,7 @@
     "@tailwindcss/postcss": "^4.3.0",
     "ai": "^6.0.194",
     "bcryptjs": "^3.0.3",
-    "braintrust": "^3.15.0",
+    "braintrust": "^3.16.0",
     "dotenv": "^17.4.2",
     "ical": "^0.8.0",
     "ioredis": "^5.11.0",
