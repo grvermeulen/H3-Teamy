@@ -6,6 +6,7 @@
 - When syncing Vercel environment configuration, treat remote settings as source of truth and sync local values from remote.
 - Use the GitHub CLI when GitHub information is needed.
 - Follow the provided Sentry instrumentation patterns for Next.js projects.
+- **Sentry noise**: verwachte clientfouten niet als issues melden — o.a. WebAuthn-annulering (`NotAllowedError` / `AbortError` via `isBenignWebAuthnClientError`), Chromium/WebKit “Failed to fetch” / “Load failed”, aborted fetches, en idle pg-pool disconnects; gebruik bestaande `beforeSend`-filters en helpers in plaats van nieuwe ad-hoc suppressies.
 - For test coverage analysis, use only tests listed in `enabled_tests.txt` and format reports like `coverage_report.md`.
 - Run a de-slop pass after AI-assisted implementation to remove narration comments, defensive checks the type system already covers, and tests that test the language rather than business logic.
 - Research existing solutions in `src/lib/` and npm before writing new utilities or helpers.
@@ -18,45 +19,31 @@
 ## Learned Workspace Facts
 
 - This repository is `H3-Teamy`, hosted at `grvermeulen/H3-Teamy`.
-- The project targets **Node.js 22** (`package.json` `engines`), and is a Next.js 16 app with React 19, TypeScript 6, Prisma 5 (PostgreSQL), NextAuth, Tailwind CSS 4, Sentry, and Vitest.
+- The project targets **Node.js 22** (`package.json` `engines`), and is a Next.js **16.2.9** app with React **19.2**, TypeScript **6**, **Prisma 7** (PostgreSQL via `@prisma/adapter-pg` and `pg`), NextAuth, Tailwind CSS **4**, Sentry, and Vitest **4**.
 - CI includes an "Agentic CI" verify pipeline (lint, typecheck, build, test) and Vercel deployment checks.
 - Technical documentation is organized under `docs/tech/*`.
-- Pull request #54 requires `AGENTS.md` to only contain learned preferences and learned workspace facts.
+- Pull request #54 requires `AGENTS.md` to only contain learned preferences and learned workspace facts (two top-level sections, bullet lists only — no extra headings or narrative blocks).
 - All user-facing strings must be in Dutch (NL).
 - Business logic belongs in `src/lib/services/` and `src/lib/*.ts`, not in API routes or components.
 - API routes should be thin handlers: parse request, check auth via `getServerSession(authOptions)`, validate with Zod, delegate to service, return response.
-- Shared utilities live in `src/lib/` — `userUtils.ts` (display names), `badges.ts` (attendance badges), `kv.ts` (Redis cache), `eventId.ts` (date-based IDs), `training.ts` (training logic).
+- Shared utilities live in `src/lib/` — `userUtils.ts` (display names), `badges.ts` (attendance badges), `kv.ts` (Redis cache), `eventId.ts` (date-based IDs), `training.ts` (training logic), `webAuthnEnv.ts` / `webAuthnClientErrors.ts` (passkeys), `passkeyPrismaErrors.ts` (schema drift), `sentryEphemeralVercelUrl.ts` / `sentryUptimePreviewNoise.ts` (preview uptime noise).
 - Validation schemas live in `src/lib/schemas/`.
-- External services: OpenAI/Anthropic via the Vercel AI Gateway (report generation/vision, idea triage), WaAPI (WhatsApp), Resend (email), Sportlink (iCal events), OCR worker (FastAPI/EasyOCR).
-- All AI calls go through `src/lib/ai/client.ts`, which wraps the Vercel AI SDK v6 with Braintrust tracing. Env vars: `BRAINTRUST_API_KEY` enables tracing (no-op when absent), `BRAINTRUST_PROJECT_NAME` (default `"H3-Teamy"`). Run `npm run eval` to execute Braintrust evals in `evals/`.
+- External services: OpenAI/Anthropic via the Vercel AI Gateway (report generation/vision, idea triage), WaAPI (WhatsApp), Resend (email), Sportlink (iCal via the `ical` package — not `node-ical`, for Turbopack/SSR compatibility), OCR worker (FastAPI/EasyOCR).
+- All AI calls go through `src/lib/ai/client.ts`, which wraps the Vercel AI SDK **v6** (`ai` package) with Braintrust tracing. Env vars: `BRAINTRUST_API_KEY` enables tracing (no-op when absent), `BRAINTRUST_PROJECT_NAME` (default `"H3-Teamy"`). Run `npm run eval` to execute Braintrust evals in `evals/`.
+- **AI Gateway models**: centralize ids in `src/lib/ai/gatewayModels.ts` — defaults `anthropic/claude-sonnet-4` (structured) and `openai/gpt-4o` (text); remap free-tier-blocked ids (`claude-opus-*`, `gpt-5*`). Optional overrides: `AI_GATEWAY_STRUCTURED_MODEL`, `REPORT_GENERATE_MODEL` (also remapped when blocked).
+- **WebAuthn passkeys**: `@simplewebauthn/server` + `@simplewebauthn/browser`; business logic in `src/lib/services/passkeyService.ts`; API routes under `src/app/api/auth/passkey/**`. RP-ID follows the incoming request host (`resolveWebAuthnRpConfig(req)`), with optional `WEBAUTHN_RP_ID` / `WEBAUTHN_RP_NAME`. Missing Passkey tables (Prisma P2021/P2022) map to `DbUnavailableError` — run migrations on deploy.
+- **Attendance nudge**: rolling **14-day** training-attendance window; `src/lib/services/attendanceNudgeService.ts` + `GET /api/training/nudge`; AI copy via `src/lib/ai/attendanceNudge.ts`; UI `AttendanceNudge` on the attendance page.
+- **Sentry preview uptime**: ephemeral Vercel preview URLs (`*-git-*`) cause false downtime alerts; `next.config.js` sets `automaticVercelMonitors` only when `VERCEL_ENV === "production"`; `scripts/sentry-resolve-preview-uptime.ts` auto-resolves matching issues via the **Sentry Issue Sync** workflow.
+- **sharp**: image processing via `sharp` ^0.35; minimal local types in `src/types/sharp.d.ts` until upstream typings cover the APIs used here (added after Dependabot 0.35 bump).
 - Cache (ioredis) failures must never propagate to the caller — wrap in try/catch, log with Sentry, continue.
-- Pre-commit hooks run Prettier, ESLint, `tsc --noEmit`, and `vitest run`.
+- Pre-commit hooks run Prettier, ESLint, `tsc --noEmit`, and `vitest run`. For Cloud Agent commits, use `--no-verify` only when explicitly instructed; otherwise let hooks run.
 - The `.cursor/rules/` directory contains agent-agnostic coding rules adapted from ECC (everything-claude-code) covering: security, API design, frontend/backend patterns, database migrations, verification loops, search-first workflow, code review, and de-slop cleanup.
-
-## Cursor Cloud specific instructions
-
-### Services
-
-- **Next.js dev server**: `npm run dev` (port 3000). Uses Turbopack.
-- **PostgreSQL**: required. In Cloud Agent VMs, start via Docker: `docker run --name pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=h3teamy -p 5432:5432 -d postgres:16`. The Docker daemon must be running first (`dockerd &`). After starting Postgres, run `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/h3teamy npx prisma migrate deploy` to apply migrations.
-- **Redis**: optional. The app falls back to an in-memory `Map` when `REDIS_URL` is unset. No Redis needed for basic dev.
-
-### Environment
-
-- Create `.env.local` with at minimum: `DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL=http://localhost:3000`.
-- `prisma.config.ts` reads `DATABASE_URL` via `dotenv/config` (loads `.env`, not `.env.local`), so pass `DATABASE_URL=...` as an env var prefix when running Prisma CLI commands directly.
-- Seeded test account: `trainer@example.test` / `preview123` (admin/trainer role).
-
-### Commands (see `package.json` scripts)
-
-- Lint: `npm run lint`
-- Typecheck: `npx tsc --noEmit`
-- Test: `npx vitest run` (314 tests, ~14s)
-- Build: `npm run build`
-- Seed DB: `DATABASE_URL=... npm run db:seed`
-
-### Gotchas
-
-- The `postinstall` script runs `prisma generate`, which needs a valid `prisma.config.ts`. If no database is reachable, generation still succeeds (it only needs the schema, not a live DB).
-- Pre-commit hooks (`husky`) run Prettier, ESLint, `tsc --noEmit`, and `vitest run`. For Cloud Agent commits, use `--no-verify` only when explicitly instructed; otherwise let hooks run.
-- Docker in the Cloud Agent VM requires `fuse-overlayfs`, `iptables-legacy`, and the `"storage-driver": "fuse-overlayfs"` daemon config. The update script handles Node.js and npm deps only; Docker + Postgres must be started manually per session.
+- **Local / Cloud Agent dev server**: `npm run dev` (Next.js on port 3000, Turbopack).
+- **PostgreSQL (required)**: in Cursor Cloud Agent VMs, start with Docker after the daemon is up (`dockerd &`): `docker run --name pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=h3teamy -p 5432:5432 -d postgres:16`, then `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/h3teamy npx prisma migrate deploy`.
+- **Redis**: optional; the app falls back to an in-memory `Map` when `REDIS_URL` is unset.
+- **Environment files**: keep at least `DATABASE_URL`, `NEXTAUTH_SECRET`, and `NEXTAUTH_URL=http://localhost:3000` in `.env.local` for local dev.
+- **`prisma.config.ts`**: loads `DATABASE_URL` resolution via `dotenv/config` (primarily `.env`); for Prisma CLI one-off commands, prefix the shell with `DATABASE_URL=...` or use `dotenv-cli` as in `package.json` scripts (`db:migrate:preview`, etc.). The datasource URL chain prefers unpooled/direct URLs over pooler URLs where multiple env vars exist (see file comments).
+- **Seeded test account**: `trainer@example.test` / `preview123` (admin/trainer role) via `DATABASE_URL=... npm run db:seed`.
+- **Common commands**: `npm run lint`, `npx tsc --noEmit`, `npx vitest run`, `npm run build` — Vitest counts drift over time; expect on the order of **~408** passing tests and **~20s** for a full run unless CI config changes.
+- **`postinstall`** runs `prisma generate`; it needs a valid `prisma.config.ts` but not a live database (generate uses the schema only).
+- **Docker on Cloud Agent VMs**: needs `fuse-overlayfs`, `iptables-legacy`, and daemon `"storage-driver": "fuse-overlayfs"`; the repo update script covers Node/npm only — Postgres and Docker must be started per session when needed.
