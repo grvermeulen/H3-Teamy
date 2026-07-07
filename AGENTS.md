@@ -19,7 +19,7 @@
 ## Learned Workspace Facts
 
 - This repository is `H3-Teamy`, hosted at `grvermeulen/H3-Teamy`.
-- The project targets **Node.js 22** (`package.json` `engines`), and is a Next.js **16.2.9** app with React **19.2**, TypeScript **6**, **Prisma 7** (PostgreSQL via `@prisma/adapter-pg` and `pg`), NextAuth, Tailwind CSS **4.3.1**, Sentry, and Vitest **4**.
+- The project targets **Node.js 22** (`package.json` `engines`), and is a Next.js **16.2.10** app with React **19.2**, TypeScript **6**, **Prisma 7** (PostgreSQL via `@prisma/adapter-pg` and `pg`), NextAuth, Tailwind CSS **4.3.2**, Sentry, and Vitest **4**.
 - CI includes an "Agentic CI" verify pipeline (lint, typecheck, build, test) and Vercel deployment checks.
 - Technical documentation is organized under `docs/tech/*`.
 - Pull request #54 requires `AGENTS.md` to only contain learned preferences and learned workspace facts (two top-level sections, bullet lists only — no extra headings or narrative blocks).
@@ -34,7 +34,7 @@
 - **WebAuthn passkeys**: `@simplewebauthn/server` + `@simplewebauthn/browser`; business logic in `src/lib/services/passkeyService.ts`; API routes under `src/app/api/auth/passkey/**`. RP-ID follows the incoming request host (`resolveWebAuthnRpConfig(req)`), with optional `WEBAUTHN_RP_ID` / `WEBAUTHN_RP_NAME`. Missing Passkey tables (Prisma P2021/P2022) map to `DbUnavailableError` — run migrations on deploy.
 - **Attendance nudge**: rolling **14-day** training-attendance window; `src/lib/services/attendanceNudgeService.ts` + `GET /api/training/nudge`; AI copy via `src/lib/ai/attendanceNudge.ts`; UI `AttendanceNudge` on the attendance page.
 - **Sentry preview uptime**: ephemeral Vercel preview URLs (`*-git-*`) cause false downtime alerts; `next.config.js` sets `automaticVercelMonitors` only when `VERCEL_ENV === "production"`; `scripts/sentry-resolve-preview-uptime.ts` auto-resolves matching issues via the **Sentry Issue Sync** workflow.
-- **sharp**: image processing via `sharp` ^0.35.2; minimal local types in `src/types/sharp.d.ts` until upstream typings cover the APIs used here (added after Dependabot 0.35 bump).
+- **sharp**: image processing via `sharp` ^0.35.3; minimal local types in `src/types/sharp.d.ts` until upstream typings cover the APIs used here (added after Dependabot 0.35 bump). Match-report vision extraction in `reportExtractProvider.ts` downscales tall screenshots to **7800px** on the long side (Anthropic rejects **8000px**).
 - Cache (ioredis) failures must never propagate to the caller — wrap in try/catch, log with Sentry, continue.
 - Pre-commit hooks run Prettier, ESLint, `tsc --noEmit`, and `vitest run`. For Cloud Agent commits, use `--no-verify` only when explicitly instructed; otherwise let hooks run.
 - The `.cursor/rules/` directory contains agent-agnostic coding rules adapted from ECC (everything-claude-code) covering: security, API design, frontend/backend patterns, database migrations, verification loops, search-first workflow, code review, and de-slop cleanup.
@@ -44,6 +44,6 @@
 - **Environment files**: keep at least `DATABASE_URL`, `NEXTAUTH_SECRET`, and `NEXTAUTH_URL=http://localhost:3000` in `.env.local` for local dev.
 - **`prisma.config.ts`**: loads `DATABASE_URL` resolution via `dotenv/config` (primarily `.env`); for Prisma CLI one-off commands, prefix the shell with `DATABASE_URL=...` or use `dotenv-cli` as in `package.json` scripts (`db:migrate:preview`, etc.). The datasource URL chain prefers unpooled/direct URLs over pooler URLs where multiple env vars exist (see file comments).
 - **Seeded test account**: `trainer@example.test` / `preview123` (admin/trainer role) via `DATABASE_URL=... npm run db:seed`.
-- **Common commands**: `npm run lint`, `npx tsc --noEmit`, `npx vitest run`, `npm run build` — Vitest counts drift over time; expect on the order of **~408** passing tests and **~17s** for a full run unless CI config changes.
+- **Common commands**: `npm run lint`, `npx tsc --noEmit`, `npx vitest run`, `npm run build` — Vitest counts drift over time; expect on the order of **~408** passing tests and **~16s** for a full run unless CI config changes.
 - **`postinstall`** runs `prisma generate`; it needs a valid `prisma.config.ts` but not a live database (generate uses the schema only).
 - **Docker on Cloud Agent VMs**: needs `fuse-overlayfs`, `iptables-legacy`, and daemon `"storage-driver": "fuse-overlayfs"`; the repo update script covers Node/npm only — Postgres and Docker must be started per session when needed.
