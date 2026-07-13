@@ -11,6 +11,7 @@
 - Run a de-slop pass after AI-assisted implementation to remove narration comments, defensive checks the type system already covers, and tests that test the language rather than business logic.
 - Research existing solutions in `src/lib/` and npm before writing new utilities or helpers.
 - Run the verification loop (build, typecheck, lint, test, security scan, diff review) before creating or updating PRs.
+- **TypeScript**: pin at **6.0.3** until `eslint-config-next` / `typescript-eslint` 8.x supports TS 7 (`typescript` peer `<6.0.0`); revert Dependabot major TS bumps that break `npm run lint` (see PR #451).
 - User-facing release / tour “Wat is nieuw”: verhoog `package.json`-versie en voeg dezelfde versiesleutel toe in `src/lib/changelog.ts` (`CHANGELOG`); zonder beide toont `/api/whats-new` geen nieuwe ronde (en gebruikers die de oude versie al bevestigden zien niets zolang de versie ongewijzigd blijft).
 - **Geen BugBot Pro**: gebruik de gratis stack — CodeRabbit op PRs, Agentic CI, GitHub Copilot-review (workflow), en `.cursor/rules` / `AGENTS.md` in Cursor. BugBot betaalde tier niet nodig.
 - **Sentry**: organisatie-slug is `h3-teamy`; **project-slug** in Sentry is `javascript-nextjs` (Project → Settings → General). Dat moet overeenkomen met `org` / `project` in `next.config.js` en `SENTRY_ORG` / `SENTRY_PROJECT` in `.github/workflows/sentry-issue-sync.yml`. Optioneel `SENTRY_PROJECT` in Vercel zetten om te overrulen. Token `SENTRY_AUTH_TOKEN` lokaal in `.env` / `.env.local` houden; naar **Vercel** en **GitHub repo secret** zetten (niet committen).
@@ -19,7 +20,7 @@
 ## Learned Workspace Facts
 
 - This repository is `H3-Teamy`, hosted at `grvermeulen/H3-Teamy`.
-- The project targets **Node.js 22** (`package.json` `engines`), and is a Next.js **16.2.10** app with React **19.2**, TypeScript **6**, **Prisma 7** (PostgreSQL via `@prisma/adapter-pg` and `pg`), NextAuth, Tailwind CSS **4.3.2**, Sentry, and Vitest **4**.
+- The project targets **Node.js 22** (`package.json` `engines`), and is a Next.js **16.2.10** app with React **19.2**, TypeScript **6.0.3** (pinned), **Prisma 7** (PostgreSQL via `@prisma/adapter-pg` and `pg`), NextAuth, Tailwind CSS **4.3.2**, Sentry, and Vitest **4**.
 - CI includes an "Agentic CI" verify pipeline (lint, typecheck, build, test) and Vercel deployment checks.
 - Technical documentation is organized under `docs/tech/*`.
 - Pull request #54 requires `AGENTS.md` to only contain learned preferences and learned workspace facts (two top-level sections, bullet lists only — no extra headings or narrative blocks).
