@@ -44,7 +44,7 @@
     "@sentry/nextjs": "^10.65.0",
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.2",
-    "@tailwindcss/postcss": "^4.3.2",
+    "@tailwindcss/postcss": "^4.3.3",
     "ai": "^7.0.28",
     "bcryptjs": "^3.0.3",
     "braintrust": "^3.23.0",
