@@ -45,7 +45,7 @@
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.2",
     "@tailwindcss/postcss": "^4.3.3",
-    "ai": "^7.0.29",
+    "ai": "^7.0.31",
     "bcryptjs": "^3.0.3",
     "braintrust": "^3.23.1",
     "dotenv": "^17.4.2",
