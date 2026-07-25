@@ -85,6 +85,7 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
 
   const cacheKey = "calendar:events:v1";
   let parsed: TeamEvent[] | null = null;
+  let sportlinkFetchError: Error | null = null;
 
   if (url) {
     try {
@@ -116,11 +117,7 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
           } satisfies TeamEvent;
         });
     } catch (err: unknown) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      Sentry.captureException(error, {
-        tags: { source: "sportlink_ical" },
-        fingerprint: ["sportlink-ical-fetch"],
-      });
+      sportlinkFetchError = err instanceof Error ? err : new Error(String(err));
     }
   }
 
@@ -158,6 +155,13 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
   // so historical events with RSVPs remain visible.
   if (merged.length === 0) {
     merged = await fetchEventsFromDb();
+  }
+
+  if (sportlinkFetchError && merged.length === 0) {
+    Sentry.captureException(sportlinkFetchError, {
+      tags: { source: "sportlink_ical" },
+      fingerprint: ["sportlink-ical-fetch"],
+    });
   }
 
   return merged;
