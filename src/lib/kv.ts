@@ -37,40 +37,76 @@ const memoryTtl = new Map<string, number>(); // unix ms expiration for local tok
 // Expect standard env: KV_REST_API_URL, KV_REST_API_TOKEN, KV_REST_API_READ_ONLY_TOKEN, KV_URL
 // Also supports Redis via REDIS_URL using ioredis
 let redisClient: any = null;
+let redisDisabled = false;
+
+function markRedisUnavailable(): void {
+  redisDisabled = true;
+  if (redisClient) {
+    try {
+      redisClient.disconnect?.();
+    } catch {}
+    redisClient = null;
+  }
+}
+
+function captureKvCacheError(error: unknown, operation: string): void {
+  Sentry.captureException(
+    error instanceof Error ? error : new Error(String(error)),
+    {
+      tags: { component: "kv-cache", operation },
+    },
+  );
+}
+
 async function getRedis() {
+  if (redisDisabled) return null;
   if (redisClient) return redisClient;
   const url = process.env.REDIS_URL;
   if (!url) return null;
-  const { default: IORedis } = await import("ioredis");
-  redisClient = new IORedis(url, {
-    lazyConnect: true,
-    maxRetriesPerRequest: 2,
-  });
   try {
+    const { default: IORedis } = await import("ioredis");
+    redisClient = new IORedis(url, {
+      lazyConnect: true,
+      maxRetriesPerRequest: 2,
+    });
     await redisClient.connect?.();
-  } catch {}
-  return redisClient;
+    return redisClient;
+  } catch (error: unknown) {
+    captureKvCacheError(error, "redis_connect");
+    markRedisUnavailable();
+    return null;
+  }
 }
 async function kvGet(key: string): Promise<RsvpStatus | null> {
   const redis = await getRedis();
   if (redis) {
-    const val = (await redis.get(key)) as RsvpStatus | null;
-    if (val !== "yes" && val !== "no" && val !== "maybe") return null;
-    return val;
+    try {
+      const val = (await redis.get(key)) as RsvpStatus | null;
+      if (val !== "yes" && val !== "no" && val !== "maybe") return null;
+      return val;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGet_redis");
+      markRedisUnavailable();
+    }
   }
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
-      },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const data = await res.json().catch(() => ({}) as any);
-    const val = data?.result ?? null;
-    if (val !== "yes" && val !== "no" && val !== "maybe") return null;
-    return val;
+    try {
+      const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+        },
+        cache: "no-store",
+      });
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => ({}) as any);
+      const val = data?.result ?? null;
+      if (val !== "yes" && val !== "no" && val !== "maybe") return null;
+      return val;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGet_rest");
+      return memoryStore.get(key) ?? null;
+    }
   }
   return memoryStore.get(key) ?? null;
 }
@@ -78,25 +114,34 @@ async function kvGet(key: string): Promise<RsvpStatus | null> {
 async function kvSet(key: string, value: RsvpStatus): Promise<void> {
   const redis = await getRedis();
   if (redis) {
-    if (value === null) {
-      await redis.del(key);
-    } else {
-      await redis.set(key, value);
+    try {
+      if (value === null) {
+        await redis.del(key);
+      } else {
+        await redis.set(key, value);
+      }
+      return;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSet_redis");
+      markRedisUnavailable();
     }
-    return;
   }
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    await fetch(
-      `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+    try {
+      await fetch(
+        `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+          },
+          body: value ?? "",
         },
-        body: value ?? "",
-      },
-    );
-    return;
+      );
+      return;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSet_rest");
+    }
   }
   if (value === null) memoryStore.delete(key);
   else memoryStore.set(key, value);
@@ -169,28 +214,37 @@ export async function setRsvp(
 export async function kvGetJson<T = any>(key: string): Promise<T | null> {
   const redis = await getRedis();
   if (redis) {
-    const raw = (await redis.get(key)) as string | null;
-    if (!raw) return null;
     try {
-      return JSON.parse(raw) as T;
-    } catch {
-      return null;
+      const raw = (await redis.get(key)) as string | null;
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        return null;
+      }
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGetJson_redis");
+      markRedisUnavailable();
     }
   }
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const data = await res.json().catch(() => ({}) as any);
-    const raw = data?.result ?? null;
-    if (!raw) return null;
     try {
-      return JSON.parse(raw) as T;
-    } catch {
-      return null;
+      const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` },
+        cache: "no-store",
+      });
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => ({}) as any);
+      const raw = data?.result ?? null;
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        return null;
+      }
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGetJson_rest");
     }
   }
   const exp = memoryTtl.get(key);
@@ -212,21 +266,30 @@ export async function kvSetJson(key: string, value: any): Promise<void> {
   const redis = await getRedis();
   const payload = JSON.stringify(value);
   if (redis) {
-    await redis.set(key, payload);
-    return;
+    try {
+      await redis.set(key, payload);
+      return;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSetJson_redis");
+      markRedisUnavailable();
+    }
   }
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    await fetch(
-      `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+    try {
+      await fetch(
+        `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+          },
+          body: payload,
         },
-        body: payload,
-      },
-    );
-    return;
+      );
+      return;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSetJson_rest");
+    }
   }
   memoryJson.set(key, payload);
 }
@@ -1102,8 +1165,7 @@ export async function getUserRolesBatch(
 
   for (const userId of uniqueIds) {
     const raw = memoryStore.get(`roles:${userId}`) as unknown as
-      | string
-      | undefined;
+      string | undefined;
     if (!raw) {
       out[userId] = { player: true };
       continue;
