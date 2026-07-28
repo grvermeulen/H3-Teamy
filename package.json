@@ -39,7 +39,7 @@
     "eval": "braintrust eval evals"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "7.9.0",
+    "@prisma/adapter-pg": "7.9.1",
     "@prisma/client": "7.9.1",
     "@sentry/nextjs": "^10.68.0",
     "@simplewebauthn/browser": "^13.3.0",
