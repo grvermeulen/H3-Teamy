@@ -16,6 +16,14 @@ describe("isPgPoolIdleDisconnectNoise", () => {
     ).toBe(true);
   });
 
+  it("returns true for Connection terminated due to connection timeout (JAVASCRIPT-NEXTJS-1V)", () => {
+    expect(
+      isPgPoolIdleDisconnectNoise(
+        new Error("Connection terminated due to connection timeout"),
+      ),
+    ).toBe(true);
+  });
+
   it("returns false for unrelated pool errors", () => {
     expect(
       isPgPoolIdleDisconnectNoise(new Error("password authentication failed")),

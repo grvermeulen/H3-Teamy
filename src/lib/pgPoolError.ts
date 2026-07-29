@@ -11,6 +11,7 @@ export function isPgPoolIdleDisconnectNoise(error: unknown): boolean {
   const lower = error.message.trim().toLowerCase();
   return (
     lower.includes("connection terminated unexpectedly") ||
+    lower.includes("connection terminated due to connection timeout") ||
     lower === "connection terminated"
   );
 }
