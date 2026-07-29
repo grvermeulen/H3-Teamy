@@ -70,6 +70,15 @@ describe("getPrismaPgAdapterOptions onPoolError", () => {
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });
 
+  it("adds a breadcrumb for Connection terminated due to connection timeout instead of captureException", () => {
+    const { onPoolError } = getPrismaPgAdapterOptions();
+    onPoolError(
+      new Error("Connection terminated due to connection timeout"),
+    );
+    expect(vi.mocked(Sentry.addBreadcrumb)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
   it("calls captureException for unexpected pool errors", () => {
     const { onPoolError } = getPrismaPgAdapterOptions();
     const err = new Error("password authentication failed for user");
