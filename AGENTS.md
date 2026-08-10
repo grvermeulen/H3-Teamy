@@ -20,7 +20,7 @@
 ## Learned Workspace Facts
 
 - This repository is `H3-Teamy`, hosted at `grvermeulen/H3-Teamy`.
-- The project targets **Node.js 22** (`package.json` `engines`), and is a Next.js **16.2.12** app with React **19.2.8**, TypeScript **6.0.3** (pinned), **Prisma 7.9.1** (PostgreSQL via `@prisma/adapter-pg` and `pg`), NextAuth, Tailwind CSS **4.3.2**, Sentry, and Vitest **4**.
+- The project targets **Node.js 22** (`package.json` `engines`), and is a Next.js **16.3.0** app with React **19.2.8**, TypeScript **6.0.3** (pinned), **Prisma 7.9.1** (PostgreSQL via `@prisma/adapter-pg` and `pg`), **ioredis 6.0.0**, NextAuth, Tailwind CSS **4.3.2**, Sentry, and Vitest **4**.
 - CI includes an "Agentic CI" verify pipeline (lint, typecheck, build, test) and Vercel deployment checks.
 - Technical documentation is organized under `docs/tech/*`; OpenAPI spec via `npm run docs:generate` (`scripts/docs/`, `@asteasolutions/zod-to-openapi` ^9.1.0 + Zod schemas in `src/lib/schemas/`).
 - Pull request #54 requires `AGENTS.md` to only contain learned preferences and learned workspace facts (two top-level sections, bullet lists only — no extra headings or narrative blocks).
@@ -41,7 +41,7 @@
 - The `.cursor/rules/` directory contains agent-agnostic coding rules adapted from ECC (everything-claude-code) covering: security, API design, frontend/backend patterns, database migrations, verification loops, search-first workflow, code review, and de-slop cleanup.
 - **Local / Cloud Agent dev server**: `npm run dev` (Next.js on port 3000, Turbopack).
 - **PostgreSQL (required)**: in Cursor Cloud Agent VMs, start with Docker after the daemon is up (`dockerd &`): `docker run --name pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=h3teamy -p 5432:5432 -d postgres:16`, then `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/h3teamy npx prisma migrate deploy`.
-- **Redis**: optional; the app falls back to an in-memory `Map` when `REDIS_URL` is unset.
+- **Redis**: optional via `REDIS_URL` (ioredis **6.0.0**, RESP3 by default); the app falls back to an in-memory `Map` when unset or on connection failure.
 - **Environment files**: keep at least `DATABASE_URL`, `NEXTAUTH_SECRET`, and `NEXTAUTH_URL=http://localhost:3000` in `.env.local` for local dev.
 - **`prisma.config.ts`**: loads `DATABASE_URL` resolution via `dotenv/config` (primarily `.env`); for Prisma CLI one-off commands, prefix the shell with `DATABASE_URL=...` or use `dotenv-cli` as in `package.json` scripts (`db:migrate:preview`, etc.). The datasource URL chain prefers unpooled/direct URLs over pooler URLs where multiple env vars exist (see file comments).
 - **Seeded test account**: `trainer@example.test` / `preview123` (admin/trainer role) via `DATABASE_URL=... npm run db:seed`.
