@@ -71,7 +71,7 @@
     "@testing-library/react": "^16.3.2",
     "@types/bcryptjs": "^3.0.0",
     "@types/ical": "^0.8.3",
-    "@types/node": "26.1.2",
+    "@types/node": "26.2.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
@@ -83,7 +83,7 @@
     "jsdom": "^30.0.1",
     "prettier": "^3.9.6",
     "ts-node": "^10.9.2",
-    "tsx": "^4.23.10",
+    "tsx": "^4.23.11",
     "typescript": "6.0.3",
     "vitest": "^4.1.4"
   }
