@@ -37,7 +37,7 @@
 - **Sentry preview uptime**: ephemeral Vercel preview URLs (`*-git-*`) cause false downtime alerts; `next.config.js` sets `automaticVercelMonitors` only when `VERCEL_ENV === "production"`; `scripts/sentry-resolve-preview-uptime.ts` auto-resolves matching issues via the **Sentry Issue Sync** workflow.
 - **sharp**: image processing via `sharp` ^0.35.3; minimal local types in `src/types/sharp.d.ts` until upstream typings cover the APIs used here (added after Dependabot 0.35 bump). Match-report vision extraction in `reportExtractProvider.ts` downscales tall screenshots to **7800px** on the long side (Anthropic rejects **8000px**).
 - Cache (ioredis/KV REST) failures must never propagate to the caller — `kv.ts` logs with Sentry and falls back to in-memory; page handlers must not fail on cache errors.
-- Pre-commit hooks run Prettier, ESLint, `tsc --noEmit`, and `vitest run`. For Cloud Agent commits, use `--no-verify` only when explicitly instructed; otherwise let hooks run.
+- Pre-commit hooks run Prettier, `npm run check:merge-conflicts`, ESLint, `tsc --noEmit`, and `vitest run`. For Cloud Agent commits, use `--no-verify` only when explicitly instructed; otherwise let hooks run.
 - The `.cursor/rules/` directory contains agent-agnostic coding rules adapted from ECC (everything-claude-code) covering: security, API design, frontend/backend patterns, database migrations, verification loops, search-first workflow, code review, and de-slop cleanup.
 - **Local / Cloud Agent dev server**: `npm run dev` (Next.js on port 3000, Turbopack).
 - **PostgreSQL (required)**: in Cursor Cloud Agent VMs, start with Docker after the daemon is up (`dockerd &`): `docker run --name pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=h3teamy -p 5432:5432 -d postgres:16`, then `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/h3teamy npx prisma migrate deploy`.
@@ -45,6 +45,6 @@
 - **Environment files**: keep at least `DATABASE_URL`, `NEXTAUTH_SECRET`, and `NEXTAUTH_URL=http://localhost:3000` in `.env.local` for local dev.
 - **`prisma.config.ts`**: loads `DATABASE_URL` resolution via `dotenv/config` (primarily `.env`); for Prisma CLI one-off commands, prefix the shell with `DATABASE_URL=...` or use `dotenv-cli` as in `package.json` scripts (`db:migrate:preview`, etc.). The datasource URL chain prefers unpooled/direct URLs over pooler URLs where multiple env vars exist (see file comments).
 - **Seeded test account**: `trainer@example.test` / `preview123` (admin/trainer role) via `DATABASE_URL=... npm run db:seed`.
-- **Common commands**: `npm run lint`, `npx tsc --noEmit`, `npx vitest run`, `npm run build` — Vitest counts drift over time; expect on the order of **~413** passing tests and **~17s** for a full run unless CI config changes.
+- **Common commands**: `npm run lint`, `npx tsc --noEmit`, `npx vitest run`, `npm run build` — Vitest counts drift over time; expect on the order of **~413** passing tests and **~19s** for a full run unless CI config changes.
 - **`postinstall`** runs `prisma generate`; it needs a valid `prisma.config.ts` but not a live database (generate uses the schema only).
 - **Docker on Cloud Agent VMs**: needs `fuse-overlayfs`, `iptables-legacy`, and daemon `"storage-driver": "fuse-overlayfs"`; the repo update script covers Node/npm only — Postgres and Docker must be started per session when needed.
