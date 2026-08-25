@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { shouldDropBrowserExtensionNoiseEvent } from "@/lib/sentryBrowserExtensionNoise";
+import { shouldDropBenignClientFetchNoiseEvent } from "@/lib/sentryBenignClientFetchNoise";
 
 /**
  * Parseert traces sample rate (0–1) uit env; default 0.1 voor productie.
@@ -18,6 +19,9 @@ Sentry.init({
 
   beforeSend(event, hint) {
     if (shouldDropBrowserExtensionNoiseEvent(event, hint)) {
+      return null;
+    }
+    if (shouldDropBenignClientFetchNoiseEvent(event, hint)) {
       return null;
     }
     return event;

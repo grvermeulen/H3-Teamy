@@ -54,6 +54,19 @@ describe("WhatsNewTour", () => {
     );
   });
 
+  it("does not report Firefox NetworkError for /api/whats-new (benign transient)", async () => {
+    vi.spyOn(global, "fetch").mockRejectedValue(
+      new DOMException("A network error occurred.", "NetworkError"),
+    );
+    render(<WhatsNewTour />);
+    await vi.waitFor(
+      () => {
+        expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+      },
+      { timeout: 500 },
+    );
+  });
+
   it("reports to Sentry when /api/whats-new fetch rejects with an unexpected error", async () => {
     const err = new TypeError("Unexpected fetch failure");
     vi.spyOn(global, "fetch").mockRejectedValue(err);

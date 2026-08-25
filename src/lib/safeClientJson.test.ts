@@ -76,6 +76,36 @@ describe("fetchJsonOr", () => {
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });
 
+  it("returns fallback without Sentry when Firefox rejects with NetworkError DOMException", async () => {
+    vi.spyOn(global, "fetch").mockRejectedValue(
+      new DOMException("A network error occurred.", "NetworkError"),
+    );
+    const fallback = { ok: false };
+    const result = await fetchJsonOr(
+      "/api/me",
+      undefined,
+      fallback,
+      "test-firefox-network-error",
+    );
+    expect(result).toBe(fallback);
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
+  it("returns fallback without Sentry when Firefox rejects with fetch resource TypeError", async () => {
+    vi.spyOn(global, "fetch").mockRejectedValue(
+      new TypeError("NetworkError when attempting to fetch resource."),
+    );
+    const fallback = { ok: false };
+    const result = await fetchJsonOr(
+      "/api/me",
+      undefined,
+      fallback,
+      "test-firefox-fetch-resource",
+    );
+    expect(result).toBe(fallback);
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
   it("returns fallback without Sentry when Load failed is nested in error cause", async () => {
     const loadFailed = new TypeError("Load failed");
     const wrapped = new Error("wrapped");
