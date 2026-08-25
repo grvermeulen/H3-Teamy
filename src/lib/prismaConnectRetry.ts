@@ -83,9 +83,11 @@ export async function withPgConnectRetry<T>(
     }
   }
   if (lastError !== undefined && isTransientPostgresConnectError(lastError)) {
-    Sentry.captureException(lastError, {
-      extra: { operationName, exhaustedRetries: true },
-      tags: { db_connect: "exhausted" },
+    Sentry.addBreadcrumb({
+      category: "postgres",
+      message: `DB-connectie na herhaalde pogingen mislukt: ${operationName}`,
+      level: "warning",
+      data: { operationName, exhaustedRetries: true },
     });
     throw new DbUnavailableError();
   }
