@@ -20,7 +20,7 @@
 ## Learned Workspace Facts
 
 - This repository is `H3-Teamy`, hosted at `grvermeulen/H3-Teamy`.
-- The project targets **Node.js 22** (`package.json` `engines`), and is a Next.js **16.3.0** app with React **19.2.8**, TypeScript **6.0.3** (pinned), **Prisma 7.9.1** (PostgreSQL via `@prisma/adapter-pg` and `pg`), **ioredis 6.0.0**, NextAuth, Tailwind CSS **4.3.2**, Sentry, and Vitest **4**.
+- The project targets **Node.js 22** (`package.json` `engines`), and is a Next.js **16.3.1** app with React **19.2.8**, TypeScript **6.0.3** (pinned), **Prisma 7.9.1** (PostgreSQL via `@prisma/adapter-pg` and `pg`), **ioredis 6.0.0**, NextAuth, Tailwind CSS **4.3.2**, Sentry, and Vitest **4**.
 - CI includes an "Agentic CI" verify pipeline (lint, typecheck, build, test) and Vercel deployment checks.
 - Technical documentation is organized under `docs/tech/*`; OpenAPI spec via `npm run docs:generate` (`scripts/docs/`, `@asteasolutions/zod-to-openapi` ^9.1.0 + Zod schemas in `src/lib/schemas/`).
 - Pull request #54 requires `AGENTS.md` to only contain learned preferences and learned workspace facts (two top-level sections, bullet lists only — no extra headings or narrative blocks).
@@ -45,6 +45,6 @@
 - **Environment files**: keep at least `DATABASE_URL`, `NEXTAUTH_SECRET`, and `NEXTAUTH_URL=http://localhost:3000` in `.env.local` for local dev.
 - **`prisma.config.ts`**: loads `DATABASE_URL` resolution via `dotenv/config` (primarily `.env`); for Prisma CLI one-off commands, prefix the shell with `DATABASE_URL=...` or use `dotenv-cli` as in `package.json` scripts (`db:migrate:preview`, etc.). The datasource URL chain prefers unpooled/direct URLs over pooler URLs where multiple env vars exist (see file comments).
 - **Seeded test account**: `trainer@example.test` / `preview123` (admin/trainer role) via `DATABASE_URL=... npm run db:seed`.
-- **Common commands**: `npm run lint`, `npx tsc --noEmit`, `npx vitest run`, `npm run build` — Vitest counts drift over time; expect on the order of **~413** passing tests and **~19s** for a full run unless CI config changes.
+- **Common commands**: `npm run lint`, `npx tsc --noEmit`, `npx vitest run`, `npm run build` — Vitest counts drift over time; expect on the order of **~413** passing tests and **~18s** for a full run unless CI config changes.
 - **`postinstall`** runs `prisma generate`; it needs a valid `prisma.config.ts` but not a live database (generate uses the schema only).
 - **Docker on Cloud Agent VMs**: needs `fuse-overlayfs`, `iptables-legacy`, and daemon `"storage-driver": "fuse-overlayfs"`; the repo update script covers Node/npm only — Postgres and Docker must be started per session when needed.
