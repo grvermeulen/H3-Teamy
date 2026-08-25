@@ -12,6 +12,7 @@ export function isPgPoolIdleDisconnectNoise(error: unknown): boolean {
   return (
     lower.includes("connection terminated unexpectedly") ||
     lower.includes("connection terminated due to connection timeout") ||
+    lower.includes("timeout exceeded when trying to connect") ||
     lower === "connection terminated"
   );
 }

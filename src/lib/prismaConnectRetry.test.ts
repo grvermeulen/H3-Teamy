@@ -96,7 +96,7 @@ describe("withPgConnectRetry", () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it("after max attempts on P1001 captures once and throws DbUnavailableError", async () => {
+  it("after max attempts on P1001 adds breadcrumb and throws DbUnavailableError", async () => {
     const prismaErr = new Prisma.PrismaClientKnownRequestError("unreachable", {
       code: "P1001",
       clientVersion: "test",
@@ -111,11 +111,11 @@ describe("withPgConnectRetry", () => {
     expect(out.ok).toBe(false);
     if (!out.ok) expect(out.e).toBeInstanceOf(DbUnavailableError);
     expect(fn).toHaveBeenCalledTimes(4);
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
-      prismaErr,
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+    expect(vi.mocked(Sentry.addBreadcrumb)).toHaveBeenCalledWith(
       expect.objectContaining({
-        extra: expect.objectContaining({
+        category: "postgres",
+        data: expect.objectContaining({
           operationName: "getActiveUser",
           exhaustedRetries: true,
         }),

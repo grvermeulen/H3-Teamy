@@ -24,6 +24,14 @@ describe("isPgPoolIdleDisconnectNoise", () => {
     ).toBe(true);
   });
 
+  it("returns true for timeout exceeded when trying to connect (JAVASCRIPT-NEXTJS-37)", () => {
+    expect(
+      isPgPoolIdleDisconnectNoise(
+        new Error("timeout exceeded when trying to connect"),
+      ),
+    ).toBe(true);
+  });
+
   it("returns false for unrelated pool errors", () => {
     expect(
       isPgPoolIdleDisconnectNoise(new Error("password authentication failed")),
