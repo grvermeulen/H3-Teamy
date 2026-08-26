@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   gatewayModelId,
+  getReportExtractGatewayModel,
   getReportGenerateGatewayModel,
   getStructuredGatewayModel,
   isGatewayFreeTierAccessError,
@@ -98,6 +99,22 @@ describe("getReportGenerateGatewayModel", () => {
   it("remaps gpt-5 env override", () => {
     vi.stubEnv("REPORT_GENERATE_MODEL", "openai/gpt-5-chat-latest");
     expect(getReportGenerateGatewayModel()).toBe("openai/gpt-4o");
+  });
+});
+
+describe("getReportExtractGatewayModel", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("uses gpt-4o default when env unset", () => {
+    vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "");
+    expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
+  });
+
+  it("remaps gpt-5 env override", () => {
+    vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/gpt-5-chat-latest");
+    expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
   });
 });
 

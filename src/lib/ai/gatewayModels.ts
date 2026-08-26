@@ -122,6 +122,16 @@ export function getReportGenerateGatewayModel(): string {
 }
 
 /**
+ * Model for screenshot/VLM `generateObject` in report extract. Honors
+ * `REPORT_EXTRACT_OPENAI_MODEL` when set; remaps free-tier-blocked ids to
+ * `openai/gpt-4o` (see Sentry JAVASCRIPT-NEXTJS-38).
+ */
+export function getReportExtractGatewayModel(): string {
+  const fromEnv = process.env.REPORT_EXTRACT_OPENAI_MODEL?.trim();
+  return resolveGatewayModel(fromEnv ?? "", "text").model;
+}
+
+/**
  * Returns true when the error is the AI Gateway free-tier model access denial.
  */
 export function isGatewayFreeTierAccessError(error: unknown): boolean {
