@@ -12,7 +12,7 @@ Generates a short-lived token (Redis or in-memory) and emails a link to set a ne
 
 ## Environment
 
-- `ENABLE_EMAIL=true`
+- `ENABLE_EMAIL=true` (optional — auto-enables when `RESEND_API_KEY`, `EMAIL_FROM`, and `APP_URL` are set)
 - `RESEND_API_KEY`
 - `APP_URL`
 - `EMAIL_FROM` (verified sender in Resend)

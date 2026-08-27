@@ -387,10 +387,15 @@ function makeToken(): string {
 
 export async function createPasswordResetToken(
   email: string,
-): Promise<{ ok: boolean; token?: string }> {
+): Promise<{ ok: boolean; token?: string; recipientEmail?: string }> {
   const p = await getPrisma();
-  const user = p ? await p.user.findFirst({ where: { email } }) : null;
-  if (!user) return { ok: true }; // do not leak existence
+  const user = p
+    ? await p.user.findFirst({
+        where: { email: { equals: email, mode: "insensitive" } },
+        select: { id: true, email: true },
+      })
+    : null;
+  if (!user) return { ok: true };
   const token = makeToken();
   const key = `pwreset:${token}`;
   const redis = await getRedis();
@@ -401,7 +406,7 @@ export async function createPasswordResetToken(
     memoryJson.set(key, JSON.stringify({ userId: user.id }));
     memoryTtl.set(key, Date.now() + ttlSec * 1000);
   }
-  return { ok: true, token };
+  return { ok: true, token, recipientEmail: user.email ?? email };
 }
 
 export async function redeemPasswordResetToken(
