@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
           await createPasswordResetToken(normalizedEmail);
         span.setAttribute("password_reset_suppressed", Boolean(suppressed));
         const emailConfig = getOutboundEmailConfig();
+        let sent = false;
 
         if (token && emailConfig) {
           try {
@@ -37,6 +38,8 @@ export async function POST(req: NextRequest) {
                   extra: { resend: result.error },
                 },
               );
+            } else {
+              sent = true;
             }
           } catch (error: unknown) {
             Sentry.captureException(error, {
@@ -56,10 +59,16 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        const body: { ok: boolean; token?: string; suppressed?: boolean } = {
-          ok,
-        };
+        span.setAttribute("password_reset_sent", sent);
+
+        const body: {
+          ok: boolean;
+          token?: string;
+          suppressed?: boolean;
+          sent?: boolean;
+        } = { ok };
         if (suppressed) body.suppressed = true;
+        if (sent) body.sent = true;
         if (process.env.NODE_ENV !== "production") body.token = token;
         return NextResponse.json(body);
       } catch (error: unknown) {
