@@ -379,7 +379,7 @@ function kvRestToken(): string | null {
   );
 }
 
-async function kvRestCommand(command: string[]): Promise<string | null> {
+async function kvRestCommand(command: string[]): Promise<string | number | null> {
   const restBase = kvRestBaseUrl();
   const token = kvRestToken();
   if (!restBase || !token) return null;
@@ -395,10 +395,16 @@ async function kvRestCommand(command: string[]): Promise<string | null> {
     });
     if (!res.ok) return null;
     const data = (await res.json().catch(() => null)) as {
-      result?: string | null;
+      result?: string | number | boolean | null;
     } | null;
     const result = data?.result;
-    return typeof result === "string" ? result : null;
+    if (command[0] === "SET" && (result === "OK" || result === true)) {
+      return "OK";
+    }
+    if (typeof result === "string" || typeof result === "number") {
+      return result;
+    }
+    return null;
   } catch (error: unknown) {
     captureKvCacheError(error, "kvRestCommand");
     return null;
@@ -464,7 +470,7 @@ async function kvGetString(key: string): Promise<string | null> {
     }
   }
   const restVal = await kvRestCommand(["GET", key]);
-  if (restVal) return restVal;
+  if (typeof restVal === "string") return restVal;
   const restBase = kvRestBaseUrl();
   const token = kvRestToken();
   if (restBase && token) {
@@ -562,9 +568,79 @@ function makeToken(): string {
   return Math.random().toString(36).slice(2, 10).toUpperCase();
 }
 
+function passwordResetActiveSince(): Date {
+  return new Date(Date.now() - PASSWORD_RESET_TTL_SEC * 1000);
+}
+
+async function hasActivePasswordResetPendingDb(userId: string): Promise<boolean> {
+  const p = await getPrisma();
+  if (!p) return false;
+  const since = passwordResetActiveSince();
+  const row = await p.linkCode.findFirst({
+    where: { userId, createdAt: { gte: since } },
+    select: { code: true },
+  });
+  return Boolean(row);
+}
+
+async function storePasswordResetTokenDb(
+  token: string,
+  userId: string,
+): Promise<boolean> {
+  const p = await getPrisma();
+  if (!p) return false;
+  try {
+    await p.$transaction([
+      p.linkCode.deleteMany({ where: { userId } }),
+      p.linkCode.create({ data: { code: token, userId } }),
+    ]);
+    return true;
+  } catch (error: unknown) {
+    Sentry.captureException(error, {
+      tags: { context: "password_reset", component: "db-fallback" },
+    });
+    return false;
+  }
+}
+
+async function getPasswordResetUserIdFromDb(token: string): Promise<string | null> {
+  const p = await getPrisma();
+  if (!p) return null;
+  const since = passwordResetActiveSince();
+  const row = await p.linkCode.findUnique({
+    where: { code: token },
+    select: { userId: true, createdAt: true },
+  });
+  if (!row || row.createdAt < since) return null;
+  return row.userId;
+}
+
+async function deletePasswordResetTokenDb(
+  token: string,
+  userId?: string,
+): Promise<void> {
+  const p = await getPrisma();
+  if (!p) return;
+  await p.linkCode.delete({ where: { code: token } }).catch((error: unknown) => {
+    Sentry.captureException(error, {
+      tags: { context: "password_reset", component: "db-fallback" },
+      extra: { token, userId },
+    });
+  });
+  if (userId) {
+    await p.linkCode.deleteMany({ where: { userId } }).catch((error: unknown) => {
+      Sentry.captureException(error, {
+        tags: { context: "password_reset", component: "db-fallback" },
+        extra: { userId },
+      });
+    });
+  }
+}
+
 async function hasActivePasswordResetPending(userId: string): Promise<boolean> {
   const pendingKey = passwordResetPendingKey(userId);
-  return Boolean(await kvGetString(pendingKey));
+  if (await kvGetString(pendingKey)) return true;
+  return hasActivePasswordResetPendingDb(userId);
 }
 
 async function setPasswordResetPending(
@@ -578,6 +654,15 @@ async function setPasswordResetPending(
 async function clearPasswordResetPending(userId: string): Promise<void> {
   const pendingKey = passwordResetPendingKey(userId);
   await kvDelete(pendingKey);
+  const p = await getPrisma();
+  if (p) {
+    await p.linkCode.deleteMany({ where: { userId } }).catch((error: unknown) => {
+      Sentry.captureException(error, {
+        tags: { context: "password_reset", component: "db-fallback" },
+        extra: { userId },
+      });
+    });
+  }
 }
 
 export async function createPasswordResetToken(
@@ -602,17 +687,28 @@ export async function createPasswordResetToken(
   const token = makeToken();
   const key = passwordResetRedisKey(token);
   const ttlSec = PASSWORD_RESET_TTL_SEC;
-  const stored = await kvSetStringWithTtl(key, user.id, ttlSec);
-  if (!stored) {
+  const storedKv = await kvSetStringWithTtl(key, user.id, ttlSec);
+  if (storedKv) {
+    const pendingSet = await setPasswordResetPending(user.id, ttlSec);
+    if (pendingSet) {
+      return { ok: true, token, recipientEmail: user.email ?? email };
+    }
+    await kvDelete(key);
+  }
+  const storedDb = await storePasswordResetTokenDb(token, user.id);
+  if (!storedDb) {
     Sentry.captureMessage("password_reset_storage_failed", {
       level: "error",
       tags: { context: "password_reset", component: "kv-cache" },
+      extra: {
+        kvStored: storedKv,
+        hasRedisUrl: Boolean(process.env.REDIS_URL),
+        hasKvRest: Boolean(kvRestBaseUrl() && kvRestToken()),
+        hasDatabase: Boolean(
+          process.env.DATABASE_URL || process.env.PRISMA_DATABASE_URL,
+        ),
+      },
     });
-    return { ok: true };
-  }
-  const pendingSet = await setPasswordResetPending(user.id, ttlSec);
-  if (!pendingSet) {
-    await kvDelete(key);
     return { ok: true };
   }
   return { ok: true, token, recipientEmail: user.email ?? email };
@@ -636,6 +732,9 @@ export async function redeemPasswordResetToken(
       userId = null;
     }
   }
+  if (!userId) {
+    userId = await getPasswordResetUserIdFromDb(normalizedToken);
+  }
   if (!userId) return { ok: false, error: "invalid_or_expired" };
   const p = await getPrisma();
   if (!p) return { ok: false, error: "db_unavailable" };
@@ -644,6 +743,7 @@ export async function redeemPasswordResetToken(
     .update({ where: { id: userId }, data: { passwordHash: hash } })
     .catch(() => null);
   await kvDelete(key);
+  await deletePasswordResetTokenDb(normalizedToken, userId);
   await clearPasswordResetPending(userId);
   return { ok: true };
 }
