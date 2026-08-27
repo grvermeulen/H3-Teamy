@@ -24,4 +24,4 @@ Generates a short-lived token (Redis or in-memory) and emails a link to set a ne
 ## Security
 
 - Generic success response to prevent user enumeration
-- Token TTL 15m; single-use via Redis key
+- Token TTL 60m; single-use via Redis key

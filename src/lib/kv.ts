@@ -6,6 +6,11 @@ import * as Sentry from "@sentry/nextjs";
 import type { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { withPgConnectRetry } from "./prismaConnectRetry";
+import {
+  PASSWORD_RESET_TTL_SEC,
+  normalizePasswordResetToken,
+  passwordResetRedisKey,
+} from "./passwordResetToken";
 
 type RsvpStatus = "yes" | "no" | "maybe" | null;
 type UserProfile = {
@@ -397,11 +402,16 @@ export async function createPasswordResetToken(
     : null;
   if (!user) return { ok: true };
   const token = makeToken();
-  const key = `pwreset:${token}`;
+  const key = passwordResetRedisKey(token);
   const redis = await getRedis();
-  const ttlSec = 15 * 60;
+  const ttlSec = PASSWORD_RESET_TTL_SEC;
   if (redis) {
-    await redis.set(key, user.id, "EX", ttlSec);
+    try {
+      await redis.set(key, user.id, "EX", ttlSec);
+    } catch (error: unknown) {
+      captureKvCacheError(error, "password_reset_set");
+      return { ok: true };
+    }
   } else {
     memoryJson.set(key, JSON.stringify({ userId: user.id }));
     memoryTtl.set(key, Date.now() + ttlSec * 1000);
@@ -413,13 +423,19 @@ export async function redeemPasswordResetToken(
   token: string,
   newPassword: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  if (!token || !newPassword || newPassword.length < 8)
+  const normalizedToken = normalizePasswordResetToken(token);
+  if (!normalizedToken || !newPassword || newPassword.length < 8)
     return { ok: false, error: "invalid" };
-  const key = `pwreset:${token}`;
+  const key = passwordResetRedisKey(normalizedToken);
   const redis = await getRedis();
   let userId: string | null = null;
   if (redis) {
-    userId = (await redis.get(key)) as string | null;
+    try {
+      userId = (await redis.get(key)) as string | null;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "password_reset_get");
+      return { ok: false, error: "db_unavailable" };
+    }
   } else {
     const exp = memoryTtl.get(key);
     if (typeof exp === "number" && Date.now() > exp) {
