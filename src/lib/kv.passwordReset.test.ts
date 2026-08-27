@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import * as Sentry from "@sentry/nextjs";
 
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
@@ -81,6 +80,9 @@ describe("password reset token storage", () => {
     );
     expect(redeemed.ok).toBe(true);
     expect(mockUserUpdate).toHaveBeenCalled();
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalled();
+    expect(
+      [...store.keys()].some((key) => key.startsWith("pwreset:")),
+    ).toBe(false);
   });
 });
