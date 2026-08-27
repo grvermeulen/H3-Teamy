@@ -6,6 +6,10 @@ vi.mock("@sentry/nextjs", () => ({
 
 const mockUserFindFirst = vi.fn();
 const mockUserUpdate = vi.fn();
+const mockPasswordResetDeleteMany = vi.fn();
+const mockPasswordResetCreate = vi.fn();
+const mockPasswordResetFindUnique = vi.fn();
+const mockPasswordResetCount = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -19,6 +23,12 @@ beforeEach(() => {
       user: {
         findFirst: mockUserFindFirst,
         update: mockUserUpdate,
+      },
+      passwordResetToken: {
+        deleteMany: mockPasswordResetDeleteMany,
+        create: mockPasswordResetCreate,
+        findUnique: mockPasswordResetFindUnique,
+        count: mockPasswordResetCount,
       },
     },
   }));
@@ -42,7 +52,8 @@ describe("password reset token storage", () => {
       email: "grvermeulen@gmail.com",
     });
     mockUserUpdate.mockResolvedValue({});
-
+    mockPasswordResetDeleteMany.mockResolvedValue({ count: 0 });
+    mockPasswordResetCount.mockResolvedValue(0);
     const store = new Map<string, string>();
     vi.spyOn(global, "fetch").mockImplementation(async (input) => {
       const url = String(input);
@@ -84,5 +95,40 @@ describe("password reset token storage", () => {
     expect(
       [...store.keys()].some((key) => key.startsWith("pwreset:")),
     ).toBe(false);
+  });
+
+  it("stores and redeems via Postgres when KV and Redis are unavailable", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    mockUserFindFirst.mockResolvedValue({
+      id: "user_test",
+      email: "grvermeulen@gmail.com",
+    });
+    mockUserUpdate.mockResolvedValue({});
+    mockPasswordResetCount.mockResolvedValue(0);
+    mockPasswordResetDeleteMany.mockResolvedValue({ count: 0 });
+    mockPasswordResetCreate.mockResolvedValue({});
+    vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("fetch failed"));
+
+    const { createPasswordResetToken, redeemPasswordResetToken } = await import(
+      "./kv"
+    );
+    const created = await createPasswordResetToken("grvermeulen@gmail.com");
+    expect(created.token).toBeTruthy();
+    expect(mockPasswordResetCreate).toHaveBeenCalled();
+
+    const normalized = created.token!.trim().toUpperCase();
+    mockPasswordResetFindUnique.mockResolvedValue({
+      token: normalized,
+      userId: "user_test",
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+
+    const redeemed = await redeemPasswordResetToken(
+      created.token!,
+      "newpassword123",
+    );
+    expect(redeemed.ok).toBe(true);
+    expect(mockUserUpdate).toHaveBeenCalled();
+    expect(mockPasswordResetDeleteMany).toHaveBeenCalled();
   });
 });

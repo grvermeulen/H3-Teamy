@@ -564,7 +564,85 @@ function makeToken(): string {
 
 async function hasActivePasswordResetPending(userId: string): Promise<boolean> {
   const pendingKey = passwordResetPendingKey(userId);
-  return Boolean(await kvGetString(pendingKey));
+  if (await kvGetString(pendingKey)) return true;
+  const p = await getPrisma();
+  if (!p) return false;
+  const active = await p.passwordResetToken.count({
+    where: { userId, expiresAt: { gt: new Date() } },
+  });
+  return active > 0;
+}
+
+async function storePasswordResetToken(
+  userId: string,
+  token: string,
+  ttlSec: number,
+): Promise<boolean> {
+  const normalizedToken = normalizePasswordResetToken(token);
+  const key = passwordResetRedisKey(normalizedToken);
+  const kvOk = await kvSetStringWithTtl(key, userId, ttlSec);
+  if (kvOk) return true;
+  const p = await getPrisma();
+  if (!p) return false;
+  try {
+    await p.passwordResetToken.deleteMany({ where: { userId } });
+    await p.passwordResetToken.create({
+      data: {
+        token: normalizedToken,
+        userId,
+        expiresAt: new Date(Date.now() + ttlSec * 1000),
+      },
+    });
+    return true;
+  } catch (error: unknown) {
+    captureKvCacheError(error, "password_reset_db_set");
+    return false;
+  }
+}
+
+async function lookupPasswordResetUserId(
+  normalizedToken: string,
+): Promise<string | null> {
+  const key = passwordResetRedisKey(normalizedToken);
+  let userId: string | null = await kvGetString(key);
+  if (userId?.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(userId) as { userId?: string };
+      userId =
+        typeof parsed.userId === "string" ? parsed.userId : null;
+    } catch {
+      userId = null;
+    }
+  }
+  if (userId) return userId;
+  const p = await getPrisma();
+  if (!p) return null;
+  const row = await p.passwordResetToken.findUnique({
+    where: { token: normalizedToken },
+  });
+  if (!row) return null;
+  if (row.expiresAt <= new Date()) {
+    await p.passwordResetToken
+      .delete({ where: { token: normalizedToken } })
+      .catch(() => null);
+    return null;
+  }
+  return row.userId;
+}
+
+async function clearPasswordResetToken(
+  normalizedToken: string,
+  userId: string,
+): Promise<void> {
+  const key = passwordResetRedisKey(normalizedToken);
+  await kvDelete(key);
+  await clearPasswordResetPending(userId);
+  const p = await getPrisma();
+  if (p) {
+    await p.passwordResetToken
+      .deleteMany({ where: { userId } })
+      .catch(() => null);
+  }
 }
 
 async function setPasswordResetPending(
@@ -600,9 +678,8 @@ export async function createPasswordResetToken(
     return { ok: true, suppressed: true };
   }
   const token = makeToken();
-  const key = passwordResetRedisKey(token);
   const ttlSec = PASSWORD_RESET_TTL_SEC;
-  const stored = await kvSetStringWithTtl(key, user.id, ttlSec);
+  const stored = await storePasswordResetToken(user.id, token, ttlSec);
   if (!stored) {
     Sentry.captureMessage("password_reset_storage_failed", {
       level: "error",
@@ -610,11 +687,7 @@ export async function createPasswordResetToken(
     });
     return { ok: true };
   }
-  const pendingSet = await setPasswordResetPending(user.id, ttlSec);
-  if (!pendingSet) {
-    await kvDelete(key);
-    return { ok: true };
-  }
+  await setPasswordResetPending(user.id, ttlSec);
   return { ok: true, token, recipientEmail: user.email ?? email };
 }
 
@@ -625,17 +698,7 @@ export async function redeemPasswordResetToken(
   const normalizedToken = normalizePasswordResetToken(token);
   if (!normalizedToken || !newPassword || newPassword.length < 8)
     return { ok: false, error: "invalid" };
-  const key = passwordResetRedisKey(normalizedToken);
-  let userId: string | null = await kvGetString(key);
-  if (userId?.startsWith("{")) {
-    try {
-      const parsed = JSON.parse(userId) as { userId?: string };
-      userId =
-        typeof parsed.userId === "string" ? parsed.userId : null;
-    } catch {
-      userId = null;
-    }
-  }
+  const userId = await lookupPasswordResetUserId(normalizedToken);
   if (!userId) return { ok: false, error: "invalid_or_expired" };
   const p = await getPrisma();
   if (!p) return { ok: false, error: "db_unavailable" };
@@ -643,8 +706,7 @@ export async function redeemPasswordResetToken(
   await p.user
     .update({ where: { id: userId }, data: { passwordHash: hash } })
     .catch(() => null);
-  await kvDelete(key);
-  await clearPasswordResetPending(userId);
+  await clearPasswordResetToken(normalizedToken, userId);
   return { ok: true };
 }
 
