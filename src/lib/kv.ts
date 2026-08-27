@@ -303,8 +303,13 @@ export async function kvSetJson(key: string, value: any): Promise<void> {
 export async function kvDelete(key: string): Promise<void> {
   const redis = await getRedis();
   if (redis) {
-    await redis.del(key).catch(() => {});
-    return;
+    try {
+      await redis.del(key);
+      return;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvDelete_redis");
+      markRedisUnavailable();
+    }
   }
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
     await fetch(
@@ -315,11 +320,96 @@ export async function kvDelete(key: string): Promise<void> {
           Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
         },
       },
-    ).catch(() => {});
+    ).catch((error: unknown) => {
+      captureKvCacheError(error, "kvDelete_rest");
+    });
     return;
   }
   memoryJson.delete(key);
   memoryTtl.delete(key);
+}
+
+function kvRestBaseUrl(): string | null {
+  const url = process.env.KV_REST_API_URL;
+  return url ? url.replace(/\/$/, "") : null;
+}
+
+/** Redis-first string storage with TTL; falls back to KV REST then in-memory. */
+async function kvSetStringWithTtl(
+  key: string,
+  value: string,
+  ttlSec: number,
+): Promise<boolean> {
+  const redis = await getRedis();
+  if (redis) {
+    try {
+      await redis.set(key, value, "EX", ttlSec);
+      return true;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSetStringWithTtl_redis");
+      markRedisUnavailable();
+    }
+  }
+  const restBase = kvRestBaseUrl();
+  if (restBase && process.env.KV_REST_API_TOKEN) {
+    try {
+      const res = await fetch(
+        `${restBase}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}?EX=${ttlSec}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+          },
+          cache: "no-store",
+        },
+      );
+      if (res.ok) return true;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSetStringWithTtl_rest");
+    }
+  }
+  memoryJson.set(key, value);
+  memoryTtl.set(key, Date.now() + ttlSec * 1000);
+  return process.env.NODE_ENV !== "production";
+}
+
+/** Redis-first string lookup; falls back to KV REST then in-memory TTL map. */
+async function kvGetString(key: string): Promise<string | null> {
+  const redis = await getRedis();
+  if (redis) {
+    try {
+      const val = (await redis.get(key)) as string | null;
+      return val ?? null;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGetString_redis");
+      markRedisUnavailable();
+    }
+  }
+  const restBase = kvRestBaseUrl();
+  if (restBase && process.env.KV_REST_API_TOKEN) {
+    try {
+      const res = await fetch(`${restBase}/get/${encodeURIComponent(key)}`, {
+        headers: {
+          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+        },
+        cache: "no-store",
+      });
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => ({}) as { result?: string | null });
+      const val = data?.result;
+      return typeof val === "string" ? val : null;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGetString_rest");
+    }
+  }
+  if (process.env.NODE_ENV === "production") return null;
+  const exp = memoryTtl.get(key);
+  if (typeof exp === "number" && Date.now() > exp) {
+    memoryJson.delete(key);
+    memoryTtl.delete(key);
+    return null;
+  }
+  return memoryJson.get(key) ?? null;
 }
 
 const WEBAUTHN_CHALLENGE_TTL_SEC = 5 * 60;
@@ -393,22 +483,7 @@ function makeToken(): string {
 
 async function hasActivePasswordResetPending(userId: string): Promise<boolean> {
   const pendingKey = passwordResetPendingKey(userId);
-  const redis = await getRedis();
-  if (redis) {
-    try {
-      return Boolean(await redis.get(pendingKey));
-    } catch (error: unknown) {
-      captureKvCacheError(error, "password_reset_pending_get");
-      return false;
-    }
-  }
-  const exp = memoryTtl.get(pendingKey);
-  if (typeof exp === "number" && Date.now() > exp) {
-    memoryJson.delete(pendingKey);
-    memoryTtl.delete(pendingKey);
-    return false;
-  }
-  return memoryJson.has(pendingKey);
+  return Boolean(await kvGetString(pendingKey));
 }
 
 async function setPasswordResetPending(
@@ -416,32 +491,12 @@ async function setPasswordResetPending(
   ttlSec: number,
 ): Promise<boolean> {
   const pendingKey = passwordResetPendingKey(userId);
-  const redis = await getRedis();
-  if (redis) {
-    try {
-      await redis.set(pendingKey, "1", "EX", ttlSec);
-      return true;
-    } catch (error: unknown) {
-      captureKvCacheError(error, "password_reset_pending_set");
-      return false;
-    }
-  }
-  memoryJson.set(pendingKey, "1");
-  memoryTtl.set(pendingKey, Date.now() + ttlSec * 1000);
-  return true;
+  return kvSetStringWithTtl(pendingKey, "1", ttlSec);
 }
 
 async function clearPasswordResetPending(userId: string): Promise<void> {
   const pendingKey = passwordResetPendingKey(userId);
-  const redis = await getRedis();
-  if (redis) {
-    await redis.del(pendingKey).catch((error: unknown) => {
-      captureKvCacheError(error, "password_reset_pending_del");
-    });
-    return;
-  }
-  memoryJson.delete(pendingKey);
-  memoryTtl.delete(pendingKey);
+  await kvDelete(pendingKey);
 }
 
 export async function createPasswordResetToken(
@@ -465,20 +520,13 @@ export async function createPasswordResetToken(
   }
   const token = makeToken();
   const key = passwordResetRedisKey(token);
-  const redis = await getRedis();
   const ttlSec = PASSWORD_RESET_TTL_SEC;
-  if (redis) {
-    try {
-      await redis.set(key, user.id, "EX", ttlSec);
-      await setPasswordResetPending(user.id, ttlSec);
-    } catch (error: unknown) {
-      captureKvCacheError(error, "password_reset_set");
-      return { ok: true };
-    }
-  } else {
-    memoryJson.set(key, JSON.stringify({ userId: user.id }));
-    memoryTtl.set(key, Date.now() + ttlSec * 1000);
-    await setPasswordResetPending(user.id, ttlSec);
+  const stored = await kvSetStringWithTtl(key, user.id, ttlSec);
+  if (!stored) return { ok: true };
+  const pendingSet = await setPasswordResetPending(user.id, ttlSec);
+  if (!pendingSet) {
+    await kvDelete(key);
+    return { ok: true };
   }
   return { ok: true, token, recipientEmail: user.email ?? email };
 }
@@ -491,28 +539,14 @@ export async function redeemPasswordResetToken(
   if (!normalizedToken || !newPassword || newPassword.length < 8)
     return { ok: false, error: "invalid" };
   const key = passwordResetRedisKey(normalizedToken);
-  const redis = await getRedis();
-  let userId: string | null = null;
-  if (redis) {
+  let userId: string | null = await kvGetString(key);
+  if (userId?.startsWith("{")) {
     try {
-      userId = (await redis.get(key)) as string | null;
-    } catch (error: unknown) {
-      captureKvCacheError(error, "password_reset_get");
-      return { ok: false, error: "db_unavailable" };
-    }
-  } else {
-    const exp = memoryTtl.get(key);
-    if (typeof exp === "number" && Date.now() > exp) {
-      memoryJson.delete(key);
-      memoryTtl.delete(key);
-    }
-    const val = memoryJson.get(key);
-    if (val) {
-      try {
-        userId = JSON.parse(val).userId as string;
-      } catch {
-        userId = null;
-      }
+      const parsed = JSON.parse(userId) as { userId?: string };
+      userId =
+        typeof parsed.userId === "string" ? parsed.userId : null;
+    } catch {
+      userId = null;
     }
   }
   if (!userId) return { ok: false, error: "invalid_or_expired" };
@@ -522,12 +556,7 @@ export async function redeemPasswordResetToken(
   await p.user
     .update({ where: { id: userId }, data: { passwordHash: hash } })
     .catch(() => null);
-  if (redis) {
-    await redis.del(key).catch(() => {});
-  } else {
-    memoryJson.delete(key);
-    memoryTtl.delete(key);
-  }
+  await kvDelete(key);
   await clearPasswordResetPending(userId);
   return { ok: true };
 }
