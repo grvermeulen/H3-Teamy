@@ -139,12 +139,14 @@ describe("defaultSeasonWindow", () => {
 
   it("verlengt met een jaar als alleen SEASON_START gezet is", () => {
     vi.stubEnv("SEASON_START", "01-07-2025");
+    vi.stubEnv("SEASON_END", "");
     const w = defaultSeasonWindow();
     expect(w.from).toBe("2025-07-01");
     expect(w.to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it("trekt een jaar terug als alleen SEASON_END gezet is", () => {
+    vi.stubEnv("SEASON_START", "");
     vi.stubEnv("SEASON_END", "30-06-2026");
     const w = defaultSeasonWindow();
     expect(w.to).toBe("2026-06-30");
@@ -156,6 +158,16 @@ describe("defaultSeasonWindow", () => {
     expect(w.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(w.to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(w.from < w.to).toBe(true);
+  });
+
+  it("gebruikt committed season wanneer env-seizoen verlopen is", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 27)); // 2026-08-27
+    vi.stubEnv("SEASON_START", "19-09-2025");
+    vi.stubEnv("SEASON_END", "01-07-2026");
+    const w = defaultSeasonWindow();
+    expect(w).toEqual({ from: "2026-08-26", to: "2027-07-07" });
+    vi.useRealTimers();
   });
 });
 

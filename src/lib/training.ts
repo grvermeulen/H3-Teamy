@@ -32,6 +32,26 @@ function addYears(date: Date, years: number): Date {
   return d;
 }
 
+import { CURRENT_SEASON } from "./seasonConfig";
+
+function resolveEnvSeasonWindow(): { from: string; to: string } | null {
+  const envStart = parseDdMmYyyy(process.env.SEASON_START);
+  const envEnd = parseDdMmYyyy(process.env.SEASON_END);
+
+  if (envStart && envEnd && envStart < envEnd) {
+    return { from: toYMD(envStart), to: toYMD(envEnd) };
+  }
+  if (envStart && !envEnd) {
+    const end = addYears(envStart, 1);
+    return { from: toYMD(envStart), to: toYMD(end) };
+  }
+  if (!envStart && envEnd) {
+    const start = addYears(envEnd, -1);
+    return { from: toYMD(start), to: toYMD(envEnd) };
+  }
+  return null;
+}
+
 export function generateTrainingDates(from: Date, to: Date): string[] {
   const dates: string[] = [];
   const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
@@ -46,19 +66,25 @@ export function generateTrainingDates(from: Date, to: Date): string[] {
 }
 
 export function defaultSeasonWindow(): { from: string; to: string } {
-  const envStart = parseDdMmYyyy(process.env.SEASON_START);
-  const envEnd = parseDdMmYyyy(process.env.SEASON_END);
+  const today = toYMD(new Date());
+  const envWindow = resolveEnvSeasonWindow();
+  const envStartSet = Boolean(parseDdMmYyyy(process.env.SEASON_START));
+  const envEndSet = Boolean(parseDdMmYyyy(process.env.SEASON_END));
 
-  if (envStart && envEnd && envStart < envEnd) {
-    return { from: toYMD(envStart), to: toYMD(envEnd) };
+  if (envWindow) {
+    if (
+      envStartSet &&
+      envEndSet &&
+      today > envWindow.to &&
+      today <= CURRENT_SEASON.to
+    ) {
+      return { from: CURRENT_SEASON.from, to: CURRENT_SEASON.to };
+    }
+    return envWindow;
   }
-  if (envStart && !envEnd) {
-    const end = addYears(envStart, 1);
-    return { from: toYMD(envStart), to: toYMD(end) };
-  }
-  if (!envStart && envEnd) {
-    const start = addYears(envEnd, -1);
-    return { from: toYMD(start), to: toYMD(envEnd) };
+
+  if (today >= CURRENT_SEASON.from && today <= CURRENT_SEASON.to) {
+    return { from: CURRENT_SEASON.from, to: CURRENT_SEASON.to };
   }
 
   // Fallback: Season runs July 1st to July 1st next year
