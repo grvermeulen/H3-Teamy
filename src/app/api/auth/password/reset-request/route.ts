@@ -13,9 +13,9 @@ export async function POST(req: NextRequest) {
         span.setAttribute("email_present", Boolean(normalizedEmail));
         if (!normalizedEmail) return NextResponse.json({ ok: true });
 
-        const { ok, token, recipientEmail } = await createPasswordResetToken(
-          normalizedEmail,
-        );
+        const { ok, token, recipientEmail, suppressed } =
+          await createPasswordResetToken(normalizedEmail);
+        span.setAttribute("password_reset_suppressed", Boolean(suppressed));
         const emailConfig = getOutboundEmailConfig();
 
         if (token && emailConfig) {
@@ -56,7 +56,10 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        const body: { ok: boolean; token?: string } = { ok };
+        const body: { ok: boolean; token?: string; suppressed?: boolean } = {
+          ok,
+        };
+        if (suppressed) body.suppressed = true;
         if (process.env.NODE_ENV !== "production") body.token = token;
         return NextResponse.json(body);
       } catch (error: unknown) {

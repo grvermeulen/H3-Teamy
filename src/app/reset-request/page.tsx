@@ -19,14 +19,20 @@ export default function ResetRequestPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      const msg =
-        "Als dit e-mailadres bekend is, hebben we een resetlink gestuurd.";
       if (res.ok) {
-        const data = await res.json().catch(() => ({}) as any);
+        const data = await res.json().catch(() => ({}) as {
+          token?: string;
+          suppressed?: boolean;
+        });
+        const msg = data?.suppressed
+          ? "Er is al een actieve resetlink (60 minuten geldig). Controleer je e-mail, ook spam. Je kunt daarna opnieuw een link aanvragen."
+          : "Als dit e-mailadres bekend is, hebben we een resetlink gestuurd.";
         setNotice(msg);
-        if (data?.token) setDevToken(data.token as string);
+        if (data?.token) setDevToken(data.token);
       } else {
-        setNotice(msg);
+        setNotice(
+          "Als dit e-mailadres bekend is, hebben we een resetlink gestuurd.",
+        );
       }
     } finally {
       setSubmitting(false);

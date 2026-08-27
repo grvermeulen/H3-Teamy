@@ -9,3 +9,8 @@ export function normalizePasswordResetToken(raw: string): string {
 export function passwordResetRedisKey(rawToken: string): string {
   return `pwreset:${normalizePasswordResetToken(rawToken)}`;
 }
+
+/** Marks that this user already has an active reset link (same TTL as the token). */
+export function passwordResetPendingKey(userId: string): string {
+  return `pwreset:pending:${userId}`;
+}
