@@ -22,6 +22,20 @@ model User {
   attendances Attendance[]
   feedback  Feedback[]
   passkeys  Passkey[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+/** Short-lived wachtwoord-reset token (KV-fallback in Postgres). */
+model PasswordResetToken {
+  token     String   @id
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 /** WebAuthn-passkey (Touch ID, Face ID, Windows Hello, enz.) gekoppeld aan een gebruiker. */
