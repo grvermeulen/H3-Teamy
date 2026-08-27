@@ -39,8 +39,20 @@ export default function ResetWithTokenPage() {
         });
         setTimeout(() => router.push("/login"), 1000);
       } else {
-        const data = await res.json().catch(() => ({}) as any);
-        setNotice({ tone: "error", text: data?.error || "Reset mislukt" });
+        const data = await res.json().catch(() => ({}) as { error?: string });
+        const errorKey = data?.error || "unknown";
+        const messages: Record<string, string> = {
+          invalid_or_expired:
+            "De resetlink is verlopen of al gebruikt. Vraag via inloggen een nieuwe link aan (wachtwoord vergeten).",
+          invalid:
+            "Ongeldige invoer. Gebruik minimaal 8 tekens en controleer dat beide wachtwoorden gelijk zijn.",
+          db_unavailable:
+            "De server is tijdelijk niet bereikbaar. Probeer het later opnieuw.",
+        };
+        setNotice({
+          tone: "error",
+          text: messages[errorKey] ?? "Reset mislukt. Vraag een nieuwe link aan.",
+        });
       }
     } finally {
       setSubmitting(false);

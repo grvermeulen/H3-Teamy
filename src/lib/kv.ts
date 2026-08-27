@@ -6,6 +6,12 @@ import * as Sentry from "@sentry/nextjs";
 import type { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { withPgConnectRetry } from "./prismaConnectRetry";
+import {
+  PASSWORD_RESET_TTL_SEC,
+  normalizePasswordResetToken,
+  passwordResetPendingKey,
+  passwordResetRedisKey,
+} from "./passwordResetToken";
 
 type RsvpStatus = "yes" | "no" | "maybe" | null;
 type UserProfile = {
@@ -385,9 +391,67 @@ function makeToken(): string {
   return Math.random().toString(36).slice(2, 10).toUpperCase();
 }
 
+async function hasActivePasswordResetPending(userId: string): Promise<boolean> {
+  const pendingKey = passwordResetPendingKey(userId);
+  const redis = await getRedis();
+  if (redis) {
+    try {
+      return Boolean(await redis.get(pendingKey));
+    } catch (error: unknown) {
+      captureKvCacheError(error, "password_reset_pending_get");
+      return false;
+    }
+  }
+  const exp = memoryTtl.get(pendingKey);
+  if (typeof exp === "number" && Date.now() > exp) {
+    memoryJson.delete(pendingKey);
+    memoryTtl.delete(pendingKey);
+    return false;
+  }
+  return memoryJson.has(pendingKey);
+}
+
+async function setPasswordResetPending(
+  userId: string,
+  ttlSec: number,
+): Promise<boolean> {
+  const pendingKey = passwordResetPendingKey(userId);
+  const redis = await getRedis();
+  if (redis) {
+    try {
+      await redis.set(pendingKey, "1", "EX", ttlSec);
+      return true;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "password_reset_pending_set");
+      return false;
+    }
+  }
+  memoryJson.set(pendingKey, "1");
+  memoryTtl.set(pendingKey, Date.now() + ttlSec * 1000);
+  return true;
+}
+
+async function clearPasswordResetPending(userId: string): Promise<void> {
+  const pendingKey = passwordResetPendingKey(userId);
+  const redis = await getRedis();
+  if (redis) {
+    await redis.del(pendingKey).catch((error: unknown) => {
+      captureKvCacheError(error, "password_reset_pending_del");
+    });
+    return;
+  }
+  memoryJson.delete(pendingKey);
+  memoryTtl.delete(pendingKey);
+}
+
 export async function createPasswordResetToken(
   email: string,
-): Promise<{ ok: boolean; token?: string; recipientEmail?: string }> {
+): Promise<{
+  ok: boolean;
+  token?: string;
+  recipientEmail?: string;
+  suppressed?: boolean;
+}> {
   const p = await getPrisma();
   const user = p
     ? await p.user.findFirst({
@@ -396,15 +460,25 @@ export async function createPasswordResetToken(
       })
     : null;
   if (!user) return { ok: true };
+  if (await hasActivePasswordResetPending(user.id)) {
+    return { ok: true, suppressed: true };
+  }
   const token = makeToken();
-  const key = `pwreset:${token}`;
+  const key = passwordResetRedisKey(token);
   const redis = await getRedis();
-  const ttlSec = 15 * 60;
+  const ttlSec = PASSWORD_RESET_TTL_SEC;
   if (redis) {
-    await redis.set(key, user.id, "EX", ttlSec);
+    try {
+      await redis.set(key, user.id, "EX", ttlSec);
+      await setPasswordResetPending(user.id, ttlSec);
+    } catch (error: unknown) {
+      captureKvCacheError(error, "password_reset_set");
+      return { ok: true };
+    }
   } else {
     memoryJson.set(key, JSON.stringify({ userId: user.id }));
     memoryTtl.set(key, Date.now() + ttlSec * 1000);
+    await setPasswordResetPending(user.id, ttlSec);
   }
   return { ok: true, token, recipientEmail: user.email ?? email };
 }
@@ -413,13 +487,19 @@ export async function redeemPasswordResetToken(
   token: string,
   newPassword: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  if (!token || !newPassword || newPassword.length < 8)
+  const normalizedToken = normalizePasswordResetToken(token);
+  if (!normalizedToken || !newPassword || newPassword.length < 8)
     return { ok: false, error: "invalid" };
-  const key = `pwreset:${token}`;
+  const key = passwordResetRedisKey(normalizedToken);
   const redis = await getRedis();
   let userId: string | null = null;
   if (redis) {
-    userId = (await redis.get(key)) as string | null;
+    try {
+      userId = (await redis.get(key)) as string | null;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "password_reset_get");
+      return { ok: false, error: "db_unavailable" };
+    }
   } else {
     const exp = memoryTtl.get(key);
     if (typeof exp === "number" && Date.now() > exp) {
@@ -448,6 +528,7 @@ export async function redeemPasswordResetToken(
     memoryJson.delete(key);
     memoryTtl.delete(key);
   }
+  await clearPasswordResetPending(userId);
   return { ok: true };
 }
 

@@ -23,6 +23,13 @@ describe("auth schemas", () => {
     expect(PasswordResetRequestResponseSchema.parse({ ok: true })).toEqual({
       ok: true,
     });
+    expect(
+      PasswordResetRequestResponseSchema.parse({
+        ok: true,
+        sent: true,
+        suppressed: false,
+      }),
+    ).toEqual({ ok: true, sent: true, suppressed: false });
   });
 
   it("PasswordResetConfirmBodySchema", () => {

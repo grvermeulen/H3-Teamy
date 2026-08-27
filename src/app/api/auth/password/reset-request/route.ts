@@ -13,10 +13,11 @@ export async function POST(req: NextRequest) {
         span.setAttribute("email_present", Boolean(normalizedEmail));
         if (!normalizedEmail) return NextResponse.json({ ok: true });
 
-        const { ok, token, recipientEmail } = await createPasswordResetToken(
-          normalizedEmail,
-        );
+        const { ok, token, recipientEmail, suppressed } =
+          await createPasswordResetToken(normalizedEmail);
+        span.setAttribute("password_reset_suppressed", Boolean(suppressed));
         const emailConfig = getOutboundEmailConfig();
+        let sent = false;
 
         if (token && emailConfig) {
           try {
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
               from: emailConfig.fromEmail,
               to: recipientEmail ?? normalizedEmail,
               subject: "Wachtwoord resetten — H3 Teamy",
-              html: `<p>Je hebt gevraagd om je wachtwoord te resetten voor H3 Teamy.</p><p><a href="${url}">Klik hier om een nieuw wachtwoord te kiezen</a></p><p>Of kopieer deze link: ${url}</p><p>De link is 15 minuten geldig.</p><p>Heb je dit niet aangevraagd? Negeer deze e-mail.</p>`,
+              html: `<p>Je hebt gevraagd om je wachtwoord te resetten voor H3 Teamy.</p><p><a href="${url}">Klik hier om een nieuw wachtwoord te kiezen</a></p><p>Of kopieer deze link: ${url}</p><p>De link is 60 minuten geldig.</p><p>Heb je dit niet aangevraagd? Negeer deze e-mail.</p>`,
             });
             if (result.error) {
               Sentry.captureException(
@@ -37,6 +38,8 @@ export async function POST(req: NextRequest) {
                   extra: { resend: result.error },
                 },
               );
+            } else {
+              sent = true;
             }
           } catch (error: unknown) {
             Sentry.captureException(error, {
@@ -56,7 +59,16 @@ export async function POST(req: NextRequest) {
           });
         }
 
-        const body: { ok: boolean; token?: string } = { ok };
+        span.setAttribute("password_reset_sent", sent);
+
+        const body: {
+          ok: boolean;
+          token?: string;
+          suppressed?: boolean;
+          sent?: boolean;
+        } = { ok };
+        if (suppressed) body.suppressed = true;
+        if (sent) body.sent = true;
         if (process.env.NODE_ENV !== "production") body.token = token;
         return NextResponse.json(body);
       } catch (error: unknown) {
