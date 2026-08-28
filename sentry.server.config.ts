@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { shouldDropDevLocalhostDbNoiseForSentry } from "@/lib/sentryDevDbNoise";
+import { shouldDropPgPoolNoiseForSentry } from "@/lib/sentryPgPoolNoise";
 
 /** Parseert traces sample rate (0–1) uit server-env; default 0.1. */
 function parseTracesSampleRate(): number {
@@ -21,6 +22,7 @@ Sentry.init({
 
   beforeSend(event, hint) {
     if (shouldDropDevLocalhostDbNoiseForSentry(event, hint)) return null;
+    if (shouldDropPgPoolNoiseForSentry(event, hint)) return null;
     return event;
   },
 

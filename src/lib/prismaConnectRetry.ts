@@ -30,7 +30,8 @@ export function isTransientPostgresConnectError(error: unknown): boolean {
       msg.includes("upstream database") ||
       msg.includes("failed to connect") ||
       msg.includes("can't reach database server") ||
-      msg.includes("could not connect to server")
+      msg.includes("could not connect to server") ||
+      msg.includes("error while reading client passwordmessage")
     );
   }
   return false;

@@ -47,6 +47,14 @@ describe("isTransientPostgresConnectError", () => {
     ).toBe(true);
   });
 
+  it("returns true for Prisma Postgres proxy auth handshake noise (JAVASCRIPT-NEXTJS-3A)", () => {
+    expect(
+      isTransientPostgresConnectError(
+        new Error("Error while reading client PasswordMessage"),
+      ),
+    ).toBe(true);
+  });
+
   it("returns false for unrelated errors", () => {
     expect(isTransientPostgresConnectError(new Error("unique violation"))).toBe(
       false,
