@@ -1,3 +1,8 @@
+import {
+  BOOTSTRAP_ADMIN_USER_IDS,
+  BOOTSTRAP_TRAINER_USER_IDS,
+} from "./roleBootstrapIds";
+
 /**
  * Parses a comma-separated list of user IDs from an environment variable.
  *
@@ -13,12 +18,24 @@ export function parseEnvUserIds(raw: string | undefined): Set<string> {
   return out;
 }
 
+function resolveBootstrapUserIds(
+  envRaw: string | undefined,
+  defaults: readonly string[],
+): Set<string> {
+  const fromEnv = parseEnvUserIds(envRaw);
+  if (fromEnv.size > 0) return fromEnv;
+  return new Set(defaults);
+}
+
 /**
  * Bootstrap admin user IDs from `ADMIN_USER_IDS` (comma-separated).
  * Used before the admin UI can assign roles in KV.
  */
 export function getBootstrapAdminUserIds(): Set<string> {
-  return parseEnvUserIds(process.env.ADMIN_USER_IDS);
+  return resolveBootstrapUserIds(
+    process.env.ADMIN_USER_IDS,
+    BOOTSTRAP_ADMIN_USER_IDS,
+  );
 }
 
 /**
@@ -26,7 +43,10 @@ export function getBootstrapAdminUserIds(): Set<string> {
  * Admins from {@link getBootstrapAdminUserIds} are implicitly trainers.
  */
 export function getBootstrapTrainerUserIds(): Set<string> {
-  return parseEnvUserIds(process.env.TRAINER_USER_IDS);
+  return resolveBootstrapUserIds(
+    process.env.TRAINER_USER_IDS,
+    BOOTSTRAP_TRAINER_USER_IDS,
+  );
 }
 
 /**

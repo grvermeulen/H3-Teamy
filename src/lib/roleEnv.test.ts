@@ -33,6 +33,17 @@ describe("bootstrap env role ids", () => {
     vi.stubEnv("TRAINER_USER_IDS", "trainer-1");
     expect(Array.from(getBootstrapTrainerUserIds())).toEqual(["trainer-1"]);
   });
+
+  it("falls back to committed bootstrap ids when env is unset", () => {
+    vi.stubEnv("ADMIN_USER_IDS", "");
+    vi.stubEnv("TRAINER_USER_IDS", "");
+    expect(Array.from(getBootstrapAdminUserIds())).toEqual([
+      "7651890a-f601-4711-9ff0-64da8ac052dc",
+    ]);
+    expect(Array.from(getBootstrapTrainerUserIds())).toContain(
+      "cmesohfy00003peijgslbdi13",
+    );
+  });
 });
 
 describe("mergeUserRoles", () => {
