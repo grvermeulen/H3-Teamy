@@ -6,6 +6,7 @@ import { prisma } from "./db";
 import { getUserRoles, type UserRoles } from "./kv";
 import { isTransientPostgresConnectError, withPgConnectRetry } from "./prismaConnectRetry";
 import { USER_CORE_SELECT } from "./userPrismaSelect";
+import { displayName } from "./userUtils";
 
 function norm(s: string) {
   return (s || "").toLowerCase().trim();
@@ -46,7 +47,7 @@ export async function isTrainer(
         select: USER_CORE_SELECT,
       }),
     );
-    const full = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
+    const full = displayName(user ?? {});
     const admin = process.env.ADMIN_FULL_NAME || "";
     const trainers = (process.env.TRAINER_FULL_NAMES || "")
       .split(",")
@@ -116,7 +117,7 @@ export async function isAdminUser(
         select: USER_CORE_SELECT,
       }),
     );
-    const full = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
+    const full = displayName(user ?? {});
     const admin = process.env.ADMIN_FULL_NAME || "";
     const envAdmin = norm(full) === norm(admin);
     const roles: UserRoles = await getUserRoles(userId).catch(

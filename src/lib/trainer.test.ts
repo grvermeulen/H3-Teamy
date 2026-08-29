@@ -67,6 +67,22 @@ describe("trainer permissions", () => {
       });
     });
 
+    it("matches TRAINER_FULL_NAMES when firstName has trailing whitespace", async () => {
+      process.env.TRAINER_FULL_NAMES = "Jan Willem Pater";
+      vi.mocked(getActiveUser).mockResolvedValue({
+        userId: "cmesohfy00003peijgslbdi13",
+      });
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
+        firstName: "Jan Willem ",
+        lastName: "Pater",
+      });
+      vi.mocked(getUserRoles).mockResolvedValue({});
+
+      const result = await isTrainer(mockReq);
+      expect(result.isTrainer).toBe(true);
+      expect(result.me.name).toBe("Jan Willem Pater");
+    });
+
     it("returns true if user is Admin", async () => {
       vi.mocked(getActiveUser).mockResolvedValue({ userId: "2" });
       vi.mocked(prisma.user.findUnique).mockResolvedValue({
