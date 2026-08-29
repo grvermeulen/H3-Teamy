@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as Sentry from "@sentry/nextjs";
 import { isTrainer, isAdminUser } from "./trainer";
 import { prisma } from "./db";
@@ -12,7 +12,6 @@ vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
 }));
 
-// Mock dependencies
 vi.mock("./db", () => ({
   prisma: {
     user: {
@@ -44,15 +43,19 @@ vi.mock("./kv", () => ({
 describe("trainer permissions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.ADMIN_FULL_NAME = "Super Admin";
-    process.env.TRAINER_FULL_NAMES = "Trainer One,Trainer Two";
+    vi.stubEnv("ADMIN_USER_IDS", "admin-user");
+    vi.stubEnv("TRAINER_USER_IDS", "trainer-user");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   const mockReq = {} as NextRequest;
 
   describe("isTrainer", () => {
-    it("returns true if user is listed in TRAINER_FULL_NAMES", async () => {
-      vi.mocked(getActiveUser).mockResolvedValue({ userId: "1" });
+    it("returns true if user is listed in TRAINER_USER_IDS", async () => {
+      vi.mocked(getActiveUser).mockResolvedValue({ userId: "trainer-user" });
       vi.mocked(prisma.user.findUnique).mockResolvedValue({
         firstName: "Trainer",
         lastName: "One",
@@ -62,29 +65,13 @@ describe("trainer permissions", () => {
       const result = await isTrainer(mockReq);
       expect(result.isTrainer).toBe(true);
       expect(vi.mocked(prisma.user.findUnique)).toHaveBeenCalledWith({
-        where: { id: "1" },
+        where: { id: "trainer-user" },
         select: USER_CORE_SELECT,
       });
     });
 
-    it("matches TRAINER_FULL_NAMES when firstName has trailing whitespace", async () => {
-      process.env.TRAINER_FULL_NAMES = "Jan Willem Pater";
-      vi.mocked(getActiveUser).mockResolvedValue({
-        userId: "cmesohfy00003peijgslbdi13",
-      });
-      vi.mocked(prisma.user.findUnique).mockResolvedValue({
-        firstName: "Jan Willem ",
-        lastName: "Pater",
-      });
-      vi.mocked(getUserRoles).mockResolvedValue({});
-
-      const result = await isTrainer(mockReq);
-      expect(result.isTrainer).toBe(true);
-      expect(result.me.name).toBe("Jan Willem Pater");
-    });
-
-    it("returns true if user is Admin", async () => {
-      vi.mocked(getActiveUser).mockResolvedValue({ userId: "2" });
+    it("returns true for bootstrap admin user ids", async () => {
+      vi.mocked(getActiveUser).mockResolvedValue({ userId: "admin-user" });
       vi.mocked(prisma.user.findUnique).mockResolvedValue({
         firstName: "Super",
         lastName: "Admin",
@@ -95,7 +82,7 @@ describe("trainer permissions", () => {
       expect(result.isTrainer).toBe(true);
     });
 
-    it("returns true if user has trainer role", async () => {
+    it("returns true if user has trainer role in KV", async () => {
       vi.mocked(getActiveUser).mockResolvedValue({ userId: "3" });
       vi.mocked(prisma.user.findUnique).mockResolvedValue({
         firstName: "Random",
@@ -198,8 +185,8 @@ describe("trainer permissions", () => {
   });
 
   describe("isAdminUser", () => {
-    it("returns true if user matches ADMIN_FULL_NAME", async () => {
-      vi.mocked(getActiveUser).mockResolvedValue({ userId: "1" });
+    it("returns true if user is listed in ADMIN_USER_IDS", async () => {
+      vi.mocked(getActiveUser).mockResolvedValue({ userId: "admin-user" });
       vi.mocked(prisma.user.findUnique).mockResolvedValue({
         firstName: "Super",
         lastName: "Admin",
@@ -210,7 +197,7 @@ describe("trainer permissions", () => {
       expect(result.isAdmin).toBe(true);
     });
 
-    it("returns true if user has admin role", async () => {
+    it("returns true if user has admin role in KV", async () => {
       vi.mocked(getActiveUser).mockResolvedValue({ userId: "2" });
       vi.mocked(prisma.user.findUnique).mockResolvedValue({
         firstName: "Role",
@@ -223,12 +210,12 @@ describe("trainer permissions", () => {
     });
 
     it("returns false if only trainer", async () => {
-      vi.mocked(getActiveUser).mockResolvedValue({ userId: "3" });
+      vi.mocked(getActiveUser).mockResolvedValue({ userId: "trainer-user" });
       vi.mocked(prisma.user.findUnique).mockResolvedValue({
         firstName: "Trainer",
         lastName: "One",
       });
-      vi.mocked(getUserRoles).mockResolvedValue({ trainer: true }); // Trainer but not admin
+      vi.mocked(getUserRoles).mockResolvedValue({ trainer: true });
 
       const result = await isAdminUser(mockReq);
       expect(result.isAdmin).toBe(false);

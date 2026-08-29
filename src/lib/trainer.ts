@@ -5,16 +5,17 @@ import { isDbUnavailableError } from "./dbUnavailableError";
 import { prisma } from "./db";
 import { getUserRoles, type UserRoles } from "./kv";
 import { isTransientPostgresConnectError, withPgConnectRetry } from "./prismaConnectRetry";
+import {
+  getBootstrapAdminUserIds,
+  getBootstrapTrainerUserIds,
+} from "./roleEnv";
 import { USER_CORE_SELECT } from "./userPrismaSelect";
 import { displayName } from "./userUtils";
 
-function norm(s: string) {
-  return (s || "").toLowerCase().trim();
-}
-
 /**
  * Checks if the current request is from a Trainer or Admin.
- * Verifies against Env variables (ADMIN_FULL_NAME, TRAINER_FULL_NAMES) and DB roles.
+ * Verifies against env bootstrap user IDs (`ADMIN_USER_IDS`, `TRAINER_USER_IDS`)
+ * and KV roles keyed by user ID.
  *
  * @param req - The incoming Next.js request.
  * @returns An object containing `isTrainer` boolean and the user's identity `me`.
@@ -48,13 +49,9 @@ export async function isTrainer(
       }),
     );
     const full = displayName(user ?? {});
-    const admin = process.env.ADMIN_FULL_NAME || "";
-    const trainers = (process.env.TRAINER_FULL_NAMES || "")
-      .split(",")
-      .map((s) => norm(s))
-      .filter(Boolean);
-    const isAdmin = norm(full) === norm(admin);
-    const isTrainerListed = trainers.includes(norm(full));
+    const envAdmin = getBootstrapAdminUserIds().has(userId);
+    const envTrainer =
+      getBootstrapTrainerUserIds().has(userId) || envAdmin;
     const roles: UserRoles = await getUserRoles(userId).catch(
       (err: unknown) => {
         Sentry.captureException(err, {
@@ -66,7 +63,7 @@ export async function isTrainer(
     );
     const byRole = Boolean(roles?.trainer || roles?.admin);
     return {
-      isTrainer: Boolean(isAdmin || isTrainerListed || byRole),
+      isTrainer: Boolean(envAdmin || envTrainer || byRole),
       me: { id: userId, name: full },
     };
   } catch (err: unknown) {
@@ -85,7 +82,7 @@ export async function isTrainer(
 
 /**
  * Checks if the current request is from an Admin.
- * Verifies against Env variables (ADMIN_FULL_NAME) and DB roles.
+ * Verifies against env bootstrap user IDs (`ADMIN_USER_IDS`) and KV roles.
  *
  * @param req - The incoming Next.js request.
  * @returns An object containing `isAdmin` boolean and the user's identity `me`.
@@ -118,8 +115,7 @@ export async function isAdminUser(
       }),
     );
     const full = displayName(user ?? {});
-    const admin = process.env.ADMIN_FULL_NAME || "";
-    const envAdmin = norm(full) === norm(admin);
+    const envAdmin = getBootstrapAdminUserIds().has(userId);
     const roles: UserRoles = await getUserRoles(userId).catch(
       (err: unknown) => {
         Sentry.captureException(err, {
