@@ -1,11 +1,12 @@
 /**
- * Vercel AI Gateway model ids for H3-Teamy. Premium snapshots (Opus, GPT-5 chat)
- * return 500 "Free tier users do not have access to this model" on teams without
- * paid AI Gateway credits — see Sentry JAVASCRIPT-NEXTJS-1S.
+ * Vercel AI Gateway model ids for H3-Teamy. Premium snapshots (Opus, Sonnet 4,
+ * GPT-5 chat) return 403 "Free tier users do not have access to this model" on
+ * teams without paid AI Gateway credits — see Sentry JAVASCRIPT-NEXTJS-1S and
+ * JAVASCRIPT-NEXTJS-38.
  */
 
 /** `generateObject` default (idea triage, attendance nudges). */
-export const DEFAULT_STRUCTURED_GATEWAY_MODEL = "anthropic/claude-sonnet-4";
+export const DEFAULT_STRUCTURED_GATEWAY_MODEL = "openai/gpt-4o";
 
 /** `generateText` default (match report narrative). */
 export const DEFAULT_TEXT_GATEWAY_MODEL = "openai/gpt-4o";
@@ -16,6 +17,7 @@ const TEXT_FALLBACK = DEFAULT_TEXT_GATEWAY_MODEL;
 /** Model id suffixes blocked on AI Gateway free tier (provider prefix stripped). */
 const FREE_TIER_BLOCKED_IDS = new Set([
   "claude-opus-4",
+  "claude-sonnet-4",
   "gpt-5-chat-latest",
   "gpt-5.2-2025-12-11",
 ]);

@@ -68,7 +68,7 @@ describe("shapeIdea", () => {
       model: string;
       system: string;
     };
-    expect(args.model).toBe("anthropic/claude-sonnet-4");
+    expect(args.model).toBe("openai/gpt-4o");
     expect(args.system).toBe(PM_SYSTEM_PROMPT);
   });
 
