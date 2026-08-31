@@ -29,12 +29,21 @@ describe("toGatewayModelString", () => {
 });
 
 describe("resolveGatewayModel", () => {
-  it("remaps claude-opus-4 to sonnet for structured calls", () => {
+  it("remaps claude-opus-4 to gpt-4o for structured calls", () => {
     expect(
       resolveGatewayModel("anthropic/claude-opus-4", "structured"),
     ).toEqual({
-      model: "anthropic/claude-sonnet-4",
+      model: "openai/gpt-4o",
       substitutedFrom: "anthropic/claude-opus-4",
+    });
+  });
+
+  it("remaps claude-sonnet-4 for structured calls", () => {
+    expect(
+      resolveGatewayModel("anthropic/claude-sonnet-4", "structured"),
+    ).toEqual({
+      model: "openai/gpt-4o",
+      substitutedFrom: "anthropic/claude-sonnet-4",
     });
   });
 
@@ -62,7 +71,7 @@ describe("resolveGatewayModel", () => {
 
   it("defaults empty input to kind-specific fallback", () => {
     expect(resolveGatewayModel("", "structured")).toEqual({
-      model: "anthropic/claude-sonnet-4",
+      model: "openai/gpt-4o",
     });
     expect(resolveGatewayModel("", "text")).toEqual({
       model: "openai/gpt-4o",
@@ -77,12 +86,17 @@ describe("getStructuredGatewayModel", () => {
 
   it("uses default when env unset", () => {
     vi.stubEnv("AI_GATEWAY_STRUCTURED_MODEL", "");
-    expect(getStructuredGatewayModel()).toBe("anthropic/claude-sonnet-4");
+    expect(getStructuredGatewayModel()).toBe("openai/gpt-4o");
   });
 
   it("remaps blocked env override", () => {
     vi.stubEnv("AI_GATEWAY_STRUCTURED_MODEL", "anthropic/claude-opus-4");
-    expect(getStructuredGatewayModel()).toBe("anthropic/claude-sonnet-4");
+    expect(getStructuredGatewayModel()).toBe("openai/gpt-4o");
+  });
+
+  it("remaps claude-sonnet-4 env override", () => {
+    vi.stubEnv("AI_GATEWAY_STRUCTURED_MODEL", "anthropic/claude-sonnet-4");
+    expect(getStructuredGatewayModel()).toBe("openai/gpt-4o");
   });
 });
 

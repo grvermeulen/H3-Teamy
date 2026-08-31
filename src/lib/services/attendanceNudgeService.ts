@@ -3,6 +3,7 @@ import {
   generateAttendanceNudge,
   type AttendanceNudge,
 } from "../ai/attendanceNudge";
+import { isGatewayFreeTierAccessError } from "../ai/gatewayModels";
 import { kvGetJson, kvSetJson, getAttendanceForDates } from "../kv";
 import {
   describeRelativeDay,
@@ -127,10 +128,12 @@ export async function getOrCreateNudge(
     await kvSetJson(key, fresh).catch(() => {});
     return fresh;
   } catch (err) {
-    Sentry.captureException(err, {
-      tags: { component: "attendance-nudge" },
-      extra: { userId, bucket: bucket.tone },
-    });
+    if (!isGatewayFreeTierAccessError(err)) {
+      Sentry.captureException(err, {
+        tags: { component: "attendance-nudge" },
+        extra: { userId, bucket: bucket.tone },
+      });
+    }
     return staticFallback(bucket, nextTrainingLabel);
   }
 }

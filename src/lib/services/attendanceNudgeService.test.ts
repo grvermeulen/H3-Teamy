@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import * as Sentry from "@sentry/nextjs";
 
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
@@ -110,6 +111,7 @@ describe("computeRecentAttendance", () => {
 
 describe("getOrCreateNudge", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     kvGetJson.mockReset();
     kvSetJson.mockReset();
     kvSetJson.mockResolvedValue(undefined);
@@ -213,6 +215,18 @@ describe("getOrCreateNudge", () => {
     expect(out.message).toContain("woensdag");
     expect(out.message).toMatch(/bak ligt klaar/);
     expect(kvSetJson).not.toHaveBeenCalled();
+  });
+
+  it("does not report gateway free-tier model errors to Sentry", async () => {
+    kvGetJson.mockResolvedValue(null);
+    generateAttendanceNudge.mockRejectedValue(
+      new Error(
+        "Free tier users do not have access to this model. Upgrade to paid credits",
+      ),
+    );
+    const out = await getOrCreateNudge("u1", bucket, { today });
+    expect(out.tone).toBe("encourage");
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it("falls back to a static Dutch cheer message when the LLM throws", async () => {

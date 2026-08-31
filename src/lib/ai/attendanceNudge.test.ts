@@ -87,7 +87,7 @@ describe("generateAttendanceNudge", () => {
       system: string;
       prompt: string;
     };
-    expect(args.model).toBe("anthropic/claude-sonnet-4");
+    expect(args.model).toBe("openai/gpt-4o");
     expect(args.system).toBe(NUDGE_SYSTEM_PROMPT);
     expect(args.prompt).toContain("Joost");
     expect(args.prompt).toContain("1 van 4");
