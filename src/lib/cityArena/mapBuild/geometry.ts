@@ -113,3 +113,173 @@ export function distancePointToPolygon(point: Point, ring: Point[]): number {
   }
   return nearest;
 }
+
+/** True when two rectangles overlap or touch. */
+export function rectsIntersect(a: Rect, b: Rect): boolean {
+  return (
+    a.minX <= b.maxX && b.minX <= a.maxX && a.minY <= b.maxY && b.minY <= a.maxY
+  );
+}
+
+/** Douglas-Peucker simplification; endpoints are always kept. */
+export function simplifyPolyline(
+  points: Point[],
+  toleranceMetres: number,
+): Point[] {
+  if (points.length <= 2) return points.slice();
+  const keep = new Array<boolean>(points.length).fill(false);
+  keep[0] = true;
+  keep[points.length - 1] = true;
+  const pending: Array<[number, number]> = [[0, points.length - 1]];
+  while (pending.length > 0) {
+    const range = pending.pop();
+    if (!range) break;
+    const [start, end] = range;
+    let farthestDistance = 0;
+    let farthestIndex = -1;
+    for (let index = start + 1; index < end; index++) {
+      const candidate = distancePointToSegment(
+        points[index],
+        points[start],
+        points[end],
+      );
+      if (candidate > farthestDistance) {
+        farthestDistance = candidate;
+        farthestIndex = index;
+      }
+    }
+    if (farthestIndex === -1 || farthestDistance <= toleranceMetres) continue;
+    keep[farthestIndex] = true;
+    pending.push([start, farthestIndex], [farthestIndex, end]);
+  }
+  return points.filter((_, index) => keep[index]);
+}
+
+/** Simplifies a closed ring (first point not repeated); returns the input when < 3 points would remain. */
+export function simplifyRing(ring: Point[], toleranceMetres: number): Point[] {
+  if (ring.length <= 3) return ring.slice();
+  const closed = simplifyPolyline([...ring, ring[0]], toleranceMetres);
+  const open = closed.slice(0, -1);
+  return open.length >= 3 ? open : ring.slice();
+}
+
+function intersectVertical(a: Point, b: Point, x: number): Point {
+  const t = (x - a[0]) / (b[0] - a[0]);
+  return [x, a[1] + t * (b[1] - a[1])];
+}
+
+function intersectHorizontal(a: Point, b: Point, y: number): Point {
+  const t = (y - a[1]) / (b[1] - a[1]);
+  return [a[0] + t * (b[0] - a[0]), y];
+}
+
+type ClipEdge = {
+  inside: (point: Point) => boolean;
+  intersect: (a: Point, b: Point) => Point;
+};
+
+/** Sutherland-Hodgman clipping of a ring against a rectangle; `[]` when nothing remains. */
+export function clipPolygonToRect(ring: Point[], rect: Rect): Point[] {
+  const edges: ClipEdge[] = [
+    {
+      inside: (point) => point[0] >= rect.minX,
+      intersect: (a, b) => intersectVertical(a, b, rect.minX),
+    },
+    {
+      inside: (point) => point[0] <= rect.maxX,
+      intersect: (a, b) => intersectVertical(a, b, rect.maxX),
+    },
+    {
+      inside: (point) => point[1] >= rect.minY,
+      intersect: (a, b) => intersectHorizontal(a, b, rect.minY),
+    },
+    {
+      inside: (point) => point[1] <= rect.maxY,
+      intersect: (a, b) => intersectHorizontal(a, b, rect.maxY),
+    },
+  ];
+  let output = ring;
+  for (const edge of edges) {
+    if (output.length === 0) return [];
+    const input = output;
+    output = [];
+    for (let index = 0; index < input.length; index++) {
+      const current = input[index];
+      const previous = input[(index + input.length - 1) % input.length];
+      const currentInside = edge.inside(current);
+      const previousInside = edge.inside(previous);
+      if (currentInside) {
+        if (!previousInside) output.push(edge.intersect(previous, current));
+        output.push(current);
+      } else if (previousInside) {
+        output.push(edge.intersect(previous, current));
+      }
+    }
+  }
+  return output.length >= 3 ? output : [];
+}
+
+/** Liang-Barsky clip of one segment; `null` when fully outside. */
+function clipSegmentToRect(
+  a: Point,
+  b: Point,
+  rect: Rect,
+): [Point, Point] | null {
+  const deltaX = b[0] - a[0];
+  const deltaY = b[1] - a[1];
+  let tEnter = 0;
+  let tExit = 1;
+  const checks: Array<[number, number]> = [
+    [-deltaX, a[0] - rect.minX],
+    [deltaX, rect.maxX - a[0]],
+    [-deltaY, a[1] - rect.minY],
+    [deltaY, rect.maxY - a[1]],
+  ];
+  for (const [denominator, numerator] of checks) {
+    if (denominator === 0) {
+      if (numerator < 0) return null;
+      continue;
+    }
+    const ratio = numerator / denominator;
+    if (denominator < 0) {
+      if (ratio > tExit) return null;
+      if (ratio > tEnter) tEnter = ratio;
+    } else {
+      if (ratio < tEnter) return null;
+      if (ratio < tExit) tExit = ratio;
+    }
+  }
+  const start: Point =
+    tEnter === 0 ? a : [a[0] + tEnter * deltaX, a[1] + tEnter * deltaY];
+  const end: Point =
+    tExit === 1 ? b : [a[0] + tExit * deltaX, a[1] + tExit * deltaY];
+  return [start, end];
+}
+
+/** Clips a polyline to a rectangle, returning the pieces that remain inside (each ≥ 2 points). */
+export function clipPolylineToRect(points: Point[], rect: Rect): Point[][] {
+  const pieces: Point[][] = [];
+  let current: Point[] = [];
+  for (let index = 0; index + 1 < points.length; index++) {
+    const clipped = clipSegmentToRect(points[index], points[index + 1], rect);
+    if (!clipped) {
+      if (current.length >= 2) pieces.push(current);
+      current = [];
+      continue;
+    }
+    const [start, end] = clipped;
+    if (current.length === 0) {
+      current.push(start);
+    } else {
+      const last = current[current.length - 1];
+      const continuous = last[0] === start[0] && last[1] === start[1];
+      if (!continuous) {
+        pieces.push(current);
+        current = [start];
+      }
+    }
+    current.push(end);
+  }
+  if (current.length >= 2) pieces.push(current);
+  return pieces;
+}

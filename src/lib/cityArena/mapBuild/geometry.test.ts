@@ -8,6 +8,11 @@ import {
   pointInPolygon,
   polygonArea,
   polygonCentroid,
+  clipPolygonToRect,
+  clipPolylineToRect,
+  rectsIntersect,
+  simplifyPolyline,
+  simplifyRing,
 } from "./geometry";
 
 const unitSquare: Point[] = [
@@ -63,5 +68,121 @@ describe("geometry primitives", () => {
       maxY: 1,
     });
     expect(distance([0, 0], [3, 4])).toBe(5);
+  });
+});
+
+describe("simplification and clipping", () => {
+  it("collapses a nearly straight line to its endpoints", () => {
+    const wobbly: Point[] = [
+      [0, 0],
+      [1, 0.001],
+      [2, -0.002],
+      [3, 0],
+    ];
+    expect(simplifyPolyline(wobbly, 0.5)).toEqual([
+      [0, 0],
+      [3, 0],
+    ]);
+  });
+
+  it("keeps a corner that exceeds the tolerance", () => {
+    const corner: Point[] = [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+    ];
+    expect(simplifyPolyline(corner, 0.5)).toEqual(corner);
+  });
+
+  it("simplifies a ring but never below three points", () => {
+    const ring: Point[] = [
+      [0, 0],
+      [5, 0.01],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+    ];
+    expect(simplifyRing(ring, 0.5)).toEqual([
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+    ]);
+    const triangle: Point[] = [
+      [0, 0],
+      [1, 0],
+      [0, 1],
+    ];
+    expect(simplifyRing(triangle, 100)).toEqual(triangle);
+  });
+
+  it("clips a polygon to a rectangle", () => {
+    const square: Point[] = [
+      [0, 0],
+      [2, 0],
+      [2, 2],
+      [0, 2],
+    ];
+    const clipped = clipPolygonToRect(square, {
+      minX: 1,
+      minY: -1,
+      maxX: 3,
+      maxY: 3,
+    });
+    expect(polygonArea(clipped)).toBeCloseTo(2);
+    expect(
+      clipPolygonToRect(square, { minX: 5, minY: 5, maxX: 6, maxY: 6 }),
+    ).toEqual([]);
+  });
+
+  it("clips a polyline into pieces", () => {
+    const rect = { minX: 0, minY: 0, maxX: 2, maxY: 1 };
+    expect(
+      clipPolylineToRect(
+        [
+          [-1, 0.5],
+          [3, 0.5],
+        ],
+        rect,
+      ),
+    ).toEqual([
+      [
+        [0, 0.5],
+        [2, 0.5],
+      ],
+    ]);
+    const twoPasses: Point[] = [
+      [-1, 0.5],
+      [1, 0.5],
+      [1, 5],
+      [1.5, 5],
+      [1.5, 0.5],
+      [3, 0.5],
+    ];
+    expect(clipPolylineToRect(twoPasses, rect)).toHaveLength(2);
+    expect(
+      clipPolylineToRect(
+        [
+          [5, 5],
+          [6, 6],
+        ],
+        rect,
+      ),
+    ).toEqual([]);
+  });
+
+  it("detects rectangle overlap", () => {
+    expect(
+      rectsIntersect(
+        { minX: 0, minY: 0, maxX: 1, maxY: 1 },
+        { minX: 1, minY: 1, maxX: 2, maxY: 2 },
+      ),
+    ).toBe(true);
+    expect(
+      rectsIntersect(
+        { minX: 0, minY: 0, maxX: 1, maxY: 1 },
+        { minX: 2, minY: 2, maxX: 3, maxY: 3 },
+      ),
+    ).toBe(false);
   });
 });
