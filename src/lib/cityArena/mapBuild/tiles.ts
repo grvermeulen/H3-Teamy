@@ -93,8 +93,8 @@ export function tilesCovering(rect: Rect, bounds: Rect): TileCoord[] {
     bounds,
   );
   const coords: TileCoord[] = [];
-  for (let y = Math.max(0, first.y); y <= last.y; y++) {
-    for (let x = Math.max(0, first.x); x <= last.x; x++) {
+  for (let y = Math.max(0, first.y - 1); y <= last.y; y++) {
+    for (let x = Math.max(0, first.x - 1); x <= last.x; x++) {
       const coord = { x, y };
       if (rectsIntersect(rect, tileRect(coord, bounds))) coords.push(coord);
     }

@@ -49,6 +49,15 @@ describe("tile grid", () => {
     ]);
   });
 
+  it("includes a tile whose expanded rect exactly touches the geometry bounds", () => {
+    expect(
+      tilesCovering({ minX: 4020, minY: 0, maxX: 5000, maxY: 100 }, bounds),
+    ).toEqual([
+      { x: 1, y: 0 },
+      { x: 2, y: 0 },
+    ]);
+  });
+
   it("flattens points to integer units", () => {
     expect(
       flattenUnits([
