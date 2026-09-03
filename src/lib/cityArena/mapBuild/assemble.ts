@@ -74,15 +74,15 @@ export type AssembledMap = {
 export const MIN_BUILDING_AREA_M2 = 40;
 
 /**
- * Non-landmark buildings are kept only within this distance of a zone centre. The real
- * build exceeded the 900 KB gzip budget even with `MIN_BUILDING_AREA_M2 = 40` and this at
- * the brief's prescribed 1200 (radius all the way down to 10 — i.e. almost no non-landmark
- * buildings anywhere — still left the asset at 939.7 KB, because ground/water polygons and
- * per-tile road rendering, not buildings, turned out to dominate this region's real OSM
- * data). Lowered further to 1000 alongside `RING_SIMPLIFY_TOLERANCE_M` below; still ≥ the
- * 500 m zone radius, so the whole playable disc keeps building detail. See spec §3.1.
+ * Non-landmark buildings are kept only within this distance of a zone centre. The brief's
+ * prescribed 1200 (with `MIN_BUILDING_AREA_M2 = 40`) left the real build at 1137.9 KB —
+ * over budget — once buildings correctly use `BUILDING_SIMPLIFY_TOLERANCE_M` (0.5 m,
+ * below) instead of the coarser terrain tolerance; 1000 also failed (1017.8 KB). Lowered
+ * to 700, which lands at 857.8 KB with a comfortable margin. This is below the 500 m zone
+ * match radius, so the outer edge of each disc has less building detail than the core —
+ * an accepted trade-off for this region's real building density (see spec §3.1).
  */
-export const BUILDING_KEEP_RADIUS_M = 1000;
+export const BUILDING_KEEP_RADIUS_M = 700;
 
 /** A landmark point attaches to the building containing it or within this distance. */
 export const LANDMARK_ATTACH_DISTANCE_M = 15;
@@ -91,24 +91,31 @@ export const LANDMARK_ATTACH_DISTANCE_M = 15;
 export const DEFAULT_BUILDING_LEVELS = 2;
 
 /**
- * Douglas-Peucker tolerance for every polygon/polyline ring (buildings, ground, water).
- * Raised from 0.5 during the real build: ground polygons (farmland/forest/grass over the
- * whole ~10 km bbox, unfiltered by zone proximity by design — spec §3.1) were ~68 % of
- * total tile bytes and the actual dominant gzip-budget cost, not buildings. 4 m is coarse
- * only for background terrain outlines, not buildings' collision-relevant footprints
- * (small polygons lose few vertices at this tolerance) — see spec §3.1.
+ * Douglas-Peucker tolerance for building footprint rings. Kept fine: a coarser tolerance
+ * collapses small footprints (a 6×5 m outbuilding can lose a vertex; L-shaped notches
+ * under the tolerance vanish), and building outlines are collision-relevant, not just
+ * decorative — see spec §3.3.
  */
-const RING_SIMPLIFY_TOLERANCE_M = 4;
+export const BUILDING_SIMPLIFY_TOLERANCE_M = 0.5;
+
+/**
+ * Douglas-Peucker tolerance for ground and water rings — background terrain outlines
+ * only, never used for buildings. Raised from 0.5 during the real build: ground polygons
+ * (farmland/forest/grass over the whole ~10 km bbox, unfiltered by zone proximity by
+ * design — spec §3.1) were ~68 % of total tile bytes and the actual dominant gzip-budget
+ * cost, not buildings — see spec §3.1 and §3.3.
+ */
+export const TERRAIN_SIMPLIFY_TOLERANCE_M = 4;
 
 type StyledLandmark = ProjectedLandmark & {
   name: string;
   style: MapLandmark["style"];
 };
 
-function ringToMetres(ring: LatLon[]): Point[] {
+function ringToMetres(ring: LatLon[], toleranceMetres: number): Point[] {
   return simplifyRing(
     ring.map((coordinate) => projectLonLat(coordinate.lon, coordinate.lat)),
-    RING_SIMPLIFY_TOLERANCE_M,
+    toleranceMetres,
   );
 }
 
@@ -126,7 +133,7 @@ function projectBuildings(
 ): ProjectedBuilding[] {
   const buildings: ProjectedBuilding[] = [];
   for (const feature of features) {
-    const ring = ringToMetres(feature.ring);
+    const ring = ringToMetres(feature.ring, BUILDING_SIMPLIFY_TOLERANCE_M);
     if (ring.length < 3) continue;
     const isLandmark = landmarkElementIds.has(feature.id.split("#")[0]);
     if (!isLandmark) {
@@ -190,11 +197,13 @@ export function assembleMap(input: AssembleInput): AssembledMap {
   );
   attachLandmarks(buildings, landmarks);
   const water: ProjectedWater[] = areas.water
-    .map((feature) => ({ ring: ringToMetres(feature.ring) }))
+    .map((feature) => ({
+      ring: ringToMetres(feature.ring, TERRAIN_SIMPLIFY_TOLERANCE_M),
+    }))
     .filter((feature) => feature.ring.length >= 3);
   const ground: ProjectedGround[] = areas.ground
     .map((feature) => ({
-      ring: ringToMetres(feature.ring),
+      ring: ringToMetres(feature.ring, TERRAIN_SIMPLIFY_TOLERANCE_M),
       kind: feature.kind,
     }))
     .filter((feature) => feature.ring.length >= 3);

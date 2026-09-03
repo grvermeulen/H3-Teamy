@@ -8,6 +8,7 @@ import {
   regionBoundsMetres,
   tileCoordFor,
   tileFileName,
+  tileGridSize,
   tileRect,
   tilesCovering,
 } from "./tiles";
@@ -21,8 +22,11 @@ describe("tile grid", () => {
     expect(region.maxX - region.minX).toBeLessThan(13_100);
     expect(region.maxY - region.minY).toBeGreaterThan(8_800);
     expect(region.maxY - region.minY).toBeLessThan(8_900);
-    expect(Math.ceil((region.maxX - region.minX) / TILE_SIZE_M)).toBe(7);
-    expect(Math.ceil((region.maxY - region.minY) / TILE_SIZE_M)).toBe(5);
+    expect(tileGridSize(region)).toEqual({ columns: 7, rows: 5 });
+  });
+
+  it("computes the tile grid size from bounds", () => {
+    expect(tileGridSize(bounds)).toEqual({ columns: 3, rows: 2 });
   });
 
   it("maps points to tile coordinates and expands tile rects by the overlap", () => {
@@ -56,6 +60,18 @@ describe("tile grid", () => {
       { x: 1, y: 0 },
       { x: 2, y: 0 },
     ]);
+  });
+
+  it("yields no tiles for geometry entirely outside the grid", () => {
+    expect(
+      tilesCovering({ minX: 6500, minY: 100, maxX: 9000, maxY: 200 }, bounds),
+    ).toEqual([]);
+  });
+
+  it("clips geometry straddling the grid edge to the last valid tile", () => {
+    expect(
+      tilesCovering({ minX: 5900, minY: 100, maxX: 9000, maxY: 200 }, bounds),
+    ).toEqual([{ x: 2, y: 0 }]);
   });
 
   it("flattens points to integer units", () => {

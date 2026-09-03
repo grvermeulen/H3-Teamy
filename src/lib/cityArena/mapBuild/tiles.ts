@@ -82,7 +82,25 @@ export function tileRect(
   };
 }
 
-/** All tiles whose expanded rectangle intersects `rect`, row-major. */
+/**
+ * Number of tile columns and rows the bounds divide into (`Math.ceil` on each axis, so a
+ * bounds edge that doesn't land exactly on a tile boundary still gets a full tile).
+ */
+export function tileGridSize(bounds: Rect): { columns: number; rows: number } {
+  return {
+    columns: Math.ceil((bounds.maxX - bounds.minX) / TILE_SIZE_M),
+    rows: Math.ceil((bounds.maxY - bounds.minY) / TILE_SIZE_M),
+  };
+}
+
+/**
+ * All tiles whose expanded rectangle intersects `rect`, row-major. Clamped to the actual
+ * tile grid: Overpass returns the complete geometry of any way/polygon with at least one
+ * node inside the bbox, so roads and large ground polygons routinely extend tens of km
+ * beyond the region — without clamping, that geometry would spawn tiles far outside the
+ * grid. Geometry entirely outside the grid yields no tiles; geometry straddling the edge
+ * is still clipped by the edge tile's rect exactly as before.
+ */
 export function tilesCovering(rect: Rect, bounds: Rect): TileCoord[] {
   const first = tileCoordFor(
     [rect.minX - TILE_OVERLAP_M, rect.minY - TILE_OVERLAP_M],
@@ -92,9 +110,14 @@ export function tilesCovering(rect: Rect, bounds: Rect): TileCoord[] {
     [rect.maxX + TILE_OVERLAP_M, rect.maxY + TILE_OVERLAP_M],
     bounds,
   );
+  const { columns, rows } = tileGridSize(bounds);
   const coords: TileCoord[] = [];
-  for (let y = Math.max(0, first.y - 1); y <= last.y; y++) {
-    for (let x = Math.max(0, first.x - 1); x <= last.x; x++) {
+  for (let y = Math.max(0, first.y - 1); y <= Math.min(last.y, rows - 1); y++) {
+    for (
+      let x = Math.max(0, first.x - 1);
+      x <= Math.min(last.x, columns - 1);
+      x++
+    ) {
       const coord = { x, y };
       if (rectsIntersect(rect, tileRect(coord, bounds))) coords.push(coord);
     }

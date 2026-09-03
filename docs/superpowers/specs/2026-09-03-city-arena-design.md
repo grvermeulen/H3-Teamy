@@ -116,7 +116,7 @@ Overpass API, bbox `51.94,5.53,52.02,5.72`, converted to GeoJSON with `osmtogeoj
 | Ground    | `landuse` ∈ grass, meadow, farmland, forest; `leisure` ∈ park, pitch; `natural` ∈ wood, scrub                                                                          | Mapped to `grass`, `field`, `forest`; `urban` is the implicit default and is not stored |
 | Landmarks | from `landmarks.config.ts` (below)                                                                                                                                     | Matching is case-insensitive substring on `name` plus tag filter                        |
 
-Real-build note (gzip budget, §3.4): the shipped build needed all three of `MIN_BUILDING_AREA_M2 = 40`, `BUILDING_KEEP_RADIUS_M = 1000 m` (both above) and the ring simplification tolerance raised to 4 m (§3.3) to land under 900 KB gzipped. The brief's two-step building-only remedy was insufficient on its own — even trimming `BUILDING_KEEP_RADIUS_M` to 10 m (i.e. almost no non-landmark buildings) still left the asset at 939.7 KB, because unfiltered ground polygons (farmland/forest/grass over the whole ~10 km bbox) turned out to be ~68 % of tile bytes for this real region, not buildings.
+Real-build note (gzip budget, §3.4): the shipped build needed `MIN_BUILDING_AREA_M2 = 40`, `BUILDING_KEEP_RADIUS_M` (both above; see §3.4 for the value that shipped) and `TERRAIN_SIMPLIFY_TOLERANCE_M` raised to 4 m for ground/water only (§3.3 — buildings stay at 0.5 m) to land under 900 KB gzipped. The brief's two-step building-only remedy was insufficient on its own — even trimming `BUILDING_KEEP_RADIUS_M` to 10 m (i.e. almost no non-landmark buildings) still left the asset at 939.7 KB, because unfiltered ground polygons (farmland/forest/grass over the whole ~10 km bbox) turned out to be ~68 % of tile bytes for this real region, not buildings. A second real-build fix, unrelated to budget: `tilesCovering` (`tiles.ts`) now clamps to the actual tile grid (`tileGridSize`) — Overpass returns the complete geometry of any way/polygon with at least one node inside the bbox, so long roads and large ground polygons run tens of km outside the region, which previously spawned tiles far beyond the grid.
 
 ### 3.2 Landmark config (`scripts/arena/landmarks.config.ts`)
 
@@ -146,9 +146,13 @@ polygon containing or nearest (≤ 15 m) the node.
   `x = (lon − lon0) · cos(lat0) · 111 320`, `y = −(lat − lat0) · 110 574` (metres; north is
   up on screen). Max distortion over 13 km is sub-metre.
 - **Quantisation:** coordinates stored as integers in units of 0.25 m.
-- **Simplification:** Douglas-Peucker, tolerance 4 m, on all polylines/polygons. Raised
-  from 0.5 m during the real build (gzip budget, §3.1/§3.4) — ground polygons dominated
-  the payload, not buildings, and 4 m only thins background terrain outlines.
+- **Simplification:** Douglas-Peucker, two tolerances by kind (`BUILDING_SIMPLIFY_TOLERANCE_M`
+  and `TERRAIN_SIMPLIFY_TOLERANCE_M` in `assemble.ts`). Buildings stay at the original
+  0.5 m — a coarser tolerance collapses small footprints and drops sub-tolerance L-shaped
+  notches, and building outlines are collision-relevant. Ground and water were raised to
+  4 m during the real build (gzip budget, §3.1/§3.4): those polygons (farmland/forest/grass
+  over the whole ~10 km bbox) dominated the payload, not buildings, and 4 m only thins
+  background terrain outlines.
 - **Tiling:** 2 km × 2 km tiles (8 000 units) on a grid anchored at the region's
   south-west corner; geometry clipped to tiles with 20 m overlap so seams never show.
 - **Road graph:** nodes at intersections plus shape points every ≥ 20 m; edges carry
