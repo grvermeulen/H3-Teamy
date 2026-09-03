@@ -69,12 +69,27 @@ export function elementCenter(
     }
     if (member.type === "way") {
       const way = waysById.get(member.ref);
-      if (way) memberCoordinates.push(...wayCoordinates(way, nodesById));
+      if (way) {
+        const ring = wayCoordinates(way, nodesById);
+        const isClosed =
+          ring.length > 1 && way.nodes[0] === way.nodes[way.nodes.length - 1];
+        memberCoordinates.push(...(isClosed ? ring.slice(0, -1) : ring));
+      }
     }
   }
   if (memberCoordinates.length === 0) return null;
-  // Use centroidOf for geometric accuracy (accounts for polygon structure)
-  return centroidOf(memberCoordinates);
+  const sumLat = memberCoordinates.reduce(
+    (total, coordinate) => total + coordinate.lat,
+    0,
+  );
+  const sumLon = memberCoordinates.reduce(
+    (total, coordinate) => total + coordinate.lon,
+    0,
+  );
+  return {
+    lat: sumLat / memberCoordinates.length,
+    lon: sumLon / memberCoordinates.length,
+  };
 }
 
 function metresBetween(a: LatLon, b: LatLon): number {
