@@ -79,6 +79,7 @@
     "eslint-config-next": "16.2.4",
     "husky": "^9.1.6",
     "jsdom": "^29.1.0",
+    "osm2geojson-lite": "2.0.1",
     "prettier": "^3.8.3",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
