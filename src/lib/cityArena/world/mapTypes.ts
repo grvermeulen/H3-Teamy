@@ -82,16 +82,24 @@ export type MapRoads = {
 };
 
 /** Road centre line inside a tile, flat `[x0, y0, …]` units. */
-export type TileRoad = { pts: number[]; cls: RoadClass; name?: string };
+export type TileRoad = {
+  points: number[];
+  roadClass: RoadClass;
+  name?: string;
+};
 
 /** Building footprint (outer ring, flat units, first point not repeated). */
-export type TileBuilding = { pts: number[]; levels: number; landmark?: string };
+export type TileBuilding = {
+  points: number[];
+  levels: number;
+  landmark?: string;
+};
 
 /** Ground polygon with its fill kind. */
-export type TileGround = { pts: number[]; kind: GroundKind };
+export type TileGround = { points: number[]; kind: GroundKind };
 
 /** Water polygon. */
-export type TileWater = { pts: number[] };
+export type TileWater = { points: number[] };
 
 /** `tile_x_y.json` — all static geometry inside one 2 km tile (plus 20 m overlap). */
 export type MapTile = {
