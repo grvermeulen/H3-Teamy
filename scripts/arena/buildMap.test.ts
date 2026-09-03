@@ -8,7 +8,6 @@ import {
   MINI_LANDMARKS,
   overpassMini,
 } from "../../src/lib/cityArena/mapBuild/fixtures/overpassMini";
-import type { MapIndex } from "../../src/lib/cityArena/world/mapTypes";
 import { GZIP_BUDGET_BYTES, runBuild } from "./buildMap";
 
 describe("runBuild", () => {
@@ -45,11 +44,12 @@ describe("runBuild", () => {
     expect(files.filter((name) => name.startsWith("tile_"))).not.toHaveLength(
       0,
     );
-    const index = JSON.parse(
+    const writtenIndex: unknown = JSON.parse(
       await readFile(join(outDir, "index.json"), "utf8"),
-    ) as MapIndex;
-    expect(index.zones).toHaveLength(4);
-    expect(index.tiles.every((tile) => tile.bytes > 0)).toBe(true);
+    );
+    expect(writtenIndex).toEqual(result.index);
+    expect(result.index.zones).toHaveLength(4);
+    expect(result.index.tiles.every((tile) => tile.bytes > 0)).toBe(true);
     expect(result.totalGzipBytes).toBeGreaterThan(0);
     expect(result.totalGzipBytes).toBeLessThan(GZIP_BUDGET_BYTES);
     expect(result.files.map((file) => file.name)).toContain("roads.json");
