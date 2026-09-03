@@ -111,10 +111,12 @@ Overpass API, bbox `51.94,5.53,52.02,5.72`, converted to GeoJSON with `osmtogeoj
 | Layer     | OSM filter                                                                                                                                                             | Notes                                                                                   |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | Roads     | `highway` ∈ motorway, trunk, primary, secondary, tertiary, unclassified, residential, living_street, pedestrian (+ `_link` variants); `service` only inside zone discs | Cycle/foot paths dropped. Keep `name`, `oneway`, `lanes`, `maxspeed` when present       |
-| Buildings | `building=*`, footprint area ≥ 30 m², centroid within 1.5 km of any zone centre; landmark buildings always kept                                                        | Keep `building:levels` (default 2)                                                      |
+| Buildings | `building=*`, footprint area ≥ 40 m², centroid within 1.0 km of any zone centre; landmark buildings always kept                                                        | Keep `building:levels` (default 2)                                                      |
 | Water     | `natural=water` polygons (plus `landuse` ∈ reservoir, basin); waterway _lines_ are not used                                                                            | Impassable                                                                              |
 | Ground    | `landuse` ∈ grass, meadow, farmland, forest; `leisure` ∈ park, pitch; `natural` ∈ wood, scrub                                                                          | Mapped to `grass`, `field`, `forest`; `urban` is the implicit default and is not stored |
 | Landmarks | from `landmarks.config.ts` (below)                                                                                                                                     | Matching is case-insensitive substring on `name` plus tag filter                        |
+
+Real-build note (gzip budget, §3.4): the shipped build needed all three of `MIN_BUILDING_AREA_M2 = 40`, `BUILDING_KEEP_RADIUS_M = 1000 m` (both above) and the ring simplification tolerance raised to 4 m (§3.3) to land under 900 KB gzipped. The brief's two-step building-only remedy was insufficient on its own — even trimming `BUILDING_KEEP_RADIUS_M` to 10 m (i.e. almost no non-landmark buildings) still left the asset at 939.7 KB, because unfiltered ground polygons (farmland/forest/grass over the whole ~10 km bbox) turned out to be ~68 % of tile bytes for this real region, not buildings.
 
 ### 3.2 Landmark config (`scripts/arena/landmarks.config.ts`)
 
@@ -144,12 +146,17 @@ polygon containing or nearest (≤ 15 m) the node.
   `x = (lon − lon0) · cos(lat0) · 111 320`, `y = −(lat − lat0) · 110 574` (metres; north is
   up on screen). Max distortion over 13 km is sub-metre.
 - **Quantisation:** coordinates stored as integers in units of 0.25 m.
-- **Simplification:** Douglas-Peucker, tolerance 0.5 m, on all polylines/polygons.
+- **Simplification:** Douglas-Peucker, tolerance 4 m, on all polylines/polygons. Raised
+  from 0.5 m during the real build (gzip budget, §3.1/§3.4) — ground polygons dominated
+  the payload, not buildings, and 4 m only thins background terrain outlines.
 - **Tiling:** 2 km × 2 km tiles (8 000 units) on a grid anchored at the region's
   south-west corner; geometry clipped to tiles with 20 m overlap so seams never show.
 - **Road graph:** nodes at intersections plus shape points every ≥ 20 m; edges carry
   class, name index, one-way flag, length. Only drivable classes. Connectivity check per
-  zone disc (largest component must contain ≥ 95 % of edges) fails the build otherwise.
+  zone disc (largest component must contain ≥ 85 % of edges) fails the build otherwise.
+  Lowered from 95 % during the real build: the WUR campus zone's real-world road graph
+  tops out at 85.7 % (the rest are short disconnected service/parking spurs), and the
+  brief's decision rule allows 85 % as the floor.
 - **Spawn nodes:** per zone, road-graph nodes inside the disc, ≥ 8 m from any building and
   ≥ 6 m from water.
 
@@ -157,12 +164,20 @@ polygon containing or nearest (≤ 15 m) the node.
 
 - `index.json` — version, generation timestamp, origin, bounds, tile grid, zones
   (`key, name, center, radius, spawnNodes, landmarks`), landmarks
-  (`key, name, style, center, tile`). Small (< 30 KB gz).
-- `roads.json` — road graph (nodes, edges, names). ≈ 100–150 KB gz.
+  (`key, name, style, center, tile`). Small (< 30 KB gz; 7.5 KB in the shipped build).
+- `roads.json` — road graph (nodes, edges, names). Shipped at 187.8 KB gz (13 756 nodes,
+  15 101 edges) — higher than the original ≈ 100–150 KB estimate; the region's real
+  drivable network is denser than assumed pre-build.
 - `tile_x_y.json` — `{ roads, buildings, ground, water }` with flat integer coordinate
-  arrays; buildings carry `levels` and optional `landmark`. 40–120 KB gz each.
+  arrays; buildings carry `levels` and optional `landmark`. The region's real bounds (a
+  ~52 km² box covering Rhenen, Wageningen, the WUR campus and Bennekom, most of it open
+  countryside) tile into 47, not the originally-estimated 20–35 — many fringe tiles hold
+  almost nothing (as little as 0.1 KB gz) while the four town/campus cores run larger (up
+  to 115.6 KB gz, 410 KB raw, for the Wageningen–campus tile); no tile approaches the
+  ~1.2 MB raw size that would call for tile-grid changes.
 - Polygons store their outer ring only; holes (courtyards, river islands) are dropped.
-- Budget: total ≤ 900 KB gzipped; the build fails above it.
+- Budget: total ≤ 900 KB gzipped; the build fails above it. Shipped at 866.1 KB — see
+  §3.1's real-build note for the constants that got it there.
 - `next.config.js` `headers()` adds `Cache-Control: public, max-age=31536000, immutable`
   for `/arena/map/:path*`. Any regeneration bumps the path version (`v1` → `v2`) via a
   constant in `src/lib/cityArena/constants.ts`. The service worker only caches

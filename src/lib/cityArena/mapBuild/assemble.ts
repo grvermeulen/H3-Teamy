@@ -66,11 +66,23 @@ export type AssembledMap = {
   tiles: MapTile[];
 };
 
-/** Buildings smaller than this are dropped (sheds, garages). */
-export const MIN_BUILDING_AREA_M2 = 30;
+/**
+ * Buildings smaller than this are dropped (sheds, garages). Raised from 30 during the
+ * real build (decision rule, brief step 1) to help stay inside the 900 KB gzip budget —
+ * see spec §3.1.
+ */
+export const MIN_BUILDING_AREA_M2 = 40;
 
-/** Non-landmark buildings are kept only within this distance of a zone centre. */
-export const BUILDING_KEEP_RADIUS_M = 1500;
+/**
+ * Non-landmark buildings are kept only within this distance of a zone centre. The real
+ * build exceeded the 900 KB gzip budget even with `MIN_BUILDING_AREA_M2 = 40` and this at
+ * the brief's prescribed 1200 (radius all the way down to 10 — i.e. almost no non-landmark
+ * buildings anywhere — still left the asset at 939.7 KB, because ground/water polygons and
+ * per-tile road rendering, not buildings, turned out to dominate this region's real OSM
+ * data). Lowered further to 1000 alongside `RING_SIMPLIFY_TOLERANCE_M` below; still ≥ the
+ * 500 m zone radius, so the whole playable disc keeps building detail. See spec §3.1.
+ */
+export const BUILDING_KEEP_RADIUS_M = 1000;
 
 /** A landmark point attaches to the building containing it or within this distance. */
 export const LANDMARK_ATTACH_DISTANCE_M = 15;
@@ -78,7 +90,15 @@ export const LANDMARK_ATTACH_DISTANCE_M = 15;
 /** `building:levels` fallback. */
 export const DEFAULT_BUILDING_LEVELS = 2;
 
-const RING_SIMPLIFY_TOLERANCE_M = 0.5;
+/**
+ * Douglas-Peucker tolerance for every polygon/polyline ring (buildings, ground, water).
+ * Raised from 0.5 during the real build: ground polygons (farmland/forest/grass over the
+ * whole ~10 km bbox, unfiltered by zone proximity by design — spec §3.1) were ~68 % of
+ * total tile bytes and the actual dominant gzip-budget cost, not buildings. 4 m is coarse
+ * only for background terrain outlines, not buildings' collision-relevant footprints
+ * (small polygons lose few vertices at this tolerance) — see spec §3.1.
+ */
+const RING_SIMPLIFY_TOLERANCE_M = 4;
 
 type StyledLandmark = ProjectedLandmark & {
   name: string;

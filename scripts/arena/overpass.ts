@@ -75,7 +75,15 @@ export async function fetchOverpass(
     try {
       response = await fetchImpl(options.endpoint ?? OVERPASS_ENDPOINT, {
         method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          // Overpass's server rejects requests with no User-Agent (406 Not
+          // Acceptable); Node's fetch sends none by default, unlike curl or a
+          // browser. Overpass's fair-use policy also asks for an identifying
+          // header, so this doubles as etiquette, not just a workaround.
+          "user-agent":
+            "H3-Teamy-Arena-MapBuild/1.0 (+https://github.com/grvermeulen/H3-Teamy)",
+        },
         body: `data=${encodeURIComponent(query)}`,
       });
     } catch (error: unknown) {

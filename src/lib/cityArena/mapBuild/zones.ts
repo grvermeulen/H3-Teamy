@@ -19,8 +19,12 @@ export const SPAWN_MIN_BUILDING_DISTANCE_M = 8;
 /** Spawn nodes must keep this distance from water. */
 export const SPAWN_MIN_WATER_DISTANCE_M = 6;
 
-/** Minimum share of in-zone edges that must belong to the largest connected component. */
-export const MIN_CONNECTED_EDGE_SHARE = 0.95;
+/**
+ * Minimum share of in-zone edges that must belong to the largest connected component.
+ * The WUR campus zone's real road graph tops out at 85.7 % (490 in-disc edges; the
+ * remainder are short disconnected service/parking spurs) — see spec §3.3.
+ */
+export const MIN_CONNECTED_EDGE_SHARE = 0.85;
 
 /** Dutch display names of the zones. */
 export const ZONE_NAMES: Record<ZoneKey, string> = {

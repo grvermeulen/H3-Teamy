@@ -42,7 +42,11 @@ export const LANDMARKS: LandmarkConfig[] = [
   {
     key: "gastland",
     name: "Zwembad 't Gastland",
-    nameMatch: "Gastland",
+    // The complex at Groeneweg 58, Rhenen (the real-world 't Gastland site, per
+    // local sources — it is mid-rebuild) is tagged in OSM under its current
+    // operator's brand, "Feel Fit Center Rhenen"; the name "Gastland" is absent.
+    // "Feel Fit" is bbox-unique.
+    nameMatch: "Feel Fit",
     style: "pool",
     matchesTags: isPool,
   },
@@ -68,6 +72,10 @@ export const LANDMARKS: LandmarkConfig[] = [
     nameMatch: "Bongerd",
     style: "pool",
     matchesTags: isPool,
+    // Two OSM candidates share "Bongerd": the pool itself (this node, tagged
+    // addr:street=Bornsesteeg) and the WUR multi-sport complex around it
+    // (way/826591321 "Sports Centre de Bongerd"). Pin the pool.
+    osmId: "node/3014133762",
   },
   {
     key: "wur-forum",
@@ -94,7 +102,10 @@ export const LANDMARKS: LandmarkConfig[] = [
   {
     key: "oude-kerk-bennekom",
     name: "Oude Kerk",
-    nameMatch: "Oude Kerk",
+    // OSM's `name` tag is "Oude of Sint-Alexanderkerk" (14th c., heritage-listed,
+    // wikipedia nl:Alexanderkerk (Bennekom)) — no "Oude Kerk" substring, so match
+    // on the distinctive, bbox-unique fragment instead.
+    nameMatch: "Alexanderkerk",
     style: "church",
     matchesTags: isPlaceOfWorship,
     zoneAnchor: "bennekom",
