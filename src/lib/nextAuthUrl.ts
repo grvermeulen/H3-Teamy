@@ -54,3 +54,24 @@ export function resolveNextAuthUrl(): string | undefined {
 
   return undefined;
 }
+
+/**
+ * Past `process.env.NEXTAUTH_URL` aan vóór NextAuth het leest.
+ * Zet een geldige origin indien beschikbaar; verwijdert ongeldige of lege waarden
+ * zodat NextAuth de request-URL als fallback kan gebruiken.
+ */
+export function applyNextAuthUrlEnv(): void {
+  const resolved = resolveNextAuthUrl();
+  if (resolved) {
+    process.env.NEXTAUTH_URL = resolved;
+    return;
+  }
+
+  const raw = process.env.NEXTAUTH_URL;
+  if (raw === undefined) return;
+
+  const trimmed = raw.trim();
+  if (!trimmed || toOrigin(trimmed) === undefined) {
+    delete process.env.NEXTAUTH_URL;
+  }
+}
