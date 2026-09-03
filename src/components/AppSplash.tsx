@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Sentry from "@sentry/nextjs";
 
 /** `sessionStorage` key that marks the splash screen as already shown for this browser session. */
@@ -37,6 +37,9 @@ function prefersReducedMotion(): boolean {
  */
 export default function AppSplash(): React.JSX.Element | null {
   const [phase, setPhase] = useState<SplashPhase>("visible");
+  // Survives React Strict Mode's simulated mount -> cleanup -> remount in development, so the
+  // show/skip decision below is made exactly once even though the effect body runs twice.
+  const decisionRef = useRef<"show" | "skip" | null>(null);
 
   useEffect(() => {
     let alreadySeen = false;
@@ -47,15 +50,20 @@ export default function AppSplash(): React.JSX.Element | null {
       alreadySeen = false;
     }
 
-    if (alreadySeen) {
-      setPhase("hidden");
-      return;
+    if (decisionRef.current === null) {
+      decisionRef.current = alreadySeen ? "skip" : "show";
+      if (!alreadySeen) {
+        try {
+          sessionStorage.setItem(SPLASH_SEEN_KEY, "1");
+        } catch (error) {
+          Sentry.captureException(error, { tags: { area: "app-splash" } });
+        }
+      }
     }
 
-    try {
-      sessionStorage.setItem(SPLASH_SEEN_KEY, "1");
-    } catch (error) {
-      Sentry.captureException(error, { tags: { area: "app-splash" } });
+    if (decisionRef.current === "skip") {
+      setPhase("hidden");
+      return;
     }
 
     let minVisibleElapsed = false;

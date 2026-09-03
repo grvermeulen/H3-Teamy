@@ -1,4 +1,10 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  configure,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AppSplash, {
   FADE_MS,
@@ -66,5 +72,29 @@ describe("AppSplash", () => {
       vi.advanceTimersByTime(MAX_VISIBLE_MS + FADE_MS);
     });
     expect(screen.queryByTestId("app-splash")).not.toBeInTheDocument();
+  });
+
+  it("keeps showing under React Strict Mode double effects", () => {
+    configure({ reactStrictMode: true });
+    try {
+      Object.defineProperty(document, "readyState", {
+        configurable: true,
+        value: "complete",
+      });
+      render(<AppSplash />);
+      expect(screen.getByTestId("app-splash")).toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(MIN_VISIBLE_MS - 1);
+      });
+      expect(screen.getByTestId("app-splash")).not.toHaveClass("opacity-0");
+
+      act(() => {
+        vi.advanceTimersByTime(1 + FADE_MS);
+      });
+      expect(screen.queryByTestId("app-splash")).not.toBeInTheDocument();
+    } finally {
+      configure({ reactStrictMode: false });
+    }
   });
 });
