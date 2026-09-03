@@ -65,7 +65,7 @@ export default function RootLayout({
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={process.env.NEXT_PUBLIC_LOGO_URL || "/logo.svg"}
+              src="/logo.png"
               alt="H3-logo"
               width={44}
               height={44}
