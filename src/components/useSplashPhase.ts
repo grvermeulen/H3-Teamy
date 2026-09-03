@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import * as Sentry from "@sentry/nextjs";
 
 /** Visibility phase of the app splash screen. */
 export type SplashPhase = "visible" | "fading" | "hidden";
+
+/** Once-per-instance decision on whether the splash should show or be skipped. */
+type SplashDecision = "show" | "skip";
 
 /** `sessionStorage` key that marks the splash screen as already shown for this browser session. */
 export const SPLASH_SEEN_KEY = "h3-splash-seen-v1";
@@ -54,6 +57,64 @@ function markSeen(): void {
 }
 
 /**
+ * Runs one effect invocation of the splash lifecycle: makes the show/skip decision exactly once
+ * per component instance (recorded in `decisionRef`, which — unlike a plain variable — survives
+ * React Strict Mode's simulated mount -> cleanup -> remount in development), then, unless skipped,
+ * arms the min/max-visible timers and the page-load listener that drive `setPhase` through
+ * `"visible"` -> `"fading"` -> `"hidden"` (skipping straight to `"hidden"` when the user prefers
+ * reduced motion). Returns the cleanup function that clears every timer and listener; kept
+ * module-private since it is only ever called from {@link useSplashPhase}'s effect.
+ */
+function runSplashLifecycle(
+  decisionRef: RefObject<SplashDecision | null>,
+  setPhase: (phase: SplashPhase) => void,
+): () => void {
+  const alreadySeen = readSeenFlag();
+  if (decisionRef.current === null) {
+    decisionRef.current = alreadySeen ? "skip" : "show";
+    if (!alreadySeen) markSeen();
+  }
+  if (decisionRef.current === "skip") {
+    setPhase("hidden");
+    return () => {};
+  }
+  let minVisibleElapsed = false;
+  let pageReady = document.readyState === "complete";
+  let settled = false;
+  const timers: ReturnType<typeof setTimeout>[] = [];
+
+  function finish(): void {
+    if (settled) return;
+    settled = true;
+    if (prefersReducedMotion()) {
+      setPhase("hidden");
+      return;
+    }
+    setPhase("fading");
+    timers.push(setTimeout(() => setPhase("hidden"), FADE_MS));
+  }
+  function maybeFinish(): void {
+    if (minVisibleElapsed && pageReady) finish();
+  }
+  function onLoad(): void {
+    pageReady = true;
+    maybeFinish();
+  }
+  timers.push(
+    setTimeout(() => {
+      minVisibleElapsed = true;
+      maybeFinish();
+    }, MIN_VISIBLE_MS),
+  );
+  timers.push(setTimeout(finish, MAX_VISIBLE_MS));
+  if (!pageReady) window.addEventListener("load", onLoad);
+  return () => {
+    timers.forEach(clearTimeout);
+    window.removeEventListener("load", onLoad);
+  };
+}
+
+/**
  * Drives the once-per-session app splash screen's visibility.
  *
  * Starts at `"visible"` so the server-rendered first paint shows the splash. On mount it checks
@@ -63,60 +124,14 @@ function markSeen(): void {
  * It then fades to `"fading"` for {@link FADE_MS} before settling on `"hidden"` (skipped when the
  * user prefers reduced motion, which goes straight to `"hidden"`). The show/skip decision is made
  * exactly once per component instance via a ref, so it survives React Strict Mode's simulated
- * mount -> cleanup -> remount in development. Every timer and listener is cleared on unmount.
+ * mount -> cleanup -> remount in development. Every timer and listener is cleared on unmount. See
+ * {@link runSplashLifecycle} for the implementation.
  */
 export function useSplashPhase(): SplashPhase {
   const [phase, setPhase] = useState<SplashPhase>("visible");
-  const decisionRef = useRef<"show" | "skip" | null>(null);
+  const decisionRef = useRef<SplashDecision | null>(null);
 
-  useEffect(() => {
-    const alreadySeen = readSeenFlag();
-    if (decisionRef.current === null) {
-      decisionRef.current = alreadySeen ? "skip" : "show";
-      if (!alreadySeen) markSeen();
-    }
-    if (decisionRef.current === "skip") {
-      setPhase("hidden");
-      return;
-    }
-
-    let minVisibleElapsed = false;
-    let pageReady = document.readyState === "complete";
-    let settled = false;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-
-    function finish(): void {
-      if (settled) return;
-      settled = true;
-      if (prefersReducedMotion()) {
-        setPhase("hidden");
-        return;
-      }
-      setPhase("fading");
-      timers.push(setTimeout(() => setPhase("hidden"), FADE_MS));
-    }
-    function maybeFinish(): void {
-      if (minVisibleElapsed && pageReady) finish();
-    }
-    function onLoad(): void {
-      pageReady = true;
-      maybeFinish();
-    }
-
-    timers.push(
-      setTimeout(() => {
-        minVisibleElapsed = true;
-        maybeFinish();
-      }, MIN_VISIBLE_MS),
-    );
-    timers.push(setTimeout(finish, MAX_VISIBLE_MS));
-    if (!pageReady) window.addEventListener("load", onLoad);
-
-    return () => {
-      timers.forEach(clearTimeout);
-      window.removeEventListener("load", onLoad);
-    };
-  }, []);
+  useEffect(() => runSplashLifecycle(decisionRef, setPhase), []);
 
   return phase;
 }
