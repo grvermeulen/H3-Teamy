@@ -80,7 +80,9 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
-        const email = (creds?.email as string) || "";
+        const email = String(creds?.email ?? "")
+          .trim()
+          .toLowerCase();
         const password = (creds?.password as string) || "";
         if (!email || !password) return null;
         try {

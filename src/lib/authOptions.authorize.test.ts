@@ -135,6 +135,35 @@ describe("Credentials authorize", () => {
     });
   });
 
+  it("normalizes email casing and whitespace before lookup", async () => {
+    const row: UserCoreRow = {
+      id: "u1",
+      email: "pelsarjen@gmail.com",
+      passwordHash: "$2a$10$hashed",
+      firstName: "Arjen",
+      lastName: "Pels",
+    };
+    vi.mocked(prisma.user.findFirst).mockResolvedValueOnce(row);
+
+    const bcrypt = await import("bcryptjs");
+    vi.mocked(bcrypt.default.compare).mockResolvedValueOnce(true);
+
+    const result = await authorize?.({
+      email: "  Pelsarjen@gmail.com  ",
+      password: "secret",
+    });
+
+    expect(result).toEqual({
+      id: "u1",
+      name: "Arjen Pels",
+      email: "pelsarjen@gmail.com",
+    });
+    expect(prisma.user.findFirst).toHaveBeenCalledWith({
+      where: { email: "pelsarjen@gmail.com" },
+      select: USER_CORE_SELECT,
+    });
+  });
+
   it("returns null on P2022 schema drift and reports to Sentry", async () => {
     const err = new Prisma.PrismaClientKnownRequestError("column missing", {
       code: "P2022",
