@@ -59,12 +59,11 @@ export async function fetchOverpass(
         return cached;
       }
     } catch (error: unknown) {
-      if (
-        !(error instanceof Error) ||
-        !("code" in error) ||
-        error.code !== "ENOENT"
-      )
-        throw error;
+      const isMissing =
+        error instanceof Error && "code" in error && error.code === "ENOENT";
+      const isCorrupt = error instanceof SyntaxError;
+      if (!isMissing && !isCorrupt) throw error;
+      if (isCorrupt) log(`Overpass cache corrupt, refetching ${cacheFile}`);
     }
   }
 

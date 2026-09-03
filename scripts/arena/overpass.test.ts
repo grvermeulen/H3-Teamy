@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -64,6 +64,18 @@ describe("fetchOverpass", () => {
     await fetchOverpass("q", { cacheDir, fetchImpl, sleep });
     await fetchOverpass("q", { cacheDir, fetchImpl, sleep, refresh: true });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("treats a corrupt cache file as a miss and fetches again", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(payload));
+    await mkdir(cacheDir, { recursive: true });
+    await writeFile(
+      join(cacheDir, `${overpassCacheKey("q")}.json`),
+      "{ not json",
+    );
+    const result = await fetchOverpass("q", { cacheDir, fetchImpl, sleep });
+    expect(result.elements).toHaveLength(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("retries on 429 and 5xx with backoff, then succeeds", async () => {
