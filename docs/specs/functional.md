@@ -9,17 +9,20 @@ This document reflects the features that exist in the code today. Planned or fut
 ### Current Capabilities
 
 <!-- AUTOGEN:features -->
-| Feature | Docs |
-|---|---|
-| admin | docs/tech/admin/README.md |
-| auth | docs/tech/auth/README.md |
-| events | docs/tech/events/README.md |
-| identity-link | docs/tech/identity-link/README.md |
+
+| Feature        | Docs                               |
+| -------------- | ---------------------------------- |
+| admin          | docs/tech/admin/README.md          |
+| arena          | docs/tech/arena/README.md          |
+| auth           | docs/tech/auth/README.md           |
+| events         | docs/tech/events/README.md         |
+| identity-link  | docs/tech/identity-link/README.md  |
 | password-reset | docs/tech/password-reset/README.md |
-| profile | docs/tech/profile/README.md |
-| reports | docs/tech/reports/README.md |
-| rsvp | docs/tech/rsvp/README.md |
-| training | docs/tech/training/README.md |
+| profile        | docs/tech/profile/README.md        |
+| reports        | docs/tech/reports/README.md        |
+| rsvp           | docs/tech/rsvp/README.md           |
+| training       | docs/tech/training/README.md       |
+
 <!-- /AUTOGEN:features -->
 
 ### Implemented User Journeys
@@ -42,6 +45,7 @@ This document reflects the features that exist in the code today. Planned or fut
 ### API and Routes Inventory
 
 <!-- AUTOGEN:routes -->
+
 # Routes Inventory
 
 ## API Routes
@@ -87,7 +91,7 @@ This document reflects the features that exist in the code today. Planned or fut
 
 ## Pages
 
-- 
+-
 - /admin
 - /admin/feedback
 - /attendance

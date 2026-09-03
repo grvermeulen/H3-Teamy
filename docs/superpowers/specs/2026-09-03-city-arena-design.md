@@ -108,13 +108,13 @@ public repository.
 Overpass API, bbox `51.94,5.53,52.02,5.72`, converted to GeoJSON with `osmtogeojson`
 (dev dependency; handles multipolygon relations such as the Nederrijn).
 
-| Layer     | OSM filter                                                                                                                                                             | Notes                                                                             |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Roads     | `highway` ∈ motorway, trunk, primary, secondary, tertiary, unclassified, residential, living_street, pedestrian (+ `_link` variants); `service` only inside zone discs | Cycle/foot paths dropped. Keep `name`, `oneway`, `lanes`, `maxspeed` when present |
-| Buildings | `building=*`, footprint area ≥ 30 m², centroid within 1.5 km of any zone centre; landmark buildings always kept                                                        | Keep `building:levels` (default 2)                                                |
-| Water     | `natural=water`, `waterway` ∈ river, canal, stream (as buffered lines when no polygon)                                                                                 | Impassable                                                                        |
-| Ground    | `landuse` ∈ grass, meadow, farmland, forest, residential, industrial; `leisure` ∈ park, pitch; `natural` ∈ wood, scrub                                                 | Mapped to 4 ground kinds: `grass`, `field`, `forest`, `urban` (default)           |
-| Landmarks | from `landmarks.config.ts` (below)                                                                                                                                     | Matching is case-insensitive substring on `name` plus tag filter                  |
+| Layer     | OSM filter                                                                                                                                                             | Notes                                                                                   |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Roads     | `highway` ∈ motorway, trunk, primary, secondary, tertiary, unclassified, residential, living_street, pedestrian (+ `_link` variants); `service` only inside zone discs | Cycle/foot paths dropped. Keep `name`, `oneway`, `lanes`, `maxspeed` when present       |
+| Buildings | `building=*`, footprint area ≥ 30 m², centroid within 1.5 km of any zone centre; landmark buildings always kept                                                        | Keep `building:levels` (default 2)                                                      |
+| Water     | `natural=water` polygons (plus `landuse` ∈ reservoir, basin); waterway _lines_ are not used                                                                            | Impassable                                                                              |
+| Ground    | `landuse` ∈ grass, meadow, farmland, forest; `leisure` ∈ park, pitch; `natural` ∈ wood, scrub                                                                          | Mapped to `grass`, `field`, `forest`; `urban` is the implicit default and is not stored |
+| Landmarks | from `landmarks.config.ts` (below)                                                                                                                                     | Matching is case-insensitive substring on `name` plus tag filter                        |
 
 ### 3.2 Landmark config (`scripts/arena/landmarks.config.ts`)
 
@@ -161,6 +161,7 @@ polygon containing or nearest (≤ 15 m) the node.
 - `roads.json` — road graph (nodes, edges, names). ≈ 100–150 KB gz.
 - `tile_x_y.json` — `{ roads, buildings, ground, water }` with flat integer coordinate
   arrays; buildings carry `levels` and optional `landmark`. 40–120 KB gz each.
+- Polygons store their outer ring only; holes (courtyards, river islands) are dropped.
 - Budget: total ≤ 900 KB gzipped; the build fails above it.
 - `next.config.js` `headers()` adds `Cache-Control: public, max-age=31536000, immutable`
   for `/arena/map/:path*`. Any regeneration bumps the path version (`v1` → `v2`) via a
@@ -674,11 +675,12 @@ identical, and the real-Ably lane covers what the relay cannot.
 ## 13. File layout (focused files, target < 400 lines each)
 
 ```
-scripts/arena/                build-map.ts · overpass.ts · transform.ts (+ .test.ts) · landmarks.config.ts
+scripts/arena/                build-map.ts · buildMap.ts · overpass.ts (I/O only)
                               relay.mjs · bot-client.ts · replay.ts
 public/arena/map/v1/          index.json · roads.json · tile_x_y.json
 src/lib/cityArena/
   constants.ts · types.ts · schemas.ts · storage.ts
+  mapBuild/  geometry · osmTypes · overpassQueries · landmarks.config · landmarks · roads · areas · zones · tiles · assemble · errors · fixtures/overpassMini
   world/     mapLoader · collisionGrid · roadGraph · zone · projection
   sim/       state · step · player · vehicle · weapons · bullets · peds · cops · pickups · spawn · round · bots · invariants
   net/       transport · ablyTransport · memoryTransport · wsRelayTransport · messages · election · hostLoop · clientLoop · roomCode · clock
