@@ -16,6 +16,8 @@
     "neon:cleanup-branches": "node scripts/neon-cleanup-branches.mjs",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:preview": "dotenv -e .env.preview.local -- tsx prisma/seed.ts",
+    "arena:build-map": "tsx scripts/arena/build-map.ts",
+    "arena:build-map:check": "tsx scripts/arena/build-map.ts --check",
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "eslint .",
