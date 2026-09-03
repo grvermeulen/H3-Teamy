@@ -6,6 +6,7 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as Sentry from "@sentry/nextjs";
 import AppSplash, {
   FADE_MS,
   MAX_VISIBLE_MS,
@@ -28,6 +29,7 @@ describe("AppSplash", () => {
     // Drop any per-test override of document.readyState so later tests see the jsdom default.
     Reflect.deleteProperty(document, "readyState");
     vi.useRealTimers();
+    vi.restoreAllMocks();
     cleanup();
   });
 
@@ -96,5 +98,22 @@ describe("AppSplash", () => {
     } finally {
       configure({ reactStrictMode: false });
     }
+  });
+
+  it("reports storage errors to Sentry and still shows the splash", () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("storage blocked");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("storage blocked");
+    });
+
+    render(<AppSplash />);
+
+    expect(screen.getByTestId("app-splash")).toBeInTheDocument();
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ tags: { area: "app-splash" } }),
+    );
   });
 });
