@@ -42,6 +42,9 @@ ecc-reference/
 # Temporary files
 tmp-*
 
+# Overpass download cache (scripts/arena)
+.cache/
+
 # Sentry
 .sentryclirc
 
