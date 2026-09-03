@@ -35,17 +35,31 @@ const sources = {
 const iconsDir = path.join(root, "public", "icons");
 const brandingDir = path.join(root, "public", "branding");
 
-async function main() {
+/**
+ * Exits the process if any branding source file listed in `sources` is missing.
+ */
+function assertSourcesExist() {
   for (const file of Object.values(sources)) {
     if (!fs.existsSync(file)) {
       console.error(`Missing branding source ${file}`);
       process.exit(1);
     }
   }
+}
+
+/**
+ * Creates the output directories the generated icons and splash images are written to.
+ */
+function ensureOutputDirectories() {
   fs.mkdirSync(iconsDir, { recursive: true });
   fs.mkdirSync(brandingDir, { recursive: true });
+}
 
-  const logo = sharp(sources.logo);
+/**
+ * Generates the apple-touch icon, the manifest icon sizes, and the header logo / favicon PNGs
+ * from the given `logo` sharp image.
+ */
+async function generateIcons(logo) {
   await logo
     .clone()
     .resize(APPLE_TOUCH_ICON_SIZE, APPLE_TOUCH_ICON_SIZE)
@@ -68,8 +82,13 @@ async function main() {
     .resize(LOGO_PNG_SIZE, LOGO_PNG_SIZE)
     .png()
     .toFile(path.join(root, "src", "app", "icon.png"));
+}
 
-  // Maskable icon: badge at 80 % on a black canvas so circular masks keep the safe zone.
+/**
+ * Generates the maskable manifest icon: the given `logo` badge at 80 % on a black canvas, so
+ * circular masks keep the safe zone.
+ */
+async function generateMaskableIcon(logo) {
   const badge = await logo
     .clone()
     .resize(MASKABLE_BADGE_SIZE, MASKABLE_BADGE_SIZE)
@@ -86,7 +105,13 @@ async function main() {
     .composite([{ input: badge, gravity: "centre" }])
     .png()
     .toFile(path.join(iconsDir, "icon-maskable-512.png"));
+}
 
+/**
+ * Generates the optimised portrait (app) and landscape (game) splash images, each as a WebP
+ * primary source and a JPEG fallback.
+ */
+async function generateSplashes() {
   const splashApp = sharp(sources.splashApp).resize({
     width: SPLASH_APP_WIDTH,
   });
@@ -110,10 +135,27 @@ async function main() {
     .clone()
     .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
     .toFile(path.join(brandingDir, "splash-game-landscape.jpg"));
+}
 
+/**
+ * Logs where the generated branding assets were written.
+ */
+function reportDone() {
   console.log(
     "Branding assets written to public/icons, public/branding, public/logo.png, src/app/icon.png",
   );
+}
+
+async function main() {
+  assertSourcesExist();
+  ensureOutputDirectories();
+
+  const logo = sharp(sources.logo);
+  await generateIcons(logo);
+  await generateMaskableIcon(logo);
+  await generateSplashes();
+
+  reportDone();
 }
 
 main().catch((error) => {
