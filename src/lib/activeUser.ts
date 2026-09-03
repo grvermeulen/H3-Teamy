@@ -242,7 +242,9 @@ async function resolveActiveUser(
               update: { userId: authUserId },
             });
             try {
-              await tx.user.delete({
+              // deleteMany is idempotent: concurrent silent-adopt races may already
+              // have removed this empty cookie user (P2025 on delete would noise Sentry).
+              await tx.user.deleteMany({
                 where: { id: cookieIdentity.userId },
               });
             } catch (error: unknown) {
