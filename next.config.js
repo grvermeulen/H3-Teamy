@@ -10,6 +10,20 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
   },
+  /** Map tiles are content-versioned by path (`/arena/map/v1/...`), so they can be cached forever. */
+  async headers() {
+    return [
+      {
+        source: "/arena/map/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 module.exports = withSentryConfig(nextConfig, {

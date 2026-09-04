@@ -83,10 +83,7 @@ export function resolveGatewayModel(
   if (!trimmed) {
     const fallback = fallbackForKind(kind);
     return {
-      model: toGatewayModelString(
-        fallback,
-        defaultProviderForKind(kind),
-      ),
+      model: toGatewayModelString(fallback, defaultProviderForKind(kind)),
     };
   }
 
@@ -94,10 +91,7 @@ export function resolveGatewayModel(
   if (isFreeTierBlockedId(id)) {
     const fallback = fallbackForKind(kind);
     return {
-      model: toGatewayModelString(
-        fallback,
-        defaultProviderForKind(kind),
-      ),
+      model: toGatewayModelString(fallback, defaultProviderForKind(kind)),
       substitutedFrom: trimmed,
     };
   }

@@ -41,7 +41,8 @@ export async function POST(req: NextRequest): Promise<Response> {
       const map: Record<string, string> = {
         challenge_missing:
           "Sessie verlopen. Vraag opnieuw een passkey-aanmelding aan.",
-        credential_unknown: "Geen bekende passkey. Voeg eerder een passkey toe op je profiel.",
+        credential_unknown:
+          "Geen bekende passkey. Voeg eerder een passkey toe op je profiel.",
         verification_failed: "Passkey kon niet worden geverifieerd.",
       };
       return NextResponse.json(

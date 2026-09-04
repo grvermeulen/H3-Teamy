@@ -27,7 +27,5 @@ export function shouldDropBenignClientFetchNoiseEvent(
   hint: EventHint,
 ): boolean {
   const original = hint.originalException;
-  return (
-    isBenignTransientClientFetchError(original) || isAbortError(original)
-  );
+  return isBenignTransientClientFetchError(original) || isAbortError(original);
 }

@@ -17,10 +17,7 @@ function reportCredentialsAuthorizeError(
   error: unknown,
   context: string,
 ): void {
-  if (
-    isDbUnavailableError(error) ||
-    isTransientPostgresConnectError(error)
-  ) {
+  if (isDbUnavailableError(error) || isTransientPostgresConnectError(error)) {
     return;
   }
   const code =

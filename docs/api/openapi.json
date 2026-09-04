@@ -19,7 +19,9 @@
             "format": "email"
           }
         },
-        "required": ["email"]
+        "required": [
+          "email"
+        ]
       },
       "PasswordResetRequestResponse": {
         "type": "object",
@@ -34,7 +36,9 @@
             "type": "boolean"
           }
         },
-        "required": ["ok"]
+        "required": [
+          "ok"
+        ]
       },
       "PasswordResetConfirmBody": {
         "type": "object",
@@ -48,7 +52,10 @@
             "minLength": 8
           }
         },
-        "required": ["token", "newPassword"]
+        "required": [
+          "token",
+          "newPassword"
+        ]
       },
       "PasswordResetConfirmResponse": {
         "anyOf": [
@@ -59,7 +66,9 @@
                 "type": "boolean"
               }
             },
-            "required": ["ok"]
+            "required": [
+              "ok"
+            ]
           },
           {
             "type": "object",
@@ -68,7 +77,9 @@
                 "type": "string"
               }
             },
-            "required": ["error"]
+            "required": [
+              "error"
+            ]
           }
         ]
       }
@@ -89,7 +100,9 @@
                     "format": "email"
                   }
                 },
-                "required": ["email"]
+                "required": [
+                  "email"
+                ]
               }
             }
           }
@@ -112,7 +125,9 @@
                       "type": "boolean"
                     }
                   },
-                  "required": ["ok"]
+                  "required": [
+                    "ok"
+                  ]
                 }
               }
             }
@@ -137,7 +152,10 @@
                     "minLength": 8
                   }
                 },
-                "required": ["token", "newPassword"]
+                "required": [
+                  "token",
+                  "newPassword"
+                ]
               }
             }
           }
@@ -156,7 +174,9 @@
                           "type": "boolean"
                         }
                       },
-                      "required": ["ok"]
+                      "required": [
+                        "ok"
+                      ]
                     },
                     {
                       "type": "object",
@@ -165,7 +185,9 @@
                           "type": "string"
                         }
                       },
-                      "required": ["error"]
+                      "required": [
+                        "error"
+                      ]
                     }
                   ]
                 }

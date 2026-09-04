@@ -8,9 +8,11 @@ import {
 
 describe("parseEnvUserIds", () => {
   it("parses comma-separated ids and trims whitespace", () => {
-    expect(
-      Array.from(parseEnvUserIds(" user-a , user-b,user-c ")),
-    ).toEqual(["user-a", "user-b", "user-c"]);
+    expect(Array.from(parseEnvUserIds(" user-a , user-b,user-c "))).toEqual([
+      "user-a",
+      "user-b",
+      "user-c",
+    ]);
   });
 
   it("returns empty set for blank input", () => {
@@ -26,7 +28,10 @@ describe("bootstrap env role ids", () => {
 
   it("reads ADMIN_USER_IDS", () => {
     vi.stubEnv("ADMIN_USER_IDS", "admin-1, admin-2");
-    expect(Array.from(getBootstrapAdminUserIds())).toEqual(["admin-1", "admin-2"]);
+    expect(Array.from(getBootstrapAdminUserIds())).toEqual([
+      "admin-1",
+      "admin-2",
+    ]);
   });
 
   it("reads TRAINER_USER_IDS", () => {
@@ -59,22 +64,21 @@ describe("mergeUserRoles", () => {
   });
 
   it("applies bootstrap admin and trainer env ids", () => {
-    expect(
-      mergeUserRoles("admin-env", {}, envAdmins, envTrainers),
-    ).toEqual({ admin: true, trainer: true, player: true });
-    expect(
-      mergeUserRoles("trainer-env", {}, envAdmins, envTrainers),
-    ).toEqual({ admin: false, trainer: true, player: true });
+    expect(mergeUserRoles("admin-env", {}, envAdmins, envTrainers)).toEqual({
+      admin: true,
+      trainer: true,
+      player: true,
+    });
+    expect(mergeUserRoles("trainer-env", {}, envAdmins, envTrainers)).toEqual({
+      admin: false,
+      trainer: true,
+      player: true,
+    });
   });
 
   it("merges kv flags with env ids", () => {
     expect(
-      mergeUserRoles(
-        "kv-trainer",
-        { trainer: true },
-        envAdmins,
-        envTrainers,
-      ),
+      mergeUserRoles("kv-trainer", { trainer: true }, envAdmins, envTrainers),
     ).toEqual({ admin: false, trainer: true, player: true });
   });
 });

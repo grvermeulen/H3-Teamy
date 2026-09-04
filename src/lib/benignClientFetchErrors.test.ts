@@ -32,9 +32,7 @@ describe("isBenignTransientClientFetchError", () => {
 
   it("returns true for Error with A network error occurred message", () => {
     expect(
-      isBenignTransientClientFetchError(
-        new Error("A network error occurred."),
-      ),
+      isBenignTransientClientFetchError(new Error("A network error occurred.")),
     ).toBe(true);
   });
 

@@ -9,8 +9,8 @@ export function isOutboundEmailEnabled(): boolean {
   if (flag === "true") return true;
   return Boolean(
     process.env.RESEND_API_KEY &&
-      process.env.EMAIL_FROM?.trim() &&
-      process.env.APP_URL?.trim(),
+    process.env.EMAIL_FROM?.trim() &&
+    process.env.APP_URL?.trim(),
   );
 }
 

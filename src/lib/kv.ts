@@ -476,7 +476,9 @@ async function kvGetString(key: string): Promise<string | null> {
         cache: "no-store",
       });
       if (!res.ok) return null;
-      const data = await res.json().catch(() => ({}) as { result?: string | null });
+      const data = await res
+        .json()
+        .catch(() => ({}) as { result?: string | null });
       const val = data?.result;
       return typeof val === "string" ? val : null;
     } catch (error: unknown) {
@@ -608,8 +610,7 @@ async function lookupPasswordResetUserId(
   if (userId?.startsWith("{")) {
     try {
       const parsed = JSON.parse(userId) as { userId?: string };
-      userId =
-        typeof parsed.userId === "string" ? parsed.userId : null;
+      userId = typeof parsed.userId === "string" ? parsed.userId : null;
     } catch {
       userId = null;
     }
@@ -658,9 +659,7 @@ async function clearPasswordResetPending(userId: string): Promise<void> {
   await kvDelete(pendingKey);
 }
 
-export async function createPasswordResetToken(
-  email: string,
-): Promise<{
+export async function createPasswordResetToken(email: string): Promise<{
   ok: boolean;
   token?: string;
   recipientEmail?: string;

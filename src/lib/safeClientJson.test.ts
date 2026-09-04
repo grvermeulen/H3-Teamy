@@ -64,7 +64,9 @@ describe("fetchJsonOr", () => {
   });
 
   it("returns fallback without Sentry when Chromium rejects with Failed to fetch", async () => {
-    vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.spyOn(global, "fetch").mockRejectedValue(
+      new TypeError("Failed to fetch"),
+    );
     const fallback = { user: null as null };
     const result = await fetchJsonOr(
       "/api/me",
@@ -259,7 +261,9 @@ describe("fetchJsonIfOkOr", () => {
   });
 
   it("returns null without Sentry when Chromium rejects with Failed to fetch", async () => {
-    vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.spyOn(global, "fetch").mockRejectedValue(
+      new TypeError("Failed to fetch"),
+    );
     const result = await fetchJsonIfOkOr<{ x: number }>(
       "/api/x",
       { cache: "no-store" },

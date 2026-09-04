@@ -18,8 +18,7 @@ vi.mock("./db", () => ({
 }));
 
 vi.mock("./prismaConnectRetry", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("./prismaConnectRetry")>();
+  const actual = await importOriginal<typeof import("./prismaConnectRetry")>();
   return {
     ...actual,
     withPgConnectRetry: vi.fn(
