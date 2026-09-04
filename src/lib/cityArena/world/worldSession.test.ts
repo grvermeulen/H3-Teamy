@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Rect } from "../mapBuild/geometry";
 import type { LandmarkLookup } from "../render/drawStatic";
 import { createFakeTarget } from "../render/testing/fakeContext";
@@ -40,6 +40,28 @@ function tile(x: number, y: number): MapTile {
   return { x, y, roads: [], buildings: building, ground: [], water: [] };
 }
 
+/** Bookkeeping key for a decoded tile's coordinate, matching `tileKey` in `worldSession.ts`. */
+function tileKey(decodedTile: DecodedTile): string {
+  return `${decodedTile.x}:${decodedTile.y}`;
+}
+
+/**
+ * Tiles present in `before` but not `after`, and vice versa. Used to derive the expected
+ * `invalidateRect` calls around a `session.update()` from the session's own observable
+ * before/after resident-tile sets, rather than hard-coding the LRU's exact eviction order.
+ */
+function diffResidentTiles(
+  before: DecodedTile[],
+  after: DecodedTile[],
+): { evicted: DecodedTile[]; inserted: DecodedTile[] } {
+  const beforeByKey = new Map(before.map((t) => [tileKey(t), t]));
+  const afterByKey = new Map(after.map((t) => [tileKey(t), t]));
+  return {
+    evicted: before.filter((t) => !afterByKey.has(tileKey(t))),
+    inserted: after.filter((t) => !beforeByKey.has(tileKey(t))),
+  };
+}
+
 const fetchImpl = vi.fn<typeof fetch>(async (input) => {
   const url = String(input);
   const body = url.endsWith("index.json")
@@ -61,6 +83,10 @@ const fetchImpl = vi.fn<typeof fetch>(async (input) => {
 describe("createWorldSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("loads index and roads, syncs tiles into collision and raster, and exposes landmarks", async () => {
@@ -87,11 +113,22 @@ describe("createWorldSession", () => {
     expect(session.collision.obstacleCount()).toBe(1);
     expect(session.loadedTileRects()).toHaveLength(9);
     expect(onProgress).toHaveBeenCalledWith({ loaded: 9, total: 9 });
+    const before = session.tiles();
     const invalidate = vi.spyOn(session.raster, "invalidateRect");
     await session.update([4000, 4000]);
     expect(session.tiles()).toHaveLength(9);
     expect(session.collision.obstacleCount()).toBe(1);
-    expect(invalidate).toHaveBeenCalled();
+
+    // Requiring at least one eviction and one insertion keeps this a real regression check
+    // rather than a vacuous pass if the move happened to touch nothing.
+    const { evicted, inserted } = diffResidentTiles(before, session.tiles());
+    expect(evicted.length).toBeGreaterThan(0);
+    expect(inserted.length).toBeGreaterThan(0);
+    expect(invalidate).toHaveBeenCalledTimes(evicted.length + inserted.length);
+    for (const changedTile of [...evicted, ...inserted]) {
+      expect(invalidate).toHaveBeenCalledWith(changedTile.rect);
+    }
+
     session.dispose();
     expect(session.tiles()).toHaveLength(0);
   });
@@ -228,6 +265,10 @@ describe("createWorldSession with a controllable fake loader", () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("retries ready() after a rejected load instead of caching the rejection", async () => {
     const loader = createFakeLoader();
     loader.loadIndex = vi
@@ -264,7 +305,10 @@ describe("createWorldSession with a controllable fake loader", () => {
     expect(progress).toEqual({ loaded: 2, total: 2 });
     expect(insertTile).toHaveBeenCalledTimes(2);
     expect(removeTile).not.toHaveBeenCalled();
+    // Both tiles are newly resident, in the loader's own getLoadedTiles() order.
     expect(invalidateRect).toHaveBeenCalledTimes(2);
+    expect(invalidateRect).toHaveBeenNthCalledWith(1, tileA.rect);
+    expect(invalidateRect).toHaveBeenNthCalledWith(2, tileB.rect);
     expect(session.tiles()).toHaveLength(2);
     expect(session.collision.obstacleCount()).toBe(1);
     expect(session.loadedTileRects()).toHaveLength(2);
@@ -276,7 +320,9 @@ describe("createWorldSession with a controllable fake loader", () => {
     expect(removeTile).toHaveBeenCalledTimes(1);
     expect(removeTile).toHaveBeenLastCalledWith(tileA.x, tileA.y);
     expect(insertTile).toHaveBeenCalledTimes(2);
+    // tileA drops out (tileB stays resident, so it needs no further invalidation).
     expect(invalidateRect).toHaveBeenCalledTimes(3);
+    expect(invalidateRect).toHaveBeenNthCalledWith(3, tileA.rect);
     expect(session.tiles()).toHaveLength(1);
     expect(session.collision.obstacleCount()).toBe(0);
 

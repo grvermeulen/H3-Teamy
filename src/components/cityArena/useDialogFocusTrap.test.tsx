@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useRef } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
 
 function Dialog({ onClose }: { onClose: () => void }): React.JSX.Element {
@@ -17,6 +17,10 @@ function Dialog({ onClose }: { onClose: () => void }): React.JSX.Element {
 describe("useDialogFocusTrap", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it("closes on Escape and wraps Tab between the first and last control", () => {

@@ -1,7 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createLru } from "./lru";
 
 describe("createLru", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("evicts the least recently used entry when the cost limit is exceeded", () => {
     const evicted: string[] = [];
     const lru = createLru<string, number>({

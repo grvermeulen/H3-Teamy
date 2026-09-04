@@ -4,6 +4,9 @@ import type { MapIndex, MapRoads, MapTile, ZoneKey } from "./world/mapTypes";
 const zoneKeys = ["rhenen", "wageningen", "campus", "bennekom"] as const;
 const unitPoint = z.tuple([z.number().int(), z.number().int()]);
 
+/** Zone a fresh player (or invalid stored settings) starts in. */
+const DEFAULT_ZONE: ZoneKey = "wageningen";
+
 /** Zod schema for `index.json`; runtime validation happens once per session. */
 export const MapIndexSchema = z.object({
   version: z.literal(1),
@@ -100,11 +103,11 @@ export function isMapRoads(value: unknown): value is MapRoads {
 
 /** Persisted player preferences (extended by later plans). */
 export const ArenaSettingsSchema = z.object({
-  lastZone: z.enum(zoneKeys).default("wageningen"),
+  lastZone: z.enum(zoneKeys).default(DEFAULT_ZONE),
 });
 
-/** Parsed settings type. */
-export type ArenaSettings = { lastZone: ZoneKey };
+/** Parsed settings type, inferred from {@link ArenaSettingsSchema} so the two cannot drift. */
+export type ArenaSettings = z.infer<typeof ArenaSettingsSchema>;
 
 /** Defaults used when nothing valid is stored. */
-export const DEFAULT_ARENA_SETTINGS: ArenaSettings = { lastZone: "wageningen" };
+export const DEFAULT_ARENA_SETTINGS: ArenaSettings = { lastZone: DEFAULT_ZONE };

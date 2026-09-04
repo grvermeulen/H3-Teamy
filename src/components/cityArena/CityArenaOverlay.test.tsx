@@ -1,5 +1,6 @@
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -138,6 +139,7 @@ describe("CityArenaOverlay", () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -172,7 +174,7 @@ describe("CityArenaOverlay", () => {
     await act(async () => {
       fireEvent.keyDown(document, { code: "Escape", key: "Escape" });
     });
-    expect(onClose).toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("disables the zone picker until the world finishes booting, then lets it teleport", async () => {
@@ -205,7 +207,7 @@ describe("CityArenaOverlay", () => {
         "Kon geen verbinding maken, probeer het later opnieuw",
       ),
     );
-    expect(Sentry.captureException).toHaveBeenCalledWith(
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(Error),
       expect.objectContaining({ tags: { area: "arena", kind: "boot" } }),
     );

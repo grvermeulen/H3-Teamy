@@ -1,4 +1,5 @@
-import { act, renderHook } from "@testing-library/react";
+import * as Sentry from "@sentry/nextjs";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LoadProgress } from "@/lib/cityArena/world/mapLoader";
@@ -23,6 +24,7 @@ const mockCreateWorldSession = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/cityArena/world/worldSession", () => ({
   createWorldSession: mockCreateWorldSession,
 }));
+vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
 import { nearestLandmarkTo, useArenaGame } from "./useArenaGame";
 
@@ -45,6 +47,29 @@ const testGraph = decodeRoadGraph({
   names: [],
 });
 const testReady: WorldReady = { index: testIndex, graph: testGraph };
+
+/** Index with two single-spawn-point zones, so `teleportToZone` moves to a known position. */
+const zonedTestIndex: MapIndex = {
+  ...testIndex,
+  zones: [
+    {
+      key: "wageningen",
+      name: "Wageningen",
+      center: [0, 0],
+      radius: 4000,
+      spawnNodes: [[0, 0]],
+      landmarks: [],
+    },
+    {
+      key: "campus",
+      name: "Campus",
+      center: [4000, 4000],
+      radius: 4000,
+      spawnNodes: [[4000, 4000]],
+      landmarks: [],
+    },
+  ],
+};
 
 /** A world session whose `ready()` stays pending until the returned `resolveReady` runs. */
 function createControllableSession(): {
@@ -73,6 +98,37 @@ function createControllableSession(): {
     dispose: vi.fn(),
   };
   return { session, resolveReady };
+}
+
+/**
+ * A controllable session whose `session.update` resolves immediately the first time (the
+ * boot's own sync) but stays pending on every later call until `settlePendingUpdate` is
+ * invoked — for testing that a throttled refresh sync never overlaps itself.
+ */
+function createDeferredUpdateSession(index: MapIndex): {
+  session: WorldSession;
+  resolveReady: (value: WorldReady) => void;
+  updateCalls: Point[];
+  settlePendingUpdate: (progress: LoadProgress) => void;
+} {
+  const { session, resolveReady } = createControllableSession();
+  session.index = () => index;
+  const updateCalls: Point[] = [];
+  let settleFn: ((progress: LoadProgress) => void) | null = null;
+  session.update = vi.fn((centre: Point): Promise<LoadProgress> => {
+    updateCalls.push(centre);
+    if (updateCalls.length === 1)
+      return Promise.resolve({ loaded: 0, total: 0 });
+    return new Promise<LoadProgress>((resolve) => {
+      settleFn = resolve;
+    });
+  });
+  return {
+    session,
+    resolveReady,
+    updateCalls,
+    settlePendingUpdate: (progress) => settleFn?.(progress),
+  };
 }
 
 /** Renders the hook with a plain (unattached) canvas ref, exactly as the overlay would. */
@@ -115,6 +171,7 @@ describe("useArenaGame", () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -160,48 +217,48 @@ describe("useArenaGame", () => {
     expect(session.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it("does not start a second tile sync while one is in flight, and runs exactly one follow-up sync at the newer position", async () => {
-    const zonedIndex: MapIndex = {
-      ...testIndex,
-      zones: [
-        {
-          key: "wageningen",
-          name: "Wageningen",
-          center: [0, 0],
-          radius: 4000,
-          spawnNodes: [[0, 0]],
-          landmarks: [],
-        },
-        {
-          key: "campus",
-          name: "Campus",
-          center: [4000, 4000],
-          radius: 4000,
-          spawnNodes: [[4000, 4000]],
-          landmarks: [],
-        },
-      ],
+  it("sets the phase to error and reports to Sentry when ready() rejects", async () => {
+    const session: WorldSession = {
+      ready: vi.fn(() => Promise.reject(new Error("boot failed"))),
+      index: () => testIndex,
+      graph: () => testGraph,
+      collision: createCollisionGrid(),
+      raster: createStaticRaster((width, height) =>
+        createFakeTarget(width, height),
+      ),
+      landmarks: () => new Map(),
+      update: vi.fn(async () => ({ loaded: 0, total: 0 })),
+      tiles: () => [],
+      loadedTileRects: () => [],
+      hasFailures: () => false,
+      dispose: vi.fn(),
     };
-    const { session, resolveReady } = createControllableSession();
-    session.index = () => zonedIndex;
+    mockCreateWorldSession.mockReturnValue(session);
 
-    const updateCalls: Point[] = [];
-    let settlePendingUpdate: ((progress: LoadProgress) => void) | null = null;
-    session.update = vi.fn((centre: Point): Promise<LoadProgress> => {
-      updateCalls.push(centre);
-      if (updateCalls.length === 1) {
-        return Promise.resolve({ loaded: 0, total: 0 });
-      }
-      return new Promise<LoadProgress>((resolve) => {
-        settlePendingUpdate = resolve;
-      });
+    const { result } = renderArenaGame();
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
     });
+
+    expect(result.current.phase).toBe("error");
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ tags: { area: "arena", kind: "boot" } }),
+    );
+  });
+
+  it("does not start a second tile sync while one is in flight, and runs exactly one follow-up sync at the newer position", async () => {
+    const { session, resolveReady, updateCalls, settlePendingUpdate } =
+      createDeferredUpdateSession(zonedTestIndex);
     mockCreateWorldSession.mockReturnValue(session);
 
     const { result } = renderArenaGameWithCanvas();
 
     await act(async () => {
-      resolveReady({ index: zonedIndex, graph: testGraph });
+      resolveReady({ index: zonedTestIndex, graph: testGraph });
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
@@ -223,7 +280,7 @@ describe("useArenaGame", () => {
     expect(updateCalls).toHaveLength(2); // the teleport only requests a follow-up
 
     await act(async () => {
-      settlePendingUpdate?.({ loaded: 9, total: 9 });
+      settlePendingUpdate({ loaded: 9, total: 9 });
       await Promise.resolve();
       await Promise.resolve();
     });

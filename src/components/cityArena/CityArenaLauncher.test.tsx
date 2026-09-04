@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ARENA_SETTINGS_KEY } from "@/lib/cityArena/storage";
 import CityArenaLauncher from "./CityArenaLauncher";
 
@@ -36,6 +36,10 @@ describe("CityArenaLauncher", () => {
     vi.clearAllMocks();
     localStorage.clear();
     sessionState.loggedIn = true;
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it("offers the zone choice and opens the overlay for a logged-in member, remembering the zone", () => {

@@ -1,8 +1,12 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import ArenaDebugOverlay from "./ArenaDebugOverlay";
 
 describe("ArenaDebugOverlay", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("prints the metrics", () => {
     render(
       <ArenaDebugOverlay

@@ -95,6 +95,69 @@ const landmarks: LandmarkLookup = new Map([
   ["cunerakerk", { name: "Cunerakerk", style: "church" }],
 ]);
 
+// Fixtures for the "keeps the layer order across two touching tiles" test below: tileWest only
+// has water near the border, tileEast only has ground there. Painting "per tile" (tileWest's
+// ground+water, then tileEast's ground+water) would still put tileEast's ground fill after
+// tileWest's water fill in the recorded call order; painting each layer once across the union
+// puts every ground fill before any water fill.
+const tileWest: DecodedTile = {
+  x: 0,
+  y: 0,
+  rect: { minX: 0, minY: 0, maxX: 100, maxY: 100 },
+  roads: [
+    {
+      points: [
+        [10, 50],
+        [90, 50],
+      ],
+      roadClass: "primary",
+      bounds: { minX: 10, minY: 50, maxX: 90, maxY: 50 },
+    },
+  ],
+  buildings: [],
+  ground: [],
+  water: [
+    {
+      ring: [
+        [10, 10],
+        [20, 10],
+        [20, 20],
+        [10, 20],
+      ],
+      bounds: { minX: 10, minY: 10, maxX: 20, maxY: 20 },
+    },
+  ],
+};
+const tileEast: DecodedTile = {
+  x: 1,
+  y: 0,
+  rect: { minX: 100, minY: 0, maxX: 200, maxY: 100 },
+  roads: [
+    {
+      points: [
+        [110, 50],
+        [190, 50],
+      ],
+      roadClass: "service",
+      bounds: { minX: 110, minY: 50, maxX: 190, maxY: 50 },
+    },
+  ],
+  buildings: [],
+  ground: [
+    {
+      ring: [
+        [110, 10],
+        [120, 10],
+        [120, 20],
+        [110, 20],
+      ],
+      bounds: { minX: 110, minY: 10, maxX: 120, maxY: 20 },
+      kind: "grass",
+    },
+  ],
+  water: [],
+};
+
 describe("paintChunk", () => {
   it("paints ground, water, roads and buildings in order and labels landmarks and streets", () => {
     const context = createFakeContext();
@@ -140,68 +203,6 @@ describe("paintChunk", () => {
   });
 
   it("keeps the layer order across two touching tiles instead of per tile", () => {
-    // tileWest only has water near the border; tileEast only has ground there. Painting "per
-    // tile" (tileWest's ground+water, then tileEast's ground+water) would still put tileEast's
-    // ground fill after tileWest's water fill in the recorded call order; painting each layer
-    // once across the union puts every ground fill before any water fill.
-    const tileWest: DecodedTile = {
-      x: 0,
-      y: 0,
-      rect: { minX: 0, minY: 0, maxX: 100, maxY: 100 },
-      roads: [
-        {
-          points: [
-            [10, 50],
-            [90, 50],
-          ],
-          roadClass: "primary",
-          bounds: { minX: 10, minY: 50, maxX: 90, maxY: 50 },
-        },
-      ],
-      buildings: [],
-      ground: [],
-      water: [
-        {
-          ring: [
-            [10, 10],
-            [20, 10],
-            [20, 20],
-            [10, 20],
-          ],
-          bounds: { minX: 10, minY: 10, maxX: 20, maxY: 20 },
-        },
-      ],
-    };
-    const tileEast: DecodedTile = {
-      x: 1,
-      y: 0,
-      rect: { minX: 100, minY: 0, maxX: 200, maxY: 100 },
-      roads: [
-        {
-          points: [
-            [110, 50],
-            [190, 50],
-          ],
-          roadClass: "service",
-          bounds: { minX: 110, minY: 50, maxX: 190, maxY: 50 },
-        },
-      ],
-      buildings: [],
-      ground: [
-        {
-          ring: [
-            [110, 10],
-            [120, 10],
-            [120, 20],
-            [110, 20],
-          ],
-          bounds: { minX: 110, minY: 10, maxX: 120, maxY: 20 },
-          kind: "grass",
-        },
-      ],
-      water: [],
-    };
-
     const context = createFakeContext();
     paintChunk(
       context,

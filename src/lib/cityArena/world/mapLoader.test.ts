@@ -147,7 +147,7 @@ describe("createMapLoader", () => {
     expect(progress).toEqual({ loaded: 1, total: 1 });
     expect(loader.getTile(1, 1)?.x).toBe(1);
     expect(loader.hasFailures()).toBe(false);
-    expect(throwingListener).toHaveBeenCalled();
+    expect(throwingListener).toHaveBeenCalledTimes(1);
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(Error),
       expect.objectContaining({

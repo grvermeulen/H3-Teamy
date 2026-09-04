@@ -41,6 +41,20 @@ describe("arena settings storage", () => {
     );
   });
 
+  it("falls back to defaults and reports valid JSON with an invalid shape", () => {
+    localStorage.setItem(
+      ARENA_SETTINGS_KEY,
+      JSON.stringify({ lastZone: "onbekend" }),
+    );
+    expect(loadArenaSettings()).toEqual({ lastZone: "wageningen" });
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: { area: "arena", kind: "settings-invalid" },
+      }),
+    );
+  });
+
   it("reports storage failures on save without throwing", () => {
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new Error("quota");

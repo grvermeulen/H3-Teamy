@@ -1,8 +1,12 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import ArenaLoadingScreen, { ATTRIBUTION_TEXT } from "./ArenaLoadingScreen";
 
 describe("ArenaLoadingScreen", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("shows progress, the attribution and hides a broken splash image", () => {
     render(<ArenaLoadingScreen loaded={3} total={9} failed={false} />);
     expect(screen.getByRole("status")).toHaveTextContent("Kaart laden… 3/9");
