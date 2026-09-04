@@ -38,6 +38,7 @@ export function createStick(
   };
   return {
     begin(pointerId, x, y) {
+      if (current.pointerId !== null) return;
       current = { pointerId, origin: [x, y], knob: [x, y], vector: [0, 0] };
     },
     move(pointerId, x, y) {

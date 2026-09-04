@@ -50,6 +50,7 @@ function useStickHandlers(
   const onPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       event.preventDefault();
+      if (stick.state().pointerId !== null) return;
       const [x, y] = localPoint(event);
       stick.begin(event.pointerId, x, y);
       capturePointer(event);

@@ -37,4 +37,16 @@ describe("createStick", () => {
       vector: [0, 0],
     });
   });
+
+  it("keeps the first pointer in control and ignores a second pointer's begin", () => {
+    const stick = createStick();
+    stick.begin(1, 0, 0);
+    stick.begin(2, 500, 500);
+    expect(stick.state().pointerId).toBe(1);
+    expect(stick.state().origin).toEqual([0, 0]);
+    stick.move(1, 0, -48);
+    expect(stick.state().vector).toEqual([0, -1]);
+    stick.end(1);
+    expect(stick.state().pointerId).toBeNull();
+  });
 });
