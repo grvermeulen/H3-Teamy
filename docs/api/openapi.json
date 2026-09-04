@@ -26,6 +26,12 @@
         "properties": {
           "ok": {
             "type": "boolean"
+          },
+          "sent": {
+            "type": "boolean"
+          },
+          "suppressed": {
+            "type": "boolean"
           }
         },
         "required": ["ok"]
@@ -97,6 +103,12 @@
                   "type": "object",
                   "properties": {
                     "ok": {
+                      "type": "boolean"
+                    },
+                    "sent": {
+                      "type": "boolean"
+                    },
+                    "suppressed": {
                       "type": "boolean"
                     }
                   },

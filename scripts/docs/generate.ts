@@ -1,10 +1,9 @@
 import fs from "fs";
 import path from "path";
 import { execSync } from "child_process";
-import { pathToFileURL } from "url";
-import { injectSection } from "./utils.ts";
+import { injectSection, isMainModule } from "./utils.ts";
 
-function main() {
+function main(): void {
   const root = process.cwd();
 
   // 0) ensure output dirs
@@ -53,10 +52,4 @@ function main() {
   console.log("Docs generated.");
 }
 
-// ESM-friendly main guard
-try {
-  const isDirect = import.meta.url === pathToFileURL(process.argv[1]).href;
-  if (isDirect) main();
-} catch {
-  // no-op fallback
-}
+if (isMainModule(import.meta.url)) main();
