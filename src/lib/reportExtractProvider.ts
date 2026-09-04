@@ -261,7 +261,6 @@ async function callAiTextNormalization(args: {
     const { object } = await generateObject({
       model: args.model,
       schema: ExtractResultSchema,
-      temperature: 0.1,
       system: SYSTEM_PROMPT,
       prompt: buildNormalizationPrompt(args.rawText),
     });
@@ -331,7 +330,6 @@ async function callAiVisionExtraction(args: {
     const { object } = await generateObject({
       model: args.model,
       schema: ExtractResultSchema,
-      temperature: 0.1,
       system: SYSTEM_PROMPT,
       messages: [
         {

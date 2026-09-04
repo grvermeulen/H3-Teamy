@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as Sentry from "@sentry/nextjs";
 import AdminNav from "../../../components/AdminNav";
 import { AppBar, Button, EmptyState, showToast } from "../../../components/ui";
@@ -62,6 +62,8 @@ export default function AdminFeedbackPage(): React.JSX.Element {
   const [filterStatus, setFilterStatus] = useState<
     "ALL" | FeedbackRow["status"]
   >("ALL");
+  const filterStatusRef = useRef(filterStatus);
+  filterStatusRef.current = filterStatus;
   const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set());
 
   async function load(): Promise<void> {
@@ -118,7 +120,8 @@ export default function AdminFeedbackPage(): React.JSX.Element {
         );
         setError("Status bijwerken mislukt.");
       } else {
-        if (filterStatus !== "ALL" && status !== filterStatus) {
+        const currentFilterStatus = filterStatusRef.current;
+        if (currentFilterStatus !== "ALL" && status !== currentFilterStatus) {
           setRows((current) => current.filter((row) => row.id !== id));
         }
         showToast("Feedbackstatus bijgewerkt", "success");

@@ -186,6 +186,7 @@ describe("reportExtractProvider", () => {
         messages: Array<{ content: Array<{ type: string }> }>;
       };
       expect(args.model).toBe("openai/gpt-5.6-sol");
+      expect(args).not.toHaveProperty("temperature");
       expect(args.messages[0].content[1].type).toBe("image");
       expect(out.providerUsed).toBe("vlm");
       expect(out.fallbackUsed).toBe(false);
@@ -219,6 +220,7 @@ describe("reportExtractProvider", () => {
       const normalizationArgs = mockedGenerateObject.mock.calls[0][0] as {
         prompt: string;
       };
+      expect(normalizationArgs).not.toHaveProperty("temperature");
       expect(normalizationArgs.prompt).toContain("RAW OCR TEXT");
       expect(out.providerUsed).toBe("ocr");
       expect(out.fallbackUsed).toBe(false);
