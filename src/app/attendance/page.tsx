@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toYMD } from "../../lib/training";
 import { getBadgeForAttendance } from "../../lib/badges";
 import { Card, EmptyState, Stack } from "../../components/ui";
+import AttendanceNudge from "../../components/AttendanceNudge";
 
 type Row = {
   userId: string;
@@ -82,6 +83,8 @@ export default function AttendanceOverview() {
     <main>
       <div className="container">
         <h1>Opkomst</h1>
+
+        <AttendanceNudge />
 
         <Card style={{ marginBottom: 12 }}>
           <Stack gap="2">

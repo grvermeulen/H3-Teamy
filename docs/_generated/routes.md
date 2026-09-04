@@ -8,6 +8,11 @@
 - /api/admin/users
 - /api/auth/[...nextauth]
 - /api/auth/link
+- /api/auth/passkey/login-options
+- /api/auth/passkey/login-verify
+- /api/auth/passkey/register-options
+- /api/auth/passkey/register-verify
+- /api/auth/passkeys
 - /api/auth/password/reset-confirm
 - /api/auth/password/reset-request
 - /api/auth/register
@@ -35,6 +40,7 @@
 - /api/test-image
 - /api/trainer/status
 - /api/training/attendance
+- /api/training/nudge
 - /api/training/overview
 - /api/training/sessions
 - /api/users
@@ -43,7 +49,7 @@
 
 ## Pages
 
-- 
+-
 - /admin
 - /admin/feedback
 - /attendance

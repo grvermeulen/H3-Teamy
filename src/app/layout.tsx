@@ -6,6 +6,7 @@ import ChristmasTheme from "../components/ChristmasTheme";
 import SessionStatus from "../components/SessionStatus";
 import FeedbackFab from "../components/FeedbackFab";
 import WhatsNewTour from "../components/WhatsNewTour";
+import AppSplash from "../components/AppSplash";
 import { ToastRegion } from "../components/ui";
 
 export const metadata: Metadata = {
@@ -52,6 +53,7 @@ export default function RootLayout({
         />
       </head>
       <body>
+        <AppSplash />
         <ChristmasTheme />
         <Providers>
           <header
@@ -65,7 +67,7 @@ export default function RootLayout({
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={process.env.NEXT_PUBLIC_LOGO_URL || "/logo.svg"}
+              src="/logo.png"
               alt="H3-logo"
               width={44}
               height={44}

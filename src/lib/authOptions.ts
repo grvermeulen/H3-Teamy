@@ -3,9 +3,32 @@ import GoogleProvider from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import * as Sentry from "@sentry/nextjs";
 import { Prisma } from "@prisma/client";
-import { prisma } from "./db";
 import bcrypt from "bcryptjs";
+import { prisma } from "./db";
+import { isDbUnavailableError } from "./dbUnavailableError";
+import {
+  isTransientPostgresConnectError,
+  withPgConnectRetry,
+} from "./prismaConnectRetry";
+import { verifyPasskeyExchangeToken } from "./passkeyExchangeToken";
 import { USER_CORE_SELECT } from "./userPrismaSelect";
+
+function reportCredentialsAuthorizeError(
+  error: unknown,
+  context: string,
+): void {
+  if (isDbUnavailableError(error) || isTransientPostgresConnectError(error)) {
+    return;
+  }
+  const code =
+    error instanceof Prisma.PrismaClientKnownRequestError
+      ? error.code
+      : undefined;
+  Sentry.captureException(error, {
+    tags: { context },
+    extra: { prismaCode: code },
+  });
+}
 
 /**
  * NextAuth configuration: Google + credentials, JWT sessions with user id on `session.user.id`.
@@ -21,16 +44,49 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: "Email", type: "text" },
         password: { label: "Password", type: "password" },
+        passkeyExchange: { label: "Passkey", type: "text" },
       },
       async authorize(creds) {
+        const exchangeRaw = creds?.passkeyExchange;
+        const exchange =
+          typeof exchangeRaw === "string" ? exchangeRaw.trim() : "";
+        if (exchange) {
+          const userId = verifyPasskeyExchangeToken(exchange);
+          if (!userId) return null;
+          try {
+            const user = await withPgConnectRetry(
+              "credentials_authorize_passkey",
+              () =>
+                prisma.user.findUnique({
+                  where: { id: userId },
+                  select: USER_CORE_SELECT,
+                }),
+            );
+            if (!user) return null;
+            return {
+              id: user.id,
+              name: `${user.firstName} ${user.lastName}`.trim(),
+              email: user.email ?? undefined,
+            };
+          } catch (error: unknown) {
+            reportCredentialsAuthorizeError(
+              error,
+              "credentials_authorize_passkey",
+            );
+            return null;
+          }
+        }
+
         const email = (creds?.email as string) || "";
         const password = (creds?.password as string) || "";
         if (!email || !password) return null;
         try {
-          const user = await prisma.user.findFirst({
-            where: { email },
-            select: USER_CORE_SELECT,
-          });
+          const user = await withPgConnectRetry("credentials_authorize", () =>
+            prisma.user.findFirst({
+              where: { email },
+              select: USER_CORE_SELECT,
+            }),
+          );
           if (!user || !user.passwordHash) return null;
           const ok = await bcrypt.compare(password, user.passwordHash);
           if (!ok) return null;
@@ -40,14 +96,7 @@ export const authOptions: NextAuthOptions = {
             email: user.email ?? undefined,
           };
         } catch (error: unknown) {
-          const code =
-            error instanceof Prisma.PrismaClientKnownRequestError
-              ? error.code
-              : undefined;
-          Sentry.captureException(error, {
-            tags: { context: "credentials_authorize" },
-            extra: { prismaCode: code },
-          });
+          reportCredentialsAuthorizeError(error, "credentials_authorize");
           return null;
         }
       },

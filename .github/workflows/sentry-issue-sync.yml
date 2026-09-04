@@ -13,6 +13,20 @@ jobs:
       contents: read
       issues: write
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Resolve ephemeral preview uptime downtime (Sentry)
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: h3-teamy
+          SENTRY_PROJECT: javascript-nextjs
+        run: npx tsx scripts/sentry-resolve-preview-uptime.ts
+
       - name: Fetch unresolved Sentry issues
         id: sentry
         env:

@@ -30,7 +30,8 @@ export function isTransientPostgresConnectError(error: unknown): boolean {
       msg.includes("upstream database") ||
       msg.includes("failed to connect") ||
       msg.includes("can't reach database server") ||
-      msg.includes("could not connect to server")
+      msg.includes("could not connect to server") ||
+      msg.includes("error while reading client passwordmessage")
     );
   }
   return false;
@@ -83,9 +84,11 @@ export async function withPgConnectRetry<T>(
     }
   }
   if (lastError !== undefined && isTransientPostgresConnectError(lastError)) {
-    Sentry.captureException(lastError, {
-      extra: { operationName, exhaustedRetries: true },
-      tags: { db_connect: "exhausted" },
+    Sentry.addBreadcrumb({
+      category: "postgres",
+      message: `DB-connectie na herhaalde pogingen mislukt: ${operationName}`,
+      level: "warning",
+      data: { operationName, exhaustedRetries: true },
     });
     throw new DbUnavailableError();
   }

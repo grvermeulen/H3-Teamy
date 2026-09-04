@@ -154,6 +154,41 @@ describe("FeedbackFab", () => {
     expect(screen.queryByLabelText("Stuur feedback")).not.toBeInTheDocument();
   });
 
+  it("does not report benign Firefox NetworkError for feedback POST", async () => {
+    vi.mocked(usePathname).mockReturnValue("/events");
+    vi.mocked(useSession).mockReturnValue(sessionAuthenticated);
+    vi.spyOn(global, "fetch").mockRejectedValue(
+      new DOMException("A network error occurred.", "NetworkError"),
+    );
+
+    render(<FeedbackFab />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Stuur feedback")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByLabelText("Stuur feedback"));
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/RSVP-knop/i)).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByPlaceholderText(/RSVP-knop/i), {
+      target: { value: "Korte titel bug" },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/Wat deed je/i), {
+      target: { value: "Langere toelichting hier." },
+    });
+    const form = screen
+      .getByRole("button", { name: /Verstuur bugmelding/i })
+      .closest("form");
+    expect(form).toBeTruthy();
+    fireEvent.submit(form!);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Netwerkfout/i)).toBeInTheDocument();
+    });
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
   it("captures feedback POST network errors in Sentry and shows a notice", async () => {
     vi.mocked(usePathname).mockReturnValue("/events");
     vi.mocked(useSession).mockReturnValue(sessionAuthenticated);

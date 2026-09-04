@@ -24,6 +24,16 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.2.1": {
+    title: "Wat is er nieuw in 0.2.1",
+    steps: [
+      {
+        title: "Snel inloggen met passkey",
+        body: "Op je profiel kun je een passkey toevoegen (Touch ID, Face ID of Windows Hello). Daarna kun je onder Inloggen ook ‘Inloggen met passkey’ gebruiken — naast Google en e-mail.",
+        target: "[data-tour='profile-passkeys']",
+      },
+    ],
+  },
   "0.2.0": {
     title: "Wat is er nieuw in 0.2.0",
     steps: [

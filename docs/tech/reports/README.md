@@ -22,7 +22,8 @@ The app uses `await Promise.resolve(params)` for `eventId` so Next.js 15+ async 
 `/api/report/extract` supports a runtime provider flag so extraction can switch without code changes.
 
 - `REPORT_EXTRACT_PROVIDER=vlm|ocr|hybrid` (default: `vlm`)
-- `REPORT_EXTRACT_OPENAI_MODEL=<model-name>` (optional; defaults to `gpt-4o` when unset. The removed gateway snapshot `gpt-5.2-2025-12-11` is remapped to `gpt-4o` in code.)
+- `REPORT_EXTRACT_OPENAI_MODEL=<model-name>` (optional; defaults to `gpt-4o` when unset. Premium GPT-5 ids and removed snapshots are remapped to `gpt-4o` in code — see Sentry JAVASCRIPT-NEXTJS-1F / JAVASCRIPT-NEXTJS-38.)
+- `REPORT_GENERATE_MODEL=<model-name>` (optional; defaults to `openai/gpt-4o` for `/api/report/generate`. Premium GPT-5 chat ids are remapped in code — see Sentry JAVASCRIPT-NEXTJS-1S.)
 - `OPENAI_API_KEY=<secret>` (required)
 - `OCR_WORKER_URL=<url>` (required for `ocr` and `hybrid`)
 - `OCR_WORKER_TOKEN=<token>` (required for `ocr` and `hybrid`)

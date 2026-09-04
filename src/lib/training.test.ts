@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   defaultSeasonWindow,
+  describeRelativeDay,
   generateTrainingDates,
+  nextTrainingDate,
   splitTrainingSessionDatesForDisplay,
   toYMD,
 } from "./training";
@@ -24,6 +26,96 @@ describe("generateTrainingDates", () => {
       const w = dt.getDay();
       expect(w === 3 || w === 5).toBe(true);
     }
+  });
+});
+
+describe("nextTrainingDate", () => {
+  // 2025-09 calendar reference:
+  // Mon 1, Tue 2, Wed 3, Thu 4, Fri 5, Sat 6, Sun 7
+  // Mon 8, Tue 9, Wed 10, Thu 11, Fri 12, Sat 13, Sun 14
+  it("returns the same day when called on a Wednesday", () => {
+    const wed = new Date(2025, 8, 3); // Wed 2025-09-03
+    expect(toYMD(nextTrainingDate(wed)!)).toBe("2025-09-03");
+  });
+
+  it("returns the same day when called on a Friday", () => {
+    const fri = new Date(2025, 8, 5);
+    expect(toYMD(nextTrainingDate(fri)!)).toBe("2025-09-05");
+  });
+
+  it("returns Wednesday when called on the preceding Saturday", () => {
+    const sat = new Date(2025, 8, 6);
+    expect(toYMD(nextTrainingDate(sat)!)).toBe("2025-09-10");
+  });
+
+  it("returns Wednesday when called on a Sunday", () => {
+    const sun = new Date(2025, 8, 7);
+    expect(toYMD(nextTrainingDate(sun)!)).toBe("2025-09-10");
+  });
+
+  it("returns Wednesday when called on a Tuesday", () => {
+    const tue = new Date(2025, 8, 9);
+    expect(toYMD(nextTrainingDate(tue)!)).toBe("2025-09-10");
+  });
+
+  it("returns Friday when called on a Thursday", () => {
+    const thu = new Date(2025, 8, 4);
+    expect(toYMD(nextTrainingDate(thu)!)).toBe("2025-09-05");
+  });
+
+  // 2025-09 is CEST (UTC+2). 17:20Z = 19:20 in Amsterdam (Wed start).
+  // 18:15Z = 20:15 in Amsterdam (Fri start).
+  it("returns today on a Wednesday before training starts (Amsterdam time)", () => {
+    expect(toYMD(nextTrainingDate(new Date("2025-09-10T17:19:00Z"))!)).toBe(
+      "2025-09-10",
+    );
+  });
+
+  it("skips to Friday on a Wednesday at training start", () => {
+    expect(toYMD(nextTrainingDate(new Date("2025-09-10T17:20:00Z"))!)).toBe(
+      "2025-09-12",
+    );
+  });
+
+  it("skips to Friday on a Wednesday well past training start", () => {
+    expect(toYMD(nextTrainingDate(new Date("2025-09-10T20:00:00Z"))!)).toBe(
+      "2025-09-12",
+    );
+  });
+
+  it("returns today on a Friday before training starts (Amsterdam time)", () => {
+    expect(toYMD(nextTrainingDate(new Date("2025-09-12T18:14:00Z"))!)).toBe(
+      "2025-09-12",
+    );
+  });
+
+  it("skips to next Wednesday on a Friday at training start", () => {
+    expect(toYMD(nextTrainingDate(new Date("2025-09-12T18:15:00Z"))!)).toBe(
+      "2025-09-17",
+    );
+  });
+
+  it("skips to next Wednesday on a Friday after training", () => {
+    expect(toYMD(nextTrainingDate(new Date("2025-09-12T22:00:00Z"))!)).toBe(
+      "2025-09-17",
+    );
+  });
+});
+
+describe("describeRelativeDay", () => {
+  const today = new Date(2025, 8, 6); // Saturday 2025-09-06
+  it("returns 'vandaag' for the same day", () => {
+    expect(describeRelativeDay(today, today)).toBe("vandaag");
+  });
+  it("returns 'morgen' for the next day", () => {
+    expect(describeRelativeDay(new Date(2025, 8, 7), today)).toBe("morgen");
+  });
+  it("returns 'overmorgen' for two days out", () => {
+    expect(describeRelativeDay(new Date(2025, 8, 8), today)).toBe("overmorgen");
+  });
+  it("returns the Dutch weekday name for further-out days", () => {
+    expect(describeRelativeDay(new Date(2025, 8, 10), today)).toBe("woensdag");
+    expect(describeRelativeDay(new Date(2025, 8, 12), today)).toBe("vrijdag");
   });
 });
 

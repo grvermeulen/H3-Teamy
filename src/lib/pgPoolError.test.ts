@@ -16,6 +16,30 @@ describe("isPgPoolIdleDisconnectNoise", () => {
     ).toBe(true);
   });
 
+  it("returns true for Connection terminated due to connection timeout (JAVASCRIPT-NEXTJS-1V)", () => {
+    expect(
+      isPgPoolIdleDisconnectNoise(
+        new Error("Connection terminated due to connection timeout"),
+      ),
+    ).toBe(true);
+  });
+
+  it("returns true for timeout exceeded when trying to connect (JAVASCRIPT-NEXTJS-37)", () => {
+    expect(
+      isPgPoolIdleDisconnectNoise(
+        new Error("timeout exceeded when trying to connect"),
+      ),
+    ).toBe(true);
+  });
+
+  it("returns true for Prisma Postgres proxy auth handshake noise (JAVASCRIPT-NEXTJS-3A)", () => {
+    expect(
+      isPgPoolIdleDisconnectNoise(
+        new Error("Error while reading client PasswordMessage"),
+      ),
+    ).toBe(true);
+  });
+
   it("returns false for unrelated pool errors", () => {
     expect(
       isPgPoolIdleDisconnectNoise(new Error("password authentication failed")),

@@ -1,9 +1,9 @@
 /* Service Worker: safe caching and instant updates */
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v5";
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 
 // Only cache immutable static assets. Do NOT cache HTML (like '/') to avoid stale UIs.
-const STATIC_ASSETS = ["/logo.svg"];
+const STATIC_ASSETS = ["/logo.png"];
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();

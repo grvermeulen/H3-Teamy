@@ -1,9 +1,13 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
+import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
+import { startAuthentication } from "@simplewebauthn/browser";
+import { browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import { signIn } from "next-auth/react";
-import { useState, type JSX } from "react";
+import { useEffect, useState, type JSX } from "react";
 import { Button, Card, Input, Stack } from "../../components/ui";
+import { isBenignWebAuthnClientError } from "../../lib/webAuthnClientErrors";
 
 type LoginFormProps = {
   /** Veilig relatief redirect-pad na succesvolle login (server-gevalideerd). */
@@ -30,6 +34,14 @@ export default function LoginForm({
   const [notice, setNotice] = useState<Notice>(null);
   const [signingIn, setSigningIn] = useState(false);
   const [registering, setRegistering] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
+  const [webAuthnUsable, setWebAuthnUsable] = useState(false);
+
+  useEffect(() => {
+    setWebAuthnUsable(
+      typeof window !== "undefined" && browserSupportsWebAuthn(),
+    );
+  }, []);
 
   async function register(): Promise<void> {
     setNotice(null);
@@ -97,6 +109,85 @@ export default function LoginForm({
     }
   }
 
+  async function loginPasskey(): Promise<void> {
+    if (passkeyLoading) return;
+    setNotice(null);
+    setPasskeyLoading(true);
+    try {
+      const optRes = await fetch("/api/auth/passkey/login-options", {
+        method: "POST",
+      });
+      if (!optRes.ok) {
+        setNotice({
+          tone: "error",
+          text: "Passkey-inloggen is nu niet beschikbaar. Probeer opnieuw of kies e-mail of Google.",
+        });
+        return;
+      }
+      const { optionsJSON, loginSessionId } = (await optRes.json()) as {
+        optionsJSON: PublicKeyCredentialRequestOptionsJSON;
+        loginSessionId: string;
+      };
+      const credential = await startAuthentication({ optionsJSON });
+      const verRes = await fetch("/api/auth/passkey/login-verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ loginSessionId, credential }),
+      });
+      const data = (await verRes.json().catch(() => ({}))) as {
+        error?: string;
+        exchangeToken?: string;
+      };
+      if (!verRes.ok) {
+        setNotice({
+          tone: "error",
+          text:
+            typeof data.error === "string"
+              ? data.error
+              : "Inloggen met passkey mislukt.",
+        });
+        return;
+      }
+      const exchangeToken = data.exchangeToken;
+      if (!exchangeToken) {
+        setNotice({
+          tone: "error",
+          text: "Passkey-respons onvolledig. Probeer opnieuw.",
+        });
+        return;
+      }
+      const result = await signIn("credentials", {
+        passkeyExchange: exchangeToken,
+        redirect: false,
+        callbackUrl,
+      });
+      if (result?.error) {
+        setNotice({
+          tone: "error",
+          text: "Inloggen met passkey mislukt. Probeer opnieuw of gebruik e-mail of Google.",
+        });
+        return;
+      }
+      window.location.assign(result?.url || callbackUrl);
+    } catch (error: unknown) {
+      if (isBenignWebAuthnClientError(error)) {
+        Sentry.addBreadcrumb({
+          category: "webauthn",
+          message: "Passkey-prompt geannuleerd of niet toegestaan",
+          level: "info",
+        });
+      } else {
+        Sentry.captureException(error, { tags: { flow: "login-passkey" } });
+      }
+      setNotice({
+        tone: "error",
+        text: "Passkey-inloggen onderbroken of niet ondersteund op dit apparaat.",
+      });
+    } finally {
+      setPasskeyLoading(false);
+    }
+  }
+
   async function loginGoogle(): Promise<void> {
     setNotice(null);
     try {
@@ -128,6 +219,25 @@ export default function LoginForm({
             Inloggen met Google
           </Button>
         </Card>
+
+        {webAuthnUsable ? (
+          <Card style={{ marginTop: 12 }}>
+            <h3 style={{ marginTop: 0 }}>Snel inloggen</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Gebruik Touch ID, Face ID of een vergelijkbare passkey als je die
+              op je profiel hebt toegevoegd.
+            </p>
+            <Button
+              variant="secondary"
+              isFullWidth
+              onClick={() => void loginPasskey()}
+              loading={passkeyLoading}
+              loadingLabel="Passkey…"
+            >
+              Inloggen met passkey
+            </Button>
+          </Card>
+        ) : null}
 
         <Card style={{ marginTop: 12 }}>
           <h3 style={{ marginTop: 0 }}>Met e-mail</h3>

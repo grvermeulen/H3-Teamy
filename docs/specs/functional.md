@@ -15,6 +15,7 @@ This document reflects the features that exist in the code today. Planned or fut
 | admin          | docs/tech/admin/README.md          |
 | arena          | docs/tech/arena/README.md          |
 | auth           | docs/tech/auth/README.md           |
+| branding       | docs/tech/branding/README.md       |
 | events         | docs/tech/events/README.md         |
 | identity-link  | docs/tech/identity-link/README.md  |
 | password-reset | docs/tech/password-reset/README.md |
@@ -56,6 +57,11 @@ This document reflects the features that exist in the code today. Planned or fut
 - /api/admin/users
 - /api/auth/[...nextauth]
 - /api/auth/link
+- /api/auth/passkey/login-options
+- /api/auth/passkey/login-verify
+- /api/auth/passkey/register-options
+- /api/auth/passkey/register-verify
+- /api/auth/passkeys
 - /api/auth/password/reset-confirm
 - /api/auth/password/reset-request
 - /api/auth/register
@@ -83,6 +89,7 @@ This document reflects the features that exist in the code today. Planned or fut
 - /api/test-image
 - /api/trainer/status
 - /api/training/attendance
+- /api/training/nudge
 - /api/training/overview
 - /api/training/sessions
 - /api/users
@@ -105,6 +112,7 @@ This document reflects the features that exist in the code today. Planned or fut
 - /terms
 - /trainer/attendance
 - /trainer/attendance/[date]
+
 <!-- /AUTOGEN:routes -->
 
 ### Backlog / Out-of-scope for now

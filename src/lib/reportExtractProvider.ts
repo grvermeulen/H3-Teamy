@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
+import { gatewayModelId, resolveGatewayModel } from "./ai/gatewayModels";
 
 // OpenAI's structured-output (strict mode) via the Vercel AI Gateway requires
 // every property listed in `properties` to also appear in `required`. Optional
@@ -114,14 +115,6 @@ function gatewayModelString(rawModel: string): string {
 /** Vision-capable default when env is unset or points at a removed gateway model. */
 const DEFAULT_REPORT_EXTRACT_OPENAI_MODEL = "gpt-4o";
 
-/**
- * Strips a leading `openai/` prefix for comparisons only.
- */
-function openAiModelIdWithoutProvider(model: string): string {
-  const t = model.trim();
-  return t.startsWith("openai/") ? t.slice("openai/".length) : t;
-}
-
 export type ResolvedReportExtractOpenAiModel = {
   model: string;
   substitutedFrom?: string;
@@ -129,8 +122,9 @@ export type ResolvedReportExtractOpenAiModel = {
 
 /**
  * Resolves `REPORT_EXTRACT_OPENAI_MODEL` to a gateway-supported id. Uses
- * {@link DEFAULT_REPORT_EXTRACT_OPENAI_MODEL} when unset, and remaps snapshot ids
- * that the Vercel AI Gateway no longer serves (see Sentry JAVASCRIPT-NEXTJS-1F).
+ * {@link DEFAULT_REPORT_EXTRACT_OPENAI_MODEL} when unset, and remaps premium or
+ * removed gateway ids blocked on the AI Gateway free tier (see Sentry
+ * JAVASCRIPT-NEXTJS-1F, JAVASCRIPT-NEXTJS-38).
  *
  * @param raw - Value of `REPORT_EXTRACT_OPENAI_MODEL` (may be empty).
  * @returns The model string to pass to `gatewayModelString` / `generateObject`, and the original env value when it was rewritten.
@@ -138,18 +132,11 @@ export type ResolvedReportExtractOpenAiModel = {
 export function resolveReportExtractOpenAiModel(
   raw: string,
 ): ResolvedReportExtractOpenAiModel {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return { model: DEFAULT_REPORT_EXTRACT_OPENAI_MODEL };
-  }
-  const id = openAiModelIdWithoutProvider(trimmed);
-  if (id === "gpt-5.2-2025-12-11") {
-    return {
-      model: DEFAULT_REPORT_EXTRACT_OPENAI_MODEL,
-      substitutedFrom: trimmed,
-    };
-  }
-  return { model: trimmed };
+  const resolved = resolveGatewayModel(raw, "text");
+  return {
+    model: gatewayModelId(resolved.model),
+    substitutedFrom: resolved.substitutedFrom,
+  };
 }
 
 /**

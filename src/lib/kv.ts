@@ -6,6 +6,12 @@ import * as Sentry from "@sentry/nextjs";
 import type { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { withPgConnectRetry } from "./prismaConnectRetry";
+import {
+  PASSWORD_RESET_TTL_SEC,
+  normalizePasswordResetToken,
+  passwordResetPendingKey,
+  passwordResetRedisKey,
+} from "./passwordResetToken";
 
 type RsvpStatus = "yes" | "no" | "maybe" | null;
 type UserProfile = {
@@ -37,40 +43,105 @@ const memoryTtl = new Map<string, number>(); // unix ms expiration for local tok
 // Expect standard env: KV_REST_API_URL, KV_REST_API_TOKEN, KV_REST_API_READ_ONLY_TOKEN, KV_URL
 // Also supports Redis via REDIS_URL using ioredis
 let redisClient: any = null;
+let redisDisabled = false;
+/** Separate Redis client for auth tokens — not disabled by RSVP/cache errors elsewhere. */
+let authRedisClient: any = null;
+
+function markRedisUnavailable(): void {
+  redisDisabled = true;
+  if (redisClient) {
+    try {
+      redisClient.disconnect?.();
+    } catch {}
+    redisClient = null;
+  }
+}
+
+function captureKvCacheError(error: unknown, operation: string): void {
+  Sentry.captureException(
+    error instanceof Error ? error : new Error(String(error)),
+    {
+      tags: { component: "kv-cache", operation },
+    },
+  );
+}
+
 async function getRedis() {
+  if (redisDisabled) return null;
   if (redisClient) return redisClient;
   const url = process.env.REDIS_URL;
   if (!url) return null;
-  const { default: IORedis } = await import("ioredis");
-  redisClient = new IORedis(url, {
+  try {
+    const { default: IORedis } = await import("ioredis");
+    redisClient = new IORedis(url, redisClientOptions(url));
+    await redisClient.connect?.();
+    return redisClient;
+  } catch (error: unknown) {
+    captureKvCacheError(error, "redis_connect");
+    markRedisUnavailable();
+    return null;
+  }
+}
+
+function redisClientOptions(url: string) {
+  const options: Record<string, unknown> = {
     lazyConnect: true,
     maxRetriesPerRequest: 2,
-  });
+    enableReadyCheck: false,
+    connectTimeout: 10000,
+  };
+  if (url.startsWith("rediss://")) {
+    options.tls = {};
+  }
+  return options;
+}
+
+/** Redis for password-reset and other auth KV — isolated from {@link markRedisUnavailable}. */
+async function getAuthRedis() {
+  if (authRedisClient) return authRedisClient;
+  const url = process.env.REDIS_URL;
+  if (!url) return null;
   try {
-    await redisClient.connect?.();
-  } catch {}
-  return redisClient;
+    const { default: IORedis } = await import("ioredis");
+    authRedisClient = new IORedis(url, redisClientOptions(url));
+    await authRedisClient.connect?.();
+    return authRedisClient;
+  } catch (error: unknown) {
+    captureKvCacheError(error, "auth_redis_connect");
+    authRedisClient = null;
+    return null;
+  }
 }
 async function kvGet(key: string): Promise<RsvpStatus | null> {
   const redis = await getRedis();
   if (redis) {
-    const val = (await redis.get(key)) as RsvpStatus | null;
-    if (val !== "yes" && val !== "no" && val !== "maybe") return null;
-    return val;
+    try {
+      const val = (await redis.get(key)) as RsvpStatus | null;
+      if (val !== "yes" && val !== "no" && val !== "maybe") return null;
+      return val;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGet_redis");
+      markRedisUnavailable();
+    }
   }
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
-      },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const data = await res.json().catch(() => ({}) as any);
-    const val = data?.result ?? null;
-    if (val !== "yes" && val !== "no" && val !== "maybe") return null;
-    return val;
+    try {
+      const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+        },
+        cache: "no-store",
+      });
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => ({}) as any);
+      const val = data?.result ?? null;
+      if (val !== "yes" && val !== "no" && val !== "maybe") return null;
+      return val;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGet_rest");
+      return memoryStore.get(key) ?? null;
+    }
   }
   return memoryStore.get(key) ?? null;
 }
@@ -78,25 +149,34 @@ async function kvGet(key: string): Promise<RsvpStatus | null> {
 async function kvSet(key: string, value: RsvpStatus): Promise<void> {
   const redis = await getRedis();
   if (redis) {
-    if (value === null) {
-      await redis.del(key);
-    } else {
-      await redis.set(key, value);
+    try {
+      if (value === null) {
+        await redis.del(key);
+      } else {
+        await redis.set(key, value);
+      }
+      return;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSet_redis");
+      markRedisUnavailable();
     }
-    return;
   }
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    await fetch(
-      `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+    try {
+      await fetch(
+        `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+          },
+          body: value ?? "",
         },
-        body: value ?? "",
-      },
-    );
-    return;
+      );
+      return;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSet_rest");
+    }
   }
   if (value === null) memoryStore.delete(key);
   else memoryStore.set(key, value);
@@ -169,28 +249,37 @@ export async function setRsvp(
 export async function kvGetJson<T = any>(key: string): Promise<T | null> {
   const redis = await getRedis();
   if (redis) {
-    const raw = (await redis.get(key)) as string | null;
-    if (!raw) return null;
     try {
-      return JSON.parse(raw) as T;
-    } catch {
-      return null;
+      const raw = (await redis.get(key)) as string | null;
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        return null;
+      }
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGetJson_redis");
+      markRedisUnavailable();
     }
   }
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const data = await res.json().catch(() => ({}) as any);
-    const raw = data?.result ?? null;
-    if (!raw) return null;
     try {
-      return JSON.parse(raw) as T;
-    } catch {
-      return null;
+      const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` },
+        cache: "no-store",
+      });
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => ({}) as any);
+      const raw = data?.result ?? null;
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        return null;
+      }
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGetJson_rest");
     }
   }
   const exp = memoryTtl.get(key);
@@ -212,45 +301,262 @@ export async function kvSetJson(key: string, value: any): Promise<void> {
   const redis = await getRedis();
   const payload = JSON.stringify(value);
   if (redis) {
-    await redis.set(key, payload);
-    return;
+    try {
+      await redis.set(key, payload);
+      return;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSetJson_redis");
+      markRedisUnavailable();
+    }
   }
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    await fetch(
-      `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+    try {
+      await fetch(
+        `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+          },
+          body: payload,
         },
-        body: payload,
-      },
-    );
-    return;
+      );
+      return;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSetJson_rest");
+    }
   }
   memoryJson.set(key, payload);
 }
 
 export async function kvDelete(key: string): Promise<void> {
-  const redis = await getRedis();
+  const redis = (await getAuthRedis()) ?? (await getRedis());
   if (redis) {
-    await redis.del(key).catch(() => {});
-    return;
+    try {
+      await redis.del(key);
+      return;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvDelete_redis");
+      if (redis === redisClient) markRedisUnavailable();
+    }
   }
-  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    await fetch(
-      `${process.env.KV_REST_API_URL}/del/${encodeURIComponent(key)}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
-        },
+  const restDel = await kvRestCommand(["DEL", key]);
+  if (restDel !== null) return;
+  const restBase = kvRestBaseUrl();
+  const token = kvRestToken();
+  if (restBase && token) {
+    await fetch(`${restBase}/del/${encodeURIComponent(key)}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
       },
-    ).catch(() => {});
+    }).catch((error: unknown) => {
+      captureKvCacheError(error, "kvDelete_rest");
+    });
     return;
   }
   memoryJson.delete(key);
   memoryTtl.delete(key);
+}
+
+function kvRestBaseUrl(): string | null {
+  const candidates = [
+    process.env.KV_REST_API_URL,
+    process.env.UPSTASH_REDIS_REST_URL,
+    process.env.KV_URL?.startsWith("http") ? process.env.KV_URL : null,
+  ];
+  for (const url of candidates) {
+    if (url) return url.replace(/\/$/, "");
+  }
+  return null;
+}
+
+function kvRestToken(): string | null {
+  return (
+    process.env.KV_REST_API_TOKEN ??
+    process.env.UPSTASH_REDIS_REST_TOKEN ??
+    null
+  );
+}
+
+async function kvRestCommand(command: string[]): Promise<string | null> {
+  const restBase = kvRestBaseUrl();
+  const token = kvRestToken();
+  if (!restBase || !token) return null;
+  try {
+    const res = await fetch(restBase, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(command),
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json().catch(() => null)) as {
+      result?: string | null;
+    } | null;
+    const result = data?.result;
+    return typeof result === "string" ? result : null;
+  } catch (error: unknown) {
+    captureKvCacheError(error, "kvRestCommand");
+    return null;
+  }
+}
+
+/** Redis-first string storage with TTL; falls back to KV REST then in-memory. */
+async function kvSetStringWithTtl(
+  key: string,
+  value: string,
+  ttlSec: number,
+): Promise<boolean> {
+  const redis = await getAuthRedis();
+  if (redis) {
+    try {
+      await redis.set(key, value, "EX", ttlSec);
+      return true;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSetStringWithTtl_redis");
+    }
+  }
+  const restSet = await kvRestCommand([
+    "SET",
+    key,
+    value,
+    "EX",
+    String(ttlSec),
+  ]);
+  if (restSet === "OK") return true;
+  const restBase = kvRestBaseUrl();
+  const token = kvRestToken();
+  if (restBase && token) {
+    try {
+      const res = await fetch(
+        `${restBase}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}?EX=${ttlSec}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          cache: "no-store",
+        },
+      );
+      if (res.ok) return true;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSetStringWithTtl_rest");
+    }
+  }
+  memoryJson.set(key, value);
+  memoryTtl.set(key, Date.now() + ttlSec * 1000);
+  return process.env.NODE_ENV !== "production";
+}
+
+/** Redis-first string lookup; falls back to KV REST then in-memory TTL map. */
+async function kvGetString(key: string): Promise<string | null> {
+  const redis = await getAuthRedis();
+  if (redis) {
+    try {
+      const val = (await redis.get(key)) as string | null;
+      return val ?? null;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGetString_redis");
+    }
+  }
+  const restVal = await kvRestCommand(["GET", key]);
+  if (restVal) return restVal;
+  const restBase = kvRestBaseUrl();
+  const token = kvRestToken();
+  if (restBase && token) {
+    try {
+      const res = await fetch(`${restBase}/get/${encodeURIComponent(key)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      });
+      if (!res.ok) return null;
+      const data = await res
+        .json()
+        .catch(() => ({}) as { result?: string | null });
+      const val = data?.result;
+      return typeof val === "string" ? val : null;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGetString_rest");
+    }
+  }
+  if (process.env.NODE_ENV === "production") return null;
+  const exp = memoryTtl.get(key);
+  if (typeof exp === "number" && Date.now() > exp) {
+    memoryJson.delete(key);
+    memoryTtl.delete(key);
+    return null;
+  }
+  return memoryJson.get(key) ?? null;
+}
+
+const WEBAUTHN_CHALLENGE_TTL_SEC = 5 * 60;
+
+/**
+ * Bewaar een tijdelijke WebAuthn-challenge (registratie of login), Redis-first met TTL.
+ * Bij ontbrekende Redis: geheugenfallback met expiry (zoals wachtwoord-reset tokens).
+ *
+ * @param kind - Registratie onder ingelogde gebruiker of anonieme authenticatie-flow.
+ * @param sessionKey - Unieke sleutel (`userId` bij registratie, willekeurige sessie-id bij login).
+ * @param challenge - Base64url challenge-string uit SimpleWebAuthn.
+ */
+export async function webAuthnStoreChallenge(
+  kind: "registration" | "authentication",
+  sessionKey: string,
+  challenge: string,
+): Promise<void> {
+  const key = `webauthn:${kind}:${sessionKey}`;
+  const redis = await getRedis();
+  if (redis) {
+    await redis.set(key, challenge, "EX", WEBAUTHN_CHALLENGE_TTL_SEC);
+    return;
+  }
+  memoryJson.set(key, JSON.stringify({ challenge }));
+  memoryTtl.set(key, Date.now() + WEBAUTHN_CHALLENGE_TTL_SEC * 1000);
+}
+
+/**
+ * Haalt een challenge op en verwijdert deze (eenmalig gebruik).
+ *
+ * @param kind - Zelfde scope als bij {@link webAuthnStoreChallenge}.
+ * @param sessionKey - Zelfde sleutel als bij opslag.
+ * @returns De challenge-string of `null` bij ontbreken of expiry.
+ */
+export async function webAuthnConsumeChallenge(
+  kind: "registration" | "authentication",
+  sessionKey: string,
+): Promise<string | null> {
+  const key = `webauthn:${kind}:${sessionKey}`;
+  const redis = await getRedis();
+  if (redis) {
+    const pipeline = redis.pipeline();
+    pipeline.get(key);
+    pipeline.del(key);
+    const results = await pipeline.exec();
+    const raw = results?.[0]?.[1];
+    return typeof raw === "string" ? raw : null;
+  }
+  const exp = memoryTtl.get(key);
+  if (typeof exp === "number" && Date.now() > exp) {
+    memoryJson.delete(key);
+    memoryTtl.delete(key);
+    return null;
+  }
+  const val = memoryJson.get(key);
+  memoryJson.delete(key);
+  memoryTtl.delete(key);
+  if (!val) return null;
+  try {
+    const parsed = JSON.parse(val) as { challenge?: string };
+    return typeof parsed.challenge === "string" ? parsed.challenge : null;
+  } catch {
+    return null;
+  }
 }
 
 function makeToken(): string {
@@ -258,51 +564,140 @@ function makeToken(): string {
   return Math.random().toString(36).slice(2, 10).toUpperCase();
 }
 
-export async function createPasswordResetToken(
-  email: string,
-): Promise<{ ok: boolean; token?: string }> {
+async function hasActivePasswordResetPending(userId: string): Promise<boolean> {
+  const pendingKey = passwordResetPendingKey(userId);
+  if (await kvGetString(pendingKey)) return true;
   const p = await getPrisma();
-  const user = p ? await p.user.findFirst({ where: { email } }) : null;
-  if (!user) return { ok: true }; // do not leak existence
-  const token = makeToken();
-  const key = `pwreset:${token}`;
-  const redis = await getRedis();
-  const ttlSec = 15 * 60;
-  if (redis) {
-    await redis.set(key, user.id, "EX", ttlSec);
-  } else {
-    memoryJson.set(key, JSON.stringify({ userId: user.id }));
-    memoryTtl.set(key, Date.now() + ttlSec * 1000);
+  if (!p) return false;
+  const active = await p.passwordResetToken.count({
+    where: { userId, expiresAt: { gt: new Date() } },
+  });
+  return active > 0;
+}
+
+async function storePasswordResetToken(
+  userId: string,
+  token: string,
+  ttlSec: number,
+): Promise<boolean> {
+  const normalizedToken = normalizePasswordResetToken(token);
+  const key = passwordResetRedisKey(normalizedToken);
+  const kvOk = await kvSetStringWithTtl(key, userId, ttlSec);
+  if (kvOk) return true;
+  const p = await getPrisma();
+  if (!p) return false;
+  try {
+    await p.passwordResetToken.deleteMany({ where: { userId } });
+    await p.passwordResetToken.create({
+      data: {
+        token: normalizedToken,
+        userId,
+        expiresAt: new Date(Date.now() + ttlSec * 1000),
+      },
+    });
+    return true;
+  } catch (error: unknown) {
+    captureKvCacheError(error, "password_reset_db_set");
+    return false;
   }
-  return { ok: true, token };
+}
+
+async function lookupPasswordResetUserId(
+  normalizedToken: string,
+): Promise<string | null> {
+  const key = passwordResetRedisKey(normalizedToken);
+  let userId: string | null = await kvGetString(key);
+  if (userId?.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(userId) as { userId?: string };
+      userId = typeof parsed.userId === "string" ? parsed.userId : null;
+    } catch {
+      userId = null;
+    }
+  }
+  if (userId) return userId;
+  const p = await getPrisma();
+  if (!p) return null;
+  const row = await p.passwordResetToken.findUnique({
+    where: { token: normalizedToken },
+  });
+  if (!row) return null;
+  if (row.expiresAt <= new Date()) {
+    await p.passwordResetToken
+      .delete({ where: { token: normalizedToken } })
+      .catch(() => null);
+    return null;
+  }
+  return row.userId;
+}
+
+async function clearPasswordResetToken(
+  normalizedToken: string,
+  userId: string,
+): Promise<void> {
+  const key = passwordResetRedisKey(normalizedToken);
+  await kvDelete(key);
+  await clearPasswordResetPending(userId);
+  const p = await getPrisma();
+  if (p) {
+    await p.passwordResetToken
+      .deleteMany({ where: { userId } })
+      .catch(() => null);
+  }
+}
+
+async function setPasswordResetPending(
+  userId: string,
+  ttlSec: number,
+): Promise<boolean> {
+  const pendingKey = passwordResetPendingKey(userId);
+  return kvSetStringWithTtl(pendingKey, "1", ttlSec);
+}
+
+async function clearPasswordResetPending(userId: string): Promise<void> {
+  const pendingKey = passwordResetPendingKey(userId);
+  await kvDelete(pendingKey);
+}
+
+export async function createPasswordResetToken(email: string): Promise<{
+  ok: boolean;
+  token?: string;
+  recipientEmail?: string;
+  suppressed?: boolean;
+}> {
+  const p = await getPrisma();
+  const user = p
+    ? await p.user.findFirst({
+        where: { email: { equals: email, mode: "insensitive" } },
+        select: { id: true, email: true },
+      })
+    : null;
+  if (!user) return { ok: true };
+  if (await hasActivePasswordResetPending(user.id)) {
+    return { ok: true, suppressed: true };
+  }
+  const token = makeToken();
+  const ttlSec = PASSWORD_RESET_TTL_SEC;
+  const stored = await storePasswordResetToken(user.id, token, ttlSec);
+  if (!stored) {
+    Sentry.captureMessage("password_reset_storage_failed", {
+      level: "error",
+      tags: { context: "password_reset", component: "kv-cache" },
+    });
+    return { ok: true };
+  }
+  await setPasswordResetPending(user.id, ttlSec);
+  return { ok: true, token, recipientEmail: user.email ?? email };
 }
 
 export async function redeemPasswordResetToken(
   token: string,
   newPassword: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  if (!token || !newPassword || newPassword.length < 8)
+  const normalizedToken = normalizePasswordResetToken(token);
+  if (!normalizedToken || !newPassword || newPassword.length < 8)
     return { ok: false, error: "invalid" };
-  const key = `pwreset:${token}`;
-  const redis = await getRedis();
-  let userId: string | null = null;
-  if (redis) {
-    userId = (await redis.get(key)) as string | null;
-  } else {
-    const exp = memoryTtl.get(key);
-    if (typeof exp === "number" && Date.now() > exp) {
-      memoryJson.delete(key);
-      memoryTtl.delete(key);
-    }
-    const val = memoryJson.get(key);
-    if (val) {
-      try {
-        userId = JSON.parse(val).userId as string;
-      } catch {
-        userId = null;
-      }
-    }
-  }
+  const userId = await lookupPasswordResetUserId(normalizedToken);
   if (!userId) return { ok: false, error: "invalid_or_expired" };
   const p = await getPrisma();
   if (!p) return { ok: false, error: "db_unavailable" };
@@ -310,12 +705,7 @@ export async function redeemPasswordResetToken(
   await p.user
     .update({ where: { id: userId }, data: { passwordHash: hash } })
     .catch(() => null);
-  if (redis) {
-    await redis.del(key).catch(() => {});
-  } else {
-    memoryJson.delete(key);
-    memoryTtl.delete(key);
-  }
+  await clearPasswordResetToken(normalizedToken, userId);
   return { ok: true };
 }
 
@@ -1038,8 +1428,7 @@ export async function getUserRolesBatch(
 
   for (const userId of uniqueIds) {
     const raw = memoryStore.get(`roles:${userId}`) as unknown as
-      | string
-      | undefined;
+      string | undefined;
     if (!raw) {
       out[userId] = { player: true };
       continue;

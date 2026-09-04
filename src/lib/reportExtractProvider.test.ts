@@ -92,6 +92,13 @@ describe("reportExtractProvider", () => {
       expect(cfg.openAiModel).toBe("gpt-4o");
       expect(cfg.openAiModelSubstitutedFrom).toBe("gpt-5.2-2025-12-11");
     });
+
+    it("remaps free-tier-blocked gpt-5-chat-latest to gpt-4o", () => {
+      process.env.REPORT_EXTRACT_OPENAI_MODEL = "gpt-5-chat-latest";
+      const cfg = getExtractProviderConfig();
+      expect(cfg.openAiModel).toBe("gpt-4o");
+      expect(cfg.openAiModelSubstitutedFrom).toBe("gpt-5-chat-latest");
+    });
   });
 
   describe("resolveReportExtractOpenAiModel", () => {
@@ -105,9 +112,20 @@ describe("reportExtractProvider", () => {
     });
 
     it("remaps openai/-prefixed removed snapshot id", () => {
-      expect(resolveReportExtractOpenAiModel("openai/gpt-5.2-2025-12-11")).toEqual({
+      expect(
+        resolveReportExtractOpenAiModel("openai/gpt-5.2-2025-12-11"),
+      ).toEqual({
         model: "gpt-4o",
         substitutedFrom: "openai/gpt-5.2-2025-12-11",
+      });
+    });
+
+    it("remaps free-tier-blocked gpt-5-chat-latest", () => {
+      expect(
+        resolveReportExtractOpenAiModel("openai/gpt-5-chat-latest"),
+      ).toEqual({
+        model: "gpt-4o",
+        substitutedFrom: "openai/gpt-5-chat-latest",
       });
     });
 

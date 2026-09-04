@@ -40,6 +40,7 @@ module.exports = withSentryConfig(nextConfig, {
     treeshake: {
       removeDebugLogging: true,
     },
-    automaticVercelMonitors: true,
+    /** Cron check-ins only on production; preview deploys are ephemeral (Sentry uptime noise). */
+    automaticVercelMonitors: process.env.VERCEL_ENV === "production",
   },
 });
