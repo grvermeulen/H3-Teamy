@@ -86,22 +86,32 @@ function strokePolyline(
   context.setLineDash([]);
 }
 
-/** Paints ground and water polygons touching the chunk. */
-function paintTerrain(
+/** Paints ground polygons touching the chunk, across every touching tile. */
+function paintGround(
   context: RasterContext,
-  tile: DecodedTile,
+  tiles: DecodedTile[],
   chunkRect: Rect,
 ): void {
-  for (const area of tile.ground)
-    if (rectsIntersect(area.bounds, chunkRect))
-      fillRing(context, area.ring, GROUND_FILL[area.kind]);
-  for (const area of tile.water)
-    if (rectsIntersect(area.bounds, chunkRect))
-      fillRing(context, area.ring, WATER_FILL);
+  for (const tile of tiles)
+    for (const area of tile.ground)
+      if (rectsIntersect(area.bounds, chunkRect))
+        fillRing(context, area.ring, GROUND_FILL[area.kind]);
 }
 
-/** Paints pavements, road surfaces and dashed centre lines, each layer in its own pass. */
-function paintRoads(context: RasterContext, roads: DecodedRoad[]): void {
+/** Paints water polygons touching the chunk, across every touching tile. */
+function paintWater(
+  context: RasterContext,
+  tiles: DecodedTile[],
+  chunkRect: Rect,
+): void {
+  for (const tile of tiles)
+    for (const area of tile.water)
+      if (rectsIntersect(area.bounds, chunkRect))
+        fillRing(context, area.ring, WATER_FILL);
+}
+
+/** Paints the pavement under roads whose class gets one. */
+function paintPavements(context: RasterContext, roads: DecodedRoad[]): void {
   for (const road of roads) {
     if (PAVEMENT_CLASSES.includes(road.roadClass))
       strokePolyline(
@@ -111,6 +121,10 @@ function paintRoads(context: RasterContext, roads: DecodedRoad[]): void {
         ROAD_WIDTH_M[road.roadClass] + PAVEMENT_SIDES * PAVEMENT_WIDTH_M,
       );
   }
+}
+
+/** Paints every road's surface. */
+function paintRoadSurfaces(context: RasterContext, roads: DecodedRoad[]): void {
   for (const road of roads)
     strokePolyline(
       context,
@@ -118,6 +132,10 @@ function paintRoads(context: RasterContext, roads: DecodedRoad[]): void {
       ROAD_FILL,
       ROAD_WIDTH_M[road.roadClass],
     );
+}
+
+/** Paints the dashed centre line on roads whose class gets one. */
+function paintCentreLines(context: RasterContext, roads: DecodedRoad[]): void {
   for (const road of roads) {
     if (CENTRE_LINE_CLASSES.includes(road.roadClass))
       strokePolyline(
@@ -231,7 +249,14 @@ function tilesTouching(tiles: DecodedTile[], chunkRect: Rect): DecodedTile[] {
   );
 }
 
-/** Paints everything static inside `chunkRect` at `zoom` px/m into a context that maps metres to pixels. */
+/**
+ * Paints everything static inside `chunkRect` at `zoom` px/m into a context that maps metres to
+ * pixels. Each layer runs once over every touching tile's geometry (ground, then water, then
+ * pavements, road surfaces and centre lines, then buildings, then labels) rather than painting
+ * every layer of one tile before moving to the next — `tilesTouching` pulls in neighbouring
+ * tiles' overlap geometry, and painting per tile let a later tile's ground or road fill
+ * overwrite an earlier tile's water or centre line right at the shared border.
+ */
 export function paintChunk(
   context: RasterContext,
   chunkRect: Rect,
@@ -255,12 +280,14 @@ export function paintChunk(
     chunkRect.maxY - chunkRect.minY,
   );
   const touching = tilesTouching(tiles, chunkRect);
-  for (const tile of touching) paintTerrain(context, tile, chunkRect);
-  for (const tile of touching)
-    paintRoads(
-      context,
-      tile.roads.filter((road) => rectsIntersect(road.bounds, chunkRect)),
-    );
+  paintGround(context, touching, chunkRect);
+  paintWater(context, touching, chunkRect);
+  const roads = touching.flatMap((tile) =>
+    tile.roads.filter((road) => rectsIntersect(road.bounds, chunkRect)),
+  );
+  paintPavements(context, roads);
+  paintRoadSurfaces(context, roads);
+  paintCentreLines(context, roads);
   for (const tile of touching)
     paintBuildings(context, tile, chunkRect, landmarks);
   for (const tile of touching)
