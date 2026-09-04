@@ -256,13 +256,19 @@ function clipSegmentToRect(
   return [start, end];
 }
 
+/** True when a clipped segment's two endpoints coincide (the source only touched the rect). */
+function isZeroLength(clipped: [Point, Point]): boolean {
+  const [start, end] = clipped;
+  return start[0] === end[0] && start[1] === end[1];
+}
+
 /** Clips a polyline to a rectangle, returning the pieces that remain inside (each ≥ 2 points). */
 export function clipPolylineToRect(points: Point[], rect: Rect): Point[][] {
   const pieces: Point[][] = [];
   let current: Point[] = [];
   for (let index = 0; index + 1 < points.length; index++) {
     const clipped = clipSegmentToRect(points[index], points[index + 1], rect);
-    if (!clipped) {
+    if (!clipped || isZeroLength(clipped)) {
       if (current.length >= 2) pieces.push(current);
       current = [];
       continue;

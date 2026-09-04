@@ -9,6 +9,7 @@ import {
   boundsOf,
   clipPolygonToRect,
   clipPolylineToRect,
+  polygonArea,
   rectsIntersect,
   type Rect,
 } from "./geometry";
@@ -137,6 +138,22 @@ export function flattenUnits(points: Point[]): number[] {
   return flat;
 }
 
+/** A clipped ring needs at least this many distinct points to enclose any area. */
+const MIN_DRAWABLE_RING_POINTS = 3;
+
+/**
+ * True when a clipped ring is worth emitting: at least three distinct points and a non-zero
+ * area. `clipPolygonToRect` guarantees a length of 0 or ≥ 3, but a ring that only grazes a
+ * tile corner or edge can still come back as ≥ 3 copies of the same point (or otherwise
+ * collinear), which would otherwise reach the asset as a degenerate, invisible shape.
+ */
+function isDrawableRing(ring: Point[]): boolean {
+  if (ring.length < MIN_DRAWABLE_RING_POINTS) return false;
+  const distinctPoints = new Set(ring.map(([x, y]) => `${x},${y}`));
+  if (distinctPoints.size < MIN_DRAWABLE_RING_POINTS) return false;
+  return polygonArea(ring) > 0;
+}
+
 /**
  * Helper to clip a polygon ring to each tile it touches and visit the clipped result.
  */
@@ -147,7 +164,7 @@ function forEachClippedRing(
 ): void {
   for (const coord of tilesCovering(boundsOf(ring), bounds)) {
     const clipped = clipPolygonToRect(ring, tileRect(coord, bounds));
-    if (clipped.length > 0) visit(coord, clipped);
+    if (isDrawableRing(clipped)) visit(coord, clipped);
   }
 }
 

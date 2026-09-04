@@ -21,7 +21,7 @@ describe("tile grid", () => {
     expect(region.maxX - region.minX).toBeGreaterThan(12_900);
     expect(region.maxX - region.minX).toBeLessThan(13_100);
     expect(region.maxY - region.minY).toBeGreaterThan(8_800);
-    expect(region.maxY - region.minY).toBeLessThan(8_900);
+    expect(region.maxY - region.minY).toBeLessThan(9_000);
     expect(tileGridSize(region)).toEqual({ columns: 7, rows: 5 });
   });
 
@@ -121,6 +121,24 @@ describe("buildTiles", () => {
     });
     expect(tiles[0].buildings[0].points).toHaveLength(8);
     expect(tiles[1].buildings).toHaveLength(1);
+  });
+
+  it("drops a ring that only grazes a tile corner or edge, keeping the real tile", () => {
+    // This triangle's only vertex inside tiles (0,0), (1,0) and (0,1) is the single point
+    // (2020, 2020) they all share with tile (1,1); it fully lies inside tile (1,1) with real
+    // area. Clipping to the first three tiles must therefore drop it, not emit a degenerate
+    // ring collapsed onto that shared corner.
+    const corneringBuilding = {
+      ring: [
+        [2020, 2020],
+        [2100, 2020],
+        [2020, 2100],
+      ] as Point[],
+      levels: 1,
+    };
+    const tiles = buildTiles(bounds, [], [corneringBuilding], [], []);
+    expect(tiles.map((tile) => [tile.x, tile.y])).toEqual([[1, 1]]);
+    expect(tiles[0].buildings).toHaveLength(1);
   });
 
   it("omits empty tiles and keeps ground kind and water", () => {

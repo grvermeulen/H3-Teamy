@@ -171,6 +171,35 @@ describe("simplification and clipping", () => {
     ).toEqual([]);
   });
 
+  it("drops a zero-length clip where a polyline only grazes a corner or an edge", () => {
+    const rect = { minX: 0, minY: 0, maxX: 2, maxY: 1 };
+    const grazesCorner: Point[] = [
+      [-1, -1],
+      [0, 0],
+      [-1, 1],
+    ];
+    expect(clipPolylineToRect(grazesCorner, rect)).toEqual([]);
+
+    const grazesEdge: Point[] = [
+      [-1, 0],
+      [0, 0.5],
+      [-1, 1],
+    ];
+    expect(clipPolylineToRect(grazesEdge, rect)).toEqual([]);
+  });
+
+  it("keeps one piece when a polyline touches an edge in the middle of a longer inside run", () => {
+    const rect = { minX: 0, minY: 0, maxX: 2, maxY: 1 };
+    const touchesEdgeMidRun: Point[] = [
+      [0.2, 0.5],
+      [0.5, 1],
+      [0.8, 0.5],
+    ];
+    expect(clipPolylineToRect(touchesEdgeMidRun, rect)).toEqual([
+      touchesEdgeMidRun,
+    ]);
+  });
+
   it("detects rectangle overlap", () => {
     expect(
       rectsIntersect(
