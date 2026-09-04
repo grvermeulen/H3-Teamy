@@ -22,6 +22,11 @@ export type RoadGraph = {
 const BUCKET_M = 50;
 
 function decodeNodes(roads: MapRoads): Point[] {
+  if (roads.nodes.length % 2 !== 0) {
+    throw new Error(
+      `roads.json nodes length ${roads.nodes.length} is odd; must be even`,
+    );
+  }
   const nodes: Point[] = [];
   for (let index = 0; index + 1 < roads.nodes.length; index += 2) {
     nodes.push([
@@ -55,6 +60,11 @@ function decodeEdges(roads: MapRoads, nodeCount: number): RoadGraphEdge[] {
       throw new Error(
         `roads.json edge references an unknown class index ${classIndex}`,
       );
+    if (nameIndex >= 0 && nameIndex >= roads.names.length) {
+      throw new Error(
+        `roads.json edge references an unknown name index ${nameIndex}`,
+      );
+    }
     edges.push({
       a,
       b,
@@ -123,11 +133,12 @@ function reconstruct(cameFrom: Map<number, number>, current: number): number[] {
   return path.reverse();
 }
 
-/** A* over the graph (one-way flags are ignored — pedestrians and cops may walk both ways). */
+/** A* over the graph; by default one-way flags are ignored (pedestrians and cops may walk both ways). Pass `{ respectOneway: true }` to restrict traversal to the defined direction. */
 export function findPath(
   graph: RoadGraph,
   from: number,
   to: number,
+  options: { respectOneway?: boolean } = {},
 ): number[] | null {
   const heuristic = (index: number): number =>
     Math.hypot(
@@ -153,6 +164,7 @@ export function findPath(
     for (const edgeIndex of graph.adjacency[current]) {
       const edge = graph.edges[edgeIndex];
       const neighbour = edge.a === current ? edge.b : edge.a;
+      if (options.respectOneway && edge.oneway && edge.a !== current) continue;
       const tentative = (bestCost.get(current) ?? Infinity) + edge.length;
       if (tentative >= (bestCost.get(neighbour) ?? Infinity)) continue;
       cameFrom.set(neighbour, current);
@@ -164,16 +176,23 @@ export function findPath(
   return null;
 }
 
-/** Sum of edge lengths along a node path (0 for paths shorter than two nodes). */
+/** Sum of edge lengths along a node path (0 for paths shorter than two nodes). When multiple edges connect the same pair of nodes, uses the shortest. */
 export function pathLength(graph: RoadGraph, path: number[]): number {
   let total = 0;
   for (let index = 0; index + 1 < path.length; index++) {
-    const edge = graph.edges.find(
-      (candidate) =>
-        (candidate.a === path[index] && candidate.b === path[index + 1]) ||
-        (candidate.b === path[index] && candidate.a === path[index + 1]),
-    );
-    total += edge?.length ?? 0;
+    const currentNode = path[index];
+    const nextNode = path[index + 1];
+    let minLength = Infinity;
+    for (const edgeIndex of graph.adjacency[currentNode]) {
+      const edge = graph.edges[edgeIndex];
+      if (
+        (edge.a === currentNode && edge.b === nextNode) ||
+        (edge.b === currentNode && edge.a === nextNode)
+      ) {
+        minLength = Math.min(minLength, edge.length);
+      }
+    }
+    total += minLength !== Infinity ? minLength : 0;
   }
   return total;
 }

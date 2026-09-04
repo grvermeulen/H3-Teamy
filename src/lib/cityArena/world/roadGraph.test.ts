@@ -39,6 +39,22 @@ describe("decodeRoadGraph", () => {
     ).toThrow(/node index/);
   });
 
+  it("rejects an out-of-range nameIndex", () => {
+    expect(() =>
+      decodeRoadGraph({
+        ...roads,
+        edges: [0, 1, 0, 1, 0, 400],
+        names: ["Dorpsstraat"],
+      }),
+    ).toThrow(/name index/);
+  });
+
+  it("rejects an odd-length node array", () => {
+    expect(() =>
+      decodeRoadGraph({ ...roads, nodes: roads.nodes.slice(0, -1) }),
+    ).toThrow(/nodes/);
+  });
+
   it("finds the nearest node within a distance limit", () => {
     const graph = decodeRoadGraph(roads);
     expect(graph.nearestNode([98, 3])).toBe(1);
@@ -58,5 +74,42 @@ describe("findPath", () => {
     const graph = decodeRoadGraph({ ...roads, edges: roads.edges.slice(0, 6) });
     expect(findPath(graph, 1, 1)).toEqual([1]);
     expect(findPath(graph, 0, 3)).toBeNull();
+  });
+
+  it("respects one-way edges when respectOneway is true", () => {
+    const onewayRoads: MapRoads = {
+      nodes: [0, 0, 100, 0],
+      edges: [0, 1, 0, -1, 1, 100],
+      classes: ["residential"],
+      names: [],
+    };
+    const graph = decodeRoadGraph(onewayRoads);
+    // Default: one-way edge can be traversed both ways
+    expect(findPath(graph, 1, 0)).toEqual([1, 0]);
+    expect(findPath(graph, 0, 1)).toEqual([0, 1]);
+    // With respectOneway: 0→1 works, 1→0 fails
+    expect(findPath(graph, 0, 1, { respectOneway: true })).toEqual([0, 1]);
+    expect(findPath(graph, 1, 0, { respectOneway: true })).toBeNull();
+  });
+});
+
+describe("pathLength", () => {
+  it("returns 0 for paths shorter than two nodes", () => {
+    const graph = decodeRoadGraph(roads);
+    expect(pathLength(graph, [])).toBe(0);
+    expect(pathLength(graph, [1])).toBe(0);
+  });
+
+  it("uses shortest edge when multiple parallel edges exist", () => {
+    const parallelRoads: MapRoads = {
+      nodes: [0, 0, 100, 0],
+      edges: [0, 1, 0, -1, 0, 100, 0, 1, 0, -1, 0, 50],
+      classes: ["residential"],
+      names: [],
+    };
+    const graph = decodeRoadGraph(parallelRoads);
+    const path = [0, 1];
+    // Should use the shortest edge (50 units = 50/4 meters = 12.5m)
+    expect(pathLength(graph, path)).toBe(12.5);
   });
 });
