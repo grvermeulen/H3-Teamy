@@ -95,7 +95,7 @@ This document reflects the features that exist in the code today. Planned or fut
 
 ## Pages
 
-- 
+- /
 - /admin
 - /admin/feedback
 - /attendance
