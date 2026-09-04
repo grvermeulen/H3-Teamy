@@ -51,6 +51,10 @@ export function parseMapIndex(value: unknown): MapIndex {
   return MapIndexSchema.parse(value);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 function isFlatNumberArray(value: unknown): boolean {
   return (
     Array.isArray(value) && value.every((entry) => typeof entry === "number")
@@ -60,26 +64,20 @@ function isFlatNumberArray(value: unknown): boolean {
 function isGeometryList(value: unknown): boolean {
   return (
     Array.isArray(value) &&
-    value.every(
-      (entry) =>
-        typeof entry === "object" &&
-        entry !== null &&
-        isFlatNumberArray((entry as { points?: unknown }).points),
-    )
+    value.every((entry) => isRecord(entry) && isFlatNumberArray(entry.points))
   );
 }
 
 /** Cheap structural guard for a tile payload (full Zod validation would be too slow at 10 Hz loads). */
 export function isMapTile(value: unknown): value is MapTile {
-  if (typeof value !== "object" || value === null) return false;
-  const candidate = value as Record<string, unknown>;
+  if (!isRecord(value)) return false;
   return (
-    typeof candidate.x === "number" &&
-    typeof candidate.y === "number" &&
-    isGeometryList(candidate.roads) &&
-    isGeometryList(candidate.buildings) &&
-    isGeometryList(candidate.ground) &&
-    isGeometryList(candidate.water)
+    typeof value.x === "number" &&
+    typeof value.y === "number" &&
+    isGeometryList(value.roads) &&
+    isGeometryList(value.buildings) &&
+    isGeometryList(value.ground) &&
+    isGeometryList(value.water)
   );
 }
 

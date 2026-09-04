@@ -58,6 +58,23 @@ describe("isMapTile", () => {
     expect(isMapTile({ x: 1, y: 2, roads: [] })).toBe(false);
     expect(isMapTile(null)).toBe(false);
   });
+
+  it("rejects non-object primitives", () => {
+    expect(isMapTile(42)).toBe(false);
+  });
+
+  it("rejects geometry entries without numeric points arrays", () => {
+    expect(
+      isMapTile({
+        x: 1,
+        y: 2,
+        roads: [{ points: "not-an-array" }],
+        buildings: [],
+        ground: [],
+        water: [],
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("ArenaSettingsSchema", () => {
