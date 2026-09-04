@@ -244,4 +244,39 @@ describe("createMapLoader", () => {
     expect(progress.loaded).toBe(0);
     expect(loader.hasFailures()).toBe(true);
   });
+
+  it("refreshes tile recency when revisiting a resident tile", async () => {
+    const fetchImpl = routedFetch();
+    const loader = createMapLoader({
+      baseUrl: "/map",
+      fetchImpl,
+      maxTiles: 9,
+      sleep,
+    });
+
+    // Load the 3×3 block around tile (1,1): residents (0,0)…(2,2)
+    const point1 = [0, 0] as const;
+    await loader.ensureTilesAround(point1);
+    expect(loader.getTile(1, 1)).toBeDefined();
+    expect(loader.getLoadedTiles()).toHaveLength(9);
+
+    // Move to tile (2,2), which needs tiles (1,1)…(3,3).
+    // Without recency bumping, overlapping tiles (1,1), (1,2), (2,1), (2,2)
+    // lose their recency and some get evicted. With recency bumping via touch(),
+    // they stay resident, so we keep all 9 tiles in the second 3×3 block.
+    const point2 = [12000, 12000] as const;
+    await loader.ensureTilesAround(point2);
+
+    // All 9 tiles in the (2,2) 3×3 block should be resident
+    expect(loader.getLoadedTiles()).toHaveLength(9);
+
+    // Verify the overlapping tiles from the first call are still there
+    expect(loader.getTile(1, 1)).toBeDefined();
+    expect(loader.getTile(1, 2)).toBeDefined();
+    expect(loader.getTile(2, 1)).toBeDefined();
+    expect(loader.getTile(2, 2)).toBeDefined();
+
+    // Tile (0,0) is outside the (2,2) 3×3 block and should be evicted
+    expect(loader.getTile(0, 0)).toBeUndefined();
+  });
 });

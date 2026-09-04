@@ -170,6 +170,7 @@ type TileStoreOptions = {
 
 type TileStore = {
   get(file: string): DecodedTile | undefined;
+  touch(file: string): boolean;
   getAll(): DecodedTile[];
   hasFailures(): boolean;
   request(
@@ -221,6 +222,13 @@ function createTileStore(options: TileStoreOptions): TileStore {
 
   return {
     get: (file) => tiles.peek(file),
+    touch(file) {
+      if (tiles.has(file)) {
+        tiles.get(file);
+        return true;
+      }
+      return false;
+    },
     getAll: () => tiles.keys().flatMap((key) => tiles.peek(key) ?? []),
     hasFailures: () => failed.size > 0,
     request(ref, fetchTile) {
@@ -318,7 +326,7 @@ function createEnsureTilesAround(
     const refs = neededRefs(centre, radiusTiles, index);
     const results = await Promise.all(
       refs.map((ref) =>
-        state.tileStore.get(ref.file)
+        state.tileStore.touch(ref.file)
           ? Promise.resolve(true)
           : state.tileStore.request(ref, (tileRef) =>
               fetchDecodedTile(
