@@ -30,6 +30,20 @@ describe("useDialogFocusTrap", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps focus inside on Shift+Tab pressed right after opening", () => {
+    render(<Dialog onClose={vi.fn()} />);
+    expect(document.activeElement).toBe(screen.getByRole("dialog"));
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(screen.getByText("Laatste"));
+  });
+
+  it("wraps Tab to the first control when the container itself still has focus", () => {
+    render(<Dialog onClose={vi.fn()} />);
+    expect(document.activeElement).toBe(screen.getByRole("dialog"));
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(screen.getByText("Eerste"));
+  });
+
   it("restores focus to the previously focused trigger once the dialog unmounts", () => {
     const trigger = document.createElement("button");
     document.body.appendChild(trigger);

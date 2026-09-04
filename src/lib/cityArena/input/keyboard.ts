@@ -59,6 +59,11 @@ export function attachKeyboard(
   target.addEventListener("keyup", onKeyUp);
   target.addEventListener("blur", onBlur);
   return () => {
+    // Publish a zero vector before detaching: a still-held direction key's `keyup` will never
+    // reach this binding again, and `useArenaGame.ts` reuses the same `InputState` across a
+    // fresh `attachKeyboard`, so a stale non-zero vector would otherwise walk the player forever.
+    pressed.clear();
+    publish();
     target.removeEventListener("keydown", onKeyDown);
     target.removeEventListener("keyup", onKeyUp);
     target.removeEventListener("blur", onBlur);

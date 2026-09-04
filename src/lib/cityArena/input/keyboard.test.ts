@@ -17,8 +17,9 @@ describe("attachKeyboard", () => {
     window.dispatchEvent(new KeyboardEvent("keyup", { code: "KeyD" }));
     expect(state.snapshot()).toEqual({ move: [0, -1] });
     detach();
+    expect(state.snapshot()).toEqual({ move: [0, 0] }); // detach zeroes the vector itself
     window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyA" }));
-    expect(state.snapshot()).toEqual({ move: [0, -1] });
+    expect(state.snapshot()).toEqual({ move: [0, 0] }); // and stops listening entirely
   });
 
   it("ignores keys typed into form fields and resets on blur", () => {
@@ -36,5 +37,14 @@ describe("attachKeyboard", () => {
     expect(state.snapshot()).toEqual({ move: [0, 0] });
     detach();
     input.remove();
+  });
+
+  it("resets the movement vector to zero on detach", () => {
+    const state = createInputState();
+    const detach = attachKeyboard(window, state);
+    window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyW" }));
+    expect(state.snapshot()).toEqual({ move: [0, -1] });
+    detach();
+    expect(state.snapshot()).toEqual({ move: [0, 0] });
   });
 });

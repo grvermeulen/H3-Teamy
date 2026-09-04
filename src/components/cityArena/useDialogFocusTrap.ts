@@ -36,10 +36,16 @@ export function useDialogFocusTrap(
       if (nodes.length === 0) return;
       const first = nodes[0];
       const last = nodes[nodes.length - 1];
-      if (!event.shiftKey && document.activeElement === last) {
+      // The dialog container itself is a boundary too: it holds focus right after opening
+      // (before any control has been tabbed to), so neither `first` nor `last` matches it.
+      const onContainer = document.activeElement === dialogRef.current;
+      if (!event.shiftKey && (onContainer || document.activeElement === last)) {
         event.preventDefault();
         first.focus();
-      } else if (event.shiftKey && document.activeElement === first) {
+      } else if (
+        event.shiftKey &&
+        (onContainer || document.activeElement === first)
+      ) {
         event.preventDefault();
         last.focus();
       }
