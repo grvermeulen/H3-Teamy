@@ -119,4 +119,44 @@ describe("createCollisionGrid", () => {
       1,
     );
   });
+
+  it("indexes and resolves obstacles across negative cell boundaries", () => {
+    const negativeSquare: Point[] = [
+      [-40, -40],
+      [-30, -40],
+      [-30, -30],
+      [-40, -30],
+    ];
+    const grid = createCollisionGrid();
+    grid.insertTile(tileWith([negativeSquare], [], -1, -1));
+    expect(
+      grid
+        .query({ minX: -50, minY: -50, maxX: -25, maxY: -25 })
+        .map((o) => o.kind),
+    ).toEqual(["building"]);
+    const pushed = grid.resolveCircle([-29.8, -35], 0.4);
+    expect(pushed[0]).toBeCloseTo(-29.6);
+    expect(pushed[1]).toBeCloseTo(-35);
+  });
+
+  it("safely no-ops removing a tile that was never inserted, twice, leaving other tiles intact", () => {
+    const grid = createCollisionGrid();
+    grid.insertTile(tileWith([square]));
+    expect(() => grid.removeTile(9, 9)).not.toThrow();
+    grid.removeTile(9, 9);
+    expect(grid.obstacleCount()).toBe(1);
+    expect(
+      grid.query({ minX: 0, minY: 0, maxX: 30, maxY: 30 }).map((o) => o.kind),
+    ).toEqual(["building"]);
+  });
+
+  it("keeps insertTile idempotent when the same tile is inserted twice", () => {
+    const grid = createCollisionGrid();
+    grid.insertTile(tileWith([square]));
+    grid.insertTile(tileWith([square]));
+    expect(grid.obstacleCount()).toBe(1);
+    expect(
+      grid.query({ minX: 0, minY: 0, maxX: 30, maxY: 30 }).map((o) => o.kind),
+    ).toEqual(["building"]);
+  });
 });

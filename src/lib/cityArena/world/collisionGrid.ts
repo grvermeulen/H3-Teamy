@@ -25,7 +25,11 @@ export type CollisionGrid = {
   obstacleCount(): number;
 };
 
-/** Closest point to `point` on segment a–b. */
+/**
+ * Closest point to `point` on segment a–b. Unlike `distancePointToSegment` in
+ * `mapBuild/geometry.ts`, this returns the boundary point itself rather than a distance,
+ * because callers need the actual coordinates to derive a push-out direction.
+ */
 export function nearestPointOnSegment(point: Point, a: Point, b: Point): Point {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
@@ -91,98 +95,183 @@ export function pushCircleOutOfRing(
   return [nearest.point[0] + unitX * radius, nearest.point[1] + unitY * radius];
 }
 
+/** Grid-cell key for one cell coordinate. */
+function cellKey(cellX: number, cellY: number): string {
+  return `${cellX}:${cellY}`;
+}
+
+/** Tile-bookkeeping key for one tile coordinate. */
+function tileKey(x: number, y: number): string {
+  return `${x}:${y}`;
+}
+
+/** Visits the key of every cell that `bounds` overlaps, using `Math.floor` bucketing so the
+ * grid extends correctly into negative world coordinates. */
+function forEachCell(
+  bounds: Rect,
+  cellMetres: number,
+  visit: (key: string) => void,
+): void {
+  const minCellX = Math.floor(bounds.minX / cellMetres);
+  const maxCellX = Math.floor(bounds.maxX / cellMetres);
+  const minCellY = Math.floor(bounds.minY / cellMetres);
+  const maxCellY = Math.floor(bounds.maxY / cellMetres);
+  for (let cellY = minCellY; cellY <= maxCellY; cellY++)
+    for (let cellX = minCellX; cellX <= maxCellX; cellX++)
+      visit(cellKey(cellX, cellY));
+}
+
+/** Obstacle list for one decoded tile: its buildings and water, tagged by kind. */
+function buildObstaclesForTile(tile: DecodedTile): Obstacle[] {
+  return [
+    ...tile.buildings.map((building) => ({
+      ring: building.ring,
+      bounds: building.bounds,
+      kind: "building" as const,
+    })),
+    ...tile.water.map((water) => ({
+      ring: water.ring,
+      bounds: water.bounds,
+      kind: "water" as const,
+    })),
+  ];
+}
+
+/** Adds one obstacle into every cell its bounding box overlaps. */
+function insertObstacleIntoCells(
+  cells: Map<string, Obstacle[]>,
+  obstacle: Obstacle,
+  cellMetres: number,
+): void {
+  forEachCell(obstacle.bounds, cellMetres, (key) => {
+    const list = cells.get(key) ?? [];
+    list.push(obstacle);
+    cells.set(key, list);
+  });
+}
+
+/** Removes a known set of obstacles from every cell they were inserted into. */
+function removeObstaclesFromCells(
+  cells: Map<string, Obstacle[]>,
+  obstacles: Obstacle[],
+  cellMetres: number,
+): void {
+  const removed = new Set(obstacles);
+  for (const obstacle of obstacles) {
+    forEachCell(obstacle.bounds, cellMetres, (key) => {
+      const remaining = (cells.get(key) ?? []).filter(
+        (entry) => !removed.has(entry),
+      );
+      if (remaining.length === 0) cells.delete(key);
+      else cells.set(key, remaining);
+    });
+  }
+}
+
+/** Obstacles overlapping `rect`, deduplicated across the cells they span. */
+function queryCells(
+  cells: Map<string, Obstacle[]>,
+  rect: Rect,
+  cellMetres: number,
+): Obstacle[] {
+  const seen = new Set<Obstacle>();
+  forEachCell(rect, cellMetres, (key) => {
+    for (const obstacle of cells.get(key) ?? []) {
+      if (rectsIntersect(rect, obstacle.bounds)) seen.add(obstacle);
+    }
+  });
+  return [...seen];
+}
+
+/** Sum of obstacle counts across all registered tiles. */
+function sumObstacleCounts(obstaclesByTile: Map<string, Obstacle[]>): number {
+  return [...obstaclesByTile.values()].reduce(
+    (total, list) => total + list.length,
+    0,
+  );
+}
+
+/** Cell-bucketed obstacle storage, keyed by both grid cell and source tile. */
+type SpatialIndex = {
+  insertTile(tile: DecodedTile): void;
+  removeTile(x: number, y: number): void;
+  query(rect: Rect): Obstacle[];
+  obstacleCount(): number;
+};
+
+/**
+ * Creates an empty spatial index with `cellMetres`-wide cells. `insertTile` is idempotent:
+ * re-inserting a tile coordinate first removes its previous obstacles from the cell map so
+ * stale entries never linger.
+ */
+function createSpatialIndex(cellMetres: number): SpatialIndex {
+  const cells = new Map<string, Obstacle[]>();
+  const obstaclesByTile = new Map<string, Obstacle[]>();
+
+  return {
+    insertTile(tile) {
+      const key = tileKey(tile.x, tile.y);
+      const existing = obstaclesByTile.get(key);
+      if (existing) removeObstaclesFromCells(cells, existing, cellMetres);
+      const obstacles = buildObstaclesForTile(tile);
+      obstaclesByTile.set(key, obstacles);
+      for (const obstacle of obstacles)
+        insertObstacleIntoCells(cells, obstacle, cellMetres);
+    },
+    removeTile(x, y) {
+      const key = tileKey(x, y);
+      const obstacles = obstaclesByTile.get(key) ?? [];
+      obstaclesByTile.delete(key);
+      removeObstaclesFromCells(cells, obstacles, cellMetres);
+    },
+    query: (rect) => queryCells(cells, rect, cellMetres),
+    obstacleCount: () => sumObstacleCounts(obstaclesByTile),
+  };
+}
+
 const MAX_RESOLVE_PASSES = 3;
+
+/**
+ * Iteratively pushes a circle out of every obstacle in `index` that overlaps it, re-querying
+ * after each pass so a push out of one obstacle can be resolved against its neighbours too.
+ */
+function resolveCircleAgainst(
+  index: SpatialIndex,
+  centre: Point,
+  radius: number,
+): Point {
+  let position: Point = [centre[0], centre[1]];
+  for (let pass = 0; pass < MAX_RESOLVE_PASSES; pass++) {
+    const probe: Rect = {
+      minX: position[0] - radius,
+      minY: position[1] - radius,
+      maxX: position[0] + radius,
+      maxY: position[1] + radius,
+    };
+    let moved = false;
+    for (const obstacle of index.query(probe)) {
+      const pushed = pushCircleOutOfRing(position, radius, obstacle.ring);
+      if (pushed) {
+        position = pushed;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  return position;
+}
 
 /** Creates an empty grid; tiles are inserted/removed as the loader streams them. */
 export function createCollisionGrid(
   cellMetres = COLLISION_CELL_M,
 ): CollisionGrid {
-  const cells = new Map<string, Obstacle[]>();
-  const obstaclesByTile = new Map<string, Obstacle[]>();
-  const cellKey = (cx: number, cy: number): string => `${cx}:${cy}`;
-
-  const forEachCell = (bounds: Rect, visit: (key: string) => void): void => {
-    const minCx = Math.floor(bounds.minX / cellMetres);
-    const maxCx = Math.floor(bounds.maxX / cellMetres);
-    const minCy = Math.floor(bounds.minY / cellMetres);
-    const maxCy = Math.floor(bounds.maxY / cellMetres);
-    for (let cy = minCy; cy <= maxCy; cy++)
-      for (let cx = minCx; cx <= maxCx; cx++) visit(cellKey(cx, cy));
-  };
-
-  const query = (rect: Rect): Obstacle[] => {
-    const seen = new Set<Obstacle>();
-    forEachCell(rect, (key) => {
-      for (const obstacle of cells.get(key) ?? []) {
-        if (rectsIntersect(rect, obstacle.bounds)) seen.add(obstacle);
-      }
-    });
-    return [...seen];
-  };
-
+  const index = createSpatialIndex(cellMetres);
   return {
-    insertTile(tile) {
-      const obstacles: Obstacle[] = [
-        ...tile.buildings.map((building) => ({
-          ring: building.ring,
-          bounds: building.bounds,
-          kind: "building" as const,
-        })),
-        ...tile.water.map((water) => ({
-          ring: water.ring,
-          bounds: water.bounds,
-          kind: "water" as const,
-        })),
-      ];
-      obstaclesByTile.set(`${tile.x}:${tile.y}`, obstacles);
-      for (const obstacle of obstacles) {
-        forEachCell(obstacle.bounds, (key) => {
-          const list = cells.get(key) ?? [];
-          list.push(obstacle);
-          cells.set(key, list);
-        });
-      }
-    },
-    removeTile(x, y) {
-      const obstacles = obstaclesByTile.get(`${x}:${y}`) ?? [];
-      obstaclesByTile.delete(`${x}:${y}`);
-      const removed = new Set(obstacles);
-      for (const obstacle of obstacles) {
-        forEachCell(obstacle.bounds, (key) => {
-          const remaining = (cells.get(key) ?? []).filter(
-            (entry) => !removed.has(entry),
-          );
-          if (remaining.length === 0) cells.delete(key);
-          else cells.set(key, remaining);
-        });
-      }
-    },
-    query,
-    resolveCircle(centre, radius) {
-      let position: Point = [centre[0], centre[1]];
-      for (let pass = 0; pass < MAX_RESOLVE_PASSES; pass++) {
-        const probe: Rect = {
-          minX: position[0] - radius,
-          minY: position[1] - radius,
-          maxX: position[0] + radius,
-          maxY: position[1] + radius,
-        };
-        let moved = false;
-        for (const obstacle of query(probe)) {
-          const pushed = pushCircleOutOfRing(position, radius, obstacle.ring);
-          if (pushed) {
-            position = pushed;
-            moved = true;
-          }
-        }
-        if (!moved) break;
-      }
-      return position;
-    },
-    obstacleCount: () =>
-      [...obstaclesByTile.values()].reduce(
-        (total, list) => total + list.length,
-        0,
-      ),
+    insertTile: index.insertTile,
+    removeTile: index.removeTile,
+    query: index.query,
+    resolveCircle: (centre, radius) =>
+      resolveCircleAgainst(index, centre, radius),
+    obstacleCount: index.obstacleCount,
   };
 }
