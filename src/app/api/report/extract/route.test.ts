@@ -1,3 +1,5 @@
+// @vitest-environment node
+// These tests build Request bodies with FormData/File; Node's Request rejects jsdom's File.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
@@ -12,7 +14,8 @@ vi.mock("@sentry/nextjs", () => ({
 }));
 
 vi.mock("@/lib/reportExtractProvider", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/reportExtractProvider")>();
+  const actual =
+    await importOriginal<typeof import("@/lib/reportExtractProvider")>();
   return {
     ...actual,
     extractReportFromImage: vi.fn(),
@@ -88,7 +91,10 @@ describe("POST /api/report/extract", () => {
 
   it("extracts report data from a valid image upload", async () => {
     const form = new FormData();
-    form.set("image", new File(["pixels"], "match.jpg", { type: "image/jpeg" }));
+    form.set(
+      "image",
+      new File(["pixels"], "match.jpg", { type: "image/jpeg" }),
+    );
     vi.mocked(extractReportFromImage).mockResolvedValue({
       result: { homeScore: 2, awayScore: 1 },
       rawText: "2-1",
@@ -110,7 +116,10 @@ describe("POST /api/report/extract", () => {
 
   it("returns provider errors and reports them to Sentry", async () => {
     const form = new FormData();
-    form.set("image", new File(["pixels"], "match.jpg", { type: "image/jpeg" }));
+    form.set(
+      "image",
+      new File(["pixels"], "match.jpg", { type: "image/jpeg" }),
+    );
     vi.mocked(extractReportFromImage).mockRejectedValue(
       new ExtractProviderError({
         message: "provider failed",
