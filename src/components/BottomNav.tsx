@@ -68,12 +68,18 @@ export default function BottomNav() {
             </Link>
           ) : null}
           <Link
-            href="/profile"
-            className={isActive("/profile") ? "navActive" : undefined}
-            aria-current={isActive("/profile") ? "page" : undefined}
+            href={loggedIn ? "/profile" : "/login"}
+            className={
+              isActive(loggedIn ? "/profile" : "/login")
+                ? "navActive"
+                : undefined
+            }
+            aria-current={
+              isActive(loggedIn ? "/profile" : "/login") ? "page" : undefined
+            }
           >
             {icons.profile}
-            <small>Profiel</small>
+            <small>{loggedIn ? "Profiel" : "Inloggen"}</small>
           </Link>
         </div>
       </div>

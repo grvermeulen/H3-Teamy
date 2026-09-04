@@ -57,7 +57,6 @@ export default function SessionChecklist() {
       if (!mounted) return;
       setPresent(new Set((att?.presentUserIds || []) as string[]));
       setDirty(false);
-      showToast("Opkomst opgeslagen", "success");
     }
     load();
     return () => {

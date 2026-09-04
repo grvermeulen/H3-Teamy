@@ -13,6 +13,10 @@ describe("AppBar", () => {
   beforeEach(() => {
     back.mockReset();
     push.mockReset();
+    Object.defineProperty(document, "referrer", {
+      configurable: true,
+      value: "",
+    });
   });
 
   it("renders its title and back control", () => {
@@ -28,6 +32,40 @@ describe("AppBar", () => {
     Object.defineProperty(window.history, "length", {
       configurable: true,
       value: 1,
+    });
+    render(<AppBar title="Feedback" fallbackHref="/admin" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Terug" }));
+
+    expect(push).toHaveBeenCalledWith("/admin");
+    expect(back).not.toHaveBeenCalled();
+  });
+
+  it("uses browser history only when the referrer is from this app", () => {
+    Object.defineProperty(window.history, "length", {
+      configurable: true,
+      value: 2,
+    });
+    Object.defineProperty(document, "referrer", {
+      configurable: true,
+      value: `${window.location.origin}/attendance`,
+    });
+    render(<AppBar title="Feedback" fallbackHref="/admin" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Terug" }));
+
+    expect(back).toHaveBeenCalledOnce();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("uses the fallback for history originating outside the app", () => {
+    Object.defineProperty(window.history, "length", {
+      configurable: true,
+      value: 2,
+    });
+    Object.defineProperty(document, "referrer", {
+      configurable: true,
+      value: "https://example.com/shared-link",
     });
     render(<AppBar title="Feedback" fallbackHref="/admin" />);
 
