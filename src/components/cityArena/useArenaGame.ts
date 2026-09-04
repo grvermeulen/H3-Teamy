@@ -181,14 +181,13 @@ function routeToNearestLandmark(runtime: Runtime): number | null {
   return path ? pathLength(graph, path) : null;
 }
 
-/** Creates the map loader and world session; tile failures are reported and surfaced via `onFailed`. */
+/**
+ * Creates the map loader and world session. A tile failure is only surfaced via `onFailed` — the
+ * loader itself already reports the error to Sentry (see `mapLoader.ts`'s `recordTileFailure`),
+ * so the hook must not report it again under a second, high-cardinality tag.
+ */
 function createArenaSession(onFailed: () => void): WorldSession {
-  const loader = createMapLoader({
-    onError: (error, file) => {
-      reportArenaError(error, `tile-load:${file}`);
-      onFailed();
-    },
-  });
+  const loader = createMapLoader({ onError: onFailed });
   return createWorldSession({
     loader,
     canvasFactory: createDomCanvasFactory(),
@@ -277,6 +276,34 @@ type ArenaBootResult = {
   setProgress: (progress: LoadProgress) => void;
 };
 
+/** State setters {@link finishBoot} updates as the initial load completes. */
+type BootSetters = {
+  setZones: (zones: MapZone[]) => void;
+  setProgress: (progress: LoadProgress) => void;
+  setPhase: (phase: ArenaPhase) => void;
+};
+
+/**
+ * Finishes booting after {@link bootSession} resolves: seeds the zone list, streams the initial
+ * tiles (reporting progress as each one settles so the loading screen moves), then flips the
+ * phase to "playing". No-ops once `isCancelled` reports true.
+ */
+async function finishBoot(
+  session: WorldSession,
+  booted: { index: MapIndex; spawn: Point } | null,
+  isCancelled: IsCancelled,
+  setters: BootSetters,
+): Promise<void> {
+  if (!booted || isCancelled()) return;
+  setters.setZones(booted.index.zones);
+  const tileProgress = await session.update(booted.spawn, (progress) => {
+    if (!isCancelled()) setters.setProgress(progress);
+  });
+  if (isCancelled()) return;
+  setters.setProgress(tileProgress);
+  setters.setPhase("playing");
+}
+
 /** Boots the world session for `zoneKey`: loads the map, spawns the player, disposes on unmount. */
 function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
   const { zoneKey, canvasRef, runtimeRef } = options;
@@ -293,14 +320,13 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
     const isCancelled: IsCancelled = () => cancelled;
     const session = createArenaSession(() => setFailed(true));
     bootSession(session, zoneKey, canvasRef, runtimeRef, isCancelled)
-      .then(async (booted) => {
-        if (!booted || isCancelled()) return;
-        setZones(booted.index.zones);
-        const tileProgress = await session.update(booted.spawn);
-        if (isCancelled()) return;
-        setProgress(tileProgress);
-        setPhase("playing");
-      })
+      .then((booted) =>
+        finishBoot(session, booted, isCancelled, {
+          setZones,
+          setProgress,
+          setPhase,
+        }),
+      )
       .catch((error: unknown) => {
         reportArenaError(error, "boot");
         if (!cancelled) setPhase("error");

@@ -16,7 +16,10 @@ import {
 } from "@/lib/cityArena/input/touchStick";
 import type { MapZone, ZoneKey } from "@/lib/cityArena/world/mapTypes";
 import ArenaDebugOverlay from "./ArenaDebugOverlay";
-import ArenaLoadingScreen, { ATTRIBUTION_TEXT } from "./ArenaLoadingScreen";
+import ArenaLoadingScreen, {
+  ATTRIBUTION_TEXT,
+  MAP_LOAD_FAILURE_TEXT,
+} from "./ArenaLoadingScreen";
 import TouchStick from "./TouchStick";
 import { useArenaGame, type ArenaGame, type ArenaHud } from "./useArenaGame";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
@@ -97,15 +100,17 @@ type ArenaHudBarProps = {
   hud: ArenaHud;
   zones: MapZone[];
   pickerDisabled: boolean;
+  showLoadWarning: boolean;
   onTeleport: (key: ZoneKey) => void;
   onClose: () => void;
 };
 
-/** Top strip: current zone/street, the zone picker and the close button. */
+/** Top strip: current zone/street, an optional load warning, the zone picker and the close button. */
 function ArenaHudBar({
   hud,
   zones,
   pickerDisabled,
+  showLoadWarning,
   onTeleport,
   onClose,
 }: ArenaHudBarProps): React.JSX.Element {
@@ -116,12 +121,17 @@ function ArenaHudBar({
       data-testid="arena-hud"
       className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#21262d] px-3 py-2 text-sm text-[#c9d1d9]"
     >
-      <div className="flex min-w-0 flex-wrap gap-2.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-2.5">
         <span className="font-semibold">
           {hud.zoneName ?? "Vrij rondlopen"}
         </span>
         {hud.street ? (
           <span className="muted truncate">{hud.street}</span>
+        ) : null}
+        {showLoadWarning ? (
+          <span className="text-xs text-[#f0b429]">
+            {MAP_LOAD_FAILURE_TEXT}
+          </span>
         ) : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -242,6 +252,7 @@ export default function CityArenaOverlay({
         hud={game.hud}
         zones={game.zones}
         pickerDisabled={game.phase !== "playing"}
+        showLoadWarning={game.phase === "playing" && game.failed}
         onTeleport={game.teleportToZone}
         onClose={onClose}
       />

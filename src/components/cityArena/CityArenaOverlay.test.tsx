@@ -208,4 +208,42 @@ describe("CityArenaOverlay", () => {
       expect.objectContaining({ tags: { area: "arena", kind: "boot" } }),
     );
   });
+
+  it("shows a Dutch warning in the HUD bar once playing when a tile failed to load", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async (input) => {
+        const url = String(input);
+        if (url.endsWith("index.json"))
+          return new Response(JSON.stringify(index), { status: 200 });
+        if (url.endsWith("roads.json"))
+          return new Response(
+            JSON.stringify({
+              nodes: [0, 0, 400, 0],
+              edges: [0, 1, 0, -1, 0, 400],
+              classes: ["residential"],
+              names: [],
+            }),
+            { status: 200 },
+          );
+        if (url.endsWith("tile_0_0.json"))
+          return new Response(null, { status: 404 });
+        const match = /tile_(\d+)_(\d+)\.json$/.exec(url);
+        return new Response(
+          JSON.stringify(
+            match ? emptyTile(Number(match[1]), Number(match[2])) : null,
+          ),
+          { status: match ? 200 : 404 },
+        );
+      }),
+    );
+    render(<CityArenaOverlay zone="wageningen" onClose={vi.fn()} />);
+    await waitFor(
+      () =>
+        expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+          "Kaart kon niet volledig laden",
+        ),
+      { timeout: 3000 },
+    );
+  });
 });

@@ -79,11 +79,13 @@ describe("createWorldSession", () => {
       name: "Cunerakerk",
       style: "church",
     });
-    const progress = await session.update([0, 0]);
+    const onProgress = vi.fn();
+    const progress = await session.update([0, 0], onProgress);
     expect(progress).toEqual({ loaded: 9, total: 9 });
     expect(session.tiles()).toHaveLength(9);
     expect(session.collision.obstacleCount()).toBe(1);
     expect(session.loadedTileRects()).toHaveLength(9);
+    expect(onProgress).toHaveBeenCalledWith({ loaded: 9, total: 9 });
     const invalidate = vi.spyOn(session.raster, "invalidateRect");
     await session.update([4000, 4000]);
     expect(session.tiles()).toHaveLength(9);

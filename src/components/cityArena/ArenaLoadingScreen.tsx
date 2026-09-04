@@ -8,6 +8,8 @@ export const GAME_SPLASH_WEBP = "/branding/splash-game-landscape.webp";
 export const GAME_SPLASH_JPG = "/branding/splash-game-landscape.jpg";
 /** ODbL attribution shown on every overlay screen that displays the map. */
 export const ATTRIBUTION_TEXT = "Kaart © OpenStreetMap-bijdragers";
+/** Warning shown wherever a tile permanently failed to load (this screen and the HUD bar). */
+export const MAP_LOAD_FAILURE_TEXT = "Kaart kon niet volledig laden";
 
 /** Props for {@link ArenaLoadingScreen}. */
 type ArenaLoadingScreenProps = {
@@ -48,7 +50,7 @@ export default function ArenaLoadingScreen({
           Kaart laden… {loaded}/{total}
         </p>
         {failed ? (
-          <p className="mt-1 text-[#f0b429]">Kaart kon niet volledig laden</p>
+          <p className="mt-1 text-[#f0b429]">{MAP_LOAD_FAILURE_TEXT}</p>
         ) : null}
         <p className="muted mt-2 text-xs">{ATTRIBUTION_TEXT}</p>
       </div>

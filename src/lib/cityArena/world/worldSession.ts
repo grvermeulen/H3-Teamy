@@ -30,7 +30,10 @@ export type WorldSession = {
   collision: CollisionGrid;
   raster: StaticRaster;
   landmarks(): LandmarkLookup;
-  update(centre: Point): Promise<LoadProgress>;
+  update(
+    centre: Point,
+    onProgress?: (progress: LoadProgress) => void,
+  ): Promise<LoadProgress>;
   tiles(): DecodedTile[];
   loadedTileRects(): Rect[];
   hasFailures(): boolean;
@@ -125,8 +128,13 @@ function requireReady<T>(value: T | null, what: string): T {
 async function performUpdate(
   state: WorldSessionState,
   centre: Point,
+  onProgress?: (progress: LoadProgress) => void,
 ): Promise<LoadProgress> {
-  const progress = await state.loader.ensureTilesAround(centre);
+  const progress = await state.loader.ensureTilesAround(
+    centre,
+    undefined,
+    onProgress,
+  );
   syncResidentTiles(state);
   return progress;
 }
@@ -170,7 +178,7 @@ function assembleWorldSession(state: WorldSessionState): WorldSession {
     collision: state.collision,
     raster: state.raster,
     landmarks: () => state.landmarks,
-    update: (centre) => performUpdate(state, centre),
+    update: (centre, onProgress) => performUpdate(state, centre, onProgress),
     tiles: () => [...state.synced.values()],
     loadedTileRects: () => [...state.synced.values()].map((tile) => tile.rect),
     hasFailures: () => state.loader.hasFailures(),

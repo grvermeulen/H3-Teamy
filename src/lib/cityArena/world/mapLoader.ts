@@ -33,7 +33,11 @@ export type MapLoaderOptions = {
 export type MapLoader = {
   loadIndex(): Promise<MapIndex>;
   loadRoads(): Promise<MapRoads>;
-  ensureTilesAround(centre: Point, radiusTiles?: number): Promise<LoadProgress>;
+  ensureTilesAround(
+    centre: Point,
+    radiusTiles?: number,
+    onProgress?: (progress: LoadProgress) => void,
+  ): Promise<LoadProgress>;
   getTile(x: number, y: number): DecodedTile | undefined;
   getLoadedTiles(): DecodedTile[];
   hasFailures(): boolean;
@@ -316,29 +320,43 @@ function createLoaderState(options: MapLoaderOptions): LoaderState {
   };
 }
 
+/** Resolves one needed tile ref (touching a resident tile or fetching a missing one). */
+function settleTileRef(
+  state: LoaderState,
+  index: MapIndex,
+  ref: MapTileRef,
+): Promise<boolean> {
+  return state.tileStore.touch(ref.file)
+    ? Promise.resolve(true)
+    : state.tileStore.request(ref, (tileRef) =>
+        fetchDecodedTile(tileRef, index, state.baseUrl, state.retryOptions),
+      );
+}
+
 /** Builds `ensureTilesAround`, bound to one loader's state. */
 function createEnsureTilesAround(
   state: LoaderState,
-): (centre: Point, radiusTiles?: number) => Promise<LoadProgress> {
-  return async (centre, radiusTiles = 1) => {
+): (
+  centre: Point,
+  radiusTiles?: number,
+  onProgress?: (progress: LoadProgress) => void,
+) => Promise<LoadProgress> {
+  return async (centre, radiusTiles = 1, onProgress) => {
     if (state.disposedRef.current) return { loaded: 0, total: 0 };
     const index = await state.indexLoader.load();
     const refs = neededRefs(centre, radiusTiles, index);
+    const total = refs.length;
+    let loaded = 0;
     const results = await Promise.all(
       refs.map((ref) =>
-        state.tileStore.touch(ref.file)
-          ? Promise.resolve(true)
-          : state.tileStore.request(ref, (tileRef) =>
-              fetchDecodedTile(
-                tileRef,
-                index,
-                state.baseUrl,
-                state.retryOptions,
-              ),
-            ),
+        settleTileRef(state, index, ref).then((ok) => {
+          if (ok) loaded += 1;
+          onProgress?.({ loaded, total });
+          return ok;
+        }),
       ),
     );
-    return { loaded: results.filter(Boolean).length, total: refs.length };
+    return { loaded: results.filter(Boolean).length, total };
   };
 }
 

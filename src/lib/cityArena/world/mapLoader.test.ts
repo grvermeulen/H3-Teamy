@@ -245,6 +245,42 @@ describe("createMapLoader", () => {
     expect(loader.hasFailures()).toBe(true);
   });
 
+  it("reports progress via onProgress as each needed tile settles", async () => {
+    const twoTileIndex: MapIndex = {
+      ...index,
+      tiles: [
+        { x: 0, y: 0, file: "tile_0_0.json", bytes: 1 },
+        { x: 1, y: 0, file: "tile_1_0.json", bytes: 1 },
+      ],
+    };
+    const deferredResolvers: Array<() => void> = [];
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/index.json")) return jsonResponse(twoTileIndex);
+      const match = /tile_(\d+)_(\d+)\.json$/.exec(url);
+      if (!match) return jsonResponse({ error: "not found" }, 404);
+      return new Promise<Response>((resolve) => {
+        deferredResolvers.push(() =>
+          resolve(jsonResponse(tile(Number(match[1]), Number(match[2])))),
+        );
+      });
+    });
+    const loader = createMapLoader({ baseUrl: "/map", fetchImpl, sleep });
+    const onProgress = vi.fn();
+
+    const pending = loader.ensureTilesAround([0, 0], 1, onProgress);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(deferredResolvers).toHaveLength(2);
+
+    deferredResolvers[0]();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onProgress).toHaveBeenNthCalledWith(1, { loaded: 1, total: 2 });
+
+    deferredResolvers[1]();
+    await expect(pending).resolves.toEqual({ loaded: 2, total: 2 });
+    expect(onProgress).toHaveBeenNthCalledWith(2, { loaded: 2, total: 2 });
+  });
+
   it("refreshes tile recency when revisiting a resident tile", async () => {
     const fetchImpl = routedFetch();
     const loader = createMapLoader({
