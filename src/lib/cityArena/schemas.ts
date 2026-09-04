@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { MapIndex, MapTile, ZoneKey } from "./world/mapTypes";
+import type { MapIndex, MapRoads, MapTile, ZoneKey } from "./world/mapTypes";
 
 const zoneKeys = ["rhenen", "wageningen", "campus", "bennekom"] as const;
 const unitPoint = z.tuple([z.number().int(), z.number().int()]);
@@ -68,6 +68,12 @@ function isGeometryList(value: unknown): boolean {
   );
 }
 
+function isStringArray(value: unknown): boolean {
+  return (
+    Array.isArray(value) && value.every((entry) => typeof entry === "string")
+  );
+}
+
 /** Cheap structural guard for a tile payload (full Zod validation would be too slow at 10 Hz loads). */
 export function isMapTile(value: unknown): value is MapTile {
   if (!isRecord(value)) return false;
@@ -78,6 +84,17 @@ export function isMapTile(value: unknown): value is MapTile {
     isGeometryList(value.buildings) &&
     isGeometryList(value.ground) &&
     isGeometryList(value.water)
+  );
+}
+
+/** Cheap structural guard for `roads.json` (full Zod validation of the 180 KB flat-array payload would cost more than it protects). */
+export function isMapRoads(value: unknown): value is MapRoads {
+  if (!isRecord(value)) return false;
+  return (
+    isFlatNumberArray(value.nodes) &&
+    isFlatNumberArray(value.edges) &&
+    isStringArray(value.classes) &&
+    isStringArray(value.names)
   );
 }
 

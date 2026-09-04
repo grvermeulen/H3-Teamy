@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ArenaSettingsSchema, isMapTile, parseMapIndex } from "./schemas";
+import {
+  ArenaSettingsSchema,
+  isMapRoads,
+  isMapTile,
+  parseMapIndex,
+} from "./schemas";
 
 const validIndex = {
   version: 1,
@@ -74,6 +79,31 @@ describe("isMapTile", () => {
         water: [],
       }),
     ).toBe(false);
+  });
+});
+
+describe("isMapRoads", () => {
+  it("guards the roads shape structurally", () => {
+    expect(
+      isMapRoads({
+        nodes: [0, 0, 4, -8],
+        edges: [0, 1, 0, -1, 0, 16],
+        classes: ["residential"],
+        names: ["Dreijenlaan"],
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects a malformed payload", () => {
+    expect(
+      isMapRoads({
+        nodes: [0, 0],
+        edges: "not-an-array",
+        classes: [],
+        names: [],
+      }),
+    ).toBe(false);
+    expect(isMapRoads(null)).toBe(false);
   });
 });
 

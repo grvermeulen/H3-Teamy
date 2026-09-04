@@ -1,6 +1,9 @@
+import * as Sentry from "@sentry/nextjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MapIndex, MapTile } from "./mapTypes";
 import { createMapLoader, tileCoordForMetres } from "./mapLoader";
+
+vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
 const index: MapIndex = {
   version: 1,
@@ -52,6 +55,17 @@ describe("tileCoordForMetres", () => {
     expect(tileCoordForMetres([-2000, -2000], index)).toEqual({ x: 0, y: 0 });
     expect(tileCoordForMetres([1999, 4000], index)).toEqual({ x: 1, y: 3 });
   });
+
+  it("clamps points far outside the bounds to the nearest edge tile", () => {
+    expect(tileCoordForMetres([-1_000_000, -1_000_000], index)).toEqual({
+      x: 0,
+      y: 0,
+    });
+    expect(tileCoordForMetres([1_000_000, 1_000_000], index)).toEqual({
+      x: 3,
+      y: 3,
+    });
+  });
 });
 
 describe("createMapLoader", () => {
@@ -90,7 +104,7 @@ describe("createMapLoader", () => {
     expect(loader.getTile(3, 3)?.x).toBe(3);
   });
 
-  it("retries transient failures, then marks the tile failed and notifies", async () => {
+  it("retries transient failures, then marks the tile failed and reports to Sentry", async () => {
     const onError = vi.fn();
     const listener = vi.fn();
     const fetchImpl = routedFetch({ "/map/tile_0_0.json": 5 });
@@ -107,7 +121,97 @@ describe("createMapLoader", () => {
     expect(loader.hasFailures()).toBe(true);
     expect(onError).toHaveBeenCalledWith(expect.any(Error), "tile_0_0.json");
     expect(sleep).toHaveBeenCalledTimes(2);
-    expect(listener).toHaveBeenCalled();
+    // A failure changes nothing about the resident tile set, so listeners
+    // (used to trigger re-renders) are not notified for it.
+    expect(listener).not.toHaveBeenCalled();
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: { area: "arena", kind: "tile-load" },
+      }),
+    );
+  });
+
+  it("isolates a throwing onChange listener from tile bookkeeping", async () => {
+    const fetchImpl = routedFetch();
+    const loader = createMapLoader({ baseUrl: "/map", fetchImpl, sleep });
+    const throwingListener = vi.fn(() => {
+      throw new Error("listener boom");
+    });
+    loader.onChange(throwingListener);
+    const progress = await loader.ensureTilesAround([0, 0], 0);
+    expect(progress).toEqual({ loaded: 1, total: 1 });
+    expect(loader.getTile(1, 1)?.x).toBe(1);
+    expect(loader.hasFailures()).toBe(false);
+    expect(throwingListener).toHaveBeenCalled();
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: { area: "arena", kind: "map-listener" },
+      }),
+    );
+  });
+
+  it("refetches the index after a rejected load", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ error: "down" }, 500))
+      .mockResolvedValue(jsonResponse(index));
+    const loader = createMapLoader({
+      baseUrl: "/map",
+      fetchImpl,
+      sleep,
+      retries: 0,
+    });
+    await expect(loader.loadIndex()).rejects.toThrow();
+    await expect(loader.loadIndex()).resolves.toEqual(index);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears resident tiles and failures on dispose, and stops fetching", async () => {
+    const fetchImpl = routedFetch({ "/map/tile_0_0.json": 99 });
+    const loader = createMapLoader({
+      baseUrl: "/map",
+      fetchImpl,
+      sleep,
+      retries: 0,
+    });
+    await loader.ensureTilesAround([0, 0], 0);
+    await loader.ensureTilesAround([-2000, -2000], 0);
+    expect(loader.getTile(1, 1)).toBeDefined();
+    expect(loader.hasFailures()).toBe(true);
+
+    loader.dispose();
+    expect(loader.getTile(1, 1)).toBeUndefined();
+    expect(loader.getLoadedTiles()).toEqual([]);
+    expect(loader.hasFailures()).toBe(false);
+
+    const callsBeforeReuse = fetchImpl.mock.calls.length;
+    const progress = await loader.ensureTilesAround([0, 0], 0);
+    expect(progress).toEqual({ loaded: 0, total: 0 });
+    expect(fetchImpl.mock.calls.length).toBe(callsBeforeReuse);
+  });
+
+  it("does not store a tile whose fetch completes after dispose", async () => {
+    const deferredResolvers: Array<(response: Response) => void> = [];
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/index.json")) return jsonResponse(index);
+      return new Promise<Response>((resolve) => {
+        deferredResolvers.push(resolve);
+      });
+    });
+    const loader = createMapLoader({ baseUrl: "/map", fetchImpl, sleep });
+
+    const pending = loader.ensureTilesAround([0, 0], 0);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    loader.dispose();
+    deferredResolvers.forEach((resolve) => resolve(jsonResponse(tile(1, 1))));
+
+    const progress = await pending;
+    expect(progress).toEqual({ loaded: 0, total: 1 });
+    expect(loader.getTile(1, 1)).toBeUndefined();
+    expect(loader.getLoadedTiles()).toEqual([]);
   });
 
   it("deduplicates concurrent requests for the same tile", async () => {
