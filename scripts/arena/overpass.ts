@@ -37,6 +37,19 @@ function isRetryable(status: number): boolean {
   return status === 429 || status >= 500;
 }
 
+/**
+ * Overpass answers HTTP 200 with a `remark` and a partial (often empty) `elements` array
+ * when a query hits a server-side runtime error (timeout, memory limit). `isOverpassJson`
+ * alone accepts this as a valid response, so it must be checked separately.
+ */
+function runtimeErrorRemark(value: unknown): string | null {
+  if (typeof value !== "object" || value === null) return null;
+  const remark = (value as { remark?: unknown }).remark;
+  return typeof remark === "string" && /runtime error/i.test(remark)
+    ? remark
+    : null;
+}
+
 /** Fetches an Overpass query, caching the JSON under `cacheDir/<sha1>.json`. */
 export async function fetchOverpass(
   query: string,
@@ -95,6 +108,17 @@ export async function fetchOverpass(
         throw new Error(
           `Overpass response has no elements array: ${JSON.stringify(parsed).slice(0, 300)}`,
         );
+      }
+      const remark = runtimeErrorRemark(parsed);
+      if (remark) {
+        if (attempt > retries) {
+          throw new Error(
+            `Overpass runtime error after ${attempt} attempt(s): ${remark}`,
+          );
+        }
+        log(`Overpass runtime error (attempt ${attempt}): ${remark}; retrying`);
+        await sleep(BACKOFF_BASE_MS * attempt);
+        continue;
       }
       await mkdir(options.cacheDir, { recursive: true });
       await writeFile(cacheFile, JSON.stringify(parsed));

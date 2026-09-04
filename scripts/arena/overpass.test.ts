@@ -1,5 +1,12 @@
 // @vitest-environment node
-import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -107,5 +114,37 @@ describe("fetchOverpass", () => {
     await expect(
       fetchOverpass("q", { cacheDir, fetchImpl, sleep }),
     ).rejects.toThrow(/elements/);
+  });
+
+  it("retries a 200 response carrying a runtime-error remark instead of caching it", async () => {
+    const fetchImpl = vi
+      .fn<() => Promise<Response>>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          remark: "runtime error: Query timed out",
+          elements: [],
+        }),
+      )
+      .mockResolvedValueOnce(jsonResponse(payload));
+    const result = await fetchOverpass("q", { cacheDir, fetchImpl, sleep });
+    expect(result.elements).toHaveLength(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+    const [cacheFileName] = await readdir(cacheDir);
+    const cached: unknown = JSON.parse(
+      await readFile(join(cacheDir, cacheFileName), "utf8"),
+    );
+    expect(cached).toEqual(payload);
+  });
+
+  it("throws with the remark when every attempt is a runtime error", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () =>
+      jsonResponse({ remark: "runtime error: out of memory", elements: [] }),
+    );
+    await expect(
+      fetchOverpass("q", { cacheDir, fetchImpl, sleep, retries: 1 }),
+    ).rejects.toThrow(/runtime error: out of memory/);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(await readdir(cacheDir)).toHaveLength(0);
   });
 });
