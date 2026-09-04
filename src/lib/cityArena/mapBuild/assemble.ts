@@ -75,14 +75,11 @@ export const MIN_BUILDING_AREA_M2 = 40;
 
 /**
  * Non-landmark buildings are kept only within this distance of a zone centre. The brief's
- * prescribed 1200 (with `MIN_BUILDING_AREA_M2 = 40`) left the real build at 1137.9 KB —
- * over budget — once buildings correctly use `BUILDING_SIMPLIFY_TOLERANCE_M` (0.5 m,
- * below) instead of the coarser terrain tolerance; 1000 also failed (1017.8 KB). Lowered
- * to 700, which lands at 857.8 KB with a comfortable margin. This is below the 500 m zone
- * match radius, so the outer edge of each disc has less building detail than the core —
- * an accepted trade-off for this region's real building density (see spec §3.1).
+ * original value; owner decision 2026-09-04 raised the gzip budget (see
+ * `GZIP_BUDGET_BYTES`/`TILE_GZIP_BUDGET_BYTES` in `scripts/arena/buildMap.ts`) instead of
+ * shrinking this further — see spec §3.1/§3.4.
  */
-export const BUILDING_KEEP_RADIUS_M = 700;
+export const BUILDING_KEEP_RADIUS_M = 1200;
 
 /** A landmark point attaches to the building containing it or within this distance. */
 export const LANDMARK_ATTACH_DISTANCE_M = 15;

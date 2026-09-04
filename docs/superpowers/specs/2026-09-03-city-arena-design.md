@@ -111,12 +111,22 @@ Overpass API, bbox `51.94,5.53,52.02,5.72`, converted to GeoJSON with `osmtogeoj
 | Layer     | OSM filter                                                                                                                                                             | Notes                                                                                   |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | Roads     | `highway` ∈ motorway, trunk, primary, secondary, tertiary, unclassified, residential, living_street, pedestrian (+ `_link` variants); `service` only inside zone discs | Cycle/foot paths dropped. Keep `name`, `oneway`, `lanes`, `maxspeed` when present       |
-| Buildings | `building=*`, footprint area ≥ 40 m², centroid within 1.0 km of any zone centre; landmark buildings always kept                                                        | Keep `building:levels` (default 2)                                                      |
+| Buildings | `building=*`, footprint area ≥ 40 m², centroid within 1.2 km of any zone centre; landmark buildings always kept                                                        | Keep `building:levels` (default 2)                                                      |
 | Water     | `natural=water` polygons (plus `landuse` ∈ reservoir, basin); waterway _lines_ are not used                                                                            | Impassable                                                                              |
 | Ground    | `landuse` ∈ grass, meadow, farmland, forest; `leisure` ∈ park, pitch; `natural` ∈ wood, scrub                                                                          | Mapped to `grass`, `field`, `forest`; `urban` is the implicit default and is not stored |
 | Landmarks | from `landmarks.config.ts` (below)                                                                                                                                     | Matching is case-insensitive substring on `name` plus tag filter                        |
 
-Real-build note (gzip budget, §3.4): the shipped build needed `MIN_BUILDING_AREA_M2 = 40`, `BUILDING_KEEP_RADIUS_M` (both above; see §3.4 for the value that shipped) and `TERRAIN_SIMPLIFY_TOLERANCE_M` raised to 4 m for ground/water only (§3.3 — buildings stay at 0.5 m) to land under 900 KB gzipped. The brief's two-step building-only remedy was insufficient on its own — even trimming `BUILDING_KEEP_RADIUS_M` to 10 m (i.e. almost no non-landmark buildings) still left the asset at 939.7 KB, because unfiltered ground polygons (farmland/forest/grass over the whole ~10 km bbox) turned out to be ~68 % of tile bytes for this real region, not buildings. A second real-build fix, unrelated to budget: `tilesCovering` (`tiles.ts`) now clamps to the actual tile grid (`tileGridSize`) — Overpass returns the complete geometry of any way/polygon with at least one node inside the bbox, so long roads and large ground polygons run tens of km outside the region, which previously spawned tiles far beyond the grid.
+Real-build note (gzip budget, §3.4): the shipped build uses `MIN_BUILDING_AREA_M2 = 40`,
+`BUILDING_KEEP_RADIUS_M = 1200`, and simplification tolerances of 0.5 m for buildings /
+4 m for ground and water (`BUILDING_SIMPLIFY_TOLERANCE_M` / `TERRAIN_SIMPLIFY_TOLERANCE_M`,
+§3.3). Ground polygons (farmland/forest/grass over the whole ~10 km bbox, unfiltered by
+zone proximity by design) are the dominant contributor to tile size for this real region,
+not buildings — see §3.4 for the owner decision this led to on the total/per-tile budget.
+A second real-build fix, unrelated to budget: `tilesCovering` (`tiles.ts`) clamps to the
+actual tile grid (`tileGridSize`) — Overpass returns the complete geometry of any
+way/polygon with at least one node inside the bbox, so long roads and large ground
+polygons run tens of km outside the region, which previously spawned tiles far beyond the
+grid.
 
 ### 3.2 Landmark config (`scripts/arena/landmarks.config.ts`)
 
@@ -175,13 +185,16 @@ polygon containing or nearest (≤ 15 m) the node.
 - `tile_x_y.json` — `{ roads, buildings, ground, water }` with flat integer coordinate
   arrays; buildings carry `levels` and optional `landmark`. The region's real bounds (a
   ~52 km² box covering Rhenen, Wageningen, the WUR campus and Bennekom, most of it open
-  countryside) tile into 47, not the originally-estimated 20–35 — many fringe tiles hold
-  almost nothing (as little as 0.1 KB gz) while the four town/campus cores run larger (up
-  to 115.6 KB gz, 410 KB raw, for the Wageningen–campus tile); no tile approaches the
-  ~1.2 MB raw size that would call for tile-grid changes.
+  countryside) tile into a 7 × 5 grid — 35 tiles, `tilesCovering` clamped to that grid
+  (`tileGridSize`) so geometry outside the region never spawns extra tiles. Fringe tiles
+  are tiny (as little as 0.1 KB gz); the four town/campus cores run larger, with the
+  Wageningen–campus tile the largest at ≈ 203 KB gz — the two zones' 1.2 km keep-radius
+  discs both reach into it, and it holds two non-anchor landmarks besides.
 - Polygons store their outer ring only; holes (courtyards, river islands) are dropped.
-- Budget: total ≤ 900 KB gzipped; the build fails above it. Shipped at 866.1 KB — see
-  §3.1's real-build note for the constants that got it there.
+- Budget: total ≤ 1.2 MB gzipped and no single tile above 256 KB gzipped; the build fails
+  otherwise (owner decision 2026-09-04: the total is a repo/CDN figure — a player only
+  downloads the ≤ 9 tiles around them, so the per-tile cap is what bounds download time).
+  See §3.1's real-build note for the constants that got the shipped build under both.
 - `next.config.js` `headers()` adds `Cache-Control: public, max-age=31536000, immutable`
   for `/arena/map/:path*`. Any regeneration bumps the path version (`v1` → `v2`) via a
   constant in `src/lib/cityArena/constants.ts`. The service worker only caches

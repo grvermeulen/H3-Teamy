@@ -8,7 +8,13 @@ import {
   MINI_LANDMARKS,
   overpassMini,
 } from "../../src/lib/cityArena/mapBuild/fixtures/overpassMini";
-import { GZIP_BUDGET_BYTES, runBuild } from "./buildMap";
+import {
+  type BuiltFile,
+  GZIP_BUDGET_BYTES,
+  TILE_GZIP_BUDGET_BYTES,
+  findOversizedTiles,
+  runBuild,
+} from "./buildMap";
 
 describe("runBuild", () => {
   let workDir = "";
@@ -53,6 +59,11 @@ describe("runBuild", () => {
     expect(result.totalGzipBytes).toBeGreaterThan(0);
     expect(result.totalGzipBytes).toBeLessThan(GZIP_BUDGET_BYTES);
     expect(result.files.map((file) => file.name)).toContain("roads.json");
+    expect(
+      result.files
+        .filter((file) => file.name.startsWith("tile_"))
+        .every((file) => file.gzipBytes <= TILE_GZIP_BUDGET_BYTES),
+    ).toBe(true);
   });
 
   it("writes nothing in check mode but still validates", async () => {
@@ -85,5 +96,17 @@ describe("runBuild", () => {
       log: () => {},
     });
     expect(await readdir(outDir)).not.toContain("tile_99_99.json");
+  });
+});
+
+describe("findOversizedTiles", () => {
+  it("returns only tile files over the cap, ignoring non-tile files", () => {
+    const capBytes = 150 * 1024;
+    const files: BuiltFile[] = [
+      { name: "tile_4_2.json", bytes: 400_000, gzipBytes: 160 * 1024 }, // tile, over
+      { name: "tile_0_0.json", bytes: 20_000, gzipBytes: 8 * 1024 }, // tile, under
+      { name: "roads.json", bytes: 500_000, gzipBytes: 200 * 1024 }, // over, not a tile
+    ];
+    expect(findOversizedTiles(files, capBytes)).toEqual([files[0]]);
   });
 });

@@ -22,8 +22,16 @@ import {
 import type { MapIndex } from "../../src/lib/cityArena/world/mapTypes";
 import { fetchOverpass } from "./overpass";
 
-/** Hard ceiling for the gzipped size of all asset files together. */
-export const GZIP_BUDGET_BYTES = 900 * 1024;
+/** Hard ceiling for the gzipped size of all asset files together (a repo/CDN figure). */
+export const GZIP_BUDGET_BYTES = 1200 * 1024;
+
+/**
+ * Hard ceiling for any single tile's gzipped size. A player only downloads the ≤ 9 tiles
+ * around them, so this — not the total — is what bounds their actual download time.
+ * Owner decision 2026-09-04: 256 KB comfortably covers a complete town core within the
+ * 1.2 km building-keep radius (the Wageningen–campus tile, the largest, is ≈ 203 KB).
+ */
+export const TILE_GZIP_BUDGET_BYTES = 256 * 1024;
 
 /** Options for {@link runBuild}. */
 export type RunBuildOptions = {
@@ -54,6 +62,16 @@ function measure(name: string, json: string): BuiltFile {
     bytes: buffer.byteLength,
     gzipBytes: gzipSync(buffer).byteLength,
   };
+}
+
+/** Tile files (`name` starting with `tile_`) whose gzipped size exceeds `capBytes`. */
+export function findOversizedTiles(
+  files: BuiltFile[],
+  capBytes: number,
+): BuiltFile[] {
+  return files.filter(
+    (file) => file.name.startsWith("tile_") && file.gzipBytes > capBytes,
+  );
 }
 
 /** Fetches, assembles, validates and (unless `check`) writes the map asset. */
@@ -136,8 +154,18 @@ export async function runBuild(
     );
   }
   log(
-    `Total gzipped: ${(totalGzipBytes / 1024).toFixed(1)} KB (budget ${(GZIP_BUDGET_BYTES / 1024).toFixed(0)} KB)`,
+    `Total gzipped: ${(totalGzipBytes / 1024).toFixed(1)} KB (budget ${(GZIP_BUDGET_BYTES / 1024).toFixed(0)} KB, tile cap ${(TILE_GZIP_BUDGET_BYTES / 1024).toFixed(0)} KB)`,
   );
+  const oversizedTiles = findOversizedTiles(files, TILE_GZIP_BUDGET_BYTES);
+  if (oversizedTiles.length > 0) {
+    throw new MapBuildError(
+      `Tile(s) exceed the ${(TILE_GZIP_BUDGET_BYTES / 1024).toFixed(0)} KB per-tile gzip cap: ${oversizedTiles
+        .map(
+          (file) => `${file.name} (${(file.gzipBytes / 1024).toFixed(1)} KB)`,
+        )
+        .join(", ")}`,
+    );
+  }
   if (totalGzipBytes > GZIP_BUDGET_BYTES) {
     throw new MapBuildError(
       `Asset exceeds gzip budget: ${totalGzipBytes} > ${GZIP_BUDGET_BYTES} bytes`,
