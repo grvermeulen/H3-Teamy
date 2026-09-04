@@ -20,6 +20,9 @@ export type FetchOverpassOptions = {
 const DEFAULT_RETRIES = 3;
 const BACKOFF_BASE_MS = 2000;
 
+/** Deadline for one Overpass HTTP attempt; a stalled body must not hang forever. */
+const OVERPASS_TIMEOUT_MS = 60_000;
+
 /** SHA-1 of the query text, used as the cache file name. */
 export function overpassCacheKey(query: string): string {
   return createHash("sha1").update(query).digest("hex");
@@ -57,11 +60,16 @@ async function readCachedResponse(
 ): Promise<OverpassJson | null> {
   try {
     const cached: unknown = JSON.parse(await readFile(cacheFile, "utf8"));
-    if (isOverpassJson(cached)) {
-      log(`Overpass cache hit ${cacheFile}`);
-      return cached;
+    if (!isOverpassJson(cached)) return null;
+    const remark = runtimeErrorRemark(cached);
+    if (remark) {
+      log(
+        `Overpass cache holds a runtime error, refetching ${cacheFile}: ${remark}`,
+      );
+      return null;
     }
-    return null;
+    log(`Overpass cache hit ${cacheFile}`);
+    return cached;
   } catch (error: unknown) {
     const isMissing =
       error instanceof Error && "code" in error && error.code === "ENOENT";
@@ -72,12 +80,31 @@ async function readCachedResponse(
   }
 }
 
+/**
+ * An abort signal that fires after `timeoutMs`, plus a `clear` callback the caller must run
+ * once the operation settles. Prefers the built-in `AbortSignal.timeout`; falls back to a
+ * manual `AbortController` + `setTimeout` when that is not available (e.g. some test
+ * environments), always clearing the timer so it cannot keep the process alive.
+ */
+function createTimeoutSignal(timeoutMs: number): {
+  signal: AbortSignal;
+  clear: () => void;
+} {
+  if (typeof AbortSignal.timeout === "function") {
+    return { signal: AbortSignal.timeout(timeoutMs), clear: () => {} };
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return { signal: controller.signal, clear: () => clearTimeout(timer) };
+}
+
 /** One raw fetch attempt against the Overpass endpoint; network failures never throw. */
 async function requestOnce(
   url: string,
   query: string,
   fetchImpl: typeof fetch,
 ): Promise<{ response: Response | null; failure: string | null }> {
+  const { signal, clear } = createTimeoutSignal(OVERPASS_TIMEOUT_MS);
   try {
     const response = await fetchImpl(url, {
       method: "POST",
@@ -91,6 +118,7 @@ async function requestOnce(
           "H3-Teamy-Arena-MapBuild/1.0 (+https://github.com/grvermeulen/H3-Teamy)",
       },
       body: `data=${encodeURIComponent(query)}`,
+      signal,
     });
     return { response, failure: null };
   } catch (error: unknown) {
@@ -98,6 +126,8 @@ async function requestOnce(
       response: null,
       failure: error instanceof Error ? error.message : String(error),
     };
+  } finally {
+    clear();
   }
 }
 

@@ -147,4 +147,40 @@ describe("fetchOverpass", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(await readdir(cacheDir)).toHaveLength(0);
   });
+
+  it("treats a cached runtime-error remark as a miss and fetches again", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(payload));
+    await mkdir(cacheDir, { recursive: true });
+    await writeFile(
+      join(cacheDir, `${overpassCacheKey("q")}.json`),
+      JSON.stringify({
+        remark: "runtime error: Query timed out",
+        elements: [],
+      }),
+    );
+    const result = await fetchOverpass("q", { cacheDir, fetchImpl, sleep });
+    expect(result.elements).toHaveLength(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes an abort signal with a deadline to the fetch call", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => jsonResponse(payload));
+    await fetchOverpass("q", { cacheDir, fetchImpl, sleep });
+    const [, init] = fetchImpl.mock.calls[0];
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("retries when the request aborts, like any other failure", async () => {
+    const abortError = Object.assign(new Error("This operation was aborted"), {
+      name: "AbortError",
+    });
+    const fetchImpl = vi
+      .fn<() => Promise<Response>>()
+      .mockRejectedValueOnce(abortError)
+      .mockResolvedValueOnce(jsonResponse(payload));
+    const result = await fetchOverpass("q", { cacheDir, fetchImpl, sleep });
+    expect(result.elements).toHaveLength(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
 });
