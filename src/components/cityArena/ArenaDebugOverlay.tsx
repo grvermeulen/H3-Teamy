@@ -33,10 +33,10 @@ function debugLines({
   const route = routeMetres === null ? "—" : `${Math.round(routeMetres)} m`;
   return [
     `fps ${metrics.fps} · frame p95 ${metrics.frameP95Ms.toFixed(1)} ms`,
-    `draw p95 ${metrics.drawP95Ms.toFixed(1)} ms · sim p95 ${metrics.simP95Ms.toFixed(1)} ms`,
-    `chunks ${chunks.chunks} (${chunkSizeMb} MB) · tiles ${tiles}`,
+    `tekenen p95 ${metrics.drawP95Ms.toFixed(1)} ms · simulatie p95 ${metrics.simP95Ms.toFixed(1)} ms`,
+    `blokken ${chunks.chunks} (${chunkSizeMb} MB) · tegels ${tiles}`,
     `camera ${camera.x.toFixed(1)}, ${camera.y.toFixed(1)} · zoom ${camera.zoom}`,
-    `player ${player.x.toFixed(1)}, ${player.y.toFixed(1)} · ${player.speed.toFixed(1)} m/s`,
+    `speler ${player.x.toFixed(1)}, ${player.y.toFixed(1)} · ${player.speed.toFixed(1)} m/s`,
     `route ${route}`,
   ];
 }

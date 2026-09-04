@@ -22,9 +22,9 @@ describe("ArenaDebugOverlay", () => {
     );
     const panel = screen.getByTestId("arena-debug");
     expect(panel).toHaveTextContent("fps 58");
-    expect(panel).toHaveTextContent("draw p95 5.1 ms");
-    expect(panel).toHaveTextContent("chunks 6 (12.0 MB)");
-    expect(panel).toHaveTextContent("tiles 9");
+    expect(panel).toHaveTextContent("tekenen p95 5.1 ms");
+    expect(panel).toHaveTextContent("blokken 6 (12.0 MB)");
+    expect(panel).toHaveTextContent("tegels 9");
     expect(panel).toHaveTextContent("zoom 6");
     expect(panel).toHaveTextContent("route 412 m");
   });
