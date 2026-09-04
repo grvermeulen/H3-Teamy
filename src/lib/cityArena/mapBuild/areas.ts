@@ -1,6 +1,12 @@
 import osm2geojson from "osm2geojson-lite";
 import type { GroundKind } from "../world/mapTypes";
-import type { LatLon, OsmTags, OverpassJson } from "./osmTypes";
+import {
+  osmElementId,
+  type LatLon,
+  type OsmTags,
+  type OverpassElement,
+  type OverpassJson,
+} from "./osmTypes";
 
 /** A polygon feature reduced to its outer ring (closing point removed) and its tags. */
 export type AreaFeature = { id: string; tags: OsmTags; ring: LatLon[] };
@@ -56,6 +62,44 @@ function ringFromPositions(positions: number[][]): LatLon[] {
   return ring;
 }
 
+function hasTags(element: OverpassElement): boolean {
+  return Object.keys(element.tags ?? {}).length > 0;
+}
+
+/**
+ * Merges elements that share a `type/id` (Overpass's `out body; >; out skel qt;` returns
+ * relation members a second time as tagless skeletons). The tagged copy always wins; a
+ * tagless duplicate never overrides a tagged one, regardless of which comes first.
+ */
+export function dedupeElements(json: OverpassJson): OverpassJson {
+  const byKey = new Map<string, OverpassElement>();
+  for (const element of json.elements) {
+    const key = osmElementId(element);
+    const existing = byKey.get(key);
+    if (!existing || (!hasTags(existing) && hasTags(element))) {
+      byKey.set(key, element);
+    }
+  }
+  return { ...json, elements: [...byKey.values()] };
+}
+
+/**
+ * Drops relations that are not multipolygons — e.g. a `type=building` "Simple 3D Buildings"
+ * relation, whose outline member uses role `outline`, not `outer`. osm2geojson-lite has no
+ * usable rendering for such a relation (it falls back to a `LineString`), and `excludeWay`
+ * hides its member ways as if they were represented some other way. Dropping the relation
+ * turns its outline way back into an ordinary tagged way, which IS emitted.
+ */
+export function dropNonMultipolygonRelations(json: OverpassJson): OverpassJson {
+  return {
+    ...json,
+    elements: json.elements.filter(
+      (element) =>
+        element.type !== "relation" || element.tags?.type === "multipolygon",
+    ),
+  };
+}
+
 function outerRings(feature: GeoFeature): number[][][] {
   const geometry = feature.geometry;
   if (geometry.type === "Polygon") return [geometry.coordinates[0]];
@@ -66,7 +110,8 @@ function outerRings(feature: GeoFeature): number[][][] {
 
 /** Converts an Overpass response to classified outer-ring polygons. */
 export function extractAreas(json: OverpassJson): ExtractedAreas {
-  const collection = osm2geojson(json, {
+  const cleaned = dropNonMultipolygonRelations(dedupeElements(json));
+  const collection = osm2geojson(cleaned, {
     completeFeature: true,
     renderTagged: true,
     excludeWay: true,
