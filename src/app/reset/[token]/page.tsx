@@ -51,7 +51,8 @@ export default function ResetWithTokenPage() {
         };
         setNotice({
           tone: "error",
-          text: messages[errorKey] ?? "Reset mislukt. Vraag een nieuwe link aan.",
+          text:
+            messages[errorKey] ?? "Reset mislukt. Vraag een nieuwe link aan.",
         });
       }
     } finally {

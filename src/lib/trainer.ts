@@ -4,7 +4,10 @@ import { getActiveUser } from "./activeUser";
 import { isDbUnavailableError } from "./dbUnavailableError";
 import { prisma } from "./db";
 import { getUserRoles, type UserRoles } from "./kv";
-import { isTransientPostgresConnectError, withPgConnectRetry } from "./prismaConnectRetry";
+import {
+  isTransientPostgresConnectError,
+  withPgConnectRetry,
+} from "./prismaConnectRetry";
 import {
   getBootstrapAdminUserIds,
   getBootstrapTrainerUserIds,
@@ -30,10 +33,7 @@ export async function isTrainer(
   try {
     ({ userId } = await getActiveUser(req));
   } catch (err: unknown) {
-    if (
-      !isDbUnavailableError(err) &&
-      !isTransientPostgresConnectError(err)
-    ) {
+    if (!isDbUnavailableError(err) && !isTransientPostgresConnectError(err)) {
       Sentry.captureException(err, {
         tags: { component: "trainer" },
         extra: { context: "getActiveUser_isTrainer" },
@@ -50,8 +50,7 @@ export async function isTrainer(
     );
     const full = displayName(user ?? {});
     const envAdmin = getBootstrapAdminUserIds().has(userId);
-    const envTrainer =
-      getBootstrapTrainerUserIds().has(userId) || envAdmin;
+    const envTrainer = getBootstrapTrainerUserIds().has(userId) || envAdmin;
     const roles: UserRoles = await getUserRoles(userId).catch(
       (err: unknown) => {
         Sentry.captureException(err, {
@@ -67,10 +66,7 @@ export async function isTrainer(
       me: { id: userId, name: full },
     };
   } catch (err: unknown) {
-    if (
-      !isDbUnavailableError(err) &&
-      !isTransientPostgresConnectError(err)
-    ) {
+    if (!isDbUnavailableError(err) && !isTransientPostgresConnectError(err)) {
       Sentry.captureException(err, {
         tags: { component: "trainer" },
         extra: { context: "isTrainer", userId },
@@ -96,10 +92,7 @@ export async function isAdminUser(
   try {
     ({ userId } = await getActiveUser(req));
   } catch (err: unknown) {
-    if (
-      !isDbUnavailableError(err) &&
-      !isTransientPostgresConnectError(err)
-    ) {
+    if (!isDbUnavailableError(err) && !isTransientPostgresConnectError(err)) {
       Sentry.captureException(err, {
         tags: { component: "trainer" },
         extra: { context: "getActiveUser_isAdminUser" },
@@ -131,10 +124,7 @@ export async function isAdminUser(
       me: { id: userId, name: full },
     };
   } catch (err: unknown) {
-    if (
-      !isDbUnavailableError(err) &&
-      !isTransientPostgresConnectError(err)
-    ) {
+    if (!isDbUnavailableError(err) && !isTransientPostgresConnectError(err)) {
       Sentry.captureException(err, {
         tags: { component: "trainer" },
         extra: { context: "isAdminUser", userId },

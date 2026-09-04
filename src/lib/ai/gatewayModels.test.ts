@@ -48,9 +48,7 @@ describe("resolveGatewayModel", () => {
   });
 
   it("remaps gpt-5-chat-latest to gpt-4o for text calls", () => {
-    expect(
-      resolveGatewayModel("openai/gpt-5-chat-latest", "text"),
-    ).toEqual({
+    expect(resolveGatewayModel("openai/gpt-5-chat-latest", "text")).toEqual({
       model: "openai/gpt-4o",
       substitutedFrom: "openai/gpt-5-chat-latest",
     });

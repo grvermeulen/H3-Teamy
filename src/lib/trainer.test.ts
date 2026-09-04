@@ -21,8 +21,7 @@ vi.mock("./db", () => ({
 }));
 
 vi.mock("./prismaConnectRetry", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("./prismaConnectRetry")>();
+  const actual = await importOriginal<typeof import("./prismaConnectRetry")>();
   return {
     ...actual,
     withPgConnectRetry: async <T>(
@@ -108,7 +107,9 @@ describe("trainer permissions", () => {
 
     it("returns false if DB query fails", async () => {
       vi.mocked(getActiveUser).mockResolvedValue({ userId: "5" });
-      vi.mocked(prisma.user.findUnique).mockRejectedValue(new Error("DB Error"));
+      vi.mocked(prisma.user.findUnique).mockRejectedValue(
+        new Error("DB Error"),
+      );
 
       const result = await isTrainer(mockReq);
       expect(result.isTrainer).toBe(false);
@@ -223,7 +224,9 @@ describe("trainer permissions", () => {
 
     it("returns false if DB query fails", async () => {
       vi.mocked(getActiveUser).mockResolvedValue({ userId: "5" });
-      vi.mocked(prisma.user.findUnique).mockRejectedValue(new Error("DB Error"));
+      vi.mocked(prisma.user.findUnique).mockRejectedValue(
+        new Error("DB Error"),
+      );
 
       const result = await isAdminUser(mockReq);
       expect(result.isAdmin).toBe(false);

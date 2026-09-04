@@ -11,6 +11,8 @@ describe("passwordResetToken", () => {
   });
 
   it("builds pending key per user", () => {
-    expect(passwordResetPendingKey("user_abc")).toBe("pwreset:pending:user_abc");
+    expect(passwordResetPendingKey("user_abc")).toBe(
+      "pwreset:pending:user_abc",
+    );
   });
 });

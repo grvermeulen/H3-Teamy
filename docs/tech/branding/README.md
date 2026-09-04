@@ -17,7 +17,7 @@ What lives where:
 ## Entry Points
 
 - Sources: `assets/branding/logo-h3.png`, `assets/branding/splash-app-portrait.png`,
-  `assets/branding/splash-game-landscape.png`.
+  `assets/branding/splash-game-landscape.png`, `assets/branding/wasted-screen.png`.
 - Generation script: `scripts/generate-icons.js` (runs as the `prebuild` npm script; also runnable manually).
 - Splash screen component: `src/components/AppSplash.tsx`.
 - PWA manifest: `src/app/manifest.ts`.
@@ -32,5 +32,6 @@ What lives where:
 
 ## Game loading screen
 
+`public/branding/wasted-screen.{webp,jpg}` is the arena death-screen artwork (design spec §7, built in Plan 4).
 `public/branding/splash-game-landscape.{webp,jpg}` is reserved for the arena game's loading screen; wiring it into
 the game UI is left to a later PR. The owner accepted the artwork as delivered on 2026-09-03.

@@ -79,9 +79,8 @@ describe("password reset token storage", () => {
       return new Response("not found", { status: 404 });
     });
 
-    const { createPasswordResetToken, redeemPasswordResetToken } = await import(
-      "./kv"
-    );
+    const { createPasswordResetToken, redeemPasswordResetToken } =
+      await import("./kv");
     const created = await createPasswordResetToken("grvermeulen@gmail.com");
     expect(created.token).toBeTruthy();
 
@@ -92,9 +91,9 @@ describe("password reset token storage", () => {
     expect(redeemed.ok).toBe(true);
     expect(mockUserUpdate).toHaveBeenCalled();
     expect(global.fetch).toHaveBeenCalled();
-    expect(
-      [...store.keys()].some((key) => key.startsWith("pwreset:")),
-    ).toBe(false);
+    expect([...store.keys()].some((key) => key.startsWith("pwreset:"))).toBe(
+      false,
+    );
   });
 
   it("stores and redeems via Postgres when KV and Redis are unavailable", async () => {
@@ -109,9 +108,8 @@ describe("password reset token storage", () => {
     mockPasswordResetCreate.mockResolvedValue({});
     vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("fetch failed"));
 
-    const { createPasswordResetToken, redeemPasswordResetToken } = await import(
-      "./kv"
-    );
+    const { createPasswordResetToken, redeemPasswordResetToken } =
+      await import("./kv");
     const created = await createPasswordResetToken("grvermeulen@gmail.com");
     expect(created.token).toBeTruthy();
     expect(mockPasswordResetCreate).toHaveBeenCalled();

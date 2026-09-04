@@ -72,9 +72,7 @@ describe("getPrismaPgAdapterOptions onPoolError", () => {
 
   it("adds a breadcrumb for Connection terminated due to connection timeout instead of captureException", () => {
     const { onPoolError } = getPrismaPgAdapterOptions();
-    onPoolError(
-      new Error("Connection terminated due to connection timeout"),
-    );
+    onPoolError(new Error("Connection terminated due to connection timeout"));
     expect(vi.mocked(Sentry.addBreadcrumb)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });

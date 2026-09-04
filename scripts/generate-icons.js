@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Generates app icons and optimised splash images from the branding sources in assets/branding/.
+ * Generates app icons, optimised splash images and the arena death-screen artwork from the
+ * branding sources in assets/branding/.
  * Runs as `prebuild`; run manually with `node scripts/generate-icons.js` after replacing artwork.
  */
 const fs = require("fs");
@@ -31,6 +32,7 @@ const sources = {
     "branding",
     "splash-game-landscape.png",
   ),
+  deathScreen: path.join(root, "assets", "branding", "wasted-screen.png"),
 };
 const iconsDir = path.join(root, "public", "icons");
 const brandingDir = path.join(root, "public", "branding");
@@ -138,6 +140,23 @@ async function generateSplashes() {
 }
 
 /**
+ * Generates the arena death-screen artwork at its source size (1254 px square), as a WebP
+ * primary source and a JPEG fallback.
+ */
+async function generateDeathScreen() {
+  const deathScreen = sharp(sources.deathScreen);
+  await deathScreen
+    .clone()
+    .webp({ quality: WEBP_QUALITY_GAME })
+    .toFile(path.join(brandingDir, "wasted-screen.webp"));
+  await deathScreen
+    .clone()
+    .flatten({ background: "#000000" })
+    .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
+    .toFile(path.join(brandingDir, "wasted-screen.jpg"));
+}
+
+/**
  * Logs where the generated branding assets were written.
  */
 function reportDone() {
@@ -154,6 +173,7 @@ async function main() {
   await generateIcons(logo);
   await generateMaskableIcon(logo);
   await generateSplashes();
+  await generateDeathScreen();
 
   reportDone();
 }

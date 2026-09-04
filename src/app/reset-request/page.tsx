@@ -40,11 +40,14 @@ export default function ResetRequestPage() {
         body: JSON.stringify({ email: trimmedEmail }),
       });
       if (res.ok) {
-        const data = await res.json().catch(() => ({}) as {
-          token?: string;
-          suppressed?: boolean;
-          sent?: boolean;
-        });
+        const data = await res.json().catch(
+          () =>
+            ({}) as {
+              token?: string;
+              suppressed?: boolean;
+              sent?: boolean;
+            },
+        );
         if (data?.sent) {
           setNotice({
             tone: "success",

@@ -21,15 +21,16 @@ describe("isNodeTransformStreamRaceNoise", () => {
     const error = new TypeError(
       "controller[kState].transformAlgorithm is not a function",
     );
-    error.stack = "TypeError: controller[kState].transformAlgorithm is not a function\n    at app/page.tsx:1:1";
+    error.stack =
+      "TypeError: controller[kState].transformAlgorithm is not a function\n    at app/page.tsx:1:1";
 
     expect(isNodeTransformStreamRaceNoise(error)).toBe(false);
   });
 
   it("returns false for unrelated TypeErrors", () => {
-    expect(isNodeTransformStreamRaceNoise(new TypeError("x is not a function"))).toBe(
-      false,
-    );
+    expect(
+      isNodeTransformStreamRaceNoise(new TypeError("x is not a function")),
+    ).toBe(false);
   });
 });
 
