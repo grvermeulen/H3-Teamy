@@ -23,6 +23,18 @@ model User {
   feedback  Feedback[]
   passkeys  Passkey[]
   passwordResetTokens PasswordResetToken[]
+  userRole  UserRole?
+}
+
+/** Admin/trainer/player flags from the admin panel (KV + Postgres fallback). */
+model UserRole {
+  userId    String   @id
+  admin     Boolean  @default(false)
+  trainer   Boolean  @default(false)
+  player    Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 /** Short-lived wachtwoord-reset token (KV-fallback in Postgres). */

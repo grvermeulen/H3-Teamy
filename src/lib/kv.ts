@@ -1415,7 +1415,7 @@ export async function listAllAttendanceKeys(): Promise<string[]> {
   return keys.sort();
 }
 
-// Roles (admin/trainer/player) stored in KV/Redis for simplicity
+// Roles (admin/trainer/player) stored in KV with Postgres fallback for durability.
 export type UserRoles = {
   admin?: boolean;
   trainer?: boolean;
@@ -1423,25 +1423,101 @@ export type UserRoles = {
 };
 type Roles = UserRoles;
 
-export async function getUserRoles(userId: string): Promise<Roles> {
-  const key = `roles:${userId}`;
-  const redis = await getRedis();
-  if (redis) {
-    const raw = (await redis.get(key)) as string | null;
-    if (!raw) return { player: true };
-    try {
-      return JSON.parse(raw) as Roles;
-    } catch {
-      return { player: true };
-    }
-  }
-  const raw = memoryStore.get(key) as unknown as string | undefined;
-  if (!raw) return { player: true };
+const DEFAULT_USER_ROLES: Roles = { player: true };
+
+function userRolesKey(userId: string): string {
+  return `roles:${userId}`;
+}
+
+function normalizeUserRoles(roles: Roles | null | undefined): Roles {
+  if (!roles) return { ...DEFAULT_USER_ROLES };
+  return {
+    admin: Boolean(roles.admin),
+    trainer: Boolean(roles.trainer),
+    player: roles.player === false ? false : true,
+  };
+}
+
+async function getUserRolesFromDb(userId: string): Promise<Roles | null> {
+  const p = await getPrisma();
+  if (!p) return null;
   try {
-    return JSON.parse(raw) as Roles;
-  } catch {
-    return { player: true };
+    const row = await p.userRole.findUnique({ where: { userId } });
+    if (!row) return null;
+    return {
+      admin: row.admin,
+      trainer: row.trainer,
+      player: row.player,
+    };
+  } catch (error: unknown) {
+    captureKvCacheError(error, "getUserRoles_db");
+    return null;
   }
+}
+
+async function getUserRolesFromDbBatch(
+  userIds: string[],
+): Promise<Record<string, Roles>> {
+  const out: Record<string, Roles> = {};
+  const p = await getPrisma();
+  if (!p || userIds.length === 0) return out;
+  try {
+    const rows = await p.userRole.findMany({
+      where: { userId: { in: userIds } },
+      select: { userId: true, admin: true, trainer: true, player: true },
+    });
+    for (const row of rows) {
+      out[row.userId] = {
+        admin: row.admin,
+        trainer: row.trainer,
+        player: row.player,
+      };
+    }
+  } catch (error: unknown) {
+    captureKvCacheError(error, "getUserRolesBatch_db");
+  }
+  return out;
+}
+
+async function setUserRolesInDb(userId: string, roles: Roles): Promise<void> {
+  const p = await getPrisma();
+  if (!p) return;
+  const normalized = normalizeUserRoles(roles);
+  try {
+    await p.userRole.upsert({
+      where: { userId },
+      create: {
+        userId,
+        admin: normalized.admin ?? false,
+        trainer: normalized.trainer ?? false,
+        player: normalized.player ?? true,
+      },
+      update: {
+        admin: normalized.admin ?? false,
+        trainer: normalized.trainer ?? false,
+        player: normalized.player ?? true,
+      },
+    });
+  } catch (error: unknown) {
+    captureKvCacheError(error, "setUserRoles_db");
+  }
+}
+
+/**
+ * Loads role flags for one user from KV, then Postgres, defaulting to player-only.
+ */
+export async function getUserRoles(userId: string): Promise<Roles> {
+  const key = userRolesKey(userId);
+  const cached = await kvGetJson<Roles>(key);
+  if (cached) return normalizeUserRoles(cached);
+  const fromDb = await getUserRolesFromDb(userId);
+  if (fromDb) {
+    await kvSetJson(key, fromDb).catch((error: unknown) => {
+      captureKvCacheError(error, "getUserRoles_cache_warm");
+    });
+    return normalizeUserRoles(fromDb);
+  }
+  return { ...DEFAULT_USER_ROLES };
 }
 
 /**
@@ -1459,60 +1535,82 @@ export async function getUserRolesBatch(
 
   const redis = await getRedis();
   if (redis) {
-    const keys = uniqueIds.map((id) => `roles:${id}`);
-    const vals = (await redis.mget(keys)) as Array<string | null>;
-    for (let i = 0; i < uniqueIds.length; i++) {
-      const raw = vals[i];
-      if (!raw) {
-        out[uniqueIds[i]] = { player: true };
-        continue;
+    try {
+      const keys = uniqueIds.map((id) => userRolesKey(id));
+      const vals = (await redis.mget(keys)) as Array<string | null>;
+      const missingFromKv: string[] = [];
+      for (let i = 0; i < uniqueIds.length; i++) {
+        const raw = vals[i];
+        if (!raw) {
+          missingFromKv.push(uniqueIds[i]);
+          continue;
+        }
+        try {
+          out[uniqueIds[i]] = normalizeUserRoles(JSON.parse(raw) as Roles);
+        } catch (err: unknown) {
+          Sentry.captureException(err, {
+            extra: {
+              userId: uniqueIds[i],
+              context: "getUserRolesBatch_redis_parse",
+            },
+          });
+          missingFromKv.push(uniqueIds[i]);
+        }
       }
-      try {
-        out[uniqueIds[i]] = JSON.parse(raw) as Roles;
-      } catch (err: unknown) {
-        Sentry.captureException(err, {
-          extra: {
-            userId: uniqueIds[i],
-            context: "getUserRolesBatch_redis_parse",
-          },
-        });
-        out[uniqueIds[i]] = { player: true };
+      if (missingFromKv.length === 0) return out;
+      const fromDb = await getUserRolesFromDbBatch(missingFromKv);
+      for (const userId of missingFromKv) {
+        const roles = fromDb[userId] ?? { ...DEFAULT_USER_ROLES };
+        out[userId] = roles;
+        if (fromDb[userId]) {
+          await kvSetJson(userRolesKey(userId), roles).catch(
+            (error: unknown) => {
+              captureKvCacheError(error, "getUserRolesBatch_cache_warm");
+            },
+          );
+        }
       }
+      return out;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "getUserRolesBatch_redis");
+      markRedisUnavailable();
     }
-    return out;
   }
 
+  const missingFromKv: string[] = [];
   for (const userId of uniqueIds) {
-    const raw = memoryStore.get(`roles:${userId}`) as unknown as
-      string | undefined;
-    if (!raw) {
-      out[userId] = { player: true };
-      continue;
+    const cached = await kvGetJson<Roles>(userRolesKey(userId));
+    if (cached) {
+      out[userId] = normalizeUserRoles(cached);
+    } else {
+      missingFromKv.push(userId);
     }
-    try {
-      out[userId] = JSON.parse(raw) as Roles;
-    } catch (err: unknown) {
-      Sentry.captureException(err, {
-        extra: { userId, context: "getUserRolesBatch_memory_parse" },
-      });
-      out[userId] = { player: true };
+  }
+  if (missingFromKv.length > 0) {
+    const fromDb = await getUserRolesFromDbBatch(missingFromKv);
+    for (const userId of missingFromKv) {
+      const roles = fromDb[userId] ?? { ...DEFAULT_USER_ROLES };
+      out[userId] = roles;
+      if (fromDb[userId]) {
+        await kvSetJson(userRolesKey(userId), roles).catch((error: unknown) => {
+          captureKvCacheError(error, "getUserRolesBatch_cache_warm");
+        });
+      }
     }
   }
   return out;
 }
 
+/**
+ * Persists role flags to KV and Postgres so admin changes survive cache outages.
+ */
 export async function setUserRoles(
   userId: string,
   roles: Roles,
 ): Promise<void> {
-  const key = `roles:${userId}`;
-  const payload = JSON.stringify(roles);
-  const redis = await getRedis();
-  if (redis) {
-    await redis.set(key, payload);
-    return;
-  }
-  memoryStore.set(key, payload as any);
+  const normalized = normalizeUserRoles(roles);
+  await kvSetJson(userRolesKey(userId), normalized);
+  await setUserRolesInDb(userId, normalized);
 }
 
 export async function createLinkCode(userId: string): Promise<string> {
