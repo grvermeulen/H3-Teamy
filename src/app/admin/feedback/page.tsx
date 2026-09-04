@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import * as Sentry from "@sentry/nextjs";
-import { EmptyState } from "../../../components/ui";
+import { AppBar, EmptyState } from "../../../components/ui";
 
 type FeedbackRow = {
   id: string;
@@ -132,18 +131,17 @@ export default function AdminFeedbackPage(): React.JSX.Element {
   if (forbidden) {
     return (
       <main className="container">
-        <h1>Geen toegang</h1>
+        <AppBar title="Geen toegang" fallbackHref="/admin" />
         <p className="muted">
           Je hebt admin-rechten nodig om deze pagina te zien.
         </p>
-        <Link href="/">Terug naar start</Link>
       </main>
     );
   }
 
   return (
     <main className="container pb-24">
-      <h1>Feedback</h1>
+      <AppBar title="Feedback" fallbackHref="/admin" />
       <p className="muted">
         {counts.BUG} {counts.BUG === 1 ? "bug" : "bugs"} • {counts.IDEA}{" "}
         {counts.IDEA === 1 ? "idee" : "ideeën"}

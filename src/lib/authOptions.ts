@@ -31,13 +31,21 @@ function reportCredentialsAuthorizeError(
 }
 
 /**
+ * Normalizes dashboard-managed auth values, which can accidentally include
+ * leading or trailing whitespace when pasted into a deployment environment.
+ */
+export function normalizeAuthEnv(value: string | undefined): string {
+  return value?.trim() ?? "";
+}
+
+/**
  * NextAuth configuration: Google + credentials, JWT sessions with user id on `session.user.id`.
  */
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+      clientId: normalizeAuthEnv(process.env.GOOGLE_CLIENT_ID),
+      clientSecret: normalizeAuthEnv(process.env.GOOGLE_CLIENT_SECRET),
     }),
     Credentials({
       name: "Credentials",
@@ -102,7 +110,7 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: normalizeAuthEnv(process.env.NEXTAUTH_SECRET) || undefined,
   callbacks: {
     async jwt({ token, user }) {
       if (user?.id) {

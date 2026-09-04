@@ -10,6 +10,7 @@ import { getBadgeForAttendance, type AttendanceBadge } from "../../lib/badges";
 import { APP_VERSION } from "../../lib/version";
 import { Button, Card, Input, Stack, showToast } from "../../components/ui";
 import { isBenignWebAuthnClientError } from "../../lib/webAuthnClientErrors";
+import { useSession } from "../../components/SessionContext";
 
 type Profile = {
   id: string;
@@ -21,6 +22,7 @@ type PasskeyRow = { id: string; createdAt: string; label: string | null };
 type Roles = { admin: boolean; trainer: boolean; player: boolean };
 
 export default function ProfilePage() {
+  const { loggedIn } = useSession();
   const [, setProfile] = useState<Profile>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -386,6 +388,19 @@ export default function ProfilePage() {
               </Stack>
             </Card>
           </div>
+        ) : null}
+
+        {loggedIn ? (
+          <form
+            action="/api/auth/signout"
+            method="post"
+            style={{ maxWidth: 520 }}
+          >
+            <input type="hidden" name="callbackUrl" value="/" />
+            <Button type="submit" variant="secondary" isFullWidth>
+              Uitloggen
+            </Button>
+          </form>
         ) : null}
 
         <div
