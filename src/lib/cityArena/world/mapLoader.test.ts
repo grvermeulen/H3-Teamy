@@ -1,7 +1,11 @@
 import * as Sentry from "@sentry/nextjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MapIndex, MapTile } from "./mapTypes";
-import { createMapLoader, tileCoordForMetres } from "./mapLoader";
+import {
+  createMapLoader,
+  tileCoordForMetres,
+  TILE_RETRY_COOLDOWN_MS,
+} from "./mapLoader";
 
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
@@ -314,5 +318,37 @@ describe("createMapLoader", () => {
 
     // Tile (0,0) is outside the (2,2) 3×3 block and should be evicted
     expect(loader.getTile(0, 0)).toBeUndefined();
+  });
+
+  it("skips refetching a failed tile until the retry cooldown elapses, then retries and clears the failure", async () => {
+    let now = 0;
+    const fetchImpl = routedFetch({ "/map/tile_0_0.json": 1 });
+    const loader = createMapLoader({
+      baseUrl: "/map",
+      fetchImpl,
+      sleep,
+      retries: 0,
+      now: () => now,
+    });
+    const callsToTile00 = (): number =>
+      fetchImpl.mock.calls.filter(([url]) =>
+        String(url).endsWith("tile_0_0.json"),
+      ).length;
+
+    const first = await loader.ensureTilesAround([-2000, -2000], 0);
+    expect(first).toEqual({ loaded: 0, total: 1 });
+    expect(loader.hasFailures()).toBe(true);
+    expect(callsToTile00()).toBe(1);
+
+    const stillCoolingDown = await loader.ensureTilesAround([-2000, -2000], 0);
+    expect(stillCoolingDown).toEqual({ loaded: 0, total: 1 });
+    expect(callsToTile00()).toBe(1); // no new fetch while cooling down
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
+
+    now = TILE_RETRY_COOLDOWN_MS;
+    const afterCooldown = await loader.ensureTilesAround([-2000, -2000], 0);
+    expect(afterCooldown).toEqual({ loaded: 1, total: 1 });
+    expect(loader.hasFailures()).toBe(false);
+    expect(callsToTile00()).toBe(2);
   });
 });

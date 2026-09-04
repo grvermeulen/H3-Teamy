@@ -15,6 +15,9 @@ const DEFAULT_TILE_RETRIES = 3;
 /** Default exponential-backoff unit (milliseconds) between retries. */
 const DEFAULT_BACKOFF_MS = 500;
 
+/** How long a failed tile is skipped before the loader will retry it. */
+export const TILE_RETRY_COOLDOWN_MS = 30_000;
+
 /** Loading progress of the last `ensureTilesAround` call. */
 export type LoadProgress = { loaded: number; total: number };
 
@@ -27,6 +30,8 @@ export type MapLoaderOptions = {
   backoffMs?: number;
   sleep?: (milliseconds: number) => Promise<void>;
   onError?: (error: Error, file: string) => void;
+  /** Clock used for the retry cooldown; defaults to `Date.now`, injectable for tests. */
+  now?: () => number;
 };
 
 /** Streams map tiles around a moving point. */
@@ -170,6 +175,7 @@ type TileStoreOptions = {
   isDisposed: () => boolean;
   onChange: () => void;
   onError?: (error: Error, file: string) => void;
+  now: () => number;
 };
 
 type TileStore = {
@@ -199,7 +205,7 @@ function storeTile(
 
 /** Reports a tile failure to Sentry, then records it unless the loader was disposed. */
 function recordTileFailure(
-  failed: Set<string>,
+  failedAt: Map<string, number>,
   options: TileStoreOptions,
   file: string,
   error: unknown,
@@ -209,14 +215,52 @@ function recordTileFailure(
     tags: { area: "arena", kind: "tile-load" },
   });
   if (options.isDisposed()) return false;
-  failed.add(file);
+  failedAt.set(file, options.now());
   options.onError?.(normalized, file);
   return false;
 }
 
+/** True when `file` failed within the last {@link TILE_RETRY_COOLDOWN_MS}. */
+function isCoolingDown(
+  failedAt: Map<string, number>,
+  options: TileStoreOptions,
+  file: string,
+): boolean {
+  const failedTimestamp = failedAt.get(file);
+  return (
+    failedTimestamp !== undefined &&
+    options.now() - failedTimestamp < TILE_RETRY_COOLDOWN_MS
+  );
+}
+
+/** Fetches (or reuses an in-flight fetch of) one tile, skipping files still cooling down. */
+function requestTile(
+  tiles: Lru<string, DecodedTile>,
+  failedAt: Map<string, number>,
+  inFlight: Map<string, Promise<boolean>>,
+  options: TileStoreOptions,
+  ref: MapTileRef,
+  fetchTile: (ref: MapTileRef) => Promise<DecodedTile>,
+): Promise<boolean> {
+  const existing = inFlight.get(ref.file);
+  if (existing) return existing;
+  if (isCoolingDown(failedAt, options, ref.file)) return Promise.resolve(false);
+  const request = fetchTile(ref)
+    .then((tile) => {
+      failedAt.delete(ref.file);
+      return storeTile(tiles, options, ref.file, tile);
+    })
+    .catch((error: unknown) =>
+      recordTileFailure(failedAt, options, ref.file, error),
+    )
+    .finally(() => inFlight.delete(ref.file));
+  inFlight.set(ref.file, request);
+  return request;
+}
+
 /** Owns the resident-tile LRU plus the in-flight and failure bookkeeping for one loader. */
 function createTileStore(options: TileStoreOptions): TileStore {
-  const failed = new Set<string>();
+  const failedAt = new Map<string, number>();
   const inFlight = new Map<string, Promise<boolean>>();
   const tiles = createLru<string, DecodedTile>({
     maxCost: options.maxTiles,
@@ -234,23 +278,13 @@ function createTileStore(options: TileStoreOptions): TileStore {
       return false;
     },
     getAll: () => tiles.keys().flatMap((key) => tiles.peek(key) ?? []),
-    hasFailures: () => failed.size > 0,
-    request(ref, fetchTile) {
-      const existing = inFlight.get(ref.file);
-      if (existing) return existing;
-      const request = fetchTile(ref)
-        .then((tile) => storeTile(tiles, options, ref.file, tile))
-        .catch((error: unknown) =>
-          recordTileFailure(failed, options, ref.file, error),
-        )
-        .finally(() => inFlight.delete(ref.file));
-      inFlight.set(ref.file, request);
-      return request;
-    },
+    hasFailures: () => failedAt.size > 0,
+    request: (ref, fetchTile) =>
+      requestTile(tiles, failedAt, inFlight, options, ref, fetchTile),
     reset() {
       for (const key of tiles.keys()) tiles.delete(key);
       inFlight.clear();
-      failed.clear();
+      failedAt.clear();
     },
   };
 }
@@ -295,6 +329,7 @@ function createLoaderState(options: MapLoaderOptions): LoaderState {
     isDisposed: () => disposedRef.current,
     onChange: () => notifyListeners(listeners),
     onError: options.onError,
+    now: options.now ?? Date.now,
   });
   const indexLoader = createCachedLoader<MapIndex>(() =>
     fetchJsonWithRetries(`${baseUrl}/index.json`, retryOptions).then(

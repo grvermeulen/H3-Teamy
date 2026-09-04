@@ -1,10 +1,15 @@
 import { act, renderHook } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { LoadProgress } from "@/lib/cityArena/world/mapLoader";
 import { createStaticRaster } from "@/lib/cityArena/render/staticRaster";
-import { createFakeTarget } from "@/lib/cityArena/render/testing/fakeContext";
+import {
+  createFakeContext,
+  createFakeTarget,
+} from "@/lib/cityArena/render/testing/fakeContext";
 import { createCollisionGrid } from "@/lib/cityArena/world/collisionGrid";
 import type { MapIndex, MapLandmark } from "@/lib/cityArena/world/mapTypes";
+import type { Point } from "@/lib/cityArena/world/projection";
 import { decodeRoadGraph } from "@/lib/cityArena/world/roadGraph";
 import type {
   WorldReady,
@@ -81,6 +86,27 @@ function renderArenaGame() {
   );
 }
 
+/**
+ * Renders the hook with a real (if unattached-to-the-DOM) canvas, and fakes its 2D context —
+ * jsdom's own `getContext` returns `null`. Needed only by tests that drive the frame loop
+ * manually: `startFrameLoop`'s tick skips `runFrame` (and so the throttled tile-sync/HUD/debug
+ * refreshes) entirely when `canvasRef.current` is null, which `renderArenaGame` above leaves it.
+ */
+function renderArenaGameWithCanvas() {
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    () => createFakeContext() as unknown as CanvasRenderingContext2D,
+  );
+  const canvasRef = { current: document.createElement("canvas") };
+  return renderHook(() =>
+    useArenaGame({ zoneKey: "wageningen", canvasRef, debug: false }),
+  );
+}
+
+/** Grabs the frame-loop's `tick` callback handed to the mocked `requestAnimationFrame`. */
+function getTick(): (timestamp: number) => void {
+  return vi.mocked(window.requestAnimationFrame).mock.calls[0][0];
+}
+
 describe("useArenaGame", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -132,6 +158,109 @@ describe("useArenaGame", () => {
 
     unmount();
     expect(session.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not start a second tile sync while one is in flight, and runs exactly one follow-up sync at the newer position", async () => {
+    const zonedIndex: MapIndex = {
+      ...testIndex,
+      zones: [
+        {
+          key: "wageningen",
+          name: "Wageningen",
+          center: [0, 0],
+          radius: 4000,
+          spawnNodes: [[0, 0]],
+          landmarks: [],
+        },
+        {
+          key: "campus",
+          name: "Campus",
+          center: [4000, 4000],
+          radius: 4000,
+          spawnNodes: [[4000, 4000]],
+          landmarks: [],
+        },
+      ],
+    };
+    const { session, resolveReady } = createControllableSession();
+    session.index = () => zonedIndex;
+
+    const updateCalls: Point[] = [];
+    let settlePendingUpdate: ((progress: LoadProgress) => void) | null = null;
+    session.update = vi.fn((centre: Point): Promise<LoadProgress> => {
+      updateCalls.push(centre);
+      if (updateCalls.length === 1) {
+        return Promise.resolve({ loaded: 0, total: 0 });
+      }
+      return new Promise<LoadProgress>((resolve) => {
+        settlePendingUpdate = resolve;
+      });
+    });
+    mockCreateWorldSession.mockReturnValue(session);
+
+    const { result } = renderArenaGameWithCanvas();
+
+    await act(async () => {
+      resolveReady({ index: zonedIndex, graph: testGraph });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.phase).toBe("playing");
+    expect(updateCalls).toHaveLength(1); // the boot's own sync
+
+    const tick = getTick();
+
+    act(() => tick(500));
+    expect(updateCalls).toHaveLength(2);
+    expect(updateCalls[1]).toEqual([0, 0]);
+
+    act(() => tick(1000));
+    expect(updateCalls).toHaveLength(2); // still in flight: no second call issued
+
+    act(() => result.current.teleportToZone("campus"));
+    act(() => tick(1001));
+    expect(updateCalls).toHaveLength(2); // the teleport only requests a follow-up
+
+    await act(async () => {
+      settlePendingUpdate?.({ loaded: 9, total: 9 });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(updateCalls).toHaveLength(3); // exactly one follow-up
+    expect(updateCalls[2]).toEqual([1000, 1000]); // the post-teleport position
+  });
+
+  it("clears the failed flag once a later sync reports the loader has recovered", async () => {
+    const { session, resolveReady } = createControllableSession();
+    let currentlyFailing = true;
+    session.hasFailures = () => currentlyFailing;
+    session.update = vi
+      .fn()
+      .mockResolvedValueOnce({ loaded: 8, total: 9 })
+      .mockImplementationOnce(async () => {
+        currentlyFailing = false;
+        return { loaded: 9, total: 9 };
+      });
+    mockCreateWorldSession.mockReturnValue(session);
+
+    const { result } = renderArenaGameWithCanvas();
+
+    await act(async () => {
+      resolveReady(testReady);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.phase).toBe("playing");
+    expect(result.current.failed).toBe(true);
+
+    await act(async () => {
+      getTick()(500);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.failed).toBe(false);
   });
 });
 

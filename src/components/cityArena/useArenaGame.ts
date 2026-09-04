@@ -125,6 +125,10 @@ type Runtime = {
   camera: Camera;
   accumulator: number;
   lastTileSync: number;
+  /** True while a `session.update` tile sync is awaiting the network. */
+  tileSyncPending: boolean;
+  /** True when the timer or a teleport asked for a sync while one was already in flight. */
+  tileSyncRequested: boolean;
   lastHud: number;
   lastDebug: number;
 };
@@ -264,6 +268,8 @@ function createRuntime(
     camera: createCamera(spawn, zoomLevelForViewport(viewportWidthPx)),
     accumulator: 0,
     lastTileSync: 0,
+    tileSyncPending: false,
+    tileSyncRequested: false,
     lastHud: 0,
     lastDebug: 0,
   };
@@ -303,26 +309,32 @@ type ArenaBootOptions = {
   runtimeRef: RefObject<Runtime | null>;
 };
 
-/** Result of {@link useArenaBoot}; `setProgress` lets the frame loop push tile-sync updates. */
+/**
+ * Result of {@link useArenaBoot}; `setProgress` and `setFailed` let the frame loop push
+ * tile-sync updates after boot has handed the runtime over.
+ */
 type ArenaBootResult = {
   phase: ArenaPhase;
   progress: LoadProgress;
   failed: boolean;
   zones: MapZone[];
   setProgress: (progress: LoadProgress) => void;
+  setFailed: (failed: boolean) => void;
 };
 
 /** State setters {@link finishBoot} updates as the initial load completes. */
 type BootSetters = {
   setZones: (zones: MapZone[]) => void;
   setProgress: (progress: LoadProgress) => void;
+  setFailed: (failed: boolean) => void;
   setPhase: (phase: ArenaPhase) => void;
 };
 
 /**
  * Finishes booting after {@link bootSession} resolves: seeds the zone list, streams the initial
- * tiles (reporting progress as each one settles so the loading screen moves), then flips the
- * phase to "playing". No-ops once `isCancelled` reports true.
+ * tiles (reporting progress as each one settles so the loading screen moves), derives the
+ * failed-tiles flag from the loader's own bookkeeping, then flips the phase to "playing". No-ops
+ * once `isCancelled` reports true.
  */
 async function finishBoot(
   session: WorldSession,
@@ -337,6 +349,7 @@ async function finishBoot(
   });
   if (isCancelled()) return;
   setters.setProgress(tileProgress);
+  setters.setFailed(session.hasFailures());
   setters.setPhase("playing");
 }
 
@@ -363,6 +376,7 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
         finishBoot(session, booted, isCancelled, {
           setZones,
           setProgress,
+          setFailed,
           setPhase,
         }),
       )
@@ -377,7 +391,7 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
     };
   }, [canvasRef, runtimeRef, zoneKey]);
 
-  return { phase, progress, failed, zones, setProgress };
+  return { phase, progress, failed, zones, setProgress, setFailed };
 }
 
 /** Attaches WASD/arrow-key input on mount; returns the setter the touch stick drives. */
@@ -464,9 +478,37 @@ type FrameLoopOptions = {
   metricsRef: RefObject<FrameMetrics>;
   debug: boolean;
   setProgress: (progress: LoadProgress) => void;
+  setFailed: (failed: boolean) => void;
   setHud: (hud: ArenaHud) => void;
   setDebugSnapshot: (snapshot: DebugSnapshot | null) => void;
 };
+
+/**
+ * Starts a tile sync at the player's current position. Never runs concurrently with itself:
+ * while the request is in flight, {@link refreshThrottled} only flags `tileSyncRequested`
+ * instead of starting another one; once this call settles, it starts exactly one follow-up sync
+ * (at whatever position the player has reached by then) if that flag was set.
+ */
+function startTileSync(runtime: Runtime, options: FrameLoopOptions): void {
+  runtime.tileSyncPending = true;
+  const { player } = runtime.state;
+  runtime.session
+    .update([player.x, player.y])
+    .then(
+      (progress) => {
+        options.setProgress(progress);
+        options.setFailed(runtime.session.hasFailures());
+      },
+      (error: unknown) => reportArenaError(error, "tile-sync"),
+    )
+    .finally(() => {
+      runtime.tileSyncPending = false;
+      if (runtime.tileSyncRequested) {
+        runtime.tileSyncRequested = false;
+        startTileSync(runtime, options);
+      }
+    });
+}
 
 /** Tile-sync, HUD and (when enabled) debug-panel refreshes, each on its own throttle interval. */
 function refreshThrottled(
@@ -477,11 +519,8 @@ function refreshThrottled(
   const { player } = runtime.state;
   if (timestamp - runtime.lastTileSync >= TILE_REFRESH_MS) {
     runtime.lastTileSync = timestamp;
-    runtime.session
-      .update([player.x, player.y])
-      .then(options.setProgress, (error: unknown) =>
-        reportArenaError(error, "tile-sync"),
-      );
+    if (runtime.tileSyncPending) runtime.tileSyncRequested = true;
+    else startTileSync(runtime, options);
   }
   if (timestamp - runtime.lastHud >= HUD_REFRESH_MS) {
     runtime.lastHud = timestamp;
@@ -546,6 +585,7 @@ function useFrameLoop(phase: ArenaPhase, options: FrameLoopOptions): void {
     metricsRef,
     debug,
     setProgress,
+    setFailed,
     setHud,
     setDebugSnapshot,
   } = options;
@@ -558,6 +598,7 @@ function useFrameLoop(phase: ArenaPhase, options: FrameLoopOptions): void {
       metricsRef,
       debug,
       setProgress,
+      setFailed,
       setHud,
       setDebugSnapshot,
     });
@@ -569,6 +610,7 @@ function useFrameLoop(phase: ArenaPhase, options: FrameLoopOptions): void {
     metricsRef,
     debug,
     setProgress,
+    setFailed,
     setHud,
     setDebugSnapshot,
   ]);
@@ -597,6 +639,7 @@ export function useArenaGame({
     metricsRef,
     debug,
     setProgress: boot.setProgress,
+    setFailed: boot.setFailed,
     setHud,
     setDebugSnapshot,
   });
