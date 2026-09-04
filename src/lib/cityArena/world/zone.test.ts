@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { MapIndex, MapZone } from "./mapTypes";
+import type { MapIndex, MapLandmark, MapZone } from "./mapTypes";
 import {
   distanceToZoneEdge,
   findZone,
   findZoneByKey,
+  landmarkCentreMetres,
   pickSpawn,
   zoneCentreMetres,
   zoneRadiusMetres,
@@ -19,6 +20,13 @@ const wageningen: MapZone = {
     [10400, 6800],
   ],
   landmarks: ["grote-kerk-wageningen"],
+};
+const groteKerk: MapLandmark = {
+  key: "grote-kerk-wageningen",
+  name: "Grote Kerk",
+  style: "church",
+  center: [10349, 6683],
+  tile: { x: 1, y: 1 },
 };
 const index: MapIndex = {
   version: 1,
@@ -36,6 +44,10 @@ describe("zone helpers", () => {
   it("converts centre and radius to metres", () => {
     expect(zoneCentreMetres(wageningen)).toEqual([2587.25, 1670.75]);
     expect(zoneRadiusMetres(wageningen)).toBe(500);
+  });
+
+  it("converts a landmark centre to metres", () => {
+    expect(landmarkCentreMetres(groteKerk)).toEqual([2587.25, 1670.75]);
   });
 
   it("finds the zone containing a point and signs the edge distance", () => {

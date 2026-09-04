@@ -158,6 +158,7 @@ describe("CityArenaOverlay", () => {
         expect(screen.getByTestId("arena-hud")).toHaveTextContent("Hoogstraat"),
       { timeout: 3000 },
     );
+    expect(screen.getByLabelText("Ga naar")).toHaveValue("wageningen");
     expect(
       screen.getAllByText("Kaart © OpenStreetMap-bijdragers").length,
     ).toBeGreaterThan(0);
@@ -167,6 +168,7 @@ describe("CityArenaOverlay", () => {
     await waitFor(() =>
       expect(screen.getByTestId("arena-hud")).toHaveTextContent("WUR-campus"),
     );
+    expect(screen.getByLabelText("Ga naar")).toHaveValue("campus");
     await act(async () => {
       fireEvent.keyDown(document, { code: "Escape", key: "Escape" });
     });

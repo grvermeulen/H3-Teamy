@@ -114,8 +114,6 @@ function ArenaHudBar({
   onTeleport,
   onClose,
 }: ArenaHudBarProps): React.JSX.Element {
-  const currentKey =
-    zones.find((candidate) => candidate.name === hud.zoneName)?.key ?? "";
   return (
     <div
       data-testid="arena-hud"
@@ -137,7 +135,7 @@ function ArenaHudBar({
       <div className="flex flex-wrap items-center gap-2">
         <ArenaZonePicker
           zones={zones}
-          currentKey={currentKey}
+          currentKey={hud.zoneKey ?? ""}
           disabled={pickerDisabled}
           onTeleport={onTeleport}
         />

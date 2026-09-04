@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createStaticRaster } from "@/lib/cityArena/render/staticRaster";
 import { createFakeTarget } from "@/lib/cityArena/render/testing/fakeContext";
 import { createCollisionGrid } from "@/lib/cityArena/world/collisionGrid";
-import type { MapIndex } from "@/lib/cityArena/world/mapTypes";
+import type { MapIndex, MapLandmark } from "@/lib/cityArena/world/mapTypes";
 import { decodeRoadGraph } from "@/lib/cityArena/world/roadGraph";
 import type {
   WorldReady,
@@ -19,7 +19,7 @@ vi.mock("@/lib/cityArena/world/worldSession", () => ({
   createWorldSession: mockCreateWorldSession,
 }));
 
-import { useArenaGame } from "./useArenaGame";
+import { nearestLandmarkTo, useArenaGame } from "./useArenaGame";
 
 /** Minimal valid index with no zones: `bootSession` falls back to spawning at `[0, 0]`. */
 const testIndex: MapIndex = {
@@ -132,5 +132,31 @@ describe("useArenaGame", () => {
 
     unmount();
     expect(session.dispose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("nearestLandmarkTo", () => {
+  const near: MapLandmark = {
+    key: "near",
+    name: "Dichtbij",
+    style: "cafe",
+    center: [40, 40], // 10, 10 m
+    tile: { x: 0, y: 0 },
+  };
+  const far: MapLandmark = {
+    key: "far",
+    name: "Veraf",
+    style: "cafe",
+    center: [4000, 4000], // 1000, 1000 m
+    tile: { x: 1, y: 1 },
+  };
+
+  it("picks the landmark whose centre is closest, straight-line, to the point", () => {
+    expect(nearestLandmarkTo([far, near], [0, 0])).toBe(near);
+    expect(nearestLandmarkTo([near, far], [0, 0])).toBe(near);
+  });
+
+  it("picks the other landmark once the point is closer to it instead", () => {
+    expect(nearestLandmarkTo([near, far], [2000, 2000])).toBe(far);
   });
 });

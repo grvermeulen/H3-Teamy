@@ -1,9 +1,14 @@
-import type { MapIndex, MapZone, ZoneKey } from "./mapTypes";
+import type { MapIndex, MapLandmark, MapZone, ZoneKey } from "./mapTypes";
 import { fromUnits, type Point } from "./projection";
 
 /** Zone centre in metres. */
 export function zoneCentreMetres(zone: MapZone): Point {
   return [fromUnits(zone.center[0]), fromUnits(zone.center[1])];
+}
+
+/** Landmark centre in metres. */
+export function landmarkCentreMetres(landmark: MapLandmark): Point {
+  return [fromUnits(landmark.center[0]), fromUnits(landmark.center[1])];
 }
 
 /** Zone radius in metres. */

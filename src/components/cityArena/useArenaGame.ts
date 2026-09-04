@@ -46,6 +46,7 @@ import {
 } from "@/lib/cityArena/world/mapLoader";
 import type {
   MapIndex,
+  MapLandmark,
   MapZone,
   ZoneKey,
 } from "@/lib/cityArena/world/mapTypes";
@@ -56,7 +57,12 @@ import {
   createWorldSession,
   type WorldSession,
 } from "@/lib/cityArena/world/worldSession";
-import { findZone, findZoneByKey, pickSpawn } from "@/lib/cityArena/world/zone";
+import {
+  findZone,
+  findZoneByKey,
+  landmarkCentreMetres,
+  pickSpawn,
+} from "@/lib/cityArena/world/zone";
 
 /** How often (ms) the loader streams new tiles around the player during play. */
 const TILE_REFRESH_MS = 500;
@@ -78,7 +84,13 @@ const MS_PER_SECOND = 1000;
 /** Overlay lifecycle phase. */
 export type ArenaPhase = "loading" | "playing" | "error";
 /** Text shown in the HUD strip. */
-export type ArenaHud = { zoneName: string | null; street: string | null };
+export type ArenaHud = {
+  zoneName: string | null;
+  zoneKey: ZoneKey | null;
+  street: string | null;
+};
+/** HUD state before the first zone/street resolution runs. */
+const INITIAL_HUD: ArenaHud = { zoneName: null, zoneKey: null, street: null };
 /** Data for the debug panel. */
 export type DebugSnapshot = {
   metrics: MetricsSnapshot;
@@ -157,28 +169,38 @@ function paintCanvas(
   );
 }
 
+/** Straight-line distance in metres between two points. */
+function distanceBetween(first: Point, second: Point): number {
+  return Math.hypot(first[0] - second[0], first[1] - second[1]);
+}
+
+/** The landmark whose centre sits closest, straight-line, to `point`. Precondition: `landmarks` is non-empty. */
+export function nearestLandmarkTo(
+  landmarks: MapLandmark[],
+  point: Point,
+): MapLandmark {
+  return landmarks.reduce((closest, candidate) =>
+    distanceBetween(landmarkCentreMetres(candidate), point) <
+    distanceBetween(landmarkCentreMetres(closest), point)
+      ? candidate
+      : closest,
+  );
+}
+
 /** Walking distance to the nearest landmark along the road graph, or `null` when none is reachable. */
 function routeToNearestLandmark(runtime: Runtime): number | null {
   const index = runtime.session.index();
   const graph = runtime.session.graph();
-  const from = graph.nearestNode([
-    runtime.state.player.x,
-    runtime.state.player.y,
-  ]);
+  const playerPoint: Point = [runtime.state.player.x, runtime.state.player.y];
+  const from = graph.nearestNode(playerPoint);
   if (from === null || index.landmarks.length === 0) return null;
-  const nearest = index.landmarks
-    .map((landmark) =>
-      graph.nearestNode(
-        [
-          landmark.center[0] / index.unitsPerMetre,
-          landmark.center[1] / index.unitsPerMetre,
-        ],
-        LANDMARK_SNAP_DISTANCE_M,
-      ),
-    )
-    .find((node): node is number => node !== null);
-  if (nearest === undefined) return null;
-  const path = findPath(graph, from, nearest);
+  const nearestLandmark = nearestLandmarkTo(index.landmarks, playerPoint);
+  const to = graph.nearestNode(
+    landmarkCentreMetres(nearestLandmark),
+    LANDMARK_SNAP_DISTANCE_M,
+  );
+  if (to === null) return null;
+  const path = findPath(graph, from, to);
   return path ? pathLength(graph, path) : null;
 }
 
@@ -370,11 +392,12 @@ function useArenaInput(inputRef: RefObject<InputState>): {
   return { setInputVector };
 }
 
-/** Zone name and nearest named street for the HUD, from the player's current position. */
+/** Zone name/key and nearest named street for the HUD, from the player's current position. */
 function computeHud(session: WorldSession, player: PlayerState): ArenaHud {
   const zone = findZone(session.index(), [player.x, player.y]);
   return {
     zoneName: zone?.name ?? null,
+    zoneKey: zone?.key ?? null,
     street: nearestRoadName(session.tiles(), [player.x, player.y]),
   };
 }
@@ -560,7 +583,7 @@ export function useArenaGame({
   const runtimeRef = useRef<Runtime | null>(null);
   const inputRef = useRef(createInputState());
   const metricsRef = useRef(createFrameMetrics());
-  const [hud, setHud] = useState<ArenaHud>({ zoneName: null, street: null });
+  const [hud, setHud] = useState<ArenaHud>(INITIAL_HUD);
   const [debugSnapshot, setDebugSnapshot] = useState<DebugSnapshot | null>(
     null,
   );
@@ -584,7 +607,7 @@ export function useArenaGame({
     const zone = findZoneByKey(runtime.session.index(), key);
     if (!zone) return;
     applyTeleport(runtime, zone);
-    setHud({ zoneName: zone.name, street: null });
+    setHud({ zoneName: zone.name, zoneKey: zone.key, street: null });
   }, []);
 
   return {
