@@ -1,0 +1,32 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { useRef } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useDialogFocusTrap } from "./useDialogFocusTrap";
+
+function Dialog({ onClose }: { onClose: () => void }): React.JSX.Element {
+  const ref = useRef<HTMLDivElement>(null);
+  useDialogFocusTrap(ref, onClose);
+  return (
+    <div ref={ref} role="dialog" tabIndex={-1}>
+      <button type="button">Eerste</button>
+      <button type="button">Laatste</button>
+    </div>
+  );
+}
+
+describe("useDialogFocusTrap", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("closes on Escape and wraps Tab between the first and last control", () => {
+    const onClose = vi.fn();
+    render(<Dialog onClose={onClose} />);
+    expect(document.activeElement).toBe(screen.getByRole("dialog"));
+    screen.getByText("Laatste").focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(screen.getByText("Eerste"));
+    fireEvent.keyDown(document, { code: "Escape", key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
