@@ -63,7 +63,7 @@ describe("reportExtractProvider", () => {
     it("defaults to vlm when provider is missing", () => {
       const cfg = getExtractProviderConfig();
       expect(cfg.provider).toBe("vlm");
-      expect(cfg.openAiModel).toBe("gpt-4o");
+      expect(cfg.openAiModel).toBe("openai/gpt-4o");
     });
 
     it("does not require OPENAI_API_KEY (gateway handles auth)", () => {
@@ -82,32 +82,39 @@ describe("reportExtractProvider", () => {
     it("defaults REPORT_EXTRACT_OPENAI_MODEL to gpt-4o when unset", () => {
       delete process.env.REPORT_EXTRACT_OPENAI_MODEL;
       const cfg = getExtractProviderConfig();
-      expect(cfg.openAiModel).toBe("gpt-4o");
+      expect(cfg.openAiModel).toBe("openai/gpt-4o");
       expect(cfg.openAiModelSubstitutedFrom).toBeUndefined();
     });
 
     it("remaps removed gateway snapshot gpt-5.2-2025-12-11 to gpt-4o", () => {
       process.env.REPORT_EXTRACT_OPENAI_MODEL = "gpt-5.2-2025-12-11";
       const cfg = getExtractProviderConfig();
-      expect(cfg.openAiModel).toBe("gpt-4o");
+      expect(cfg.openAiModel).toBe("openai/gpt-4o");
       expect(cfg.openAiModelSubstitutedFrom).toBe("gpt-5.2-2025-12-11");
     });
 
     it("remaps free-tier-blocked gpt-5-chat-latest to gpt-4o", () => {
       process.env.REPORT_EXTRACT_OPENAI_MODEL = "gpt-5-chat-latest";
       const cfg = getExtractProviderConfig();
-      expect(cfg.openAiModel).toBe("gpt-4o");
+      expect(cfg.openAiModel).toBe("openai/gpt-4o");
       expect(cfg.openAiModelSubstitutedFrom).toBe("gpt-5-chat-latest");
+    });
+
+    it("routes claude-sonnet-4-6 to anthropic gateway id", () => {
+      process.env.REPORT_EXTRACT_OPENAI_MODEL = "claude-sonnet-4-6";
+      const cfg = getExtractProviderConfig();
+      expect(cfg.openAiModel).toBe("anthropic/claude-sonnet-4.6");
+      expect(cfg.openAiModelSubstitutedFrom).toBeUndefined();
     });
   });
 
   describe("resolveReportExtractOpenAiModel", () => {
-    it("returns gpt-4o for empty input", () => {
+    it("returns openai/gpt-4o for empty input", () => {
       expect(resolveReportExtractOpenAiModel("")).toEqual({
-        model: "gpt-4o",
+        model: "openai/gpt-4o",
       });
       expect(resolveReportExtractOpenAiModel("  ")).toEqual({
-        model: "gpt-4o",
+        model: "openai/gpt-4o",
       });
     });
 
@@ -115,7 +122,7 @@ describe("reportExtractProvider", () => {
       expect(
         resolveReportExtractOpenAiModel("openai/gpt-5.2-2025-12-11"),
       ).toEqual({
-        model: "gpt-4o",
+        model: "openai/gpt-4o",
         substitutedFrom: "openai/gpt-5.2-2025-12-11",
       });
     });
@@ -124,14 +131,20 @@ describe("reportExtractProvider", () => {
       expect(
         resolveReportExtractOpenAiModel("openai/gpt-5-chat-latest"),
       ).toEqual({
-        model: "gpt-4o",
+        model: "openai/gpt-4o",
         substitutedFrom: "openai/gpt-5-chat-latest",
       });
     });
 
-    it("passes through other model ids unchanged", () => {
+    it("passes through other openai model ids unchanged", () => {
       expect(resolveReportExtractOpenAiModel("gpt-4o-mini")).toEqual({
-        model: "gpt-4o-mini",
+        model: "openai/gpt-4o-mini",
+      });
+    });
+
+    it("routes claude sonnet env ids to anthropic gateway id", () => {
+      expect(resolveReportExtractOpenAiModel("claude-sonnet-4-6")).toEqual({
+        model: "anthropic/claude-sonnet-4.6",
       });
     });
   });
@@ -225,6 +238,24 @@ describe("reportExtractProvider", () => {
       expect(out.rawText).toBe("");
       expect(out.openAiModelSubstitutedFrom).toBe("gpt-5.2-2025-12-11");
       expect(out.result.homeTeam).toBe("A");
+    });
+
+    it("uses anthropic gateway id when extract model env is claude-sonnet-4-6", async () => {
+      process.env.REPORT_EXTRACT_OPENAI_MODEL = "claude-sonnet-4-6";
+      mockedGenerateObject.mockResolvedValueOnce({
+        object: {
+          homeTeam: "A",
+          awayTeam: "B",
+        },
+      } as never);
+
+      const out = await extractReportFromImage(makeImageFile());
+      expect(mockedGenerateObject).toHaveBeenCalledTimes(1);
+      const args = mockedGenerateObject.mock.calls[0][0] as {
+        model: string;
+      };
+      expect(args.model).toBe("anthropic/claude-sonnet-4.6");
+      expect(out.model).toBe("anthropic/claude-sonnet-4.6");
     });
 
     it("falls back to OCR in hybrid mode when VLM fails and reports the failure to Sentry", async () => {

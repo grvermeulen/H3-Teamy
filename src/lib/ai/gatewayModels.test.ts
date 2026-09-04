@@ -4,7 +4,9 @@ import {
   getReportExtractGatewayModel,
   getReportGenerateGatewayModel,
   getStructuredGatewayModel,
+  inferGatewayProvider,
   isGatewayFreeTierAccessError,
+  normalizeGatewayModelId,
   resolveGatewayModel,
   toGatewayModelString,
 } from "./gatewayModels";
@@ -23,8 +25,32 @@ describe("toGatewayModelString", () => {
     );
   });
 
-  it("prepends provider when missing", () => {
+  it("prepends openai provider for gpt models", () => {
     expect(toGatewayModelString("gpt-4o", "openai")).toBe("openai/gpt-4o");
+  });
+
+  it("prepends anthropic provider for claude models", () => {
+    expect(toGatewayModelString("claude-sonnet-4-6", "openai")).toBe(
+      "anthropic/claude-sonnet-4.6",
+    );
+  });
+});
+
+describe("normalizeGatewayModelId", () => {
+  it("maps hyphenated claude sonnet env ids to dotted gateway ids", () => {
+    expect(normalizeGatewayModelId("claude-sonnet-4-6")).toBe(
+      "claude-sonnet-4.6",
+    );
+  });
+});
+
+describe("inferGatewayProvider", () => {
+  it("returns anthropic for claude models", () => {
+    expect(inferGatewayProvider("claude-sonnet-4-6")).toBe("anthropic");
+  });
+
+  it("returns openai for gpt models", () => {
+    expect(inferGatewayProvider("gpt-4o")).toBe("openai");
   });
 });
 
@@ -64,6 +90,12 @@ describe("resolveGatewayModel", () => {
   it("passes through supported models", () => {
     expect(resolveGatewayModel("openai/gpt-4o-mini", "text")).toEqual({
       model: "openai/gpt-4o-mini",
+    });
+  });
+
+  it("routes claude sonnet env ids to anthropic with dotted gateway id", () => {
+    expect(resolveGatewayModel("claude-sonnet-4-6", "text")).toEqual({
+      model: "anthropic/claude-sonnet-4.6",
     });
   });
 
@@ -127,6 +159,11 @@ describe("getReportExtractGatewayModel", () => {
   it("remaps gpt-5 env override", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/gpt-5-chat-latest");
     expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
+  });
+
+  it("routes claude sonnet env override to anthropic gateway id", () => {
+    vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "claude-sonnet-4-6");
+    expect(getReportExtractGatewayModel()).toBe("anthropic/claude-sonnet-4.6");
   });
 });
 
