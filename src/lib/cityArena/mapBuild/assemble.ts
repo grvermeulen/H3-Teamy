@@ -23,7 +23,7 @@ import {
 } from "./geometry";
 import type { LandmarkConfig } from "./landmarks.config";
 import { matchLandmarks } from "./landmarks";
-import { osmElementId, type LatLon, type OverpassJson } from "./osmTypes";
+import type { LatLon, OverpassJson } from "./osmTypes";
 import {
   buildRoadGraph,
   encodeRoads,
@@ -64,6 +64,9 @@ export type AssembledMap = {
   index: MapIndex;
   roads: MapRoads;
   tiles: MapTile[];
+  /** Landmark keys with no building after attachment and footprint synthesis — rendered
+   * as labels only (spec §3.2). */
+  unattachedLandmarks: string[];
 };
 
 /**
@@ -107,6 +110,7 @@ export const TERRAIN_SIMPLIFY_TOLERANCE_M = 4;
 type StyledLandmark = ProjectedLandmark & {
   name: string;
   style: MapLandmark["style"];
+  footprint: LatLon[] | null;
 };
 
 function ringToMetres(ring: LatLon[], toleranceMetres: number): Point[] {
@@ -123,27 +127,92 @@ function levelsOf(tags: Record<string, string>): number {
     : DEFAULT_BUILDING_LEVELS;
 }
 
-function projectBuildings(
-  features: AreaFeature[],
-  zoneCentres: Point[],
-  landmarkElementIds: Set<string>,
-): ProjectedBuilding[] {
+/** Projects every building ring to metres with its levels; nothing is filtered out yet — see
+ * {@link keepBuilding} — so landmark attachment (finding 2) sees every candidate building. */
+function projectBuildingRings(features: AreaFeature[]): ProjectedBuilding[] {
   const buildings: ProjectedBuilding[] = [];
   for (const feature of features) {
     const ring = ringToMetres(feature.ring, BUILDING_SIMPLIFY_TOLERANCE_M);
     if (ring.length < 3) continue;
-    const isLandmark = landmarkElementIds.has(feature.id.split("#")[0]);
-    if (!isLandmark) {
-      if (polygonArea(ring) < MIN_BUILDING_AREA_M2) continue;
-      const centroid = polygonCentroid(ring);
-      const nearZone = zoneCentres.some(
-        (centre) => distance(centroid, centre) <= BUILDING_KEEP_RADIUS_M,
-      );
-      if (!nearZone) continue;
-    }
     buildings.push({ ring, levels: levelsOf(feature.tags) });
   }
   return buildings;
+}
+
+/**
+ * Whether a building survives the area/keep-radius filter. A building a landmark has
+ * attached to (by proximity, or a synthesised footprint) is always kept, regardless of
+ * size or distance — see finding 2/3.
+ */
+function keepBuilding(
+  building: ProjectedBuilding,
+  zoneCentres: Point[],
+): boolean {
+  if (building.landmark) return true;
+  if (polygonArea(building.ring) < MIN_BUILDING_AREA_M2) return false;
+  const centroid = polygonCentroid(building.ring);
+  return zoneCentres.some(
+    (centre) => distance(centroid, centre) <= BUILDING_KEEP_RADIUS_M,
+  );
+}
+
+/** Landmark keys already carried by some building's `landmark` field. */
+function attachedLandmarkKeys(buildings: ProjectedBuilding[]): Set<string> {
+  const keys = new Set<string>();
+  for (const building of buildings) {
+    if (building.landmark) keys.add(building.landmark);
+  }
+  return keys;
+}
+
+/**
+ * Landmarks still without a building after {@link attachLandmarks} get their own footprint
+ * as a one-level building (spec §3.2), when their matched element is a closed way or a
+ * multipolygon relation. Node landmarks, and landmarks whose element isn't closed, are left
+ * for {@link unattachedLandmarkKeys} to report.
+ */
+function attachFootprintLandmarks(
+  buildings: ProjectedBuilding[],
+  landmarks: StyledLandmark[],
+): void {
+  const attached = attachedLandmarkKeys(buildings);
+  for (const landmark of landmarks) {
+    if (attached.has(landmark.key) || !landmark.footprint) continue;
+    const ring = ringToMetres(
+      landmark.footprint,
+      BUILDING_SIMPLIFY_TOLERANCE_M,
+    );
+    if (ring.length < 3) continue;
+    buildings.push({ ring, levels: 1, landmark: landmark.key });
+  }
+}
+
+/** Landmark keys with no building even after footprint synthesis — labels only. */
+function unattachedLandmarkKeys(
+  buildings: ProjectedBuilding[],
+  landmarks: StyledLandmark[],
+): string[] {
+  const attached = attachedLandmarkKeys(buildings);
+  return landmarks
+    .filter((landmark) => !attached.has(landmark.key))
+    .map((landmark) => landmark.key);
+}
+
+/** A zone-anchor landmark with no building at all is a hard build error: the zone would
+ * have no visible anchor to orient players. */
+function assertZoneAnchorsAttached(
+  landmarks: StyledLandmark[],
+  unattachedLandmarks: string[],
+): void {
+  const missingAnchor = landmarks.find(
+    (landmark) =>
+      landmark.zoneAnchor && unattachedLandmarks.includes(landmark.key),
+  );
+  if (missingAnchor) {
+    throw new MapBuildError(
+      `Zone anchor landmark "${missingAnchor.key}" has no building`,
+    );
+  }
 }
 
 function attachLandmarks(
@@ -179,20 +248,22 @@ export function assembleMap(input: AssembleInput): AssembledMap {
     style: matched.config.style,
     center: projectLonLat(matched.center.lon, matched.center.lat),
     zoneAnchor: matched.config.zoneAnchor,
+    footprint: matched.footprint,
   }));
-  const landmarkElementIds = new Set(
-    match.matched.map((matched) => osmElementId(matched.element)),
-  );
   const zoneCentres = zoneCentresFromLandmarks(landmarks);
 
   const areas = extractAreas(input.areasOsm);
   const buildingAreas = extractAreas(input.buildingsOsm);
-  const buildings = projectBuildings(
-    buildingAreas.buildings,
-    zoneCentres.map((zone) => zone.center),
-    landmarkElementIds,
-  );
+  const buildings = projectBuildingRings(buildingAreas.buildings);
   attachLandmarks(buildings, landmarks);
+  attachFootprintLandmarks(buildings, landmarks);
+  const unattachedLandmarks = unattachedLandmarkKeys(buildings, landmarks);
+  assertZoneAnchorsAttached(landmarks, unattachedLandmarks);
+  const zoneCentrePoints = zoneCentres.map((zone) => zone.center);
+  const keptBuildings = buildings.filter((building) =>
+    keepBuilding(building, zoneCentrePoints),
+  );
+
   const water: ProjectedWater[] = areas.water
     .map((feature) => ({
       ring: ringToMetres(feature.ring, TERRAIN_SIMPLIFY_TOLERANCE_M),
@@ -214,7 +285,7 @@ export function assembleMap(input: AssembleInput): AssembledMap {
     zoneCentres,
     graph,
     landmarks,
-    indexObstacles(buildings.map((building) => building.ring)),
+    indexObstacles(keptBuildings.map((building) => building.ring)),
     indexObstacles(water.map((feature) => feature.ring)),
   );
 
@@ -222,7 +293,7 @@ export function assembleMap(input: AssembleInput): AssembledMap {
   const tiles = buildTiles(
     bounds,
     renderRoads(ways, nodeCoords),
-    buildings,
+    keptBuildings,
     ground,
     water,
   );
@@ -249,5 +320,5 @@ export function assembleMap(input: AssembleInput): AssembledMap {
       tile: tileCoordFor(landmark.center, bounds),
     })),
   };
-  return { index, roads, tiles };
+  return { index, roads, tiles, unattachedLandmarks };
 }

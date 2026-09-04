@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { LandmarkConfig } from "./landmarks.config";
 import { LANDMARKS } from "./landmarks.config";
-import { elementCenter, matchLandmarks } from "./landmarks";
-import type { OverpassJson } from "./osmTypes";
+import { elementCenter, elementFootprint, matchLandmarks } from "./landmarks";
+import type {
+  OverpassJson,
+  OverpassNode,
+  OverpassRelation,
+  OverpassWay,
+} from "./osmTypes";
 import { indexNodes, indexWays } from "./osmTypes";
 
 const worship: LandmarkConfig = {
@@ -125,7 +130,57 @@ describe("matchLandmarks", () => {
     const relationCenter = elementCenter(json.elements[6], nodes, ways);
     expect(relationCenter?.lon).toBeCloseTo(5.66, 5);
   });
+});
 
+describe("elementFootprint", () => {
+  it("returns a closed way's ring with the closing node removed", () => {
+    const elements = squareWay(1, 51.97, 5.66, { building: "yes" });
+    const nodes = indexNodes({ elements });
+    const ways = indexWays({ elements });
+    const footprint = elementFootprint(ways.get(1)!, nodes, ways);
+    expect(footprint).toHaveLength(4);
+  });
+
+  it("returns null for an open way", () => {
+    const openWay: OverpassWay = { type: "way", id: 2, nodes: [11, 12, 13] };
+    const nodes = new Map<number, OverpassNode>([
+      [11, { type: "node", id: 11, lat: 51.97, lon: 5.66 }],
+      [12, { type: "node", id: 12, lat: 51.971, lon: 5.66 }],
+      [13, { type: "node", id: 13, lat: 51.971, lon: 5.661 }],
+    ]);
+    expect(elementFootprint(openWay, nodes, new Map())).toBeNull();
+  });
+
+  it("returns null for a node", () => {
+    const node: OverpassNode = { type: "node", id: 9, lat: 51.5, lon: 5.5 };
+    expect(elementFootprint(node, new Map(), new Map())).toBeNull();
+  });
+
+  it("returns the first outer member way's footprint for a relation", () => {
+    const elements = squareWay(1, 51.97, 5.66, { building: "yes" });
+    const nodes = indexNodes({ elements });
+    const ways = indexWays({ elements });
+    const relation: OverpassRelation = {
+      type: "relation",
+      id: 5,
+      members: [{ type: "way", ref: 1, role: "outer" }],
+      tags: { type: "multipolygon" },
+    };
+    expect(elementFootprint(relation, nodes, ways)).toHaveLength(4);
+  });
+
+  it("returns null for a relation with no outer member", () => {
+    const relation: OverpassRelation = {
+      type: "relation",
+      id: 6,
+      members: [{ type: "way", ref: 999, role: "part" }],
+      tags: { type: "building" },
+    };
+    expect(elementFootprint(relation, new Map(), new Map())).toBeNull();
+  });
+});
+
+describe("ten configured landmarks", () => {
   it("ships the ten configured landmarks with four zone anchors", () => {
     expect(LANDMARKS).toHaveLength(10);
     const anchors = LANDMARKS.filter((landmark) => landmark.zoneAnchor).map(

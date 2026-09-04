@@ -86,20 +86,30 @@ export const overpassMini: OverpassJson = {
       building: "church",
       name: "Oude Kerk",
     }),
-    ...squareWay(5, WAGENINGEN.lat + 0.001, WAGENINGEN.lon, 20, {
+    // The café's building sits ~1.4 km east of the Wageningen anchor — outside
+    // BUILDING_KEEP_RADIUS_M (1.2 km) from every zone centre, but the café node stays
+    // inside it. Regression fixture for finding 2: the building must still be kept
+    // because the node landmark attaches to it, not because it happens to be nearby.
+    ...squareWay(5, WAGENINGEN.lat + 0.001, WAGENINGEN.lon + 0.02, 20, {
       building: "yes",
     }),
     {
       type: "node",
       id: 500,
       lat: WAGENINGEN.lat + 0.001,
-      lon: WAGENINGEN.lon,
+      lon: WAGENINGEN.lon + 0.02,
       tags: { amenity: "cafe", name: "Café Onder de Linden" },
     },
     ...squareWay(6, WAGENINGEN.lat, WAGENINGEN.lon + 0.002, 4, {
       building: "shed",
     }),
     ...squareWay(7, 51.945, 5.6, 20, { building: "yes", name: "Ver weg" }),
+    // No `building` tag and far from every real building — regression fixture for
+    // finding 3: it can only get a footprint building via the landmark's own outline.
+    ...squareWay(8, 51.94, 5.65, 25, {
+      leisure: "sports_centre",
+      name: "De Vrije Slag",
+    }),
     ...roadWay(11, RHENEN.lat + 0.0005, RHENEN.lon, 3, 40, {
       highway: "residential",
       name: "Herenstraat",
@@ -161,5 +171,13 @@ export const MINI_LANDMARKS: LandmarkConfig[] = [
     nameMatch: "Onder de Linden",
     style: "cafe",
     matchesTags: (tags) => tags.amenity === "cafe",
+  },
+  {
+    key: "vrije-slag",
+    name: "Zwembad De Vrije Slag",
+    nameMatch: "Vrije Slag",
+    style: "pool",
+    matchesTags: (tags) =>
+      tags.leisure === "sports_centre" || tags.leisure === "swimming_pool",
   },
 ];

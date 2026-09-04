@@ -148,7 +148,9 @@ build with the candidate list, resolved by adding an explicit `osmId` to the ent
 centres are the centroids of their anchor landmarks; zone radius is 500 m. Landmarks are
 rendered wherever they are; each zone's `landmarks` list is computed at build time as those
 within its disc. POI landmarks that are nodes (e.g. the café) are attached to the building
-polygon containing or nearest (≤ 15 m) the node.
+polygon containing or nearest (≤ 15 m) the node. Landmarks that attach to no building use
+the matched element's own outline as a one-level footprint; node landmarks without a
+containing or nearby building render as labels only.
 
 ### 3.3 Transform (pure functions in `scripts/arena/transform.ts`, unit-tested)
 

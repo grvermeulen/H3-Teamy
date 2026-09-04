@@ -9,6 +9,7 @@ import {
   type OverpassElement,
   type OverpassJson,
   type OverpassNode,
+  type OverpassRelation,
   type OverpassWay,
 } from "./osmTypes";
 
@@ -17,6 +18,7 @@ export type MatchedLandmark = {
   config: LandmarkConfig;
   element: OverpassElement;
   center: LatLon;
+  footprint: LatLon[] | null;
 };
 
 /** Result of matching every configured landmark. */
@@ -92,6 +94,46 @@ export function elementCenter(
   };
 }
 
+function wayFootprint(
+  way: OverpassWay,
+  nodesById: Map<number, OverpassNode>,
+): LatLon[] | null {
+  const ring = wayCoordinates(way, nodesById);
+  const isClosed =
+    ring.length > 1 && way.nodes[0] === way.nodes[way.nodes.length - 1];
+  return isClosed ? ring.slice(0, -1) : null;
+}
+
+function relationFootprint(
+  relation: OverpassRelation,
+  nodesById: Map<number, OverpassNode>,
+  waysById: Map<number, OverpassWay>,
+): LatLon[] | null {
+  const outer = relation.members.find(
+    (member) => member.type === "way" && member.role === "outer",
+  );
+  if (!outer) return null;
+  const way = waysById.get(outer.ref);
+  return way ? wayFootprint(way, nodesById) : null;
+}
+
+/**
+ * Outer-ring footprint for a landmark's matched element, when no building attaches to it
+ * (spec §3.2): a closed way's own ring, or a multipolygon relation's first `outer` member
+ * way's ring — the closing node removed either way. `null` for nodes, open ways, and
+ * relations with no closed `outer` member.
+ */
+export function elementFootprint(
+  element: OverpassElement,
+  nodesById: Map<number, OverpassNode>,
+  waysById: Map<number, OverpassWay>,
+): LatLon[] | null {
+  if (element.type === "way") return wayFootprint(element, nodesById);
+  if (element.type === "relation")
+    return relationFootprint(element, nodesById, waysById);
+  return null;
+}
+
 function metresBetween(a: LatLon, b: LatLon): number {
   return distance(projectLonLat(a.lon, a.lat), projectLonLat(b.lon, b.lat));
 }
@@ -129,7 +171,12 @@ export function matchLandmarks(
         metresBetween(center, landmark.near) > landmark.near.radiusM
       )
         continue;
-      candidates.push({ config: landmark, element, center });
+      candidates.push({
+        config: landmark,
+        element,
+        center,
+        footprint: elementFootprint(element, nodesById, waysById),
+      });
     }
     if (candidates.length === 1) {
       matched.push(candidates[0]);

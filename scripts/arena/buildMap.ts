@@ -126,6 +126,9 @@ export async function runBuild(
     config,
     generatedAt,
   });
+  for (const key of assembled.unattachedLandmarks) {
+    log(`Landmark without building: ${key}`);
+  }
 
   log("Stage 4/4: serialise and check budget");
   const tileJson = new Map<string, string>();
