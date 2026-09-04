@@ -68,8 +68,8 @@ export type AssembledMap = {
 
 /**
  * Buildings smaller than this are dropped (sheds, garages). Raised from 30 during the
- * real build (decision rule, brief step 1) to help stay inside the 900 KB gzip budget —
- * see spec §3.1.
+ * real build to fit the map budget (1.2 MB total, 256 KB per tile, gzipped) — see spec
+ * §3.4.
  */
 export const MIN_BUILDING_AREA_M2 = 40;
 
