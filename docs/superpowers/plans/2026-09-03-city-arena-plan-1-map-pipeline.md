@@ -4443,6 +4443,11 @@ Then follow the `loop-on-ci` workflow: watch checks, fix failures, address CodeR
 
 Each plan produces working, testable software and consumes the interfaces of the previous ones.
 
+> Reordered on 2026-09-04 (owner decision): gameplay ships before multiplayer. Plan 4 is split into 4a
+> (cars, weapons, bullets, damage, death screen, HUD) and 4b (pedestrians, cops, pickups, zone, radar, SFX),
+> both on the local simulation; Plan 3 (netcode) follows and adds rounds and the scoreboard. PR numbering
+> continues in delivery order (4a = 3/8, 4b = 4/8, netcode = 5/8, …).
+
 | Plan | PR  | Deliverable                                                                                                                                                                                                           | Depends on                     |
 | ---- | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
 | 2    | 2/7 | `MapLoader`, `StaticRaster` chunk renderer, `CollisionGrid`, `RoadGraph` A\*, `Zone`; single-player free-roam (walk only) behind `CityArenaLauncher` + `CityArenaOverlay`; OSM attribution footer; `?debug=1` overlay | Plan 1 asset and `mapTypes.ts` |

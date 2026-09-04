@@ -782,11 +782,15 @@ docs/tech/arena/README.md · docs/tech/arena/TESTING.md
   on lint, `tsc --noEmit`, Vitest and CodeRabbit, with review threads resolved:
   1. map pipeline + committed assets + cache headers;
   2. world model + renderer + single-player free-roam (no network) behind the launcher;
-  3. netcode (transport, election, prediction, lobby, rooms API, token route);
-  4. gameplay completion (cars, weapons, peds, cops, pickups, zone, round);
-  5. persistence (migration, matches, leaderboard) + launcher card lists;
-  6. controls polish, haptics, SFX, settings;
-  7. test seams, relay, DSL, CI jobs, docs.
+  3. gameplay 4a on the local simulation: cars, weapons, bullets, damage, death screen, HUD
+     (owner decision 2026-09-04: gameplay before multiplayer; the simulation stays pure and
+     deterministic so the host loop can drive it unchanged later);
+  4. gameplay 4b: pedestrians, cops/wanted, pickups, zone boundary, radar, SFX;
+  5. netcode (transport, election, prediction, lobby, rooms API, token route) plus the
+     multiplayer-only rules: rounds, scoreboard;
+  6. persistence (migration, matches, leaderboard) + launcher card lists;
+  7. controls polish, haptics, settings;
+  8. test seams, relay, DSL, CI jobs, docs.
      The implementation plan (writing-plans) breaks these into tasks.
 - Migration policy: preview database first, production after merge.
 - Docs: `docs/tech/arena/README.md` (summary, entry points, data model, env, runbook for
