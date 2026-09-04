@@ -21,20 +21,7 @@ export default function AppBar({
   const router = useRouter();
 
   function goBack(): void {
-    let hasSameOriginReferrer = false;
-    try {
-      hasSameOriginReferrer =
-        document.referrer.length > 0 &&
-        new URL(document.referrer).origin === window.location.origin;
-    } catch {
-      // A malformed referrer is not safe evidence of in-app history.
-    }
-
-    if (hasSameOriginReferrer && window.history.length > 1) {
-      router.back();
-      return;
-    }
-    router.push(fallbackHref);
+    router.replace(fallbackHref);
   }
 
   return (
