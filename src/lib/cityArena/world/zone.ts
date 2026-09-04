@@ -13,8 +13,10 @@ export function zoneRadiusMetres(zone: MapZone): number {
 
 /** Signed distance to the zone edge: negative inside, positive outside. */
 export function distanceToZoneEdge(zone: MapZone, point: Point): number {
-  const [cx, cy] = zoneCentreMetres(zone);
-  return Math.hypot(point[0] - cx, point[1] - cy) - zoneRadiusMetres(zone);
+  const [centreX, centreY] = zoneCentreMetres(zone);
+  return (
+    Math.hypot(point[0] - centreX, point[1] - centreY) - zoneRadiusMetres(zone)
+  );
 }
 
 /** The zone whose disc contains the point, or `null` in the countryside. */

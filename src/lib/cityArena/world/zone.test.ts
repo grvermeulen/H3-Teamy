@@ -46,6 +46,10 @@ describe("zone helpers", () => {
     expect(findZoneByKey(index, "rhenen")).toBeNull();
   });
 
+  it("returns null when the index has no zones", () => {
+    expect(findZone({ ...index, zones: [] }, [0, 0])).toBeNull();
+  });
+
   it("picks a spawn node deterministically and falls back to the centre", () => {
     expect(pickSpawn(wageningen, () => 0)).toEqual([2500, 1500]);
     expect(pickSpawn(wageningen, () => 0.999)).toEqual([2600, 1700]);
