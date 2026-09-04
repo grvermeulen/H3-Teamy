@@ -8,12 +8,49 @@ const TRANSIENT_PRISMA_CONNECT_CODES = new Set<string>([
   "P1017",
 ]);
 
+const PRISMA_CREDENTIAL_ERROR_CODES = new Set<string>(["P1000"]);
+
 /**
  * Bepaalt of een fout waarschijnlijk tijdelijk is (connectie/pool) en een nieuwe poging rechtvaardigt.
  *
  * @param error - Fout van Prisma, `pg` of een andere bron.
  * @returns `true` wanneer opnieuw proberen zinvol kan zijn.
  */
+/**
+ * Bepaalt of een Prisma-fout door ongeldige DB-credentials komt (bijv. preview zonder juiste DATABASE_URL).
+ *
+ * @param error - Fout van Prisma of een andere bron.
+ * @returns `true` wanneer authenticatie/credentials de oorzaak lijken.
+ */
+export function isPrismaCredentialError(error: unknown): boolean {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return PRISMA_CREDENTIAL_ERROR_CODES.has(error.code);
+  }
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return (
+      msg.includes("authentication failed against the database server") ||
+      msg.includes("provided database credentials") ||
+      msg.includes("password authentication failed")
+    );
+  }
+  return false;
+}
+
+/**
+ * Bepaalt of een Prisma-leesactie naar Redis/KV/in-memory mag terugvallen i.p.v. falen.
+ *
+ * @param error - Fout uit `withPgConnectRetry` of een directe Prisma-query.
+ * @returns `true` wanneer fallback veilig is (connectie, credentials of {@link DbUnavailableError}).
+ */
+export function shouldFallbackFromPrismaToKv(error: unknown): boolean {
+  return (
+    error instanceof DbUnavailableError ||
+    isTransientPostgresConnectError(error) ||
+    isPrismaCredentialError(error)
+  );
+}
+
 export function isTransientPostgresConnectError(error: unknown): boolean {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     return TRANSIENT_PRISMA_CONNECT_CODES.has(error.code);
