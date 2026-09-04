@@ -1,0 +1,62 @@
+import { describe, expect, it } from "vitest";
+import type { MapRoads } from "./mapTypes";
+import { decodeRoadGraph, findPath, pathLength } from "./roadGraph";
+
+// Square of four nodes (0..3) with a detour node 4 far away: 0-1-2-3-0 plus 1-4.
+const roads: MapRoads = {
+  nodes: [0, 0, 400, 0, 400, 400, 0, 400, 400, -4000],
+  edges: [
+    0, 1, 0, 0, 0, 400, 1, 2, 0, 0, 0, 400, 2, 3, 0, -1, 0, 400, 3, 0, 0, -1, 0,
+    400, 1, 4, 1, -1, 1, 4000,
+  ],
+  classes: ["residential", "service"],
+  names: ["Dorpsstraat"],
+};
+
+describe("decodeRoadGraph", () => {
+  it("decodes nodes to metres and edges with adjacency", () => {
+    const graph = decodeRoadGraph(roads);
+    expect(graph.nodes).toHaveLength(5);
+    expect(graph.nodes[1]).toEqual([100, 0]);
+    expect(graph.edges[0]).toEqual({
+      a: 0,
+      b: 1,
+      roadClass: "residential",
+      name: "Dorpsstraat",
+      oneway: false,
+      length: 100,
+    });
+    expect(graph.edges[2].name).toBeUndefined();
+    expect(graph.adjacency[1]).toEqual([0, 1, 4]);
+  });
+
+  it("rejects a malformed edge array", () => {
+    expect(() =>
+      decodeRoadGraph({ ...roads, edges: roads.edges.slice(0, 5) }),
+    ).toThrow(/stride/);
+    expect(() =>
+      decodeRoadGraph({ ...roads, edges: [0, 9, 0, 0, 0, 1] }),
+    ).toThrow(/node index/);
+  });
+
+  it("finds the nearest node within a distance limit", () => {
+    const graph = decodeRoadGraph(roads);
+    expect(graph.nearestNode([98, 3])).toBe(1);
+    expect(graph.nearestNode([5000, 5000], 100)).toBeNull();
+  });
+});
+
+describe("findPath", () => {
+  it("returns the shortest node sequence and its length", () => {
+    const graph = decodeRoadGraph(roads);
+    const path = findPath(graph, 0, 2);
+    expect(path).toEqual([0, 1, 2]);
+    expect(pathLength(graph, path ?? [])).toBe(200);
+  });
+
+  it("returns a trivial path for the same node and null when unreachable", () => {
+    const graph = decodeRoadGraph({ ...roads, edges: roads.edges.slice(0, 6) });
+    expect(findPath(graph, 1, 1)).toEqual([1]);
+    expect(findPath(graph, 0, 3)).toBeNull();
+  });
+});
