@@ -159,4 +159,13 @@ describe("createCollisionGrid", () => {
       grid.query({ minX: 0, minY: 0, maxX: 30, maxY: 30 }).map((o) => o.kind),
     ).toEqual(["building"]);
   });
+
+  it.each([0, -1, NaN, Infinity])(
+    "throws a descriptive error for cellMetres = %s",
+    (invalidCellMetres) => {
+      expect(() => createCollisionGrid(invalidCellMetres)).toThrow(
+        /cellMetres/,
+      );
+    },
+  );
 });

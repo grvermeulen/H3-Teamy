@@ -265,6 +265,11 @@ function resolveCircleAgainst(
 export function createCollisionGrid(
   cellMetres = COLLISION_CELL_M,
 ): CollisionGrid {
+  if (!Number.isFinite(cellMetres) || cellMetres <= 0) {
+    throw new Error(
+      `cellMetres must be a finite number greater than 0, got ${cellMetres}`,
+    );
+  }
   const index = createSpatialIndex(cellMetres);
   return {
     insertTile: index.insertTile,

@@ -351,4 +351,29 @@ describe("createMapLoader", () => {
     expect(loader.hasFailures()).toBe(false);
     expect(callsToTile00()).toBe(2);
   });
+
+  it("resolves getTile by the index's own file name, not the tile_x_y.json convention", async () => {
+    const oddlyNamedIndex: MapIndex = {
+      ...index,
+      tiles: index.tiles.map((ref) =>
+        ref.x === 1 && ref.y === 1
+          ? { ...ref, file: "special-centre.json" }
+          : ref,
+      ),
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/index.json")) return jsonResponse(oddlyNamedIndex);
+      if (url.endsWith("special-centre.json")) return jsonResponse(tile(1, 1));
+      const match = /tile_(\d+)_(\d+)\.json$/.exec(url);
+      if (match) return jsonResponse(tile(Number(match[1]), Number(match[2])));
+      return jsonResponse({ error: "not found" }, 404);
+    });
+    const loader = createMapLoader({ baseUrl: "/map", fetchImpl, sleep });
+
+    const progress = await loader.ensureTilesAround([0, 0], 0);
+    expect(progress).toEqual({ loaded: 1, total: 1 });
+    expect(loader.getTile(1, 1)?.x).toBe(1);
+    expect(loader.getTile(1, 1)?.y).toBe(1);
+  });
 });

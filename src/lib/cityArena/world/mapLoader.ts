@@ -289,6 +289,24 @@ function createTileStore(options: TileStoreOptions): TileStore {
   };
 }
 
+/** Bookkeeping key for one tile coordinate, matching `tileKey` in `worldSession.ts`. */
+function tileCoordKey(x: number, y: number): string {
+  return `${x}:${y}`;
+}
+
+/**
+ * Records each tile ref's own file name by coordinate. `getTile` reads this instead of assuming
+ * the `tile_${x}_${y}.json` naming convention, which `MapIndexSchema` never actually requires.
+ */
+function indexTileFiles(
+  index: MapIndex,
+  tileFileByCoord: Map<string, string>,
+): void {
+  for (const ref of index.tiles) {
+    tileFileByCoord.set(tileCoordKey(ref.x, ref.y), ref.file);
+  }
+}
+
 /** Tile refs within `radiusTiles` of the tile containing `centre`. */
 function neededRefs(
   centre: Point,
@@ -309,6 +327,8 @@ type LoaderState = {
   tileStore: TileStore;
   indexLoader: ReturnType<typeof createCachedLoader<MapIndex>>;
   roadsLoader: ReturnType<typeof createCachedLoader<MapRoads>>;
+  /** Coordinate → file name, populated once the index loads; see {@link indexTileFiles}. */
+  tileFileByCoord: Map<string, string>;
   listeners: Set<() => void>;
   disposedRef: { current: boolean };
 };
@@ -331,10 +351,14 @@ function createLoaderState(options: MapLoaderOptions): LoaderState {
     onError: options.onError,
     now: options.now ?? Date.now,
   });
+  const tileFileByCoord = new Map<string, string>();
   const indexLoader = createCachedLoader<MapIndex>(() =>
-    fetchJsonWithRetries(`${baseUrl}/index.json`, retryOptions).then(
-      parseMapIndex,
-    ),
+    fetchJsonWithRetries(`${baseUrl}/index.json`, retryOptions)
+      .then(parseMapIndex)
+      .then((index) => {
+        indexTileFiles(index, tileFileByCoord);
+        return index;
+      }),
   );
   const roadsLoader = createCachedLoader<MapRoads>(() =>
     fetchJsonWithRetries(`${baseUrl}/roads.json`, retryOptions).then(
@@ -350,6 +374,7 @@ function createLoaderState(options: MapLoaderOptions): LoaderState {
     tileStore,
     indexLoader,
     roadsLoader,
+    tileFileByCoord,
     listeners,
     disposedRef,
   };
@@ -402,6 +427,7 @@ function disposeLoaderState(state: LoaderState): void {
   state.tileStore.reset();
   state.indexLoader.reset();
   state.roadsLoader.reset();
+  state.tileFileByCoord.clear();
 }
 
 /** Assembles the public {@link MapLoader} from its internal state. */
@@ -410,7 +436,10 @@ function assembleMapLoader(state: LoaderState): MapLoader {
     loadIndex: () => state.indexLoader.load(),
     loadRoads: () => state.roadsLoader.load(),
     ensureTilesAround: createEnsureTilesAround(state),
-    getTile: (x, y) => state.tileStore.get(`tile_${x}_${y}.json`),
+    getTile: (x, y) => {
+      const file = state.tileFileByCoord.get(tileCoordKey(x, y));
+      return file === undefined ? undefined : state.tileStore.get(file);
+    },
     getLoadedTiles: () => state.tileStore.getAll(),
     hasFailures: () => state.tileStore.hasFailures(),
     onChange(listener) {
