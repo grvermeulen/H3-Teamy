@@ -264,7 +264,7 @@ describe("createMapLoader", () => {
     // Without recency bumping, overlapping tiles (1,1), (1,2), (2,1), (2,2)
     // lose their recency and some get evicted. With recency bumping via touch(),
     // they stay resident, so we keep all 9 tiles in the second 3×3 block.
-    const point2 = [12000, 12000] as const;
+    const point2 = [3000, 3000] as const;
     await loader.ensureTilesAround(point2);
 
     // All 9 tiles in the (2,2) 3×3 block should be resident
