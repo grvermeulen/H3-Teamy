@@ -13,7 +13,7 @@ export const SIM_STEP_S = 1 / 30;
 /** Input magnitudes below this are treated as "not moving". */
 export const MOVE_DEAD_ZONE = 0.05;
 
-/** Advances the player by `dt` seconds and resolves collisions. */
+/** Advances the player by `dt` seconds and resolves collisions; the aim angle, when given, wins over the movement direction for the facing. */
 export function stepPlayer(
   player: PlayerState,
   input: WorldInput,
@@ -21,7 +21,8 @@ export function stepPlayer(
   collision: Pick<CollisionGrid, "resolveCircle">,
 ): PlayerState {
   const magnitude = Math.min(1, Math.hypot(input.move[0], input.move[1]));
-  if (magnitude < MOVE_DEAD_ZONE) return { ...player, speed: 0 };
+  if (magnitude < MOVE_DEAD_ZONE)
+    return { ...player, facing: input.aim ?? player.facing, speed: 0 };
   const [resolvedX, resolvedY] = collision.resolveCircle(
     [
       player.x + input.move[0] * WALK_SPEED_MPS * dt,
@@ -32,7 +33,7 @@ export function stepPlayer(
   return {
     x: resolvedX,
     y: resolvedY,
-    facing: Math.atan2(input.move[1], input.move[0]),
+    facing: input.aim ?? Math.atan2(input.move[1], input.move[0]),
     speed: magnitude * WALK_SPEED_MPS,
   };
 }
