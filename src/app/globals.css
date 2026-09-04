@@ -803,26 +803,36 @@ body.modal-open .card {
   z-index: 1000;
 }
 .bottomNavLinks {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  overflow-x: auto;
-  flex-wrap: nowrap;
-  -webkit-overflow-scrolling: touch;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 2px;
 }
 .bottomNavLinks a,
 .bottomNavLinks button {
   color: var(--text);
   text-decoration: none;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 0;
   border-radius: var(--radius-md);
-  padding: 8px 12px;
-  min-height: 40px;
-  display: inline-flex;
+  padding: 4px 2px;
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  white-space: nowrap;
+  justify-content: center;
+  gap: 2px;
   font: inherit;
+}
+.bottomNavLinks a > span {
+  font-size: 22px;
+  line-height: 1;
+}
+.bottomNavLinks small {
+  font-size: 11px;
+  font-weight: 600;
 }
 .bottomNavLinks a:focus-visible,
 .bottomNavLinks button:focus-visible {
@@ -831,8 +841,8 @@ body.modal-open .card {
 }
 
 .navActive {
-  border-color: var(--accent);
   color: var(--accent) !important;
+  background: color-mix(in oklab, var(--accent) 12%, transparent) !important;
 }
 
 /* Christmas theme navigation */
@@ -1009,6 +1019,56 @@ body.modal-open .card {
 }
 
 /* ---------- UI primitives ---------- */
+
+/* App bar — stable drill-down navigation with an iOS-style back target. */
+.ui-app-bar {
+  display: grid;
+  grid-template-columns: var(--hit) minmax(0, 1fr) var(--hit);
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 56px;
+  margin: calc(-1 * var(--space-2)) 0 var(--space-4);
+}
+.ui-app-bar h1 {
+  min-width: 0;
+  margin: 0;
+  font-size: clamp(1.15rem, 5vw, 1.5rem);
+  line-height: 1.2;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-app-bar-back {
+  width: var(--hit);
+  height: var(--hit);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+}
+.ui-app-bar-back span {
+  font-size: 34px;
+  font-weight: 300;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+.ui-app-bar-back:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+.ui-app-bar-back:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.ui-app-bar-action {
+  display: flex;
+  justify-content: flex-end;
+}
 
 /* Stack — vertical/horizontal spacing helper */
 .ui-stack {
