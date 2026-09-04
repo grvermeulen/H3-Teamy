@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
+import { parseMultipartFormData } from "../../../../lib/multipartFormData";
 import {
   extractReportFromImage,
   ExtractProviderError,
@@ -10,8 +11,15 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   const startedAt = Date.now();
   try {
-    const form = await req.formData();
-    const file = form.get("image") as File | null;
+    const parsedForm = await parseMultipartFormData(req);
+    if (!parsedForm.ok) {
+      return NextResponse.json(
+        { error: parsedForm.error, message: parsedForm.message },
+        { status: parsedForm.status },
+      );
+    }
+
+    const file = parsedForm.form.get("image") as File | null;
     if (!file)
       return NextResponse.json({ error: "image_required" }, { status: 400 });
 
