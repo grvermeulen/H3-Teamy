@@ -58,6 +58,10 @@ const fetchImpl = vi.fn<typeof fetch>(async (input) => {
 });
 
 describe("createWorldSession", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("loads index and roads, syncs tiles into collision and raster, and exposes landmarks", async () => {
     const loader = createMapLoader({
       baseUrl: "/map",
@@ -181,6 +185,23 @@ function createFakeLoader(): FakeLoader {
 describe("createWorldSession with a controllable fake loader", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("retries ready() after a rejected load instead of caching the rejection", async () => {
+    const loader = createFakeLoader();
+    loader.loadIndex = vi
+      .fn<() => Promise<typeof emptyIndex>>()
+      .mockRejectedValueOnce(new Error("index unavailable"))
+      .mockResolvedValue(emptyIndex);
+    const session = createWorldSession({
+      loader,
+      canvasFactory: (width, height) => createFakeTarget(width, height),
+    });
+
+    await expect(session.ready()).rejects.toThrow("index unavailable");
+    await expect(session.ready()).resolves.toMatchObject({ index: emptyIndex });
+    expect(session.index()).toBe(emptyIndex);
+    expect(loader.loadIndex).toHaveBeenCalledTimes(2);
   });
 
   it("inserts and removes obstacles with concrete counts as resident tiles change", async () => {

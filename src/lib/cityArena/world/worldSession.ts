@@ -90,20 +90,28 @@ function syncResidentTiles(state: WorldSessionState): void {
   }
 }
 
-/** Loads the index and road graph once, caching the in-flight promise across repeated calls. */
+/**
+ * Loads the index and road graph once, caching the in-flight promise across repeated calls.
+ * A rejected load is forgotten so the next `ready()` call retries instead of replaying it.
+ */
 function loadReady(state: WorldSessionState): Promise<WorldReady> {
   state.readyPromise ??= Promise.all([
     state.loader.loadIndex(),
     state.loader.loadRoads(),
-  ]).then(([index, roads]) => {
-    const graph = decodeRoadGraph(roads);
-    state.loadedIndex = index;
-    state.loadedGraph = graph;
-    for (const [key, info] of buildLandmarkLookup(index)) {
-      state.landmarks.set(key, info);
-    }
-    return { index, graph };
-  });
+  ])
+    .then(([index, roads]) => {
+      const graph = decodeRoadGraph(roads);
+      state.loadedIndex = index;
+      state.loadedGraph = graph;
+      for (const [key, info] of buildLandmarkLookup(index)) {
+        state.landmarks.set(key, info);
+      }
+      return { index, graph };
+    })
+    .catch((error: unknown) => {
+      state.readyPromise = null;
+      throw error;
+    });
   return state.readyPromise;
 }
 
