@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
-import { resolveGatewayModel } from "./ai/gatewayModels";
+import { resolveReportExtractGatewayModel } from "./ai/gatewayModels";
 
 // OpenAI's structured-output (strict mode) via the Vercel AI Gateway requires
 // every property listed in `properties` to also appear in `required`. Optional
@@ -111,10 +111,8 @@ export type ResolvedReportExtractOpenAiModel = {
 
 /**
  * Resolves `REPORT_EXTRACT_OPENAI_MODEL` to a gateway-supported `provider/model`
- * string. Uses `openai/gpt-4o` when unset, remaps premium or removed gateway ids
- * blocked on the AI Gateway free tier (see Sentry JAVASCRIPT-NEXTJS-1F,
- * JAVASCRIPT-NEXTJS-38), and normalizes Claude ids to `anthropic/` (see
- * JAVASCRIPT-NEXTJS-3E).
+ * string. Uses `openai/gpt-5.6-sol` when unset and remaps stale, legacy, or
+ * non-OpenAI ids to that vision-capable default.
  *
  * @param raw - Value of `REPORT_EXTRACT_OPENAI_MODEL` (may be empty).
  * @returns Full gateway model string for `generateObject`, and the original env value when rewritten.
@@ -122,7 +120,7 @@ export type ResolvedReportExtractOpenAiModel = {
 export function resolveReportExtractOpenAiModel(
   raw: string,
 ): ResolvedReportExtractOpenAiModel {
-  const resolved = resolveGatewayModel(raw, "text");
+  const resolved = resolveReportExtractGatewayModel(raw);
   return {
     model: resolved.model,
     substitutedFrom: resolved.substitutedFrom,
@@ -138,7 +136,7 @@ export function resolveReportExtractOpenAiModel(
  * production or `AI_GATEWAY_API_KEY` locally.
  *
  * When `REPORT_EXTRACT_OPENAI_MODEL` is unset, defaults to
- * `gpt-4o` (vision). A removed snapshot (`gpt-5.2-2025-12-11`) is remapped to
+ * `openai/gpt-5.6-sol` (vision). A removed snapshot or non-OpenAI model is remapped to
  * the same default so production does not depend on stale Vercel env values.
  */
 export function getExtractProviderConfig(): ExtractProviderConfig {

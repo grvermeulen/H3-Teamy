@@ -11,6 +11,9 @@ export const DEFAULT_STRUCTURED_GATEWAY_MODEL = "openai/gpt-4o";
 /** `generateText` default (match report narrative). */
 export const DEFAULT_TEXT_GATEWAY_MODEL = "openai/gpt-4o";
 
+/** Screenshot extraction default: strongest current OpenAI vision model. */
+export const DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL = "openai/gpt-5.6-sol";
+
 const STRUCTURED_FALLBACK = DEFAULT_STRUCTURED_GATEWAY_MODEL;
 const TEXT_FALLBACK = DEFAULT_TEXT_GATEWAY_MODEL;
 
@@ -155,12 +158,37 @@ export function getReportGenerateGatewayModel(): string {
 
 /**
  * Model for screenshot/VLM `generateObject` in report extract. Honors
- * `REPORT_EXTRACT_OPENAI_MODEL` when set; remaps free-tier-blocked ids to
- * `openai/gpt-4o` (see Sentry JAVASCRIPT-NEXTJS-38).
+ * `REPORT_EXTRACT_OPENAI_MODEL` when set; remaps stale or provider-mismatched
+ * ids to the current OpenAI vision default.
  */
 export function getReportExtractGatewayModel(): string {
   const fromEnv = process.env.REPORT_EXTRACT_OPENAI_MODEL?.trim();
-  return resolveGatewayModel(fromEnv ?? "", "text").model;
+  return resolveReportExtractGatewayModel(fromEnv ?? "").model;
+}
+
+/** Keeps screenshot extraction on OpenAI and repairs stale/provider-mismatched overrides. */
+export function resolveReportExtractGatewayModel(
+  raw: string,
+): ResolvedGatewayModel {
+  const requested = raw.trim();
+  if (!requested) return { model: DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL };
+
+  const slash = requested.indexOf("/");
+  const provider = slash >= 0 ? requested.slice(0, slash) : "openai";
+  const id = gatewayModelId(requested);
+  const invalidForOpenAi =
+    provider !== "openai" ||
+    id.startsWith("claude-") ||
+    id === "gpt-5-chat-latest" ||
+    id === "gpt-5.2-2025-12-11";
+
+  if (!invalidForOpenAi) {
+    return { model: toGatewayModelString(id, "openai") };
+  }
+  return {
+    model: DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL,
+    substitutedFrom: requested,
+  };
 }
 
 /**

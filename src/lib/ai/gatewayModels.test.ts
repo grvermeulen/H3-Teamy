@@ -151,19 +151,24 @@ describe("getReportExtractGatewayModel", () => {
     vi.unstubAllEnvs();
   });
 
-  it("uses gpt-4o default when env unset", () => {
+  it("uses gpt-5.6-sol default when env unset", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "");
-    expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
+    expect(getReportExtractGatewayModel()).toBe("openai/gpt-5.6-sol");
   });
 
-  it("remaps gpt-5 env override", () => {
+  it("remaps the legacy GPT-5 chat alias", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/gpt-5-chat-latest");
-    expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
+    expect(getReportExtractGatewayModel()).toBe("openai/gpt-5.6-sol");
   });
 
-  it("routes claude sonnet env override to anthropic gateway id", () => {
+  it("remaps provider-mismatched Claude ids", () => {
+    vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/claude-sonnet-4-6");
+    expect(getReportExtractGatewayModel()).toBe("openai/gpt-5.6-sol");
+  });
+
+  it("remaps a bare Claude env override to the OpenAI extraction default", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "claude-sonnet-4-6");
-    expect(getReportExtractGatewayModel()).toBe("anthropic/claude-sonnet-4.6");
+    expect(getReportExtractGatewayModel()).toBe("openai/gpt-5.6-sol");
   });
 });
 
