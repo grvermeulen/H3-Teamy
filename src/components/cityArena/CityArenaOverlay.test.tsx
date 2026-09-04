@@ -6,11 +6,17 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as Sentry from "@sentry/nextjs";
 import type { MapIndex, MapTile } from "@/lib/cityArena/world/mapTypes";
 import {
   createFakeContext,
   createFakeTarget,
 } from "@/lib/cityArena/render/testing/fakeContext";
+
+/** Frame cap for the mocked `requestAnimationFrame` loop (see `beforeEach`), matching the pattern
+ *  in `src/components/spaceInvaders/SpaceInvadersGame.test.tsx`: enough frames for the HUD/tile
+ *  throttles to fire at least once, without ever looping forever inside a test. */
+const MAX_MOCKED_ANIMATION_FRAMES = 12;
 
 const index: MapIndex = {
   version: 1,
@@ -115,12 +121,20 @@ describe("CityArenaOverlay", () => {
       // subset the renderer needs, so a cast is unavoidable here (test file only).
       () => createFakeContext() as unknown as CanvasRenderingContext2D,
     );
-    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) =>
-      window.setTimeout(() => callback(performance.now()), 16),
+    // Runs each frame as a microtask (capped) instead of a real 16ms timer, so the frame loop
+    // settles without any real waits (same pattern as SpaceInvadersGame.test.tsx).
+    let rafCount = 0;
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      (callback: FrameRequestCallback): number => {
+        rafCount += 1;
+        if (rafCount <= MAX_MOCKED_ANIMATION_FRAMES) {
+          queueMicrotask(() => callback(performance.now() + rafCount * 16));
+        }
+        return rafCount;
+      },
     );
-    vi.spyOn(window, "cancelAnimationFrame").mockImplementation((handle) =>
-      window.clearTimeout(handle),
-    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
   });
 
   afterEach(() => {
@@ -157,5 +171,41 @@ describe("CityArenaOverlay", () => {
       fireEvent.keyDown(document, { code: "Escape", key: "Escape" });
     });
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("disables the zone picker until the world finishes booting, then lets it teleport", async () => {
+    render(<CityArenaOverlay zone="wageningen" onClose={vi.fn()} />);
+    expect(screen.getByLabelText("Ga naar")).toBeDisabled();
+
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    expect(screen.getByLabelText("Ga naar")).toBeEnabled();
+
+    fireEvent.change(screen.getByLabelText("Ga naar"), {
+      target: { value: "campus" },
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent("WUR-campus"),
+    );
+  });
+
+  it("shows the Dutch error message and reports the boot failure to Sentry", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>(async () => new Response(null, { status: 404 })),
+    );
+    render(<CityArenaOverlay zone="wageningen" onClose={vi.fn()} />);
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Kon geen verbinding maken, probeer het later opnieuw",
+      ),
+    );
+    expect(Sentry.captureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ tags: { area: "arena", kind: "boot" } }),
+    );
   });
 });

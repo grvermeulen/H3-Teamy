@@ -55,6 +55,7 @@ function useLockBodyScroll(): void {
 type ArenaZonePickerProps = {
   zones: MapZone[];
   currentKey: string;
+  disabled: boolean;
   onTeleport: (key: ZoneKey) => void;
 };
 
@@ -62,6 +63,7 @@ type ArenaZonePickerProps = {
 function ArenaZonePicker({
   zones,
   currentKey,
+  disabled,
   onTeleport,
 }: ArenaZonePickerProps): React.JSX.Element {
   return (
@@ -71,6 +73,7 @@ function ArenaZonePicker({
         aria-label="Ga naar"
         className="rounded border border-[#30363d] bg-[#0d1117] px-2 py-1 text-sm text-[#c9d1d9]"
         value={currentKey}
+        disabled={disabled}
         onChange={(event) => {
           const chosen = zones.find(
             (candidate) => candidate.key === event.target.value,
@@ -93,6 +96,7 @@ function ArenaZonePicker({
 type ArenaHudBarProps = {
   hud: ArenaHud;
   zones: MapZone[];
+  pickerDisabled: boolean;
   onTeleport: (key: ZoneKey) => void;
   onClose: () => void;
 };
@@ -101,6 +105,7 @@ type ArenaHudBarProps = {
 function ArenaHudBar({
   hud,
   zones,
+  pickerDisabled,
   onTeleport,
   onClose,
 }: ArenaHudBarProps): React.JSX.Element {
@@ -123,6 +128,7 @@ function ArenaHudBar({
         <ArenaZonePicker
           zones={zones}
           currentKey={currentKey}
+          disabled={pickerDisabled}
           onTeleport={onTeleport}
         />
         <button type="button" onClick={onClose}>
@@ -235,6 +241,7 @@ export default function CityArenaOverlay({
       <ArenaHudBar
         hud={game.hud}
         zones={game.zones}
+        pickerDisabled={game.phase !== "playing"}
         onTeleport={game.teleportToZone}
         onClose={onClose}
       />

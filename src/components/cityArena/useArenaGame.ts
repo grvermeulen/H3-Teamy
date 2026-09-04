@@ -234,14 +234,24 @@ function createRuntime(
   };
 }
 
-/** Awaits the session's index/graph, then builds the initial runtime at a random spawn point. */
+/** True once the effect that started this boot has been cleaned up (component unmounted). */
+type IsCancelled = () => boolean;
+
+/**
+ * Awaits the session's index/graph, then builds the initial runtime at a random spawn point.
+ * Returns `null` without touching `runtimeRef` when `isCancelled` reports true after the wait —
+ * the boot effect's cleanup runs synchronously and unconditionally disposes `session` before any
+ * later `await` in this function can resume, so a cancelled caller never needs to dispose again.
+ */
 async function bootSession(
   session: WorldSession,
   zoneKey: ZoneKey,
   canvasRef: RefObject<HTMLCanvasElement | null>,
   runtimeRef: RefObject<Runtime | null>,
-): Promise<{ index: MapIndex; spawn: Point }> {
+  isCancelled: IsCancelled,
+): Promise<{ index: MapIndex; spawn: Point } | null> {
   const { index } = await session.ready();
+  if (isCancelled()) return null;
   const zone = findZoneByKey(index, zoneKey) ?? index.zones[0];
   const spawn: Point = zone ? randomSpawnPoint(zone) : [0, 0];
   const width =
@@ -280,12 +290,16 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
 
   useEffect(() => {
     let cancelled = false;
+    const isCancelled: IsCancelled = () => cancelled;
     const session = createArenaSession(() => setFailed(true));
-    bootSession(session, zoneKey, canvasRef, runtimeRef)
-      .then(async ({ index, spawn }) => {
-        setZones(index.zones);
-        setProgress(await session.update(spawn));
-        if (!cancelled) setPhase("playing");
+    bootSession(session, zoneKey, canvasRef, runtimeRef, isCancelled)
+      .then(async (booted) => {
+        if (!booted || isCancelled()) return;
+        setZones(booted.index.zones);
+        const tileProgress = await session.update(booted.spawn);
+        if (isCancelled()) return;
+        setProgress(tileProgress);
+        setPhase("playing");
       })
       .catch((error: unknown) => {
         reportArenaError(error, "boot");
