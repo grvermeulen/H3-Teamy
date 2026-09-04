@@ -13,6 +13,7 @@ import GenerateReportButton from "./GenerateReportButton";
 import ReportPreview from "./ReportPreview";
 import MvpVoteButton from "./MvpVoteButton";
 import SpaceInvadersLauncher from "./spaceInvaders/SpaceInvadersLauncher";
+import CityArenaLauncher from "./cityArena/CityArenaLauncher";
 import { useSession } from "./SessionContext";
 import { formatEventDate, formatEventTime } from "../lib/datetime";
 import { fetchJsonIfOkOr } from "../lib/safeClientJson";
@@ -463,6 +464,7 @@ export default function EventList({ events }: Props): React.JSX.Element {
       ) : null}
       {future.map((evt) => renderEventCard(evt))}
       <SpaceInvadersLauncher />
+      <CityArenaLauncher />
       {visibleCount === 0 ? (
         <div className="muted">Geen recente of aankomende wedstrijden.</div>
       ) : null}

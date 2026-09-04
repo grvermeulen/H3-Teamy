@@ -1,4 +1,4 @@
-# Stadsstrijd (City Arena) — Design Spec, Slice 1
+# GTA H3 (City Arena) — Design Spec, Slice 1
 
 **Date:** 2026-09-03 · **Status:** approved in brainstorming, awaiting written review · **Owner:** Guido Vermeulen
 
@@ -59,8 +59,8 @@ The repository is public (relevant for ODbL).
 
 ## 2. Product shape and placement
 
-**Name.** UI title **"Stadsstrijd"**. Never "GTA" in UI, code comments or assets
-(trademark); no Rockstar art. Code namespace `cityArena`.
+**Name.** UI title **"GTA H3"** (renamed from the working title "Stadsstrijd" on 2026-09-04; the
+owner accepts the Grand Theft Auto trademark risk, as for the splash artwork). Code namespace `cityArena`.
 
 **Entry point.** `<CityArenaLauncher />` rendered in `src/components/EventList.tsx`
 directly after `<SpaceInvadersLauncher />`. A `card` in the same visual language, Tailwind
@@ -753,20 +753,20 @@ scripts/arena/                build-map.ts · buildMap.ts · overpass.ts (I/O on
 public/arena/map/v1/          index.json · roads.json · tile_x_y.json
 public/branding/              wasted-screen.{webp,jpg} (death screen; source assets/branding/wasted-screen.png)
 src/lib/cityArena/
-  constants.ts · types.ts · schemas.ts · storage.ts
+  constants.ts · schemas.ts · storage.ts · debugFlag.ts · debugMetrics.ts (types.ts folded into sim/types)
   mapBuild/  geometry · osmTypes · overpassQueries · landmarks.config · landmarks · roads · areas · zones · tiles · assemble · errors · fixtures/overpassMini
-  world/     mapLoader · collisionGrid · roadGraph · zone · projection
-  sim/       state · step · player · vehicle · weapons · bullets · peds · cops · pickups · spawn · round · bots · invariants
+  world/     mapTypes · projection · decode · lru · mapLoader · collisionGrid · roadGraph · nearestRoad · zone · worldSession
+  sim/       types · rng · player · freeRoam (PR 4: state · step · vehicle · weapons · bullets · peds · cops · pickups · spawn · round · bots · invariants)
   net/       transport · ablyTransport · memoryTransport · wsRelayTransport · messages · election · hostLoop · clientLoop · roomCode · clock
-  input/     inputState · keyboardMouse · touchSticks · haptics
-  render/    camera · staticRaster · drawEntities · radar · particles · feedback · deathOverlay · splitScreen (slice 2)
+  input/     inputState · keyboard · touchStick (PR 6: keyboardMouse · haptics)
+  render/    palette · camera · streetLabels · canvasTypes · drawStatic · staticRaster · drawWorld · drawEntities · renderScene · testing/fakeContext (PR 4+: radar · particles · feedback · deathOverlay · splitScreen)
   audio/     sfx
   test/      hooks (window.__arena) · sessionLog
 src/lib/ably/server.ts
 src/lib/services/arenaService.ts (+ .test.ts)
 src/lib/schemas/arena.ts (+ .test.ts)
 src/app/api/arena/            realtime-token/route.ts · rooms/route.ts · matches/route.ts · leaderboard/route.ts
-src/components/cityArena/     CityArenaLauncher · CityArenaOverlay · Lobby · MatchView · Hud · TouchControls · DeathOverlay
+src/components/cityArena/     CityArenaLaunchIcon · CityArenaLauncher · CityArenaOverlay · useArenaGame · useDialogFocusTrap · TouchStick · ArenaLoadingScreen · ArenaDebugOverlay (PR 3+: Lobby · MatchView · Hud · DeathOverlay)
                               Scoreboard · Leaderboard · ConnectionBanner · useArenaSession
 e2e/arena/                    dsl.ts · budgets.ts · fixtures/auth.ts · fixtures/touch.ts · *.spec.ts
 playwright.arena.config.ts · docker-compose.e2e.yml
@@ -799,28 +799,28 @@ docs/tech/arena/README.md · docs/tech/arena/TESTING.md
 
 ## 15. Risks and accepted trade-offs
 
-| Risk                                        | Mitigation                                                                                            |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Host on a phone backgrounds or dies         | Priority election prefers desktops; 3 s silence rule; full-state snapshots make takeover cheap        |
-| Ably free-plan limits                       | Section 6.4 budget; message counters in metrics; host-only inputs channel                             |
-| Map data size on 4G                         | Tiles streamed by proximity, immutable caching, 1.2 MB total / 256 KB per-tile gzipped build ceilings |
-| Real streets are irregular (not a GTA grid) | Zoom tuned to ≈ 60 m across on phones; radar; street labels                                           |
-| iOS haptics                                 | Opportunistic only; universal visual/audio feedback                                                   |
-| Cheating                                    | Accepted (teammates); host clamps inputs and fire rates                                               |
-| ODbL / trademark                            | Attribution footer, derived asset in public repo, no "GTA" naming or assets                           |
-| Overpass availability                       | Build is manual and committed; nightly freshness check only alerts                                    |
-| Floating-point determinism                  | Replays compared exactly on V8, with tolerance elsewhere                                              |
-| Tested bundle ≠ production bundle           | One hook module differs; real-Ably lane covers integration                                            |
+| Risk                                        | Mitigation                                                                                                 |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Host on a phone backgrounds or dies         | Priority election prefers desktops; 3 s silence rule; full-state snapshots make takeover cheap             |
+| Ably free-plan limits                       | Section 6.4 budget; message counters in metrics; host-only inputs channel                                  |
+| Map data size on 4G                         | Tiles streamed by proximity, immutable caching, 1.2 MB total / 256 KB per-tile gzipped build ceilings      |
+| Real streets are irregular (not a GTA grid) | Zoom tuned to ≈ 60 m across on phones; radar; street labels                                                |
+| iOS haptics                                 | Opportunistic only; universal visual/audio feedback                                                        |
+| Cheating                                    | Accepted (teammates); host clamps inputs and fire rates                                                    |
+| ODbL / trademark                            | Attribution footer, derived asset in public repo; the "GTA H3" name and artwork are an accepted owner risk |
+| Overpass availability                       | Build is manual and committed; nightly freshness check only alerts                                         |
+| Floating-point determinism                  | Replays compared exactly on V8, with tolerance elsewhere                                                   |
+| Tested bundle ≠ production bundle           | One hook module differs; real-Ably lane covers integration                                                 |
 
 ---
 
 ## 16. Glossary (Dutch UI strings)
 
-Stadsstrijd · Spelen · Log in om mee te doen · Nieuw potje · Meedoen met code · Actieve
+GTA H3 · Spelen · Log in om mee te doen · Nieuw potje · Meedoen met code · Actieve
 potjes · Ranglijst · Strijdgebied (Rhenen centrum, Wageningen centrum, WUR-campus, Bennekom)
 · Start · Oefenen · Instappen / Uitstappen · Wapen · Schieten · Gezocht (sterren) · Terug
 naar het strijdgebied! · Scorebord · Nieuwe host: {naam} · Verbinding verbroken… opnieuw
 verbinden · Kon geen verbinding maken, probeer het later opnieuw · Dit potje bestaat niet
 meer · Potje is vol · Kaart laden… · Kaart kon niet volledig laden · Uitslag wordt later
 opgeslagen · Geluid · Trillen · Enkele stick · Besturing · Potje verlaten · Kaart ©
-OpenStreetMap-bijdragers.
+OpenStreetMap-bijdragers. PR 2 additions: Startpunt · Ga naar · Spel laden… · Sluiten.
