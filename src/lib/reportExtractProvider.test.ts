@@ -47,7 +47,7 @@ describe("reportExtractProvider", () => {
     mockedGenerateObject.mockReset();
     mockedSentryCapture.mockReset();
     process.env = { ...originalEnv };
-    process.env.REPORT_EXTRACT_OPENAI_MODEL = "gpt-4o";
+    vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "gpt-5.6-sol");
     delete process.env.OPENAI_API_KEY;
     delete process.env.OCR_WORKER_URL;
     delete process.env.OCR_WORKER_TOKEN;
@@ -56,6 +56,7 @@ describe("reportExtractProvider", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     process.env = { ...originalEnv };
   });
 
@@ -63,7 +64,7 @@ describe("reportExtractProvider", () => {
     it("defaults to vlm when provider is missing", () => {
       const cfg = getExtractProviderConfig();
       expect(cfg.provider).toBe("vlm");
-      expect(cfg.openAiModel).toBe("openai/gpt-4o");
+      expect(cfg.openAiModel).toBe("openai/gpt-5.6-sol");
     });
 
     it("does not require OPENAI_API_KEY (gateway handles auth)", () => {
@@ -79,42 +80,42 @@ describe("reportExtractProvider", () => {
       );
     });
 
-    it("defaults REPORT_EXTRACT_OPENAI_MODEL to gpt-4o when unset", () => {
-      delete process.env.REPORT_EXTRACT_OPENAI_MODEL;
+    it("defaults REPORT_EXTRACT_OPENAI_MODEL to gpt-5.6-sol when unset", () => {
+      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", undefined);
       const cfg = getExtractProviderConfig();
-      expect(cfg.openAiModel).toBe("openai/gpt-4o");
+      expect(cfg.openAiModel).toBe("openai/gpt-5.6-sol");
       expect(cfg.openAiModelSubstitutedFrom).toBeUndefined();
     });
 
-    it("remaps removed gateway snapshot gpt-5.2-2025-12-11 to gpt-4o", () => {
-      process.env.REPORT_EXTRACT_OPENAI_MODEL = "gpt-5.2-2025-12-11";
+    it("remaps removed gateway snapshot to gpt-5.6-sol", () => {
+      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "gpt-5.2-2025-12-11");
       const cfg = getExtractProviderConfig();
-      expect(cfg.openAiModel).toBe("openai/gpt-4o");
+      expect(cfg.openAiModel).toBe("openai/gpt-5.6-sol");
       expect(cfg.openAiModelSubstitutedFrom).toBe("gpt-5.2-2025-12-11");
     });
 
-    it("remaps free-tier-blocked gpt-5-chat-latest to gpt-4o", () => {
-      process.env.REPORT_EXTRACT_OPENAI_MODEL = "gpt-5-chat-latest";
+    it("remaps the legacy chat alias to gpt-5.6-sol", () => {
+      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "gpt-5-chat-latest");
       const cfg = getExtractProviderConfig();
-      expect(cfg.openAiModel).toBe("openai/gpt-4o");
+      expect(cfg.openAiModel).toBe("openai/gpt-5.6-sol");
       expect(cfg.openAiModelSubstitutedFrom).toBe("gpt-5-chat-latest");
     });
 
-    it("routes claude-sonnet-4-6 to anthropic gateway id", () => {
-      process.env.REPORT_EXTRACT_OPENAI_MODEL = "claude-sonnet-4-6";
+    it("remaps claude-sonnet-4-6 to the OpenAI extraction default", () => {
+      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "claude-sonnet-4-6");
       const cfg = getExtractProviderConfig();
-      expect(cfg.openAiModel).toBe("anthropic/claude-sonnet-4.6");
-      expect(cfg.openAiModelSubstitutedFrom).toBeUndefined();
+      expect(cfg.openAiModel).toBe("openai/gpt-5.6-sol");
+      expect(cfg.openAiModelSubstitutedFrom).toBe("claude-sonnet-4-6");
     });
   });
 
   describe("resolveReportExtractOpenAiModel", () => {
-    it("returns openai/gpt-4o for empty input", () => {
+    it("returns openai/gpt-5.6-sol for empty input", () => {
       expect(resolveReportExtractOpenAiModel("")).toEqual({
-        model: "openai/gpt-4o",
+        model: "openai/gpt-5.6-sol",
       });
       expect(resolveReportExtractOpenAiModel("  ")).toEqual({
-        model: "openai/gpt-4o",
+        model: "openai/gpt-5.6-sol",
       });
     });
 
@@ -122,7 +123,7 @@ describe("reportExtractProvider", () => {
       expect(
         resolveReportExtractOpenAiModel("openai/gpt-5.2-2025-12-11"),
       ).toEqual({
-        model: "openai/gpt-4o",
+        model: "openai/gpt-5.6-sol",
         substitutedFrom: "openai/gpt-5.2-2025-12-11",
       });
     });
@@ -131,7 +132,7 @@ describe("reportExtractProvider", () => {
       expect(
         resolveReportExtractOpenAiModel("openai/gpt-5-chat-latest"),
       ).toEqual({
-        model: "openai/gpt-4o",
+        model: "openai/gpt-5.6-sol",
         substitutedFrom: "openai/gpt-5-chat-latest",
       });
     });
@@ -142,9 +143,19 @@ describe("reportExtractProvider", () => {
       });
     });
 
-    it("routes claude sonnet env ids to anthropic gateway id", () => {
+    it("remaps bare Claude ids to the OpenAI extraction default", () => {
       expect(resolveReportExtractOpenAiModel("claude-sonnet-4-6")).toEqual({
-        model: "anthropic/claude-sonnet-4.6",
+        model: "openai/gpt-5.6-sol",
+        substitutedFrom: "claude-sonnet-4-6",
+      });
+    });
+
+    it("remaps Claude ids even when incorrectly prefixed as OpenAI", () => {
+      expect(
+        resolveReportExtractOpenAiModel("openai/claude-sonnet-4-6"),
+      ).toEqual({
+        model: "openai/gpt-5.6-sol",
+        substitutedFrom: "openai/claude-sonnet-4-6",
       });
     });
   });
@@ -175,7 +186,8 @@ describe("reportExtractProvider", () => {
         model: string;
         messages: Array<{ content: Array<{ type: string }> }>;
       };
-      expect(args.model).toBe("openai/gpt-4o");
+      expect(args.model).toBe("openai/gpt-5.6-sol");
+      expect(args).not.toHaveProperty("temperature");
       expect(args.messages[0].content[1].type).toBe("image");
       expect(out.providerUsed).toBe("vlm");
       expect(out.fallbackUsed).toBe(false);
@@ -209,6 +221,7 @@ describe("reportExtractProvider", () => {
       const normalizationArgs = mockedGenerateObject.mock.calls[0][0] as {
         prompt: string;
       };
+      expect(normalizationArgs).not.toHaveProperty("temperature");
       expect(normalizationArgs.prompt).toContain("RAW OCR TEXT");
       expect(out.providerUsed).toBe("ocr");
       expect(out.fallbackUsed).toBe(false);
@@ -216,8 +229,8 @@ describe("reportExtractProvider", () => {
       expect(out.result.homeScore).toBe(5);
     });
 
-    it("uses gpt-4o gateway id when extract model env was a removed snapshot", async () => {
-      process.env.REPORT_EXTRACT_OPENAI_MODEL = "gpt-5.2-2025-12-11";
+    it("uses gpt-5.6-sol when extract model env was a removed snapshot", async () => {
+      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "gpt-5.2-2025-12-11");
       mockedGenerateObject.mockResolvedValueOnce({
         object: {
           homeTeam: "A",
@@ -231,7 +244,7 @@ describe("reportExtractProvider", () => {
         model: string;
         messages: Array<{ content: Array<{ type: string }> }>;
       };
-      expect(args.model).toBe("openai/gpt-4o");
+      expect(args.model).toBe("openai/gpt-5.6-sol");
       expect(args.messages[0].content[1].type).toBe("image");
       expect(out.providerUsed).toBe("vlm");
       expect(out.fallbackUsed).toBe(false);
@@ -240,8 +253,8 @@ describe("reportExtractProvider", () => {
       expect(out.result.homeTeam).toBe("A");
     });
 
-    it("uses anthropic gateway id when extract model env is claude-sonnet-4-6", async () => {
-      process.env.REPORT_EXTRACT_OPENAI_MODEL = "claude-sonnet-4-6";
+    it("replaces a stale Claude extract model with the OpenAI default", async () => {
+      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "claude-sonnet-4-6");
       mockedGenerateObject.mockResolvedValueOnce({
         object: {
           homeTeam: "A",
@@ -254,8 +267,9 @@ describe("reportExtractProvider", () => {
       const args = mockedGenerateObject.mock.calls[0][0] as {
         model: string;
       };
-      expect(args.model).toBe("anthropic/claude-sonnet-4.6");
-      expect(out.model).toBe("anthropic/claude-sonnet-4.6");
+      expect(args.model).toBe("openai/gpt-5.6-sol");
+      expect(out.model).toBe("openai/gpt-5.6-sol");
+      expect(out.openAiModelSubstitutedFrom).toBe("claude-sonnet-4-6");
     });
 
     it("falls back to OCR in hybrid mode when VLM fails and reports the failure to Sentry", async () => {

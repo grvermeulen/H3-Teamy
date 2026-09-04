@@ -36,6 +36,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       result: extracted.result,
       raw_text: extracted.rawText,
+      meta: {
+        providerUsed: extracted.providerUsed,
+        model: extracted.model,
+        fallbackUsed: extracted.fallbackUsed,
+      },
     });
   } catch (error: unknown) {
     const latencyMs = Date.now() - startedAt;
