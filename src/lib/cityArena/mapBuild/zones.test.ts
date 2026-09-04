@@ -84,6 +84,36 @@ describe("computeSpawnNodes", () => {
       computeSpawnNodes(graph, [0, 0], ZONE_RADIUS_M, buildings, water),
     ).toEqual([[0, 0]]);
   });
+
+  it("excludes vertices on a disconnected spur from spawn nodes", () => {
+    const graph: RoadGraph = {
+      nodes: [
+        [0, 0],
+        [20, 0],
+        [40, 0],
+        // Disconnected spur: inside the disc, clear of obstacles, but not reachable
+        // from the main network — must not be selected as a spawn node.
+        [10, 100],
+        [10, 120],
+      ],
+      edges: [
+        { a: 0, b: 1, roadClass: "residential", oneway: false, length: 20 },
+        { a: 1, b: 2, roadClass: "residential", oneway: false, length: 20 },
+        { a: 3, b: 4, roadClass: "residential", oneway: false, length: 20 },
+      ],
+    };
+    const spawns = computeSpawnNodes(graph, [0, 0], ZONE_RADIUS_M, [], []);
+    expect(spawns).toHaveLength(3);
+    expect(spawns).toEqual(
+      expect.arrayContaining([
+        [0, 0],
+        [20, 0],
+        [40, 0],
+      ]),
+    );
+    expect(spawns).not.toContainEqual([10, 100]);
+    expect(spawns).not.toContainEqual([10, 120]);
+  });
 });
 
 describe("checkZoneConnectivity", () => {
