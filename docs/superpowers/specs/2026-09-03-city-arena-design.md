@@ -105,12 +105,12 @@ public repository.
 
 ### 3.1 Source query
 
-Overpass API, bbox `51.94,5.53,52.02,5.72`, converted to GeoJSON with `osmtogeojson`
+Overpass API, bbox `51.94,5.53,52.02,5.72`, converted to GeoJSON with `osm2geojson-lite`
 (dev dependency; handles multipolygon relations such as the Nederrijn).
 
 | Layer     | OSM filter                                                                                                                                                             | Notes                                                                                   |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Roads     | `highway` ∈ motorway, trunk, primary, secondary, tertiary, unclassified, residential, living_street, pedestrian (+ `_link` variants); `service` only inside zone discs | Cycle/foot paths dropped. Keep `name`, `oneway`, `lanes`, `maxspeed` when present       |
+| Roads     | `highway` ∈ motorway, trunk, primary, secondary, tertiary, unclassified, residential, living_street, pedestrian (+ `_link` variants); `service` only inside zone discs | Cycle/foot paths dropped. Keep `name`, `oneway` when present                            |
 | Buildings | `building=*`, footprint area ≥ 40 m², centroid within 1.2 km of any zone centre; landmark buildings always kept                                                        | Keep `building:levels` (default 2)                                                      |
 | Water     | `natural=water` polygons (plus `landuse` ∈ reservoir, basin); waterway _lines_ are not used                                                                            | Impassable                                                                              |
 | Ground    | `landuse` ∈ grass, meadow, farmland, forest; `leisure` ∈ park, pitch; `natural` ∈ wood, scrub                                                                          | Mapped to `grass`, `field`, `forest`; `urban` is the implicit default and is not stored |
@@ -119,29 +119,37 @@ Overpass API, bbox `51.94,5.53,52.02,5.72`, converted to GeoJSON with `osmtogeoj
 Real-build note (gzip budget, §3.4): the shipped build uses `MIN_BUILDING_AREA_M2 = 40`,
 `BUILDING_KEEP_RADIUS_M = 1200`, and simplification tolerances of 0.5 m for buildings /
 4 m for ground and water (`BUILDING_SIMPLIFY_TOLERANCE_M` / `TERRAIN_SIMPLIFY_TOLERANCE_M`,
-§3.3). Ground polygons (farmland/forest/grass over the whole ~10 km bbox, unfiltered by
-zone proximity by design) are the dominant contributor to tile size for this real region,
-not buildings — see §3.4 for the owner decision this led to on the total/per-tile budget.
+§3.3). Buildings are the dominant contributor to tile size for this real region — see the
+measured per-layer gzip split in §3.4 — ahead of ground polygons (farmland/forest/grass
+over the whole ~10 km bbox, unfiltered by zone proximity by design); see §3.4 for the
+owner decision this led to on the total/per-tile budget.
 A second real-build fix, unrelated to budget: `tilesCovering` (`tiles.ts`) clamps to the
 actual tile grid (`tileGridSize`) — Overpass returns the complete geometry of any
 way/polygon with at least one node inside the bbox, so long roads and large ground
 polygons run tens of km outside the region, which previously spawned tiles far beyond the
 grid.
 
-### 3.2 Landmark config (`scripts/arena/landmarks.config.ts`)
+### 3.2 Landmark config (`src/lib/cityArena/mapBuild/landmarks.config.ts`)
 
-| key                     | Name match        | Tag filter                                                       | Style    | Zone anchor        |
-| ----------------------- | ----------------- | ---------------------------------------------------------------- | -------- | ------------------ |
-| `cunerakerk`            | "Cunera"          | `amenity=place_of_worship` or `building=church`                  | `church` | Rhenen centrum     |
-| `gastland`              | "Gastland"        | `leisure` ∈ sports_centre, swimming_pool                         | `pool`   | —                  |
-| `grote-kerk-wageningen` | "Grote Kerk"      | `amenity=place_of_worship`, within 800 m of Wageningen Markt     | `church` | Wageningen centrum |
-| `onder-de-linden`       | "Onder de Linden" | `amenity` ∈ cafe, bar, pub, restaurant                           | `cafe`   | —                  |
-| `de-bongerd`            | "Bongerd"         | `leisure` ∈ sports_centre, swimming_pool                         | `pool`   | —                  |
-| `wur-forum`             | "Forum"           | `amenity=university` or `building=university`                    | `campus` | WUR-campus         |
-| `wur-orion`             | "Orion"           | same                                                             | `campus` | —                  |
-| `wur-atlas`             | "Atlas"           | same                                                             | `campus` | —                  |
-| `oude-kerk-bennekom`    | "Oude Kerk"       | `amenity=place_of_worship`, within 800 m of Bennekom Dorpsstraat | `church` | Bennekom           |
-| `vrije-slag`            | "Vrije Slag"      | `leisure` ∈ swimming_pool, sports_centre                         | `pool`   | —                  |
+| key                     | Name match        | Tag filter                                                            | Style    | Zone anchor        |
+| ----------------------- | ----------------- | --------------------------------------------------------------------- | -------- | ------------------ |
+| `cunerakerk`            | "Cunera"          | `amenity=place_of_worship` or `building=church`                       | `church` | Rhenen centrum     |
+| `gastland`              | "Feel Fit"        | `leisure` ∈ sports_centre, swimming_pool                              | `pool`   | —                  |
+| `grote-kerk-wageningen` | "Grote Kerk"      | `amenity=place_of_worship`, within 800 m of Wageningen Markt          | `church` | Wageningen centrum |
+| `onder-de-linden`       | "Onder de Linden" | `amenity` ∈ cafe, bar, pub, restaurant                                | `cafe`   | —                  |
+| `de-bongerd`            | "Bongerd"         | `leisure` ∈ sports_centre, swimming_pool; pinned to `node/3014133762` | `pool`   | —                  |
+| `wur-forum`             | "Forum"           | `amenity=university` or `building=university`                         | `campus` | WUR-campus         |
+| `wur-orion`             | "Orion"           | same                                                                  | `campus` | —                  |
+| `wur-atlas`             | "Atlas"           | same                                                                  | `campus` | —                  |
+| `oude-kerk-bennekom`    | "Alexanderkerk"   | `amenity=place_of_worship`, within 800 m of Bennekom Dorpsstraat      | `church` | Bennekom           |
+| `vrije-slag`            | "Vrije Slag"      | `leisure` ∈ swimming_pool, sports_centre                              | `pool`   | —                  |
+
+Naming notes: OSM tags the Rhenen `gastland` complex (mid-rebuild) under its current
+operator's brand, "Feel Fit Center Rhenen" — "Gastland" is absent from its `name` tag — and
+the Bennekom church as "Oude of Sint-Alexanderkerk", not "Oude Kerk"; both name matches
+above target the distinctive substring that is actually present. `de-bongerd` is pinned by
+`osmId` because "Bongerd" also matches the WUR multi-sport complex around the pool
+(`way/826591321`, "Sports Centre de Bongerd").
 
 Rules: each entry must match **exactly one** element; zero or multiple matches fail the
 build with the candidate list, resolved by adding an explicit `osmId` to the entry. Zone
@@ -152,7 +160,7 @@ polygon containing or nearest (≤ 15 m) the node. Landmarks that attach to no b
 the matched element's own outline as a one-level footprint; node landmarks without a
 containing or nearby building render as labels only.
 
-### 3.3 Transform (pure functions in `scripts/arena/transform.ts`, unit-tested)
+### 3.3 Transform (pure functions in `src/lib/cityArena/mapBuild/`, unit-tested)
 
 - **Projection:** equirectangular at `lat0 = 51.98`, `lon0 = 5.625`:
   `x = (lon − lon0) · cos(lat0) · 111 320`, `y = −(lat − lat0) · 110 574` (metres; north is
@@ -162,11 +170,12 @@ containing or nearby building render as labels only.
   and `TERRAIN_SIMPLIFY_TOLERANCE_M` in `assemble.ts`). Buildings stay at the original
   0.5 m — a coarser tolerance collapses small footprints and drops sub-tolerance L-shaped
   notches, and building outlines are collision-relevant. Ground and water were raised to
-  4 m during the real build (gzip budget, §3.1/§3.4): those polygons (farmland/forest/grass
-  over the whole ~10 km bbox) dominated the payload, not buildings, and 4 m only thins
-  background terrain outlines.
+  4 m during the real build (gzip budget, §3.1/§3.4) to thin background terrain outlines;
+  buildings are the larger gzip contributor in the shipped build (measured split in §3.4),
+  so this tolerance alone does not dominate the budget.
 - **Tiling:** 2 km × 2 km tiles (8 000 units) on a grid anchored at the region's
-  south-west corner; geometry clipped to tiles with 20 m overlap so seams never show.
+  north-west corner (`y` grows south); geometry clipped to tiles with 20 m overlap so
+  seams never show.
 - **Road graph:** nodes at intersections plus shape points every ≥ 20 m; edges carry
   class, name index, one-way flag, length. Only drivable classes. Connectivity check per
   zone disc (largest component must contain ≥ 85 % of edges) fails the build otherwise.
@@ -180,8 +189,8 @@ containing or nearby building render as labels only.
 
 - `index.json` — version, generation timestamp, origin, bounds, tile grid, zones
   (`key, name, center, radius, spawnNodes, landmarks`), landmarks
-  (`key, name, style, center, tile`). Small (< 30 KB gz; 7.5 KB in the shipped build).
-- `roads.json` — road graph (nodes, edges, names). Shipped at 187.8 KB gz (13 756 nodes,
+  (`key, name, style, center, tile`). Small (< 30 KB gz; 6.7 KB in the shipped build).
+- `roads.json` — road graph (nodes, edges, names). Shipped at 183.4 KB gz (13 756 nodes,
   15 101 edges) — higher than the original ≈ 100–150 KB estimate; the region's real
   drivable network is denser than assumed pre-build.
 - `tile_x_y.json` — `{ roads, buildings, ground, water }` with flat integer coordinate
@@ -190,13 +199,20 @@ containing or nearby building render as labels only.
   countryside) tile into a 7 × 5 grid — 35 tiles, `tilesCovering` clamped to that grid
   (`tileGridSize`) so geometry outside the region never spawns extra tiles. Fringe tiles
   are tiny (as little as 0.1 KB gz); the four town/campus cores run larger, with the
-  Wageningen–campus tile the largest at ≈ 203 KB gz — the two zones' 1.2 km keep-radius
-  discs both reach into it, and it holds two non-anchor landmarks besides.
+  Wageningen–campus tile the largest at ≈ 204.0 KB gz — the two zones' 1.2 km keep-radius
+  discs both reach into it, and it holds two non-anchor landmarks besides (`onder-de-linden`,
+  `de-bongerd`). Measured per-layer gzip split across all 35 tiles (each tile's layer
+  serialised and gzipped separately, summed): buildings ≈ 481 KB gz (~51 %), ground
+  ≈ 306 KB gz (~32 %), roads ≈ 133 KB gz (~14 %), water ≈ 32 KB gz (~3 %) of the ≈ 949 KB
+  tile total — buildings are the dominant contributor, not ground; recovering the 14 lost
+  `type=building` relation outlines (review finding 1) and attaching/footprinting landmark
+  buildings that used to be dropped (findings 2–3) tipped the balance.
 - Polygons store their outer ring only; holes (courtyards, river islands) are dropped.
-- Budget: total ≤ 1.2 MB gzipped and no single tile above 256 KB gzipped; the build fails
-  otherwise (owner decision 2026-09-04: the total is a repo/CDN figure — a player only
-  downloads the ≤ 9 tiles around them, so the per-tile cap is what bounds download time).
-  See §3.1's real-build note for the constants that got the shipped build under both.
+- Budget: total ≤ 1.2 MB gzipped (shipped at 1138.6 KB) and no single tile above 256 KB
+  gzipped; the build fails otherwise (owner decision 2026-09-04: the total is a repo/CDN
+  figure — a player only downloads the ≤ 9 tiles around them, so the per-tile cap is what
+  bounds download time). See §3.1's real-build note for the constants that got the shipped
+  build under both.
 - `next.config.js` `headers()` adds `Cache-Control: public, max-age=31536000, immutable`
   for `/arena/map/:path*`. Any regeneration bumps the path version (`v1` → `v2`) via a
   constant in `src/lib/cityArena/constants.ts`. The service worker only caches
@@ -532,7 +548,7 @@ Errors follow the house pattern: `Sentry.captureException(err, { tags: { compone
 - New env var `ABLY_API_KEY` (server-only) in Vercel Preview + Production, `.env.example`,
   and `scripts/check-preview-env.ts`.
 - Runtime dependency: `ably`. Dev dependencies: `ws` + `@types/ws` (test relay),
-  `osmtogeojson` (map build).
+  `osm2geojson-lite` (map build).
 - Build-time flag `NEXT_PUBLIC_ARENA_TEST_HOOKS=1` enables test seams (Section 12); never set
   on Vercel.
 

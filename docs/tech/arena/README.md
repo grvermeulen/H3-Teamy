@@ -37,18 +37,23 @@ documented as their PRs land. Design: `docs/superpowers/specs/2026-09-03-city-ar
    size ≤ 1.2 MB (`GZIP_BUDGET_BYTES`, "Asset exceeds gzip budget") and no single tile above
    256 KB gzipped (`TILE_GZIP_BUDGET_BYTES`, "Tile(s) exceed the ... per-tile gzip cap" — the
    build lists the offending tiles by name and size). Either one fails the build. Levers, all in
-   `src/lib/cityArena/mapBuild/assemble.ts`: raise `MIN_BUILDING_AREA_M2` (drops small buildings),
-   lower `BUILDING_KEEP_RADIUS_M` (drops buildings far from a zone centre), or raise
-   `TERRAIN_SIMPLIFY_TOLERANCE_M` (coarser ground/water polygons — for this region's real data,
-   ground polygons are the larger contributor to tile size, not buildings). Record the change in
-   the spec.
+   `src/lib/cityArena/mapBuild/assemble.ts`: raise `MIN_BUILDING_AREA_M2` (drops small buildings)
+   or lower `BUILDING_KEEP_RADIUS_M` (drops buildings far from a zone centre) — buildings are the
+   larger contributor to tile size in the shipped build (measured per-layer gzip split, spec
+   §3.4), not ground, so these two levers matter most; raising `TERRAIN_SIMPLIFY_TOLERANCE_M`
+   (coarser ground/water polygons) helps less. Record the change in the spec.
 4. Regenerating a shipped map — bump `MAP_VERSION` in `src/lib/cityArena/constants.ts`, build into the
    new folder, delete the old folder in the same PR.
 5. `npm run arena:build-map:check` — validates and reports sizes without writing (used by the nightly
-   map-freshness job).
+   map-freshness job planned for PR 7).
 
 ## Testing
 
 - Unit tests co-located under `src/lib/cityArena/mapBuild/` and `scripts/arena/` run in the normal
   `vitest` suite; the network is never touched (injected `fetchImpl`, synthetic fixture
   `fixtures/overpassMini.ts`).
+
+## Licence
+
+The asset is a derived database of OpenStreetMap data © OpenStreetMap contributors, ODbL 1.0
+(https://www.openstreetmap.org/copyright).

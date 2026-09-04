@@ -19,6 +19,7 @@ import {
   buildLandmarkQuery,
   buildRoadsQuery,
 } from "../../src/lib/cityArena/mapBuild/overpassQueries";
+import { tileFileName } from "../../src/lib/cityArena/mapBuild/tiles";
 import type { MapIndex } from "../../src/lib/cityArena/world/mapTypes";
 import { fetchOverpass } from "./overpass";
 
@@ -133,19 +134,23 @@ export async function runBuild(
   log("Stage 4/4: serialise and check budget");
   const tileJson = new Map<string, string>();
   for (const tile of assembled.tiles) {
-    const ref = assembled.index.tiles.find(
-      (candidate) => candidate.x === tile.x && candidate.y === tile.y,
-    );
-    const json = JSON.stringify(tile);
-    if (ref) ref.bytes = Buffer.byteLength(json, "utf8");
-    tileJson.set(ref?.file ?? `tile_${tile.x}_${tile.y}.json`, json);
+    tileJson.set(tileFileName(tile), JSON.stringify(tile));
+  }
+  // Measure tiles first and fold their byte length into `index.tiles[].bytes` before
+  // `assembled.index` itself is serialised, so the written index.json reflects them.
+  const tileFiles = [...tileJson.entries()].map(([name, json]) =>
+    measure(name, json),
+  );
+  const bytesByFile = new Map(tileFiles.map((file) => [file.name, file.bytes]));
+  for (const ref of assembled.index.tiles) {
+    ref.bytes = bytesByFile.get(ref.file) ?? 0;
   }
   const indexJson = JSON.stringify(assembled.index);
   const roadsJson = JSON.stringify(assembled.roads);
   const files: BuiltFile[] = [
     measure("index.json", indexJson),
     measure("roads.json", roadsJson),
-    ...[...tileJson.entries()].map(([name, json]) => measure(name, json)),
+    ...tileFiles,
   ];
   const totalGzipBytes = files.reduce(
     (total, file) => total + file.gzipBytes,

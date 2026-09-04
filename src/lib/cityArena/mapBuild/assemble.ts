@@ -100,10 +100,12 @@ export const BUILDING_SIMPLIFY_TOLERANCE_M = 0.5;
 
 /**
  * Douglas-Peucker tolerance for ground and water rings — background terrain outlines
- * only, never used for buildings. Raised from 0.5 during the real build: ground polygons
- * (farmland/forest/grass over the whole ~10 km bbox, unfiltered by zone proximity by
- * design — spec §3.1) were ~68 % of total tile bytes and the actual dominant gzip-budget
- * cost, not buildings — see spec §3.1 and §3.3.
+ * only, never used for buildings. Raised from 0.5 during the real build to help fit the
+ * gzip budget. Measured per-layer gzip split across the shipped build's 35 tiles (each
+ * tile's layer serialised and gzipped separately, summed): buildings ≈ 481 KB (~51 %),
+ * ground ≈ 306 KB (~32 %), roads ≈ 133 KB (~14 %), water ≈ 32 KB (~3 %) — buildings are
+ * the dominant gzip-budget cost, not ground, so this tolerance alone does not carry the
+ * budget — see spec §3.1 and §3.4.
  */
 export const TERRAIN_SIMPLIFY_TOLERANCE_M = 4;
 
