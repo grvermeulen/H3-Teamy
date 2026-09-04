@@ -54,4 +54,54 @@ describe("drawVisibleChunks", () => {
     expect(stats.missing).toBe(4);
     expect(context.calls).toContain(`fill(${HATCH_BACKGROUND})`);
   });
+
+  it("keeps a tile-less chunk hatched across repeated calls instead of rasterising it, and rasterises it once a tile is loaded", () => {
+    const raster = createStaticRaster((width, height) =>
+      createFakeTarget(width, height),
+    );
+    const camera = createCamera([0, 0], 4);
+    const withoutTile = { raster, tiles: [], landmarks, loadedTileRects: [] };
+    for (let call = 0; call < 5; call++) {
+      const context = createFakeContext();
+      const stats = drawVisibleChunks(context, camera, viewport, withoutTile);
+      expect(stats.rasterised).toBe(false);
+      expect(context.calls).toContain(`fill(${HATCH_BACKGROUND})`);
+    }
+    expect(raster.stats().chunks).toBe(0);
+
+    const withTile = {
+      raster,
+      tiles: [],
+      landmarks,
+      loadedTileRects: [{ minX: -1000, minY: -1000, maxX: 1000, maxY: 1000 }],
+    };
+    const stats = drawVisibleChunks(
+      createFakeContext(),
+      camera,
+      viewport,
+      withTile,
+    );
+    expect(stats.rasterised).toBe(true);
+    expect(raster.stats().chunks).toBe(1);
+  });
+
+  it("clips the hatch to the chunk square so strokes cannot bleed into neighbours", () => {
+    const raster = createStaticRaster(() => null);
+    const source = { raster, tiles: [], landmarks, loadedTileRects: [] };
+    const camera = createCamera([0, 0], 4);
+    const chunkSizePx = 128 * camera.zoom;
+    const context = createFakeContext();
+
+    drawVisibleChunks(context, camera, viewport, source);
+
+    const saveIndex = context.calls.indexOf("save()");
+    const clipRectIndex = context.calls.indexOf(
+      `rect(-384,-448,${chunkSizePx},${chunkSizePx})`,
+    );
+    const clipIndex = context.calls.indexOf("clip()");
+    expect(saveIndex).toBe(0);
+    expect(clipRectIndex).toBeGreaterThan(saveIndex);
+    expect(clipIndex).toBe(clipRectIndex + 1);
+    expect(context.calls).toContain("restore()");
+  });
 });

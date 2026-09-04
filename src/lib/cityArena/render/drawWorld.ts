@@ -50,13 +50,18 @@ function fillChunkArea(
   context.fill();
 }
 
-/** Fills a chunk-sized square with the hatch background, then strokes diagonal hatch lines over it. */
+/** Fills a chunk-sized square with the hatch background, then strokes diagonal hatch lines over
+ *  it, clipped to the chunk square so a line cannot bleed into a neighbouring chunk. */
 function hatchChunkArea(
   context: RasterContext,
   x: number,
   y: number,
   size: number,
 ): void {
+  context.save();
+  context.beginPath();
+  context.rect(x, y, size, size);
+  context.clip();
   fillChunkArea(context, x, y, size, HATCH_BACKGROUND);
   context.beginPath();
   for (let offset = -size; offset < size; offset += HATCH_SPACING_PX) {
@@ -67,6 +72,7 @@ function hatchChunkArea(
   context.lineWidth = HATCH_LINE_WIDTH_PX;
   context.setLineDash([]);
   context.stroke();
+  context.restore();
 }
 
 /** True when a loaded tile rectangle touches the chunk's world rectangle. */
@@ -81,8 +87,9 @@ function chunkHasTile(coord: ChunkCoord, loadedTileRects: Rect[]): boolean {
 }
 
 /**
- * Blits the chunks covering the view (rasterising at most one missing chunk this call), and
- * hatches areas that have no loaded tile behind them.
+ * Blits the chunks covering the view (rasterising at most one missing chunk this call, and only
+ * among chunks that already have a loaded tile behind them), and hatches areas that have no
+ * loaded tile behind them instead of rasterising and caching a blank placeholder for them.
  */
 export function drawVisibleChunks(
   context: RasterContext,
@@ -91,8 +98,11 @@ export function drawVisibleChunks(
   source: WorldDrawSource,
 ): DrawStats {
   const needed = chunksCovering(visibleRect(camera, viewport), camera.zoom);
+  const rasterisable = needed.filter((coord) =>
+    chunkHasTile(coord, source.loadedTileRects),
+  );
   const rasterised = source.raster.rasterizeNext(
-    needed,
+    rasterisable,
     source.tiles,
     source.landmarks,
   );
