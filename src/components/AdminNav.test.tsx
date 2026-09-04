@@ -1,12 +1,19 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { usePathname } from "next/navigation";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AdminNav from "./AdminNav";
 
 vi.mock("next/navigation", () => ({ usePathname: vi.fn() }));
 
 describe("AdminNav", () => {
-  beforeEach(() => vi.mocked(usePathname).mockReturnValue("/admin"));
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(usePathname).mockReturnValue("/admin");
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
 
   it("marks the users tab active on the admin index", () => {
     render(<AdminNav />);

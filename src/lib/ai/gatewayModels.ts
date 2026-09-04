@@ -177,6 +177,7 @@ export function resolveReportExtractGatewayModel(
   const provider = slash >= 0 ? requested.slice(0, slash) : "openai";
   const id = gatewayModelId(requested);
   const invalidForOpenAi =
+    !id ||
     provider !== "openai" ||
     id.startsWith("claude-") ||
     id === "gpt-5-chat-latest" ||

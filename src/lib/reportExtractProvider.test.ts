@@ -47,7 +47,7 @@ describe("reportExtractProvider", () => {
     mockedGenerateObject.mockReset();
     mockedSentryCapture.mockReset();
     process.env = { ...originalEnv };
-    process.env.REPORT_EXTRACT_OPENAI_MODEL = "gpt-5.6-sol";
+    vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "gpt-5.6-sol");
     delete process.env.OPENAI_API_KEY;
     delete process.env.OCR_WORKER_URL;
     delete process.env.OCR_WORKER_TOKEN;
@@ -56,6 +56,7 @@ describe("reportExtractProvider", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     process.env = { ...originalEnv };
   });
 
@@ -80,28 +81,28 @@ describe("reportExtractProvider", () => {
     });
 
     it("defaults REPORT_EXTRACT_OPENAI_MODEL to gpt-5.6-sol when unset", () => {
-      delete process.env.REPORT_EXTRACT_OPENAI_MODEL;
+      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", undefined);
       const cfg = getExtractProviderConfig();
       expect(cfg.openAiModel).toBe("openai/gpt-5.6-sol");
       expect(cfg.openAiModelSubstitutedFrom).toBeUndefined();
     });
 
     it("remaps removed gateway snapshot to gpt-5.6-sol", () => {
-      process.env.REPORT_EXTRACT_OPENAI_MODEL = "gpt-5.2-2025-12-11";
+      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "gpt-5.2-2025-12-11");
       const cfg = getExtractProviderConfig();
       expect(cfg.openAiModel).toBe("openai/gpt-5.6-sol");
       expect(cfg.openAiModelSubstitutedFrom).toBe("gpt-5.2-2025-12-11");
     });
 
     it("remaps the legacy chat alias to gpt-5.6-sol", () => {
-      process.env.REPORT_EXTRACT_OPENAI_MODEL = "gpt-5-chat-latest";
+      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "gpt-5-chat-latest");
       const cfg = getExtractProviderConfig();
       expect(cfg.openAiModel).toBe("openai/gpt-5.6-sol");
       expect(cfg.openAiModelSubstitutedFrom).toBe("gpt-5-chat-latest");
     });
 
     it("remaps claude-sonnet-4-6 to the OpenAI extraction default", () => {
-      process.env.REPORT_EXTRACT_OPENAI_MODEL = "claude-sonnet-4-6";
+      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "claude-sonnet-4-6");
       const cfg = getExtractProviderConfig();
       expect(cfg.openAiModel).toBe("openai/gpt-5.6-sol");
       expect(cfg.openAiModelSubstitutedFrom).toBe("claude-sonnet-4-6");
@@ -229,7 +230,7 @@ describe("reportExtractProvider", () => {
     });
 
     it("uses gpt-5.6-sol when extract model env was a removed snapshot", async () => {
-      process.env.REPORT_EXTRACT_OPENAI_MODEL = "gpt-5.2-2025-12-11";
+      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "gpt-5.2-2025-12-11");
       mockedGenerateObject.mockResolvedValueOnce({
         object: {
           homeTeam: "A",
@@ -253,7 +254,7 @@ describe("reportExtractProvider", () => {
     });
 
     it("replaces a stale Claude extract model with the OpenAI default", async () => {
-      process.env.REPORT_EXTRACT_OPENAI_MODEL = "claude-sonnet-4-6";
+      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "claude-sonnet-4-6");
       mockedGenerateObject.mockResolvedValueOnce({
         object: {
           homeTeam: "A",

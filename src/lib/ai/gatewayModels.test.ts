@@ -166,6 +166,11 @@ describe("getReportExtractGatewayModel", () => {
     expect(getReportExtractGatewayModel()).toBe("openai/gpt-5.6-sol");
   });
 
+  it("remaps an empty OpenAI model id", () => {
+    vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/");
+    expect(getReportExtractGatewayModel()).toBe("openai/gpt-5.6-sol");
+  });
+
   it("remaps a bare Claude env override to the OpenAI extraction default", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "claude-sonnet-4-6");
     expect(getReportExtractGatewayModel()).toBe("openai/gpt-5.6-sol");

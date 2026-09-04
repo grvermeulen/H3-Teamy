@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useEffect, useMemo, useState } from "react";
 import AdminNav from "../../components/AdminNav";
 import {
@@ -38,11 +39,22 @@ async function apiErrorMessage(
   response: Response,
   fallback: string,
 ): Promise<string> {
-  const payload = (await response.json().catch(() => null)) as {
-    message?: string;
-    info?: string;
-  } | null;
+  let payload: { message?: string; info?: string } | null = null;
+  try {
+    payload = (await response.json()) as {
+      message?: string;
+      info?: string;
+    } | null;
+  } catch (error: unknown) {
+    Sentry.captureException(error, {
+      tags: { component: "admin-users", operation: "parse-api-error" },
+    });
+  }
   return payload?.info || payload?.message || fallback;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export default function AdminUsersPage() {
@@ -81,7 +93,10 @@ export default function AdminUsersPage() {
         if (!mounted) return;
         setRows((data?.users || []) as UserRow[]);
         setDirty(false);
-      } catch {
+      } catch (error: unknown) {
+        Sentry.captureException(error, {
+          tags: { component: "admin-users", operation: "load" },
+        });
         if (mounted) setLoadError("Gebruikers laden mislukt.");
       } finally {
         if (mounted) setLoading(false);
@@ -119,7 +134,10 @@ export default function AdminUsersPage() {
       }
       setDirty(false);
       showToast("Gebruikersrollen opgeslagen", "success");
-    } catch {
+    } catch (error: unknown) {
+      Sentry.captureException(error, {
+        tags: { component: "admin-users", operation: "save" },
+      });
       setSaveError("Opslaan mislukt. Controleer je verbinding.");
     } finally {
       setSaving(false);
@@ -131,9 +149,13 @@ export default function AdminUsersPage() {
     setLoadError(null);
     try {
       // Rebuild roster cache for other pages and then reload admin list
-      await fetch("/api/users?refresh=1", { cache: "no-store" }).catch(
-        () => {},
-      );
+      try {
+        await fetch("/api/users?refresh=1", { cache: "no-store" });
+      } catch (error: unknown) {
+        Sentry.captureException(error, {
+          tags: { component: "admin-users", operation: "refresh-cache" },
+        });
+      }
       const res = await fetch("/api/admin/users", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
@@ -143,7 +165,10 @@ export default function AdminUsersPage() {
       } else {
         setLoadError("Gebruikers vernieuwen mislukt.");
       }
-    } catch {
+    } catch (error: unknown) {
+      Sentry.captureException(error, {
+        tags: { component: "admin-users", operation: "refresh" },
+      });
       setLoadError("Gebruikers vernieuwen mislukt.");
     } finally {
       setRefreshing(false);
@@ -182,8 +207,11 @@ export default function AdminUsersPage() {
       const data = await res.json();
       setExtractedJson(data?.result || null);
       setExtractMeta(data?.meta || null);
-    } catch (e: any) {
-      setTestError(`Extractiefout: ${e?.message || String(e)}`);
+    } catch (error: unknown) {
+      Sentry.captureException(error, {
+        tags: { component: "admin-users", operation: "test-extract" },
+      });
+      setTestError(`Extractiefout: ${errorMessage(error)}`);
     } finally {
       setExtracting(false);
     }
@@ -219,8 +247,11 @@ export default function AdminUsersPage() {
       }
       const data = await res.json();
       setGeneratedReport(data?.report?.content || null);
-    } catch (e: any) {
-      setTestError(`Genereerfout: ${e?.message || String(e)}`);
+    } catch (error: unknown) {
+      Sentry.captureException(error, {
+        tags: { component: "admin-users", operation: "test-generate" },
+      });
+      setTestError(`Genereerfout: ${errorMessage(error)}`);
     } finally {
       setGenerating(false);
     }
