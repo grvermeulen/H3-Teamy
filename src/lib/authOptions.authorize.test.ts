@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Prisma } from "@prisma/client";
 import * as Sentry from "@sentry/nextjs";
 import { prisma } from "./db";
-import { authOptions } from "./authOptions";
+import { authOptions, normalizeAuthEnv } from "./authOptions";
 import { createPasskeyExchangeToken } from "./passkeyExchangeToken";
 import { USER_CORE_SELECT, type UserCoreRow } from "./userPrismaSelect";
 import { DbUnavailableError } from "./dbUnavailableError";
@@ -219,5 +219,16 @@ describe("Credentials authorize", () => {
         extra: { prismaCode: "P2002" },
       });
     });
+  });
+});
+
+describe("normalizeAuthEnv", () => {
+  it("removes whitespace accidentally stored around OAuth credentials", () => {
+    expect(normalizeAuthEnv("  oauth-client-id\n")).toBe("oauth-client-id");
+    expect(normalizeAuthEnv("oauth-secret\r\n")).toBe("oauth-secret");
+  });
+
+  it("returns an empty value when the variable is missing", () => {
+    expect(normalizeAuthEnv(undefined)).toBe("");
   });
 });
