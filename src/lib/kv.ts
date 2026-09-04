@@ -5,7 +5,7 @@ import "./envBootstrap";
 import * as Sentry from "@sentry/nextjs";
 import type { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { withPgConnectRetry } from "./prismaConnectRetry";
+import { withPgConnectRetry, shouldFallbackFromPrismaToKv } from "./prismaConnectRetry";
 import {
   PASSWORD_RESET_TTL_SEC,
   normalizePasswordResetToken,
@@ -767,38 +767,38 @@ export async function getUserProfile(
   }
 }
 
-/**
- * Retrieves profiles for multiple users in one batched lookup.
- *
- * @param userIds - User IDs to load profile information for.
- * @returns Mapping from user ID to profile fields for users that were found.
- */
-export async function getUserProfiles(
-  userIds: string[],
+async function listEventRsvpsFromCache(
+  eventId: string,
+): Promise<{ userId: string; status: RsvpStatus }[]> {
+  const redis = await getRedis();
+  if (redis) {
+    const keys: string[] = await redis.keys(`rsvp:*:${eventId}`);
+    if (keys.length === 0) return [];
+    const vals = await redis.mget(keys);
+    return keys.map((k, i) => ({
+      userId: k.split(":")[1]!,
+      status: (vals[i] as RsvpStatus) ?? null,
+    }));
+  }
+  const outArr: { userId: string; status: RsvpStatus }[] = [];
+  for (const [k, v] of memoryStore.entries()) {
+    if (
+      typeof k === "string" &&
+      k.startsWith(`rsvp:`) &&
+      k.endsWith(`:${eventId}`)
+    ) {
+      const userId = k.split(":")[1] || "";
+      const status = (v as RsvpStatus) ?? null;
+      outArr.push({ userId, status });
+    }
+  }
+  return outArr;
+}
+
+async function getUserProfilesFromCache(
+  uniqueIds: string[],
 ): Promise<Record<string, UserProfile>> {
   const out: Record<string, UserProfile> = {};
-  const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
-  if (uniqueIds.length === 0) return out;
-
-  const p = await getPrisma();
-  if (p) {
-    return withPgConnectRetry("getUserProfiles", async () => {
-      const rows = await p.user.findMany({
-        where: { id: { in: uniqueIds } },
-        select: { id: true, firstName: true, lastName: true, email: true },
-      });
-      const result: Record<string, UserProfile> = {};
-      for (const row of rows) {
-        result[row.id] = {
-          firstName: row.firstName,
-          lastName: row.lastName,
-          email: row.email ?? undefined,
-        };
-      }
-      return result;
-    });
-  }
-
   const redis = await getRedis();
   if (redis) {
     const entries = await Promise.all(
@@ -840,43 +840,102 @@ export async function getUserProfiles(
   return out;
 }
 
+async function getUserRsvpStatsFromCache(
+  uniqueIds: string[],
+): Promise<Record<string, { total: number; yes: number }>> {
+  const out: Record<string, { total: number; yes: number }> = {};
+  for (const userId of uniqueIds) {
+    const history = await listUserRsvps(userId).catch((error: unknown) => {
+      Sentry.captureException(error, {
+        extra: { userId, context: "getUserRsvpStats_listUserRsvps" },
+      });
+      return [];
+    });
+    out[userId] = {
+      total: history.length,
+      yes: history.filter((h) => h.status === "yes").length,
+    };
+  }
+  return out;
+}
+
+function addPrismaKvFallbackBreadcrumb(
+  operationName: string,
+  extra?: Record<string, unknown>,
+): void {
+  Sentry.addBreadcrumb({
+    category: "postgres",
+    message: `Prisma mislukt voor ${operationName}; val terug op cache`,
+    level: "warning",
+    data: { operationName, ...extra },
+  });
+}
+
+/**
+ * Retrieves profiles for multiple users in one batched lookup.
+ *
+ * @param userIds - User IDs to load profile information for.
+ * @returns Mapping from user ID to profile fields for users that were found.
+ */
+export async function getUserProfiles(
+  userIds: string[],
+): Promise<Record<string, UserProfile>> {
+  const out: Record<string, UserProfile> = {};
+  const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+  if (uniqueIds.length === 0) return out;
+
+  const p = await getPrisma();
+  if (p) {
+    try {
+      return await withPgConnectRetry("getUserProfiles", async () => {
+        const rows = await p.user.findMany({
+          where: { id: { in: uniqueIds } },
+          select: { id: true, firstName: true, lastName: true, email: true },
+        });
+        const result: Record<string, UserProfile> = {};
+        for (const row of rows) {
+          result[row.id] = {
+            firstName: row.firstName,
+            lastName: row.lastName,
+            email: row.email ?? undefined,
+          };
+        }
+        return result;
+      });
+    } catch (error: unknown) {
+      if (!shouldFallbackFromPrismaToKv(error)) {
+        throw error;
+      }
+      addPrismaKvFallbackBreadcrumb("getUserProfiles", {
+        userCount: uniqueIds.length,
+      });
+    }
+  }
+
+  return getUserProfilesFromCache(uniqueIds);
+}
+
 export async function listEventRsvps(
   eventId: string,
 ): Promise<{ userId: string; status: RsvpStatus }[]> {
   const p = await getPrisma();
   if (p) {
-    return withPgConnectRetry("listEventRsvps", async () => {
-      const rows = await p.rsvp.findMany({ where: { eventId } });
-      return rows.map((r: { userId: string; status: unknown }) => ({
-        userId: r.userId,
-        status: (r.status as RsvpStatus) ?? null,
-      }));
-    });
-  }
-  const redis = await getRedis();
-  if (redis) {
-    const keys: string[] = await redis.keys(`rsvp:*:${eventId}`);
-    if (keys.length === 0) return [];
-    const vals = await redis.mget(keys);
-    return keys.map((k, i) => ({
-      userId: k.split(":")[1]!,
-      status: (vals[i] as RsvpStatus) ?? null,
-    }));
-  }
-  const out: { userId: string; status: RsvpStatus }[] = {} as any;
-  const outArr: { userId: string; status: RsvpStatus }[] = [];
-  for (const [k, v] of memoryStore.entries()) {
-    if (
-      typeof k === "string" &&
-      k.startsWith(`rsvp:`) &&
-      k.endsWith(`:${eventId}`)
-    ) {
-      const userId = k.split(":")[1] || "";
-      const status = (v as RsvpStatus) ?? null;
-      outArr.push({ userId, status });
+    try {
+      return await withPgConnectRetry("listEventRsvps", async () => {
+        const rows = await p.rsvp.findMany({ where: { eventId } });
+        return rows.map((r: { userId: string; status: unknown }) => ({
+          userId: r.userId,
+          status: (r.status as RsvpStatus) ?? null,
+        }));
+      });
+    } catch (error: unknown) {
+      if (!shouldFallbackFromPrismaToKv(error)) {
+        throw error;
+      }
+      addPrismaKvFallbackBreadcrumb("listEventRsvps", { eventId });
     }
   }
-  return outArr;
+  return listEventRsvpsFromCache(eventId);
 }
 
 // NEW: List all RSVPs for a given user (used for attendance badge %)
@@ -927,38 +986,35 @@ export async function getUserRsvpStats(
 
   const p = await getPrisma();
   if (p) {
-    return withPgConnectRetry("getUserRsvpStats", async () => {
-      const rows = await p.rsvp.findMany({
-        where: { userId: { in: uniqueIds } },
-        select: { userId: true, status: true },
+    try {
+      return await withPgConnectRetry("getUserRsvpStats", async () => {
+        const rows = await p.rsvp.findMany({
+          where: { userId: { in: uniqueIds } },
+          select: { userId: true, status: true },
+        });
+        const result: Record<string, { total: number; yes: number }> = {};
+        for (const userId of uniqueIds) {
+          result[userId] = { total: 0, yes: 0 };
+        }
+        for (const row of rows) {
+          const current = result[row.userId] || { total: 0, yes: 0 };
+          current.total += 1;
+          if (row.status === "yes") current.yes += 1;
+          result[row.userId] = current;
+        }
+        return result;
       });
-      const result: Record<string, { total: number; yes: number }> = {};
-      for (const userId of uniqueIds) {
-        result[userId] = { total: 0, yes: 0 };
+    } catch (error: unknown) {
+      if (!shouldFallbackFromPrismaToKv(error)) {
+        throw error;
       }
-      for (const row of rows) {
-        const current = result[row.userId] || { total: 0, yes: 0 };
-        current.total += 1;
-        if (row.status === "yes") current.yes += 1;
-        result[row.userId] = current;
-      }
-      return result;
-    });
+      addPrismaKvFallbackBreadcrumb("getUserRsvpStats", {
+        userCount: uniqueIds.length,
+      });
+    }
   }
 
-  for (const userId of uniqueIds) {
-    const history = await listUserRsvps(userId).catch((error: unknown) => {
-      Sentry.captureException(error, {
-        extra: { userId, context: "getUserRsvpStats_listUserRsvps" },
-      });
-      return [];
-    });
-    out[userId] = {
-      total: history.length,
-      yes: history.filter((h) => h.status === "yes").length,
-    };
-  }
-  return out;
+  return getUserRsvpStatsFromCache(uniqueIds);
 }
 
 // Match Reports

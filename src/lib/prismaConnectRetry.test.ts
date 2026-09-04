@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Prisma } from "@prisma/client";
 import * as Sentry from "@sentry/nextjs";
 import {
+  isPrismaCredentialError,
   isTransientPostgresConnectError,
+  shouldFallbackFromPrismaToKv,
   withPgConnectRetry,
 } from "./prismaConnectRetry";
 import { DbUnavailableError } from "./dbUnavailableError";
@@ -57,6 +59,51 @@ describe("isTransientPostgresConnectError", () => {
 
   it("returns false for unrelated errors", () => {
     expect(isTransientPostgresConnectError(new Error("unique violation"))).toBe(
+      false,
+    );
+  });
+});
+
+describe("isPrismaCredentialError", () => {
+  it("returns true for Prisma P1000", () => {
+    const err = new Prisma.PrismaClientKnownRequestError("auth failed", {
+      code: "P1000",
+      clientVersion: "test",
+    });
+    expect(isPrismaCredentialError(err)).toBe(true);
+  });
+
+  it("returns true for authentication failed message", () => {
+    expect(
+      isPrismaCredentialError(
+        new Error(
+          "Authentication failed against the database server, the provided database credentials for `(not available)` are not valid",
+        ),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("shouldFallbackFromPrismaToKv", () => {
+  it("returns true for credential, transient, and DbUnavailable errors", () => {
+    expect(
+      shouldFallbackFromPrismaToKv(
+        new Prisma.PrismaClientKnownRequestError("x", {
+          code: "P1000",
+          clientVersion: "test",
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      shouldFallbackFromPrismaToKv(
+        new Prisma.PrismaClientKnownRequestError("x", {
+          code: "P1001",
+          clientVersion: "test",
+        }),
+      ),
+    ).toBe(true);
+    expect(shouldFallbackFromPrismaToKv(new DbUnavailableError())).toBe(true);
+    expect(shouldFallbackFromPrismaToKv(new Error("unique violation"))).toBe(
       false,
     );
   });

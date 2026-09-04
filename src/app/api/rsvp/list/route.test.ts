@@ -105,4 +105,19 @@ describe("GET /api/rsvp/list", () => {
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(error);
   });
+
+  it("returns 503 without Sentry when the database is temporarily unavailable", async () => {
+    const { DbUnavailableError } = await import("../../../../lib/dbUnavailableError");
+    vi.mocked(listEventRsvps).mockRejectedValue(new DbUnavailableError());
+
+    const response = await GET(
+      makeRequest("http://localhost/api/rsvp/list?eventId=wedstrijd-4"),
+    );
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: "Database tijdelijk niet beschikbaar. Probeer het later opnieuw.",
+    });
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
 });
