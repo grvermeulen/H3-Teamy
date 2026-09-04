@@ -1,3 +1,5 @@
+// @vitest-environment node
+// These tests build Request bodies with FormData/File; Node's Request rejects jsdom's File.
 import { describe, expect, it } from "vitest";
 import {
   isInvalidMultipartBodyError,
@@ -72,7 +74,10 @@ describe("parseMultipartFormData", () => {
 
   it("returns parsed form data for valid multipart requests", async () => {
     const form = new FormData();
-    form.set("image", new File(["pixels"], "match.jpg", { type: "image/jpeg" }));
+    form.set(
+      "image",
+      new File(["pixels"], "match.jpg", { type: "image/jpeg" }),
+    );
 
     const req = new Request("http://localhost/api/report/extract", {
       method: "POST",
