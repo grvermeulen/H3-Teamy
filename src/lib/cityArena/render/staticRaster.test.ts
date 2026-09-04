@@ -3,10 +3,12 @@ import type { CanvasFactory } from "./canvasTypes";
 import type { LandmarkLookup } from "./drawStatic";
 import {
   CHUNK_METRES,
+  RASTER_BUDGET_BYTES,
   chunkKey,
   chunkRect,
   chunksCovering,
   createStaticRaster,
+  rasterBudgetForViewport,
 } from "./staticRaster";
 import { createFakeTarget } from "./testing/fakeContext";
 
@@ -91,5 +93,29 @@ describe("createStaticRaster", () => {
     raster.ensureChunk({ zoom: 4, chunkX: 0, chunkY: 0 }, [], landmarks);
     raster.dispose();
     expect(raster.stats()).toEqual({ chunks: 0, bytes: 0 });
+  });
+});
+
+describe("rasterBudgetForViewport", () => {
+  it("keeps the default budget for a small phone-sized viewport", () => {
+    expect(rasterBudgetForViewport({ width: 360, height: 640 }, 4)).toBe(
+      RASTER_BUDGET_BYTES,
+    );
+  });
+
+  it("grows past the default and the raw working set for a wide desktop viewport", () => {
+    const zoom = 8;
+    const chunkPx = CHUNK_METRES * zoom;
+    const workingSetBytes =
+      (Math.ceil(2560 / chunkPx) + 1) *
+      (Math.ceil(1440 / chunkPx) + 1) *
+      chunkPx *
+      chunkPx *
+      4;
+
+    const budget = rasterBudgetForViewport({ width: 2560, height: 1440 }, zoom);
+
+    expect(budget).toBeGreaterThan(RASTER_BUDGET_BYTES);
+    expect(budget).toBeGreaterThan(workingSetBytes);
   });
 });

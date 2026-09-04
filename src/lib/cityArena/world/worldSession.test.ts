@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Rect } from "../mapBuild/geometry";
+import type { LandmarkLookup } from "../render/drawStatic";
 import { createFakeTarget } from "../render/testing/fakeContext";
 import type { DecodedTile } from "./decode";
 import { createMapLoader } from "./mapLoader";
@@ -93,6 +94,44 @@ describe("createWorldSession", () => {
     expect(invalidate).toHaveBeenCalled();
     session.dispose();
     expect(session.tiles()).toHaveLength(0);
+  });
+
+  it("sizes the raster's eviction budget from rasterBudgetBytes", async () => {
+    const loader = createMapLoader({
+      baseUrl: "/map",
+      fetchImpl,
+      sleep: async () => {},
+    });
+    const budgetBytes = 2 * 512 * 512 * 4; // room for exactly two zoom-4 chunks
+    const session = createWorldSession({
+      loader,
+      canvasFactory: (width, height) => createFakeTarget(width, height),
+      rasterBudgetBytes: budgetBytes,
+    });
+    await session.ready();
+
+    const landmarks: LandmarkLookup = new Map();
+    session.raster.ensureChunk(
+      { zoom: 4, chunkX: 0, chunkY: 0 },
+      [],
+      landmarks,
+    );
+    session.raster.ensureChunk(
+      { zoom: 4, chunkX: 1, chunkY: 0 },
+      [],
+      landmarks,
+    );
+    session.raster.ensureChunk(
+      { zoom: 4, chunkX: 2, chunkY: 0 },
+      [],
+      landmarks,
+    );
+
+    expect(session.raster.stats().bytes).toBeLessThanOrEqual(budgetBytes);
+    expect(
+      session.raster.getChunk({ zoom: 4, chunkX: 0, chunkY: 0 }),
+    ).toBeUndefined();
+    session.dispose();
   });
 });
 

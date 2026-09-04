@@ -11,6 +11,8 @@ export const CHUNK_METRES = 128;
 export const RASTER_BUDGET_BYTES = 40 * 1024 * 1024;
 /** Bytes used per rasterised pixel (RGBA, one byte per channel). */
 const BYTES_PER_PIXEL_RGBA = 4;
+/** Headroom multiplier applied to the visible chunk working set when sizing a viewport's budget. */
+export const RASTER_WORKING_SET_HEADROOM = 1.5;
 
 /** A chunk address. */
 export type ChunkCoord = { zoom: ZoomLevel; chunkX: number; chunkY: number };
@@ -80,6 +82,31 @@ export function chunksCovering(rect: Rect, zoom: ZoomLevel): ChunkCoord[] {
     );
   return coords.sort(
     (left, right) => distanceFromCentre(left) - distanceFromCentre(right),
+  );
+}
+
+/** Number of chunks spanning one axis of a `lengthPx`-sized viewport at a chunk pixel size of `chunkPx`. */
+function chunksAcrossAxis(lengthPx: number, chunkPx: number): number {
+  return Math.ceil(lengthPx / chunkPx) + 1;
+}
+
+/**
+ * Raster budget (bytes) that comfortably holds every chunk visible through a `viewport`-sized
+ * canvas at `zoom`, so a wide desktop viewport is not squeezed by the fixed default budget while
+ * a small one still gets that default. Never smaller than {@link RASTER_BUDGET_BYTES}.
+ */
+export function rasterBudgetForViewport(
+  viewport: { width: number; height: number },
+  zoom: ZoomLevel,
+): number {
+  const chunkPx = CHUNK_METRES * zoom;
+  const chunksWide = chunksAcrossAxis(viewport.width, chunkPx);
+  const chunksTall = chunksAcrossAxis(viewport.height, chunkPx);
+  const workingSetBytes =
+    chunksWide * chunksTall * chunkPx * chunkPx * BYTES_PER_PIXEL_RGBA;
+  return Math.max(
+    RASTER_BUDGET_BYTES,
+    workingSetBytes * RASTER_WORKING_SET_HEADROOM,
   );
 }
 

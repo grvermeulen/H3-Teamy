@@ -13,6 +13,8 @@ import { decodeRoadGraph, type RoadGraph } from "./roadGraph";
 export type WorldSessionOptions = {
   loader: MapLoader;
   canvasFactory: CanvasFactory;
+  /** Overrides the raster cache's byte budget; defaults to the raster's own fixed budget. */
+  rasterBudgetBytes?: number;
 };
 
 /** Resolved once the map index and the decoded road graph are both available. */
@@ -146,7 +148,10 @@ function createWorldSessionState(
   const state: WorldSessionState = {
     loader: options.loader,
     collision: createCollisionGrid(),
-    raster: createStaticRaster(options.canvasFactory),
+    raster: createStaticRaster(
+      options.canvasFactory,
+      options.rasterBudgetBytes,
+    ),
     synced: new Map<string, DecodedTile>(),
     landmarks: new Map<string, LandmarkInfo>(),
     readyPromise: null,

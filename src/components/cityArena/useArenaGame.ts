@@ -26,6 +26,7 @@ import {
 } from "@/lib/cityArena/render/camera";
 import { createDomCanvasFactory } from "@/lib/cityArena/render/canvasTypes";
 import { renderScene } from "@/lib/cityArena/render/renderScene";
+import { rasterBudgetForViewport } from "@/lib/cityArena/render/staticRaster";
 import {
   createFreeRoamState,
   stepFreeRoam,
@@ -186,12 +187,25 @@ function routeToNearestLandmark(runtime: Runtime): number | null {
  * loader itself already reports the error to Sentry (see `mapLoader.ts`'s `recordTileFailure`),
  * so the hook must not report it again under a second, high-cardinality tag.
  */
-function createArenaSession(onFailed: () => void): WorldSession {
+function createArenaSession(
+  onFailed: () => void,
+  rasterBudgetBytes: number | undefined,
+): WorldSession {
   const loader = createMapLoader({ onError: onFailed });
   return createWorldSession({
     loader,
     canvasFactory: createDomCanvasFactory(),
+    rasterBudgetBytes,
   });
+}
+
+/** Raster budget sized to the canvas's current layout box, or `undefined` before it has one. */
+function rasterBudgetForCanvas(
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+): number | undefined {
+  const rect = canvasRef.current?.getBoundingClientRect();
+  if (!rect) return undefined;
+  return rasterBudgetForViewport(rect, zoomLevelForViewport(rect.width));
 }
 
 /** A pseudo-random spawn point inside `zone`, reseeded from the zone key and the clock each call. */
@@ -318,7 +332,10 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
   useEffect(() => {
     let cancelled = false;
     const isCancelled: IsCancelled = () => cancelled;
-    const session = createArenaSession(() => setFailed(true));
+    const session = createArenaSession(
+      () => setFailed(true),
+      rasterBudgetForCanvas(canvasRef),
+    );
     bootSession(session, zoneKey, canvasRef, runtimeRef, isCancelled)
       .then((booted) =>
         finishBoot(session, booted, isCancelled, {
