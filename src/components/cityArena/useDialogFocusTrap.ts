@@ -12,14 +12,17 @@ export function useDialogFocusTrap(
   onClose: () => void,
 ): void {
   useLayoutEffect(() => {
-    dialogRef.current?.focus();
-  }, [dialogRef]);
-
-  useEffect(() => {
     const previouslyFocused =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
+    dialogRef.current?.focus();
+    return () => {
+      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+    };
+  }, [dialogRef]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.code === "Escape" || event.key === "Escape") {
         event.preventDefault();
@@ -42,9 +45,6 @@ export function useDialogFocusTrap(
       }
     };
     document.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown, true);
-      previouslyFocused?.focus();
-    };
+    return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [dialogRef, onClose]);
 }

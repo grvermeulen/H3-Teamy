@@ -29,4 +29,19 @@ describe("useDialogFocusTrap", () => {
     fireEvent.keyDown(document, { code: "Escape", key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("restores focus to the previously focused trigger once the dialog unmounts", () => {
+    const trigger = document.createElement("button");
+    document.body.appendChild(trigger);
+    trigger.focus();
+    expect(document.activeElement).toBe(trigger);
+
+    const { unmount } = render(<Dialog onClose={vi.fn()} />);
+    expect(document.activeElement).toBe(screen.getByRole("dialog"));
+
+    unmount();
+    expect(document.activeElement).toBe(trigger);
+
+    trigger.remove();
+  });
 });
