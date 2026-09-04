@@ -753,20 +753,20 @@ scripts/arena/                build-map.ts · buildMap.ts · overpass.ts (I/O on
 public/arena/map/v1/          index.json · roads.json · tile_x_y.json
 public/branding/              wasted-screen.{webp,jpg} (death screen; source assets/branding/wasted-screen.png)
 src/lib/cityArena/
-  constants.ts · types.ts · schemas.ts · storage.ts
+  constants.ts · schemas.ts · storage.ts · debugFlag.ts · debugMetrics.ts (types.ts folded into sim/types)
   mapBuild/  geometry · osmTypes · overpassQueries · landmarks.config · landmarks · roads · areas · zones · tiles · assemble · errors · fixtures/overpassMini
-  world/     mapLoader · collisionGrid · roadGraph · zone · projection
-  sim/       state · step · player · vehicle · weapons · bullets · peds · cops · pickups · spawn · round · bots · invariants
+  world/     mapTypes · projection · decode · lru · mapLoader · collisionGrid · roadGraph · nearestRoad · zone · worldSession
+  sim/       types · rng · player · freeRoam (PR 4: state · step · vehicle · weapons · bullets · peds · cops · pickups · spawn · round · bots · invariants)
   net/       transport · ablyTransport · memoryTransport · wsRelayTransport · messages · election · hostLoop · clientLoop · roomCode · clock
-  input/     inputState · keyboardMouse · touchSticks · haptics
-  render/    camera · staticRaster · drawEntities · radar · particles · feedback · deathOverlay · splitScreen (slice 2)
+  input/     inputState · keyboard · touchStick (PR 6: keyboardMouse · haptics)
+  render/    palette · camera · streetLabels · canvasTypes · drawStatic · staticRaster · drawWorld · drawEntities · renderScene · testing/fakeContext (PR 4+: radar · particles · feedback · deathOverlay · splitScreen)
   audio/     sfx
   test/      hooks (window.__arena) · sessionLog
 src/lib/ably/server.ts
 src/lib/services/arenaService.ts (+ .test.ts)
 src/lib/schemas/arena.ts (+ .test.ts)
 src/app/api/arena/            realtime-token/route.ts · rooms/route.ts · matches/route.ts · leaderboard/route.ts
-src/components/cityArena/     CityArenaLauncher · CityArenaOverlay · Lobby · MatchView · Hud · TouchControls · DeathOverlay
+src/components/cityArena/     CityArenaLaunchIcon · CityArenaLauncher · CityArenaOverlay · useArenaGame · useDialogFocusTrap · TouchStick · ArenaLoadingScreen · ArenaDebugOverlay (PR 3+: Lobby · MatchView · Hud · DeathOverlay)
                               Scoreboard · Leaderboard · ConnectionBanner · useArenaSession
 e2e/arena/                    dsl.ts · budgets.ts · fixtures/auth.ts · fixtures/touch.ts · *.spec.ts
 playwright.arena.config.ts · docker-compose.e2e.yml
@@ -823,4 +823,4 @@ naar het strijdgebied! · Scorebord · Nieuwe host: {naam} · Verbinding verbrok
 verbinden · Kon geen verbinding maken, probeer het later opnieuw · Dit potje bestaat niet
 meer · Potje is vol · Kaart laden… · Kaart kon niet volledig laden · Uitslag wordt later
 opgeslagen · Geluid · Trillen · Enkele stick · Besturing · Potje verlaten · Kaart ©
-OpenStreetMap-bijdragers.
+OpenStreetMap-bijdragers. PR 2 additions: Startpunt · Ga naar · Spel laden… · Sluiten.

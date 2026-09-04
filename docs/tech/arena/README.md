@@ -57,3 +57,18 @@ documented as their PRs land. Design: `docs/superpowers/specs/2026-09-03-city-ar
 
 The asset is a derived database of OpenStreetMap data © OpenStreetMap contributors, ODbL 1.0
 (https://www.openstreetmap.org/copyright).
+
+## Runtime (PR 2 — free-roam)
+
+- Launcher: `src/components/cityArena/CityArenaLauncher.tsx` (card under Space Invaders in `EventList`), overlay
+  `CityArenaOverlay.tsx` (dynamic import), loop/HUD state in `useArenaGame.ts`.
+- World: `src/lib/cityArena/world/` — `mapLoader` streams the 3 × 3 tiles around the player (≤ 9 resident),
+  `worldSession` keeps `collisionGrid` (16 m cells, circle push-out) and the `render/staticRaster` chunk cache
+  (128 m chunks, ≤ 40 MB) in sync; `roadGraph` decodes `roads.json` with A\* (used by the debug overlay now,
+  by cops in PR 4); `zone` resolves discs and spawn nodes.
+- Rendering: `render/renderScene` draws one viewport (chunk blits → zone ring → player); chunks are painted by
+  `render/drawStatic` (ground → water → pavements → roads → centre lines → buildings → street/landmark labels).
+- Input: WASD/arrows (`input/keyboard`), floating stick on coarse pointers (`input/touchStick` + `TouchStick`).
+- Debug: open the overlay with `?debug=1` in the URL (non-production builds) for fps/p95, chunk and tile counts,
+  camera/player positions and the route length to the nearest landmark.
+- Settings: `localStorage["h3-arena-settings-v1"]` (`lastZone`).
