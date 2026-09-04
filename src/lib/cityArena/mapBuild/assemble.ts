@@ -4,6 +4,7 @@ import {
   type MapLandmark,
   type MapRoads,
   type MapTile,
+  type MapZone,
 } from "../world/mapTypes";
 import {
   MAP_ORIGIN,
@@ -20,6 +21,7 @@ import {
   polygonArea,
   polygonCentroid,
   simplifyRing,
+  type Rect,
 } from "./geometry";
 import type { LandmarkConfig } from "./landmarks.config";
 import { matchLandmarks } from "./landmarks";
@@ -47,6 +49,7 @@ import {
   indexObstacles,
   zoneCentresFromLandmarks,
   type ProjectedLandmark,
+  type ZoneCentre,
 } from "./zones";
 
 /** Overpass responses for the four query stages plus configuration. */
@@ -217,6 +220,12 @@ function assertZoneAnchorsAttached(
   }
 }
 
+/**
+ * Attachment relies on the landmark centre lying inside its building's ring, or within
+ * {@link LANDMARK_ATTACH_DISTANCE_M} of it. This fails only for a footprint so concave that
+ * its centroid falls outside the ring; all ten current landmarks attach (verified
+ * 2026-09-04).
+ */
 function attachLandmarks(
   buildings: ProjectedBuilding[],
   landmarks: StyledLandmark[],
@@ -239,8 +248,11 @@ function attachLandmarks(
   }
 }
 
-/** Pure end-to-end transform from Overpass responses to the asset structures. */
-export function assembleMap(input: AssembleInput): AssembledMap {
+/** Matches configured landmarks against the Overpass response and derives the zone centres. */
+function resolveLandmarks(input: AssembleInput): {
+  landmarks: StyledLandmark[];
+  zoneCentres: ZoneCentre[];
+} {
   const match = matchLandmarks(input.landmarkOsm, input.config);
   if (match.errors.length > 0) throw new MapBuildError(match.errors.join("\n"));
 
@@ -252,8 +264,23 @@ export function assembleMap(input: AssembleInput): AssembledMap {
     zoneAnchor: matched.config.zoneAnchor,
     footprint: matched.footprint,
   }));
-  const zoneCentres = zoneCentresFromLandmarks(landmarks);
+  return { landmarks, zoneCentres: zoneCentresFromLandmarks(landmarks) };
+}
 
+/**
+ * Projects buildings/water/ground from the area responses, attaches landmarks (by
+ * proximity, then by footprint synthesis), and applies the building keep filter.
+ */
+function buildStaticGeometry(
+  input: AssembleInput,
+  landmarks: StyledLandmark[],
+  zoneCentres: ZoneCentre[],
+): {
+  keptBuildings: ProjectedBuilding[];
+  water: ProjectedWater[];
+  ground: ProjectedGround[];
+  unattachedLandmarks: string[];
+} {
   const areas = extractAreas(input.areasOsm);
   const buildingAreas = extractAreas(input.buildingsOsm);
   const buildings = projectBuildingRings(buildingAreas.buildings);
@@ -278,6 +305,47 @@ export function assembleMap(input: AssembleInput): AssembledMap {
     }))
     .filter((feature) => feature.ring.length >= 3);
 
+  return { keptBuildings, water, ground, unattachedLandmarks };
+}
+
+/** Assembles the `index.json` structure (tile byte counts are filled in later by the writer). */
+function buildIndex(
+  input: AssembleInput,
+  landmarks: StyledLandmark[],
+  tiles: MapTile[],
+  zones: MapZone[],
+  bounds: Rect,
+): MapIndex {
+  return {
+    version: 1,
+    generatedAt: input.generatedAt,
+    origin: { lat: MAP_ORIGIN.lat, lon: MAP_ORIGIN.lon },
+    unitsPerMetre: MAP_UNITS_PER_METRE,
+    bounds: boundsToUnits(bounds),
+    tileSize: toUnits(TILE_SIZE_M),
+    tiles: tiles.map((tile) => ({
+      x: tile.x,
+      y: tile.y,
+      file: tileFileName(tile),
+      bytes: 0,
+    })),
+    zones,
+    landmarks: landmarks.map((landmark) => ({
+      key: landmark.key,
+      name: landmark.name,
+      style: landmark.style,
+      center: [toUnits(landmark.center[0]), toUnits(landmark.center[1])],
+      tile: tileCoordFor(landmark.center, bounds),
+    })),
+  };
+}
+
+/** Pure end-to-end transform from Overpass responses to the asset structures. */
+export function assembleMap(input: AssembleInput): AssembledMap {
+  const { landmarks, zoneCentres } = resolveLandmarks(input);
+  const { keptBuildings, water, ground, unattachedLandmarks } =
+    buildStaticGeometry(input, landmarks, zoneCentres);
+
   const ways = parseRoadWays(input.roadsOsm);
   const nodeCoords = projectNodeCoordinates(input.roadsOsm);
   const graph = buildRoadGraph(ways, nodeCoords);
@@ -300,27 +368,6 @@ export function assembleMap(input: AssembleInput): AssembledMap {
     water,
   );
 
-  const index: MapIndex = {
-    version: 1,
-    generatedAt: input.generatedAt,
-    origin: { lat: MAP_ORIGIN.lat, lon: MAP_ORIGIN.lon },
-    unitsPerMetre: MAP_UNITS_PER_METRE,
-    bounds: boundsToUnits(bounds),
-    tileSize: toUnits(TILE_SIZE_M),
-    tiles: tiles.map((tile) => ({
-      x: tile.x,
-      y: tile.y,
-      file: tileFileName(tile),
-      bytes: 0,
-    })),
-    zones,
-    landmarks: landmarks.map((landmark) => ({
-      key: landmark.key,
-      name: landmark.name,
-      style: landmark.style,
-      center: [toUnits(landmark.center[0]), toUnits(landmark.center[1])],
-      tile: tileCoordFor(landmark.center, bounds),
-    })),
-  };
+  const index = buildIndex(input, landmarks, tiles, zones, bounds);
   return { index, roads, tiles, unattachedLandmarks };
 }

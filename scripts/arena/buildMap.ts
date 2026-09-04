@@ -2,7 +2,10 @@
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-import { assembleMap } from "../../src/lib/cityArena/mapBuild/assemble";
+import {
+  assembleMap,
+  type AssembledMap,
+} from "../../src/lib/cityArena/mapBuild/assemble";
 import { MapBuildError } from "../../src/lib/cityArena/mapBuild/errors";
 import {
   LANDMARKS,
@@ -12,6 +15,7 @@ import { matchLandmarks } from "../../src/lib/cityArena/mapBuild/landmarks";
 import {
   osmElementId,
   type LatLon,
+  type OverpassJson,
 } from "../../src/lib/cityArena/mapBuild/osmTypes";
 import {
   buildAreasQuery,
@@ -75,12 +79,17 @@ export function findOversizedTiles(
   );
 }
 
-/** Fetches, assembles, validates and (unless `check`) writes the map asset. */
-export async function runBuild(
+/** Stage 1 (landmarks, matched and validated) and stage 2 (roads/areas/buildings) fetches. */
+async function fetchStages(
   options: RunBuildOptions,
-): Promise<RunBuildResult> {
-  const log = options.log ?? ((line: string) => console.log(line));
-  const config = options.config ?? LANDMARKS;
+  config: LandmarkConfig[],
+  log: (line: string) => void,
+): Promise<{
+  landmarkOsm: OverpassJson;
+  roadsOsm: OverpassJson;
+  areasOsm: OverpassJson;
+  buildingsOsm: OverpassJson;
+}> {
   const fetchOptions = {
     cacheDir: options.cacheDir,
     refresh: options.refresh,
@@ -117,21 +126,16 @@ export async function runBuild(
     ),
   ]);
 
-  log("Stage 3/4: assemble");
-  const generatedAt = (options.now ?? (() => new Date()))().toISOString();
-  const assembled = assembleMap({
-    landmarkOsm,
-    roadsOsm,
-    areasOsm,
-    buildingsOsm,
-    config,
-    generatedAt,
-  });
-  for (const key of assembled.unattachedLandmarks) {
-    log(`Landmark without building: ${key}`);
-  }
+  return { landmarkOsm, roadsOsm, areasOsm, buildingsOsm };
+}
 
-  log("Stage 4/4: serialise and check budget");
+/** Serialises tiles and index/roads JSON, folding tile byte counts into the index first. */
+function serialiseAsset(assembled: AssembledMap): {
+  tileJson: Map<string, string>;
+  indexJson: string;
+  roadsJson: string;
+  files: BuiltFile[];
+} {
   const tileJson = new Map<string, string>();
   for (const tile of assembled.tiles) {
     tileJson.set(tileFileName(tile), JSON.stringify(tile));
@@ -152,6 +156,14 @@ export async function runBuild(
     measure("roads.json", roadsJson),
     ...tileFiles,
   ];
+  return { tileJson, indexJson, roadsJson, files };
+}
+
+/** Logs per-file sizes and enforces the per-tile and total gzip budgets; throws over cap. */
+function enforceBudgets(
+  files: BuiltFile[],
+  log: (line: string) => void,
+): number {
   const totalGzipBytes = files.reduce(
     (total, file) => total + file.gzipBytes,
     0,
@@ -179,20 +191,71 @@ export async function runBuild(
       `Asset exceeds gzip budget: ${totalGzipBytes} > ${GZIP_BUDGET_BYTES} bytes`,
     );
   }
+  return totalGzipBytes;
+}
+
+/** Clears stale tile files and writes the index/roads/tile JSON to `outDir`. */
+async function writeAsset(
+  outDir: string,
+  tileJson: Map<string, string>,
+  indexJson: string,
+  roadsJson: string,
+  fileCount: number,
+  log: (line: string) => void,
+): Promise<void> {
+  await mkdir(outDir, { recursive: true });
+  for (const existing of await readdir(outDir)) {
+    if (existing.startsWith("tile_") && existing.endsWith(".json"))
+      await rm(join(outDir, existing));
+  }
+  await writeFile(join(outDir, "index.json"), indexJson);
+  await writeFile(join(outDir, "roads.json"), roadsJson);
+  for (const [name, json] of tileJson)
+    await writeFile(join(outDir, name), json);
+  log(`Wrote ${fileCount} files to ${outDir}`);
+}
+
+/** Fetches, assembles, validates and (unless `check`) writes the map asset. */
+export async function runBuild(
+  options: RunBuildOptions,
+): Promise<RunBuildResult> {
+  const log = options.log ?? ((line: string) => console.log(line));
+  const config = options.config ?? LANDMARKS;
+  const { landmarkOsm, roadsOsm, areasOsm, buildingsOsm } = await fetchStages(
+    options,
+    config,
+    log,
+  );
+
+  log("Stage 3/4: assemble");
+  const generatedAt = (options.now ?? (() => new Date()))().toISOString();
+  const assembled = assembleMap({
+    landmarkOsm,
+    roadsOsm,
+    areasOsm,
+    buildingsOsm,
+    config,
+    generatedAt,
+  });
+  for (const key of assembled.unattachedLandmarks) {
+    log(`Landmark without building: ${key}`);
+  }
+
+  log("Stage 4/4: serialise and check budget");
+  const { tileJson, indexJson, roadsJson, files } = serialiseAsset(assembled);
+  const totalGzipBytes = enforceBudgets(files, log);
   if (options.check) {
     log("Check mode: nothing written");
     return { totalGzipBytes, files, index: assembled.index };
   }
 
-  await mkdir(options.outDir, { recursive: true });
-  for (const existing of await readdir(options.outDir)) {
-    if (existing.startsWith("tile_") && existing.endsWith(".json"))
-      await rm(join(options.outDir, existing));
-  }
-  await writeFile(join(options.outDir, "index.json"), indexJson);
-  await writeFile(join(options.outDir, "roads.json"), roadsJson);
-  for (const [name, json] of tileJson)
-    await writeFile(join(options.outDir, name), json);
-  log(`Wrote ${files.length} files to ${options.outDir}`);
+  await writeAsset(
+    options.outDir,
+    tileJson,
+    indexJson,
+    roadsJson,
+    files.length,
+    log,
+  );
   return { totalGzipBytes, files, index: assembled.index };
 }
