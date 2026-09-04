@@ -81,6 +81,26 @@ describe("runBuild", () => {
     await expect(readdir(outDir)).rejects.toThrow();
   });
 
+  it("rejects when landmark matching fails", async () => {
+    const emptyFetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ elements: [] }), { status: 200 }),
+    );
+    await expect(
+      runBuild({
+        outDir: join(workDir, "out-reject"),
+        cacheDir: join(workDir, "cache"),
+        check: false,
+        refresh: false,
+        fetchImpl: emptyFetch,
+        config: MINI_LANDMARKS,
+        log: () => {},
+      }),
+    ).rejects.toThrow(/Landmark/);
+    // Only the landmark stage ran: matching fails before roads/areas/buildings are fetched.
+    expect(emptyFetch).toHaveBeenCalledTimes(1);
+  });
+
   it("removes stale tiles from a previous build", async () => {
     const outDir = join(workDir, "out-stale");
     const { mkdir, writeFile } = await import("node:fs/promises");
