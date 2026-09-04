@@ -40,6 +40,9 @@ describe("overpass query builders", () => {
     const query = buildAreasQuery();
     expect(query).toContain('nwr["natural"="water"]');
     expect(query).toContain(
+      `nwr["landuse"~"^(reservoir|basin)$"](${OVERPASS_BBOX});`,
+    );
+    expect(query).toContain(
       'nwr["landuse"~"^(grass|meadow|farmland|forest)$"]',
     );
     expect(query).toContain('nwr["leisure"~"^(park|pitch)$"]');

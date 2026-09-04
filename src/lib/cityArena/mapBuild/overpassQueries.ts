@@ -54,6 +54,7 @@ export function buildRoadsQuery(serviceCentres: LatLon[]): string {
 export function buildAreasQuery(): string {
   return wrapUnion([
     `nwr["natural"="water"](${OVERPASS_BBOX});`,
+    `nwr["landuse"~"^(reservoir|basin)$"](${OVERPASS_BBOX});`,
     `nwr["landuse"~"^(grass|meadow|farmland|forest)$"](${OVERPASS_BBOX});`,
     `nwr["leisure"~"^(park|pitch)$"](${OVERPASS_BBOX});`,
     `nwr["natural"~"^(wood|scrub)$"](${OVERPASS_BBOX});`,

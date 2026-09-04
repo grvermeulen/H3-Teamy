@@ -70,6 +70,56 @@ describe("parseRoadWays", () => {
       oneway: true,
     });
   });
+
+  it("treats roundabouts, motorways and motorway links as one-way without an explicit tag", () => {
+    const json: OverpassJson = {
+      elements: [
+        {
+          type: "way",
+          id: 1,
+          nodes: [1, 2],
+          tags: { highway: "residential", junction: "roundabout" },
+        },
+        { type: "way", id: 2, nodes: [1, 2], tags: { highway: "motorway" } },
+        {
+          type: "way",
+          id: 3,
+          nodes: [1, 2],
+          tags: { highway: "motorway_link" },
+        },
+      ],
+    };
+    const ways = parseRoadWays(json);
+    expect(ways).toHaveLength(3);
+    expect(ways.every((way) => way.oneway)).toBe(true);
+  });
+
+  it("lets an explicit oneway=no override an implicit roundabout", () => {
+    const json: OverpassJson = {
+      elements: [
+        {
+          type: "way",
+          id: 1,
+          nodes: [1, 2],
+          tags: {
+            highway: "residential",
+            junction: "roundabout",
+            oneway: "no",
+          },
+        },
+      ],
+    };
+    expect(parseRoadWays(json)[0].oneway).toBe(false);
+  });
+
+  it("keeps ordinary two-way roads two-way", () => {
+    const json: OverpassJson = {
+      elements: [
+        { type: "way", id: 1, nodes: [1, 2], tags: { highway: "residential" } },
+      ],
+    };
+    expect(parseRoadWays(json)[0].oneway).toBe(false);
+  });
 });
 
 describe("buildRoadGraph", () => {

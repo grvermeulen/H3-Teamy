@@ -59,6 +59,35 @@ export function roadClassOf(tags: OsmTags): RoadClass | null {
   return ROAD_CLASSES.find((roadClass) => roadClass === base) ?? null;
 }
 
+/**
+ * OSM `highway`/`junction` values that are one-way by convention even without an explicit
+ * `oneway` tag (roundabouts and motorways carry traffic in one direction by design).
+ */
+const IMPLICIT_ONEWAY_HIGHWAYS: readonly string[] = [
+  "motorway",
+  "motorway_link",
+];
+
+/** True when a way is one-way by OSM convention, absent (or non-`no`) explicit tagging. */
+function isImplicitOneway(tags: OsmTags): boolean {
+  return (
+    tags.junction === "roundabout" ||
+    IMPLICIT_ONEWAY_HIGHWAYS.includes(tags.highway ?? "")
+  );
+}
+
+/**
+ * True when a way should be treated as one-way: an explicit `yes`/`1`/`-1` tag always wins;
+ * otherwise an implicit one-way (roundabout, motorway, motorway link) applies unless the tag
+ * explicitly says `no`.
+ */
+function isOneway(tags: OsmTags): boolean {
+  const onewayTag = tags.oneway;
+  if (onewayTag === "yes" || onewayTag === "1" || onewayTag === "-1")
+    return true;
+  return onewayTag !== "no" && isImplicitOneway(tags);
+}
+
 /** Extracts drivable ways; `oneway=-1` is normalised by reversing the node order. */
 export function parseRoadWays(json: OverpassJson): RoadWay[] {
   const ways: RoadWay[] = [];
@@ -67,14 +96,12 @@ export function parseRoadWays(json: OverpassJson): RoadWay[] {
       continue;
     const roadClass = roadClassOf(element.tags);
     if (!roadClass) continue;
-    const onewayTag = element.tags.oneway;
-    const reversed = onewayTag === "-1";
-    const oneway = reversed || onewayTag === "yes" || onewayTag === "1";
+    const reversed = element.tags.oneway === "-1";
     ways.push({
       id: element.id,
       roadClass,
       name: element.tags.name,
-      oneway,
+      oneway: isOneway(element.tags),
       nodeIds: reversed ? [...element.nodes].reverse() : [...element.nodes],
     });
   }
