@@ -13,15 +13,16 @@ describe("projection", () => {
     expect(projectLonLat(MAP_ORIGIN.lon, MAP_ORIGIN.lat)).toEqual([0, 0]);
   });
 
-  it("maps one hundredth of a degree north to about −1105.7 m (north is negative y)", () => {
-    const [x, y] = projectLonLat(MAP_ORIGIN.lon, MAP_ORIGIN.lat + 0.01);
+  it("projects latitude using the WGS84 degree length at the origin (north is negative y)", () => {
+    const [x, y] = projectLonLat(MAP_ORIGIN.lon, MAP_ORIGIN.lat + 0.04);
     expect(x).toBe(0);
-    expect(Math.abs(y - -1105.74)).toBeLessThan(0.01);
+    expect(y).toBeLessThan(0);
+    expect(Math.abs(y - -4450.7)).toBeLessThan(1);
   });
 
-  it("scales longitude by cos(lat0)", () => {
-    const [x] = projectLonLat(MAP_ORIGIN.lon + 0.01, MAP_ORIGIN.lat);
-    expect(Math.abs(x - 685.9)).toBeLessThan(1);
+  it("projects longitude using the WGS84 degree length at the origin", () => {
+    const [x] = projectLonLat(MAP_ORIGIN.lon + 0.1, MAP_ORIGIN.lat);
+    expect(Math.abs(x - 6870)).toBeLessThan(5);
   });
 
   it("round-trips through unprojectXY", () => {

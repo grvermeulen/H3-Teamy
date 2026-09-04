@@ -162,9 +162,14 @@ containing or nearby building render as labels only.
 
 ### 3.3 Transform (pure functions in `src/lib/cityArena/mapBuild/`, unit-tested)
 
-- **Projection:** equirectangular at `lat0 = 51.98`, `lon0 = 5.625`:
-  `x = (lon − lon0) · cos(lat0) · 111 320`, `y = −(lat − lat0) · 110 574` (metres; north is
-  up on screen). Max distortion over 13 km is sub-metre.
+- **Projection:** equirectangular at `lat0 = 51.98`, `lon0 = 5.625`, using WGS84 degree
+  lengths evaluated at `lat0` rather than the equatorial values: `x = (lon − lon0) · P(lat0)`,
+  `y = −(lat − lat0) · M(lat0)` (metres; north is up on screen), where
+  `M(φ) = 111132.954 − 559.822·cos(2φ) + 1.175·cos(4φ)` and
+  `P(φ) = 111412.84·cos(φ) − 93.5·cos(3φ) + 0.118·cos(5φ)` (φ in radians). The residual local
+  scale error of this fixed-scale projection over the 13 km region stays below 0.1% (under
+  0.5 m over a 500 m zone); the absolute position error is at most about 7 m at the bbox
+  corners.
 - **Quantisation:** coordinates stored as integers in units of 0.25 m.
 - **Simplification:** Douglas-Peucker, two tolerances by kind (`BUILDING_SIMPLIFY_TOLERANCE_M`
   and `TERRAIN_SIMPLIFY_TOLERANCE_M` in `assemble.ts`). Buildings stay at the original
