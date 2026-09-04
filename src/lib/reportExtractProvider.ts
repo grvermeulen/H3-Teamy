@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
-import { gatewayModelId, resolveGatewayModel } from "./ai/gatewayModels";
+import { resolveGatewayModel } from "./ai/gatewayModels";
 
 // OpenAI's structured-output (strict mode) via the Vercel AI Gateway requires
 // every property listed in `properties` to also appear in `required`. Optional
@@ -103,38 +103,28 @@ function parseProvider(raw?: string): ExtractProvider {
   return "vlm";
 }
 
-/**
- * The AI Gateway expects model strings of the form `provider/model` (e.g.
- * `openai/gpt-4o`). Existing env values may be bare OpenAI model names like
- * `gpt-4o`; in that case we prepend `openai/` so the gateway routes correctly.
- */
-function gatewayModelString(rawModel: string): string {
-  return rawModel.includes("/") ? rawModel : `openai/${rawModel}`;
-}
-
-/** Vision-capable default when env is unset or points at a removed gateway model. */
-const DEFAULT_REPORT_EXTRACT_OPENAI_MODEL = "gpt-4o";
-
 export type ResolvedReportExtractOpenAiModel = {
+  /** Full `provider/model` gateway id for `generateObject`. */
   model: string;
   substitutedFrom?: string;
 };
 
 /**
- * Resolves `REPORT_EXTRACT_OPENAI_MODEL` to a gateway-supported id. Uses
- * {@link DEFAULT_REPORT_EXTRACT_OPENAI_MODEL} when unset, and remaps premium or
- * removed gateway ids blocked on the AI Gateway free tier (see Sentry
- * JAVASCRIPT-NEXTJS-1F, JAVASCRIPT-NEXTJS-38).
+ * Resolves `REPORT_EXTRACT_OPENAI_MODEL` to a gateway-supported `provider/model`
+ * string. Uses `openai/gpt-4o` when unset, remaps premium or removed gateway ids
+ * blocked on the AI Gateway free tier (see Sentry JAVASCRIPT-NEXTJS-1F,
+ * JAVASCRIPT-NEXTJS-38), and normalizes Claude ids to `anthropic/` (see
+ * JAVASCRIPT-NEXTJS-3E).
  *
  * @param raw - Value of `REPORT_EXTRACT_OPENAI_MODEL` (may be empty).
- * @returns The model string to pass to `gatewayModelString` / `generateObject`, and the original env value when it was rewritten.
+ * @returns Full gateway model string for `generateObject`, and the original env value when rewritten.
  */
 export function resolveReportExtractOpenAiModel(
   raw: string,
 ): ResolvedReportExtractOpenAiModel {
   const resolved = resolveGatewayModel(raw, "text");
   return {
-    model: gatewayModelId(resolved.model),
+    model: resolved.model,
     substitutedFrom: resolved.substitutedFrom,
   };
 }
@@ -271,7 +261,7 @@ async function callAiTextNormalization(args: {
   const { generateObject } = await import("./ai/client");
   try {
     const { object } = await generateObject({
-      model: gatewayModelString(args.model),
+      model: args.model,
       schema: ExtractResultSchema,
       temperature: 0.1,
       system: SYSTEM_PROMPT,
@@ -341,7 +331,7 @@ async function callAiVisionExtraction(args: {
   );
   try {
     const { object } = await generateObject({
-      model: gatewayModelString(args.model),
+      model: args.model,
       schema: ExtractResultSchema,
       temperature: 0.1,
       system: SYSTEM_PROMPT,

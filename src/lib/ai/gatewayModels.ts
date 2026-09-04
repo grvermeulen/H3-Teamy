@@ -22,6 +22,16 @@ const FREE_TIER_BLOCKED_IDS = new Set([
   "gpt-5.2-2025-12-11",
 ]);
 
+/**
+ * Maps bare env model ids to canonical AI Gateway ids (without provider prefix).
+ * Vercel env often uses hyphenated snapshots (e.g. `claude-sonnet-4-6`) while the
+ * gateway registers dotted versions (`claude-sonnet-4.6`) — see Sentry
+ * JAVASCRIPT-NEXTJS-3E.
+ */
+const GATEWAY_MODEL_ID_ALIASES: Record<string, string> = {
+  "claude-sonnet-4-6": "claude-sonnet-4.6",
+};
+
 export type GatewayModelKind = "structured" | "text";
 
 export type ResolvedGatewayModel = {
@@ -41,14 +51,40 @@ export function gatewayModelId(model: string): string {
 }
 
 /**
+ * Normalizes a bare model id to the canonical AI Gateway id (no provider prefix).
+ */
+export function normalizeGatewayModelId(modelId: string): string {
+  const id = gatewayModelId(modelId);
+  return GATEWAY_MODEL_ID_ALIASES[id] ?? id;
+}
+
+/**
+ * Infers the AI Gateway provider from a bare model id.
+ */
+export function inferGatewayProvider(modelId: string): "anthropic" | "openai" {
+  const id = normalizeGatewayModelId(modelId);
+  if (id.startsWith("claude-")) return "anthropic";
+  return "openai";
+}
+
+/**
  * Ensures the model string includes a `provider/` prefix for the AI SDK gateway.
+ * Claude models route to `anthropic/`; OpenAI models default to `openai/`.
  */
 export function toGatewayModelString(
   model: string,
   defaultProvider: "anthropic" | "openai",
 ): string {
   const trimmed = model.trim();
-  return trimmed.includes("/") ? trimmed : `${defaultProvider}/${trimmed}`;
+  if (trimmed.includes("/")) {
+    const provider = trimmed.slice(0, trimmed.indexOf("/"));
+    const id = normalizeGatewayModelId(trimmed);
+    return `${provider}/${id}`;
+  }
+  const provider = inferGatewayProvider(trimmed);
+  const id = normalizeGatewayModelId(trimmed);
+  const resolvedProvider = provider === "openai" ? defaultProvider : provider;
+  return `${resolvedProvider}/${id}`;
 }
 
 function fallbackForKind(kind: GatewayModelKind): string {
@@ -87,7 +123,7 @@ export function resolveGatewayModel(
     };
   }
 
-  const id = gatewayModelId(trimmed);
+  const id = normalizeGatewayModelId(trimmed);
   if (isFreeTierBlockedId(id)) {
     const fallback = fallbackForKind(kind);
     return {
