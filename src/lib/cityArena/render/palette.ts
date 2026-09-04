@@ -63,20 +63,23 @@ export const LANDMARK_FILL: Record<LandmarkStyle, string> = {
   campus: "#5aa66f",
   cafe: "#d98b3a",
 };
-/** Label ink and halo. */
+/** Label ink colour. */
 export const LABEL_FILL = "#1f1a16";
+/** Label halo colour drawn behind the ink for contrast. */
 export const LABEL_HALO = "rgba(255,255,255,0.85)";
 /** Street label size in screen pixels. */
 export const STREET_LABEL_PX = 11;
 /** Landmark label size in screen pixels. */
 export const LANDMARK_LABEL_PX = 13;
-/** Hatch pattern for areas without a loaded tile. */
+/** Hatch background for areas without a loaded tile. */
 export const HATCH_BACKGROUND = "#2a2f38";
+/** Hatch line colour for areas without a loaded tile. */
 export const HATCH_LINE = "#3b4250";
 /** Flat colour shown while a chunk is still being rasterised. */
 export const PLACEHOLDER_FILL = "#c8c2b4";
-/** Player sprite colours. */
+/** Player sprite body colour. */
 export const PLAYER_FILL = "#f5f5f5";
+/** Player sprite outline ring colour. */
 export const PLAYER_RING = "#e11d48";
 /** Zone boundary ring. */
 export const ZONE_RING = "rgba(29,78,216,0.7)";

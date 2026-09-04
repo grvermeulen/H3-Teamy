@@ -10,13 +10,15 @@ export type Viewport = { width: number; height: number };
 /** Camera centre in metres plus its zoom. */
 export type Camera = { x: number; y: number; zoom: ZoomLevel };
 
-/** Look-ahead time and cap (spec §8). */
+/** Look-ahead time in seconds: the camera leads the player by velocity × this (spec §8). */
 export const LOOK_AHEAD_S = 0.4;
+/** Maximum look-ahead distance in metres (spec §8). */
 export const LOOK_AHEAD_MAX_M = 15;
 /** Exponential easing rate per second. */
 export const CAMERA_EASE_PER_S = 6;
-/** Target width of the view in metres. */
+/** Target width of the view in metres on phones. */
 export const PHONE_VIEW_METRES = 60;
+/** Target width of the view in metres on desktop-sized viewports. */
 export const DESKTOP_VIEW_METRES = 120;
 /** Viewports at least this wide count as desktop. */
 export const DESKTOP_MIN_WIDTH_PX = 768;

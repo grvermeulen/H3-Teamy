@@ -3,7 +3,10 @@ import type { DecodedRoad } from "../world/decode";
 
 /** Roads shorter than this get no label. */
 export const LABEL_MIN_SEGMENT_M = 40;
-/** Distance between repeated labels along one road piece. */
+/**
+ * Target spacing of repeated labels along one road piece: a piece gets
+ * `floor(length / LABEL_SPACING_M)` labels spread evenly, so the actual gap is at most this.
+ */
 export const LABEL_SPACING_M = 120;
 
 /** A label anchor in metres with the text rotation in radians. */
