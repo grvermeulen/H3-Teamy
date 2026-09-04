@@ -1,4 +1,4 @@
-# Arena (Stadsstrijd)
+# Arena (GTA H3)
 
 ## Summary
 

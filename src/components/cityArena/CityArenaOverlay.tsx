@@ -173,7 +173,7 @@ function ArenaPlayfield({
       <canvas
         ref={canvasRef}
         className="block h-full w-full touch-none"
-        aria-label="Stadsstrijd speelveld"
+        aria-label="GTA H3 speelveld"
       />
       {game.phase === "playing" && showTouch ? (
         <TouchStick stick={stick} onVector={game.setInputVector} />
@@ -233,7 +233,7 @@ export default function CityArenaOverlay({
       ref={dialogRef}
       role="dialog"
       aria-modal="true"
-      aria-label="Stadsstrijd"
+      aria-label="GTA H3"
       tabIndex={-1}
       className="fixed inset-0 z-[3200] flex min-h-dvh flex-col touch-none select-none bg-[#0B1220] pt-safe pb-safe-bottom-bar pl-safe pr-safe [-webkit-user-select:none] [-webkit-touch-callout:none]"
       onContextMenu={(event) => event.preventDefault()}

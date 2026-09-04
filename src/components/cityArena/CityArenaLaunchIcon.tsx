@@ -87,7 +87,7 @@ export function CityArenaLaunchIcon({
       className={className}
       role={decorative ? undefined : "img"}
       aria-hidden={decorative ? true : undefined}
-      aria-label={decorative ? undefined : "Stadsstrijd"}
+      aria-label={decorative ? undefined : "GTA H3"}
     >
       <IconFrame />
       <RoadPath />

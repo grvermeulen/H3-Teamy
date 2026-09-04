@@ -1,4 +1,4 @@
-# Stadsstrijd Plan 2 — World Model, Renderer and Free-Roam Implementation Plan
+# GTA H3 (formerly Stadsstrijd) Plan 2 — World Model, Renderer and Free-Roam Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -27,7 +27,7 @@
 - Every exported function, class, type-bearing constant and component has a JSDoc `/** ... */` block.
 - Every function under 50 lines (a reviewer bot enforces it); descriptive full-word identifiers — `x`, `y`, `dx`, `dy`, `a`, `b`, `t` allowed only inside geometry/camera math helpers.
 - Every `catch` in production code calls `Sentry.captureException(error, { tags: { area: "arena", kind } })` or re-throws; cache/storage failures never propagate.
-- All user-facing strings Dutch (glossary in spec §16); identifiers English; never the word "GTA" in code, comments, assets or UI.
+- All user-facing strings Dutch (glossary in spec §16); identifiers English; the UI title is "GTA H3" (owner ruling 2026-09-04; the earlier never-"GTA" rule is withdrawn).
 - No inline `style` props in new components — Tailwind utilities only (arbitrary values allowed, e.g. `z-[3200]`); the one exception is the canvas element, which sets no styles at all.
 - Tests co-located; `vi.mocked(fn)`; every `describe` using mocks has `beforeEach(() => { vi.clearAllMocks(); })`; `vi.stubEnv`/`vi.unstubAllEnvs` for env; never `fireEvent`/`userEvent` inside `waitFor`; no bare date-only strings.
 - Asset facts (verbatim from PR 1): `MAP_BASE_PATH = "/arena/map/v1"`; `index.json` fields `version: 1, origin, unitsPerMetre: 4, bounds (units), tileSize: 8000 (units = 2 000 m), tiles[{x,y,file,bytes}], zones[{key,name,center,radius: 2000,spawnNodes,landmarks}], landmarks[{key,name,style,center,tile}]`; `roads.json = { nodes: number[] (flat units), edges: number[] (stride 6: a, b, classIndex, nameIndex (−1 unnamed), oneway, lengthUnits), classes: RoadClass[], names: string[] }`; tiles `{ x, y, roads[{points, roadClass, name?}], buildings[{points, levels, landmark?}], ground[{points, kind}], water[{points}] }` with flat integer `points` in units; tile rects overlap by 20 m; the grid is 7 × 5 anchored at the north-west corner (y grows south); 4 units = 1 m.

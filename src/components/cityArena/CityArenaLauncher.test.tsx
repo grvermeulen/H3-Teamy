@@ -40,7 +40,7 @@ describe("CityArenaLauncher", () => {
 
   it("offers the zone choice and opens the overlay for a logged-in member, remembering the zone", () => {
     render(<CityArenaLauncher />);
-    expect(screen.getByText("Stadsstrijd")).toBeInTheDocument();
+    expect(screen.getByText("GTA H3")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Startpunt"), {
       target: { value: "rhenen" },
     });

@@ -38,7 +38,7 @@ function LauncherHeader(): React.JSX.Element {
     <div className="flex flex-wrap items-start gap-3">
       <CityArenaLaunchIcon size={52} decorative className="shrink-0" />
       <div className="min-w-0 flex-1">
-        <div className="font-semibold">Stadsstrijd</div>
+        <div className="font-semibold">GTA H3</div>
         <div className="muted mt-1 text-[13px]">
           Loop door Rhenen, Wageningen, de WUR-campus en Bennekom op de echte
           kaart — straten, gebouwen en herkenningspunten uit OpenStreetMap.

@@ -1,4 +1,4 @@
-# Stadsstrijd Plan 1 — Real-World Map Pipeline Implementation Plan
+# GTA H3 (formerly Stadsstrijd) Plan 1 — Real-World Map Pipeline Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
