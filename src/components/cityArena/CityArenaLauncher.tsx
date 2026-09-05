@@ -40,10 +40,10 @@ function LauncherHeader(): React.JSX.Element {
       <div className="min-w-0 flex-1">
         <div className="font-semibold">GTA H3</div>
         <div className="muted mt-1 text-[13px]">
-          Loop door Rhenen, Wageningen, de WUR-campus en Bennekom op de echte
-          kaart — straten, gebouwen en herkenningspunten uit OpenStreetMap.
-          Eerste versie: alleen rondlopen; auto&apos;s, tegenstanders en
-          multiplayer volgen.
+          Loop of rij door Rhenen, Wageningen, de WUR-campus en Bennekom op de
+          echte kaart — straten, gebouwen en herkenningspunten uit
+          OpenStreetMap. Stap in een auto, kies je wapen en overleef;
+          tegenstanders en multiplayer volgen.
         </div>
       </div>
     </div>
