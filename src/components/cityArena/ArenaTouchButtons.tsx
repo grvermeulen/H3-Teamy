@@ -51,10 +51,11 @@ function HoldButton({
   };
   const release = (): void => onButton(name, false);
   const pressOnKey = (event: ReactKeyboardEvent<HTMLButtonElement>): void => {
-    if (!isActivationKey(event.key) || event.repeat) return;
+    if (!isActivationKey(event.key)) return;
     // Stop the browser's synthetic click (and Space's page scroll) so the
     // key only ever drives the press/release pair below.
     event.preventDefault();
+    if (event.repeat) return;
     onButton(name, true);
   };
   const releaseOnKey = (event: ReactKeyboardEvent<HTMLButtonElement>): void => {
