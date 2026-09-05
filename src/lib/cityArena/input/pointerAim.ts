@@ -14,6 +14,8 @@ export type PointerAim = {
 
 /** `PointerEvent.button` of the left mouse button. */
 const PRIMARY_BUTTON = 0;
+/** Bit for the primary (left) button in `PointerEvent.buttons`. */
+const PRIMARY_BUTTON_MASK = 1;
 
 /** Binds mouse movement (aim position) and the left button (fire) on the canvas; touch pointers belong to the stick and the buttons. */
 export function attachPointerAim(
@@ -21,10 +23,21 @@ export function attachPointerAim(
   state: InputState,
 ): PointerAim {
   let position: [number, number] | null = null;
+  // Chording: releasing the primary button while another mouse button is
+  // still down does not fire `pointerup` (per the Pointer Events spec, only
+  // releasing the *last* held button does) — the change is reported via
+  // `pointermove` instead, so both handlers below sync `fire` from
+  // `event.buttons` rather than trusting the event type alone.
+  const releaseFireIfPrimaryUp = (event: PointerEvent): void => {
+    if ((event.buttons & PRIMARY_BUTTON_MASK) === 0) {
+      state.setButton("pointer", "fire", false);
+    }
+  };
   const onMove = (event: PointerEvent): void => {
     if (event.pointerType !== "mouse") return;
     const rect = target.getBoundingClientRect();
     position = [event.clientX - rect.left, event.clientY - rect.top];
+    releaseFireIfPrimaryUp(event);
   };
   const onDown = (event: PointerEvent): void => {
     if (event.pointerType !== "mouse" || event.button !== PRIMARY_BUTTON)
@@ -33,8 +46,7 @@ export function attachPointerAim(
     state.setButton("pointer", "fire", true);
   };
   const onUp = (event: PointerEvent): void => {
-    if (event.pointerType === "mouse")
-      state.setButton("pointer", "fire", false);
+    if (event.pointerType === "mouse") releaseFireIfPrimaryUp(event);
   };
   const onLeave = (event: PointerEvent): void => {
     if (event.pointerType !== "mouse") return;

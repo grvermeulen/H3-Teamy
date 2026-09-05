@@ -95,6 +95,54 @@ describe("attachPointerAim", () => {
     expect(aim.position()).toBeNull();
   });
 
+  it("releases fire when the primary button lifts while another button is still chorded", () => {
+    const canvas = document.createElement("canvas");
+    const state = createInputState();
+    const aim = attachPointerAim(canvas, state);
+    fireEvent.pointerDown(canvas, {
+      pointerType: "mouse",
+      button: 0,
+      buttons: 1,
+      clientX: 10,
+      clientY: 20,
+    });
+    expect(state.snapshot().fire).toBe(true);
+
+    // Primary released while the secondary is still held down: Pointer
+    // Events reports this via `pointermove` (buttons=2), never `pointerup`.
+    fireEvent.pointerMove(canvas, {
+      pointerType: "mouse",
+      buttons: 2,
+      clientX: 10,
+      clientY: 20,
+    });
+    expect(state.snapshot().fire).toBe(false);
+    aim.detach();
+  });
+
+  it("keeps fire held on pointermove while the primary button is still down", () => {
+    const canvas = document.createElement("canvas");
+    const state = createInputState();
+    const aim = attachPointerAim(canvas, state);
+    fireEvent.pointerDown(canvas, {
+      pointerType: "mouse",
+      button: 0,
+      buttons: 1,
+      clientX: 10,
+      clientY: 20,
+    });
+    expect(state.snapshot().fire).toBe(true);
+
+    fireEvent.pointerMove(canvas, {
+      pointerType: "mouse",
+      buttons: 1,
+      clientX: 15,
+      clientY: 25,
+    });
+    expect(state.snapshot().fire).toBe(true);
+    aim.detach();
+  });
+
   it("ignores touch pointers and the right button", () => {
     const canvas = document.createElement("canvas");
     const state = createInputState();
