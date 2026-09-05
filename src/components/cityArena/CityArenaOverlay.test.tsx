@@ -95,6 +95,7 @@ vi.mock("@/lib/cityArena/render/canvasTypes", async (importOriginal) => {
 });
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
+import { HEALTH_LABEL } from "./ArenaVitals";
 import CityArenaOverlay from "./CityArenaOverlay";
 
 describe("CityArenaOverlay", () => {
@@ -249,5 +250,49 @@ describe("CityArenaOverlay", () => {
         ),
       { timeout: 3000 },
     );
+  });
+
+  it("shows the vitals once playing and no death overlay or touch buttons on desktop", async () => {
+    render(<CityArenaOverlay zone="wageningen" onClose={vi.fn()} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    expect(screen.getByLabelText(HEALTH_LABEL)).toHaveAttribute("value", "100");
+    expect(screen.getByTestId("arena-weapon")).toHaveTextContent("Pistool ∞");
+    expect(screen.queryByTestId("death-overlay")).toBeNull();
+    expect(screen.queryByTestId("arena-touch-buttons")).toBeNull();
+    expect(screen.getByLabelText("GTA H3 speelveld").className).toContain(
+      "cursor-none",
+    );
+  });
+
+  it("shows the touch buttons next to the stick on coarse pointers", async () => {
+    vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+      matches: query.includes("pointer: coarse"),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    render(<CityArenaOverlay zone="wageningen" onClose={vi.fn()} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    expect(screen.getByTestId("touch-stick-surface")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Schieten" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Instappen" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Wapen" })).toBeInTheDocument();
+    expect(screen.getByText(/Sleep links/)).toBeInTheDocument();
   });
 });
