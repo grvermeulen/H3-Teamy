@@ -1,6 +1,10 @@
 import * as Sentry from "@sentry/nextjs";
 import { prisma } from "./db";
-import { withPgConnectRetry } from "./prismaConnectRetry";
+import { isPrismaSchemaDriftError } from "./prismaSchemaDrift";
+import {
+  shouldFallbackFromPrismaToKv,
+  withPgConnectRetry,
+} from "./prismaConnectRetry";
 
 /**
  * Storage keys for admin-controlled feature flags, keyed by a short internal name.
@@ -18,6 +22,31 @@ export const FEATURE_FLAG_DEFAULTS: Record<FeatureFlagKey, boolean> = {
   gtaH3Launcher: false,
 };
 
+function shouldReportFeatureFlagErrorToSentry(error: unknown): boolean {
+  return (
+    !shouldFallbackFromPrismaToKv(error) && !isPrismaSchemaDriftError(error)
+  );
+}
+
+function reportFeatureFlagError(
+  error: unknown,
+  kind: "feature-flag-read" | "feature-flag-write",
+  operation: string,
+): void {
+  if (!shouldReportFeatureFlagErrorToSentry(error)) {
+    Sentry.addBreadcrumb({
+      category: "postgres",
+      message: `Feature-flag ${operation} mislukt; val terug op default zonder Sentry-issue`,
+      level: "warning",
+      data: { operation, kind },
+    });
+    return;
+  }
+  Sentry.captureException(error, {
+    tags: { area: "admin", kind },
+  });
+}
+
 /**
  * Reads one feature flag from the `FeatureFlag` table (Postgres, shared by every instance).
  * Falls back to the flag's default (and reports to Sentry) when the read fails; falls back
@@ -33,9 +62,7 @@ export async function getFeatureFlag(key: FeatureFlagKey): Promise<boolean> {
     );
     return row?.enabled ?? FEATURE_FLAG_DEFAULTS[key];
   } catch (error: unknown) {
-    Sentry.captureException(error, {
-      tags: { area: "admin", kind: "feature-flag-read" },
-    });
+    reportFeatureFlagError(error, "feature-flag-read", "getFeatureFlag");
     return FEATURE_FLAG_DEFAULTS[key];
   }
 }
@@ -62,9 +89,7 @@ export async function setFeatureFlag(
       }),
     );
   } catch (error: unknown) {
-    Sentry.captureException(error, {
-      tags: { area: "admin", kind: "feature-flag-write" },
-    });
+    reportFeatureFlagError(error, "feature-flag-write", "setFeatureFlag");
     throw error;
   }
 }
@@ -96,9 +121,7 @@ export async function getAllFeatureFlags(): Promise<
     }
     return result;
   } catch (error: unknown) {
-    Sentry.captureException(error, {
-      tags: { area: "admin", kind: "feature-flag-read" },
-    });
+    reportFeatureFlagError(error, "feature-flag-read", "getAllFeatureFlags");
     return { ...FEATURE_FLAG_DEFAULTS };
   }
 }

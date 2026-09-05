@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as Sentry from "@sentry/nextjs";
+import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
 import { withPgConnectRetry } from "./prismaConnectRetry";
 import {
@@ -20,9 +21,13 @@ vi.mock("./db", () => ({
   },
 }));
 
-vi.mock("./prismaConnectRetry", () => ({
-  withPgConnectRetry: vi.fn(),
-}));
+vi.mock("./prismaConnectRetry", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./prismaConnectRetry")>();
+  return {
+    ...actual,
+    withPgConnectRetry: vi.fn(),
+  };
+});
 
 function flagRow(enabled: boolean, updatedBy = "admin-1") {
   return {
@@ -80,6 +85,38 @@ describe("featureFlags", () => {
         }),
       );
     });
+
+    it("falls back without Sentry when Postgres credentials are invalid", async () => {
+      const error = new Prisma.PrismaClientKnownRequestError(
+        "Authentication failed against the database server",
+        { code: "P1000", clientVersion: "test" },
+      );
+      vi.mocked(prisma.featureFlag.findUnique).mockRejectedValue(error);
+
+      await expect(getFeatureFlag("gtaH3Launcher")).resolves.toBe(
+        FEATURE_FLAG_DEFAULTS.gtaH3Launcher,
+      );
+      expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+      expect(vi.mocked(Sentry.addBreadcrumb)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          category: "postgres",
+          level: "warning",
+        }),
+      );
+    });
+
+    it("falls back without Sentry when the FeatureFlag table is missing", async () => {
+      const error = new Prisma.PrismaClientKnownRequestError(
+        "Table does not exist",
+        { code: "P2021", clientVersion: "test" },
+      );
+      vi.mocked(prisma.featureFlag.findUnique).mockRejectedValue(error);
+
+      await expect(getFeatureFlag("gtaH3Launcher")).resolves.toBe(
+        FEATURE_FLAG_DEFAULTS.gtaH3Launcher,
+      );
+      expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+    });
   });
 
   describe("setFeatureFlag", () => {
@@ -113,6 +150,19 @@ describe("featureFlags", () => {
           tags: { area: "admin", kind: "feature-flag-write" },
         }),
       );
+    });
+
+    it("rethrows without Sentry when Postgres credentials are invalid", async () => {
+      const error = new Prisma.PrismaClientKnownRequestError(
+        "Authentication failed against the database server",
+        { code: "P1000", clientVersion: "test" },
+      );
+      vi.mocked(prisma.featureFlag.upsert).mockRejectedValue(error);
+
+      await expect(
+        setFeatureFlag("gtaH3Launcher", true, "admin-1"),
+      ).rejects.toThrow(error);
+      expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
     });
   });
 
