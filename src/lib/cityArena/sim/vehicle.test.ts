@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Point } from "../world/projection";
 import type { VehicleState } from "./types";
 import {
+  HULL_CIRCLE_RADIUS_M,
   NO_CONTROLS,
   createVehicle,
   distanceToVehicle,
@@ -148,6 +149,32 @@ describe("stepVehicle", () => {
     expect(result.impactSpeed).toBeCloseTo(29.9);
     expect(result.vehicle.x).toBeCloseTo(7.95);
     expect(result.vehicle.velocityX).toBeCloseTo(-8.97);
+  });
+
+  it("resolves both hull circles when they need non-parallel push-outs (an inside corner)", () => {
+    // Nosed into an inside corner: the front circle (x ≥ 0) overlaps a wall
+    // to the south, the rear circle (x < 0) overlaps a different wall to the
+    // west. Resolving only the longer of the two pushes would leave the
+    // other circle still overlapping its own wall.
+    const SOUTH_WALL_Y = 0.75;
+    const WEST_WALL_X = -0.35;
+    const corner = {
+      resolveCircle: (centre: Point, radius: number): Point => {
+        const [x, y] = centre;
+        return x >= 0
+          ? [x, Math.min(y, SOUTH_WALL_Y - radius)]
+          : [Math.min(x, WEST_WALL_X - radius), y];
+      },
+    };
+    const nosedIn = createVehicle(1, "sedan", [0, 0], 0, 0);
+    const result = stepVehicle(nosedIn, NO_CONTROLS, step, corner);
+    expect(result.vehicle.x).toBeCloseTo(-0.2);
+    expect(result.vehicle.y).toBeCloseTo(-0.2);
+    for (const circle of hullCircles(result.vehicle)) {
+      const resolved = corner.resolveCircle(circle, HULL_CIRCLE_RADIUS_M);
+      expect(resolved[0]).toBeCloseTo(circle[0]);
+      expect(resolved[1]).toBeCloseTo(circle[1]);
+    }
   });
 
   it("ignores the controls of a wreck", () => {

@@ -59,6 +59,8 @@ export type VehicleStepResult = { vehicle: VehicleState; impactSpeed: number };
 
 /** Pushes shorter than this are treated as no contact. */
 const PUSH_EPSILON_M = 1e-6;
+/** Hull push-out passes: a car nosed into a corner needs a second pass to clear both circles. */
+const HULL_RESOLVE_ITERATIONS = 3;
 
 /** A parked, undamaged car. */
 export function createVehicle(
@@ -202,8 +204,8 @@ function applyDrive(
   };
 }
 
-/** The largest push-out among the hull circles, or `null` when nothing overlaps. */
-function hullPushOut(
+/** The longest push-out among the hull circles this pass, or `null` when neither overlaps. */
+function strongestCirclePush(
   vehicle: VehicleState,
   collision: Pick<CollisionGrid, "resolveCircle">,
 ): Point | null {
@@ -219,6 +221,27 @@ function hullPushOut(
     }
   }
   return bestLength > PUSH_EPSILON_M ? best : null;
+}
+
+/**
+ * Total push-out that clears both hull circles, or `null` when neither overlaps. A single pass
+ * only resolves the more penetrating circle, which can leave the other still overlapping when
+ * the car is nosed into a corner (the two circles hit different obstacles); this re-checks both
+ * after every push and stops as soon as neither needs one, up to {@link HULL_RESOLVE_ITERATIONS}.
+ */
+function hullPushOut(
+  vehicle: VehicleState,
+  collision: Pick<CollisionGrid, "resolveCircle">,
+): Point | null {
+  let total: Point = [0, 0];
+  let current = vehicle;
+  for (let pass = 0; pass < HULL_RESOLVE_ITERATIONS; pass++) {
+    const push = strongestCirclePush(current, collision);
+    if (!push) break;
+    total = [total[0] + push[0], total[1] + push[1]];
+    current = { ...current, x: current.x + push[0], y: current.y + push[1] };
+  }
+  return Math.hypot(total[0], total[1]) > PUSH_EPSILON_M ? total : null;
 }
 
 /** Moves the car by its velocity, pushes it out of obstacles and reflects the approach velocity with restitution. */
