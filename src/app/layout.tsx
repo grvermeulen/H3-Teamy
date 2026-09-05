@@ -7,6 +7,7 @@ import SessionStatus from "../components/SessionStatus";
 import FeedbackFab from "../components/FeedbackFab";
 import WhatsNewTour from "../components/WhatsNewTour";
 import AppSplash from "../components/AppSplash";
+import ServiceWorkerRegistration from "../components/ServiceWorkerRegistration";
 import { ToastRegion } from "../components/ui";
 
 export const metadata: Metadata = {
@@ -102,37 +103,7 @@ export default function RootLayout({
             </a>
           </footer>
         </Providers>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-          if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function () {
-              navigator.serviceWorker.register('/sw.js').then((registration) => {
-                if (registration.waiting) {
-                  registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-                  return;
-                }
-                registration.addEventListener('updatefound', () => {
-                  const newWorker = registration.installing;
-                  if (!newWorker) return;
-                  newWorker.addEventListener('statechange', () => {
-                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                      newWorker.postMessage({ type: 'SKIP_WAITING' });
-                    }
-                  });
-                });
-                let refreshing = false;
-                navigator.serviceWorker.addEventListener('controllerchange', () => {
-                  if (refreshing) return;
-                  refreshing = true;
-                  window.location.reload();
-                });
-              }).catch(()=>{});
-            });
-          }
-        `,
-          }}
-        />
+        <ServiceWorkerRegistration />
       </body>
     </html>
   );

@@ -1,9 +1,18 @@
 /* Service Worker: safe caching and instant updates */
-const CACHE_VERSION = "v5";
+const CACHE_VERSION = "v6";
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 
 // Only cache immutable static assets. Do NOT cache HTML (like '/') to avoid stale UIs.
 const STATIC_ASSETS = ["/logo.png"];
+
+// Next.js build output (chunks, CSS, fonts, optimised images). Served network-first: production
+// chunk names are content-hashed, so a fresh fetch is answered by the HTTP cache, while `next dev`
+// reuses the same chunk URLs across edits and restarts, so a cache-first hit would serve stale code.
+const NEXT_BUILD_PREFIX = "/_next/";
+
+// Everything else with one of these destinations (e.g. the precached shell and images) stays
+// cache-first so it keeps working offline.
+const CACHE_FIRST_DESTINATIONS = ["script", "style", "image", "font"];
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -32,6 +41,32 @@ self.addEventListener("message", (event) => {
   }
 });
 
+async function networkFirst(request) {
+  const cache = await caches.open(STATIC_CACHE);
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch (error) {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    throw error;
+  }
+}
+
+async function cacheFirst(request) {
+  const cache = await caches.open(STATIC_CACHE);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  const response = await fetch(request);
+  if (response.ok) {
+    cache.put(request, response.clone());
+  }
+  return response;
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -48,19 +83,14 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Cache-first for static assets
-  const cacheableDestinations = ["script", "style", "image", "font"];
-  if (cacheableDestinations.includes(request.destination)) {
-    event.respondWith(
-      caches.open(STATIC_CACHE).then(async (cache) => {
-        const cached = await cache.match(request);
-        if (cached) return cached;
-        const response = await fetch(request);
-        if (request.method === "GET" && response.ok) {
-          cache.put(request, response.clone());
-        }
-        return response;
-      }),
-    );
+  if (request.method !== "GET") return;
+
+  if (url.pathname.startsWith(NEXT_BUILD_PREFIX)) {
+    event.respondWith(networkFirst(request));
+    return;
+  }
+
+  if (CACHE_FIRST_DESTINATIONS.includes(request.destination)) {
+    event.respondWith(cacheFirst(request));
   }
 });
