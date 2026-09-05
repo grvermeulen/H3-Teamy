@@ -60,6 +60,10 @@ The asset is a derived database of OpenStreetMap data © OpenStreetMap contribut
 
 ## Runtime (PR 2 — free-roam)
 
+- Feature toggle: hidden by default behind the admin-controlled `gtaH3Launcher` flag
+  (`src/lib/featureFlags.ts`, toggled at `/admin` — see `docs/tech/admin/README.md`). `src/app/page.tsx`
+  reads it server-side and passes `gtaH3Enabled` to `EventList`, which renders the launcher card only
+  when true.
 - Launcher: `src/components/cityArena/CityArenaLauncher.tsx` (card under Space Invaders in `EventList`), overlay
   `CityArenaOverlay.tsx` (dynamic import), loop/HUD state in `useArenaGame.ts`.
 - World: `src/lib/cityArena/world/` — `mapLoader` streams the 3 × 3 tiles around the player (≤ 9 resident),
