@@ -30,9 +30,9 @@ function resolvePair(
   const dy = second.y - first.y;
   const distance = Math.hypot(dx, dy);
   const minimum = CAR_BODY_RADIUS_M * 2;
-  if (distance >= minimum || distance === 0) return null;
-  const normalX = dx / distance;
-  const normalY = dy / distance;
+  if (distance >= minimum) return null;
+  const normalX = distance === 0 ? 1 : dx / distance;
+  const normalY = distance === 0 ? 0 : dy / distance;
   const shift = (minimum - distance) / 2;
   const approach =
     (first.velocityX - second.velocityX) * normalX +

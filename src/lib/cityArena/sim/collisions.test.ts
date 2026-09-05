@@ -31,6 +31,16 @@ describe("resolveVehiclePairs", () => {
     expect(result.impacts).toEqual([{ first: 0, second: 1, impactSpeed: 10 }]);
   });
 
+  it("pushes cars apart along +x when they sit on the same spot", () => {
+    const first = createVehicle(1, "sedan", [5, 5], 0, 0);
+    const second = createVehicle(2, "sedan", [5, 5], 0, 0);
+    const result = resolveVehiclePairs([first, second]);
+    expect(result.vehicles[0].x).toBeCloseTo(5 - 1.6);
+    expect(result.vehicles[1].x).toBeCloseTo(5 + 1.6);
+    expect(result.vehicles[0].y).toBeCloseTo(5);
+    expect(result.impacts).toEqual([]);
+  });
+
   it("leaves separated cars alone and only separates receding ones", () => {
     const parked = [
       createVehicle(1, "sedan", [0, 0], 0, 0),
