@@ -1,6 +1,9 @@
 "use client";
 
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 import type { ButtonName } from "@/lib/cityArena/input/inputState";
 
 /** Fire button label (spec §16). */
@@ -28,7 +31,15 @@ type HoldButtonProps = {
   onButton: (name: ButtonName, pressed: boolean) => void;
 };
 
-/** A button that reports `pressed` while held and releases on up, leave or cancel. */
+/** Enter and Space are the DOM's native button-activation keys. */
+const isActivationKey = (key: string): boolean =>
+  key === "Enter" || key === " ";
+
+/**
+ * A button that reports `pressed` while held and releases on up, leave or
+ * cancel. Pointer and keyboard (Enter/Space) both drive the same press/release
+ * semantics so keyboard and screen-reader users can hold it too.
+ */
 function HoldButton({
   name,
   label,
@@ -39,6 +50,16 @@ function HoldButton({
     onButton(name, true);
   };
   const release = (): void => onButton(name, false);
+  const pressOnKey = (event: ReactKeyboardEvent<HTMLButtonElement>): void => {
+    if (!isActivationKey(event.key) || event.repeat) return;
+    // Stop the browser's synthetic click (and Space's page scroll) so the
+    // key only ever drives the press/release pair below.
+    event.preventDefault();
+    onButton(name, true);
+  };
+  const releaseOnKey = (event: ReactKeyboardEvent<HTMLButtonElement>): void => {
+    if (isActivationKey(event.key)) release();
+  };
   return (
     <button
       type="button"
@@ -47,6 +68,8 @@ function HoldButton({
       onPointerUp={release}
       onPointerLeave={release}
       onPointerCancel={release}
+      onKeyDown={pressOnKey}
+      onKeyUp={releaseOnKey}
       onContextMenu={(event) => event.preventDefault()}
     >
       {label}
