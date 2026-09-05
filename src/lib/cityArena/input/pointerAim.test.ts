@@ -35,6 +35,24 @@ describe("attachPointerAim", () => {
     expect(state.snapshot().fire).toBe(false);
   });
 
+  it("does not preventDefault on a primary-button pointerdown, so focus can leave other elements", () => {
+    const canvas = document.createElement("canvas");
+    const state = createInputState();
+    const aim = attachPointerAim(canvas, state);
+    const event = new PointerEvent("pointerdown", {
+      pointerType: "mouse",
+      button: 0,
+      clientX: 10,
+      clientY: 20,
+      bubbles: true,
+      cancelable: true,
+    });
+    canvas.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(state.snapshot().fire).toBe(true);
+    aim.detach();
+  });
+
   it("tracks the mouse on the canvas and holds fire while the left button is down", () => {
     const canvas = document.createElement("canvas");
     vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({

@@ -29,7 +29,6 @@ export function attachPointerAim(
   const onDown = (event: PointerEvent): void => {
     if (event.pointerType !== "mouse" || event.button !== PRIMARY_BUTTON)
       return;
-    event.preventDefault();
     onMove(event);
     state.setButton("pointer", "fire", true);
   };
