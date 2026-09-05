@@ -73,12 +73,30 @@ describe("resolveVehicleAgainstPlayer", () => {
   it("pushes without hurting below 5 m/s and ignores players out of reach", () => {
     const slow = { ...createVehicle(1, "sport", [0, 0], 0, 0), velocityX: 3 };
     const nudged = resolveVehicleAgainstPlayer(slow, walker);
-    expect(nudged.player.x).toBeCloseTo(2.5);
+    expect(nudged.player.x).toBeCloseTo(2);
     expect(nudged.damage).toBe(0);
     const far = { ...walker, x: 5 };
     expect(resolveVehicleAgainstPlayer(slow, far)).toEqual({
       player: far,
       damage: 0,
     });
+  });
+
+  it("settles a player walking into a parked car at exactly minimum with no snap-back, while a moving car keeps the extra clearance", () => {
+    const parked = createVehicle(1, "sport", [0, 0], 0, 0);
+    const overlapping: ArenaPlayerState = { ...walker, x: 0.5 };
+    const tickN = resolveVehicleAgainstPlayer(parked, overlapping);
+    expect(tickN.player.x).toBeCloseTo(2);
+    expect(tickN.damage).toBe(0);
+    // Resolving again from the settled position (the same held-into-the-car input next
+    // tick) must not move the player further: no 0.4 m snap-back oscillation.
+    const tickNPlusOne = resolveVehicleAgainstPlayer(parked, tickN.player);
+    expect(tickNPlusOne.player.x).toBeCloseTo(tickN.player.x);
+    expect(tickNPlusOne.player.y).toBeCloseTo(tickN.player.y);
+
+    const moving = { ...parked, velocityX: 12 };
+    const hurt = resolveVehicleAgainstPlayer(moving, overlapping);
+    expect(hurt.player.x).toBeCloseTo(2.5);
+    expect(hurt.damage).toBe(60);
   });
 });

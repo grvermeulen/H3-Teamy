@@ -10,7 +10,6 @@ import {
 } from "./bullets";
 import {
   CAR_BODY_RADIUS_M,
-  RUN_OVER_CLEARANCE_M,
   resolveVehicleAgainstPlayer,
   resolveVehiclePairs,
 } from "./collisions";
@@ -68,9 +67,10 @@ export const BOARDING_TICKS = 18;
 export const LOCAL_PLAYER_ID = 0;
 /** First id handed to entities (the player is 0). */
 const FIRST_ENTITY_ID = 1;
+/** Gap between the player and the car body after stepping out (m); keeps the door within ENTER_RANGE_M. */
+const EXIT_CLEARANCE_M = 0.2;
 /** How far from the car centre a player stands after Uitstappen: just outside the car–player contact circle. */
-const EXIT_OFFSET_M =
-  CAR_BODY_RADIUS_M + PLAYER_RADIUS_M + RUN_OVER_CLEARANCE_M;
+const EXIT_OFFSET_M = CAR_BODY_RADIUS_M + PLAYER_RADIUS_M + EXIT_CLEARANCE_M;
 
 /** What the arena step reads from the world. */
 export type ArenaWorld = {

@@ -89,10 +89,12 @@ export function resolveVehicleAgainstPlayer(
   if (distance >= minimum) return { player, damage: 0 };
   const normalX = distance === 0 ? 1 : dx / distance;
   const normalY = distance === 0 ? 0 : dy / distance;
-  const clearance = minimum + RUN_OVER_CLEARANCE_M;
   const speed = Math.hypot(vehicle.velocityX, vehicle.velocityY);
   const damage =
     speed > RUN_OVER_MIN_SPEED_MPS ? RUN_OVER_DAMAGE_PER_MPS * speed : 0;
+  // A parked/slow car pushes the player to exactly `minimum` so the next tick starts
+  // contact-free without oscillating; a moving car that hurt them gets the extra clearance.
+  const clearance = damage > 0 ? minimum + RUN_OVER_CLEARANCE_M : minimum;
   return {
     player: {
       ...player,

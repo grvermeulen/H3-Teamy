@@ -4,6 +4,7 @@ import type { MapIndex, MapZone } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
 import {
   BOARDING_TICKS,
+  ENTER_RANGE_M,
   createArenaState,
   stepArena,
   teleportArenaPlayer,
@@ -18,7 +19,7 @@ import {
   type ArenaState,
   type WorldInput,
 } from "./types";
-import { createVehicle } from "./vehicle";
+import { createVehicle, distanceToVehicle } from "./vehicle";
 
 /** One zone with spawn nodes at 0, 100, 200 and 300 m along y = 0. */
 const zone: MapZone = {
@@ -87,6 +88,14 @@ function withCar(
   return { ...state, vehicles: [{ ...car, wrecked }] };
 }
 
+/** Boards the nearby car, drives off, brakes and coasts to a full stop beside it (shared setup for the Uitstappen tests). */
+function stoppedNextToCar(): ArenaState {
+  const boarded = run(withCar(boot(), 3), createInput({ enter: true }), 1);
+  const driven = run(boarded, createInput({ move: [0, -1] }), 60);
+  const braked = run(driven, createInput({ move: [0, 1] }), 15);
+  return run(braked, createInput({}), 30);
+}
+
 describe("createArenaState", () => {
   it("spawns the player on a spawn node with the loadout and parks cars away from them", () => {
     const state = boot();
@@ -153,16 +162,26 @@ describe("stepArena driving", () => {
   });
 
   it("steps out beside a stopped car on the next rising edge", () => {
-    const boarded = run(withCar(boot(), 3), createInput({ enter: true }), 1);
-    const driven = run(boarded, createInput({ move: [0, -1] }), 60);
-    const braked = run(driven, createInput({ move: [0, 1] }), 15);
-    const stopped = run(braked, createInput({}), 30);
+    const stopped = stoppedNextToCar();
     expect(stopped.vehicles[0].velocityX).toBeCloseTo(0);
     const out = run(stopped, createInput({ enter: true }), 1);
     expect(out.player.vehicleId).toBeNull();
     expect(out.player.x).toBeCloseTo(stopped.vehicles[0].x);
-    expect(out.player.y).toBeCloseTo(stopped.vehicles[0].y - 2.5);
+    expect(out.player.y).toBeCloseTo(stopped.vehicles[0].y - 2.2);
     expect(out.player.speed).toBe(0);
+  });
+
+  it("leaves the player within Instappen reach after Uitstappen, unpushed next tick, and re-boardable", () => {
+    const out = run(stoppedNextToCar(), createInput({ enter: true }), 1);
+    const vehicle = out.vehicles[0];
+    expect(
+      distanceToVehicle(vehicle, [out.player.x, out.player.y]),
+    ).toBeLessThan(ENTER_RANGE_M);
+    const settled = run(out, EMPTY_INPUT, 1);
+    expect(settled.player.x).toBeCloseTo(out.player.x);
+    expect(settled.player.y).toBeCloseTo(out.player.y);
+    const reboarded = run(settled, createInput({ enter: true }), 1);
+    expect(reboarded.player.vehicleId).toBe(vehicle.id);
   });
 
   it("refuses cars out of reach and wrecks", () => {
