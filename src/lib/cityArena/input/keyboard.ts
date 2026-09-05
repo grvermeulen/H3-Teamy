@@ -49,28 +49,18 @@ function movementVector(pressed: Set<string>): [number, number] {
   return [Math.sign(x), Math.sign(y)];
 }
 
-/** Recomputes which buttons are held from the set of pressed key codes. */
-function publishButtonStates(
-  pressedButtons: Set<string>,
-  state: InputState,
-): void {
-  const heldButtons = new Map<ButtonName, boolean>();
+/** Every button a key maps to; releases are published for each so no button sticks. */
+const BOUND_BUTTONS: readonly ButtonName[] = ["fire", "enter", "weaponNext"];
+
+/** Publishes each button as held while any of its key codes (E/F/Enter share "enter") is still down. */
+function publishButtons(pressedButtons: Set<string>, state: InputState): void {
+  const held = new Set<ButtonName>();
   for (const code of pressedButtons) {
     const button = KEY_BUTTONS[code];
-    if (button) {
-      heldButtons.set(button, true);
-    }
+    if (button) held.add(button);
   }
-  // Publish: held buttons stay true, others implicitly false (cleared below)
-  for (const [button, _held] of heldButtons) {
-    state.setButton("keyboard", button, true);
-  }
-  // Mark released buttons as false (keys that were held before, now absent)
-  const allButtons: ButtonName[] = ["fire", "enter", "weaponNext"];
-  for (const button of allButtons) {
-    if (!heldButtons.has(button)) {
-      state.setButton("keyboard", button, false);
-    }
+  for (const button of BOUND_BUTTONS) {
+    state.setButton("keyboard", button, held.has(button));
   }
 }
 
@@ -93,15 +83,16 @@ export function attachKeyboard(
     if (!button || event.target instanceof HTMLButtonElement) return;
     event.preventDefault();
     pressedButtons.add(event.code);
-    publishButtonStates(pressedButtons, state);
+    publishButtons(pressedButtons, state);
   };
   const onKeyUp = (event: KeyboardEvent): void => {
     if (pressed.delete(event.code)) {
       state.setKeyboard(movementVector(pressed));
       return;
     }
-    pressedButtons.delete(event.code);
-    publishButtonStates(pressedButtons, state);
+    if (pressedButtons.delete(event.code)) {
+      publishButtons(pressedButtons, state);
+    }
   };
   const onBlur = (): void => {
     pressed.clear();
