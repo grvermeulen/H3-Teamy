@@ -26,7 +26,7 @@ describe("attachKeyboard", () => {
     expect(state.snapshot().move).toEqual([0, -1]);
     detach();
     press("KeyA");
-    expect(state.snapshot().move).toEqual([0, -1]);
+    expect(state.snapshot().move).toEqual([0, 0]); // detach resets the keyboard vector
   });
 
   it("holds Space as fire, E/F/Enter as enter and Q as weapon", () => {

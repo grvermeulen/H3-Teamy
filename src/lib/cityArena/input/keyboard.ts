@@ -84,6 +84,7 @@ export function attachKeyboard(
   target.addEventListener("keyup", onKeyUp);
   target.addEventListener("blur", onBlur);
   return () => {
+    state.clearKeyboard();
     target.removeEventListener("keydown", onKeyDown);
     target.removeEventListener("keyup", onKeyUp);
     target.removeEventListener("blur", onBlur);

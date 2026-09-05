@@ -50,6 +50,8 @@ export function attachPointerAim(
   return {
     position: () => position,
     detach() {
+      position = null;
+      state.setButton("pointer", "fire", false);
       target.removeEventListener("pointermove", onMove);
       target.removeEventListener("pointerdown", onDown);
       target.removeEventListener("pointerup", onUp);

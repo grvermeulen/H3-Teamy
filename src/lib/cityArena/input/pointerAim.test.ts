@@ -8,6 +8,33 @@ describe("attachPointerAim", () => {
     vi.clearAllMocks();
   });
 
+  it("forgets the position and releases fire on detach", () => {
+    const canvas = document.createElement("canvas");
+    const state = createInputState();
+    const aim = attachPointerAim(canvas, state);
+    canvas.dispatchEvent(
+      new PointerEvent("pointermove", {
+        pointerType: "mouse",
+        clientX: 10,
+        clientY: 20,
+        bubbles: true,
+      }),
+    );
+    canvas.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        pointerType: "mouse",
+        button: 0,
+        clientX: 10,
+        clientY: 20,
+        bubbles: true,
+      }),
+    );
+    expect(state.snapshot().fire).toBe(true);
+    aim.detach();
+    expect(aim.position()).toBeNull();
+    expect(state.snapshot().fire).toBe(false);
+  });
+
   it("tracks the mouse on the canvas and holds fire while the left button is down", () => {
     const canvas = document.createElement("canvas");
     vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue({
