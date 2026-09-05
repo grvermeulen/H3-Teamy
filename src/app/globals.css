@@ -1033,6 +1033,33 @@ body.modal-open .card {
   }
 }
 
+/* Death screen — the wasted artwork slams in with an overshoot and settles at 1× by 0.55 s */
+@keyframes arena-wasted-slam {
+  0% {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  66% {
+    transform: scale(0.95);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Death screen under reduced motion — the wasted artwork fades in over 300 ms */
+@keyframes arena-wasted-fade {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
 /* Feedback floating action button — SVG glyph (see component) for cross-OS parity. */
 .feedbackFab {
   position: fixed;
