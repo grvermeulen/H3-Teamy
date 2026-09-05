@@ -6,6 +6,7 @@ import * as Sentry from "@sentry/nextjs";
 import type { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { withPgConnectRetry, shouldFallbackFromPrismaToKv } from "./prismaConnectRetry";
+import { isPrismaSchemaDriftError } from "./prismaSchemaDrift";
 import {
   PASSWORD_RESET_TTL_SEC,
   normalizePasswordResetToken,
@@ -64,6 +65,25 @@ function captureKvCacheError(error: unknown, operation: string): void {
       tags: { component: "kv-cache", operation },
     },
   );
+}
+
+function shouldReportKvDbErrorToSentry(error: unknown): boolean {
+  return (
+    !shouldFallbackFromPrismaToKv(error) && !isPrismaSchemaDriftError(error)
+  );
+}
+
+function captureKvDbError(error: unknown, operation: string): void {
+  if (!shouldReportKvDbErrorToSentry(error)) {
+    Sentry.addBreadcrumb({
+      category: "postgres",
+      message: `KV Postgres ${operation} mislukt; val terug zonder Sentry-issue`,
+      level: "warning",
+      data: { operation, component: "kv-cache" },
+    });
+    return;
+  }
+  captureKvCacheError(error, operation);
 }
 
 async function getRedis() {
@@ -1450,7 +1470,7 @@ async function getUserRolesFromDb(userId: string): Promise<Roles | null> {
       player: row.player,
     };
   } catch (error: unknown) {
-    captureKvCacheError(error, "getUserRoles_db");
+    captureKvDbError(error, "getUserRoles_db");
     return null;
   }
 }
@@ -1474,7 +1494,7 @@ async function getUserRolesFromDbBatch(
       };
     }
   } catch (error: unknown) {
-    captureKvCacheError(error, "getUserRolesBatch_db");
+    captureKvDbError(error, "getUserRolesBatch_db");
   }
   return out;
 }
@@ -1499,7 +1519,7 @@ async function setUserRolesInDb(userId: string, roles: Roles): Promise<void> {
       },
     });
   } catch (error: unknown) {
-    captureKvCacheError(error, "setUserRoles_db");
+    captureKvDbError(error, "setUserRoles_db");
   }
 }
 
