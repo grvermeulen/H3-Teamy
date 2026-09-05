@@ -76,3 +76,25 @@ The asset is a derived database of OpenStreetMap data © OpenStreetMap contribut
 - Debug: open the overlay with `?debug=1` in the URL (non-production builds) for fps/p95, chunk and tile counts,
   camera/player positions and the route length to the nearest landmark.
 - Settings: `localStorage["h3-arena-settings-v1"]` (`lastZone`).
+
+## Runtime (PR 3 — cars, weapons, death screen)
+
+- Simulation: `src/lib/cityArena/sim/arena.ts` — `createArenaState(setup, random)` and one pure fixed-step
+  `stepArena(state, input, dt, world, random)` (30 Hz, immutable `ArenaState`, seeded RNG injected, no DOM). Entity
+  modules: `weapons` (spec §5 table + fist), `vehicle` (arcade physics, two-circle building collision), `bullets`
+  (swept segments via `world/raycast`), `collisions` (car–car, car–player), `damage`, `effects`, `spawn` (8 parked
+  cars per zone on spawn nodes, respawn node choice), `invariants` (`checkInvariants(state): string[]`).
+- Rules: health 100, no regen; death → respawn after 90 ticks with a 60-tick blinking shield; Instappen within 1.5 m
+  with a 0.6 s boarding delay; car health 100, smoke < 40, explosion at 0 (3 m, 80 damage, kills the occupant);
+  the spawn loadout is pistol + Uzi 60 + shotgun 8 + fist until pickups arrive (Plan 4b).
+- Input: `WorldInput = { move, aim: angle | null, fire, enter, weaponNext }`; keyboard WASD/arrows, Space, E/F/Enter, Q
+  (`input/keyboard`), mouse aim + left button (`input/pointerAim`), floating stick + Schieten/Instappen/Wapen buttons on
+  coarse pointers (`ArenaTouchButtons`). Enter/exit and weapon-next are edge-triggered inside the simulation.
+- Rendering: `render/renderScene` draws world → zone ring → cars (`drawVehicles`) → bullets and effects
+  (`drawProjectiles`) → player (`playerLook`: normal/dead/hidden/blink) → crosshair, with a `pushIn` transform for the
+  death screen. `render/deathScreen.ts` is the pure beat function (slow-mo 0–0.3 s, slam at 0.3 s, fade 2.6–3.0 s);
+  `components/cityArena/DeathOverlay.tsx` shows `public/branding/wasted-screen.{webp,jpg}`.
+- HUD: `ArenaVitals` (health `<progress>`, weapon + ammo, km/u while driving) inside the HUD bar, refreshed at 10 Hz.
+- Debug: `?debug=1` adds an entity/violation line to the panel and installs `window.__arena`
+  (`getState()`, `dispatch(input, ticks)`, `damage(amount)`, `getViolations()`); invariant violations are also sent to
+  Sentry as warnings (`kind: "invariant"`), once per distinct message per session.
