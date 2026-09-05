@@ -28,6 +28,7 @@ import {
 import { addEffect, pruneEffects } from "./effects";
 import { PLAYER_RADIUS_M, stepPlayer } from "./player";
 import {
+  chooseRespawnNode,
   chooseSpawnNode,
   nearestZone,
   spawnParkedCars,
@@ -540,8 +541,11 @@ function applyRespawn(
   const zone =
     (state.zoneKey ? findZoneByKey(world.index, state.zoneKey) : null) ??
     nearestZone(world.index, [player.x, player.y]);
+  const intactVehicles: Point[] = state.vehicles
+    .filter((vehicle) => !vehicle.wrecked)
+    .map((vehicle) => [vehicle.x, vehicle.y]);
   const spawn: Point = zone
-    ? chooseSpawnNode(zone, [], random)
+    ? chooseRespawnNode(zone, intactVehicles, random)
     : [player.x, player.y];
   return {
     ...state,

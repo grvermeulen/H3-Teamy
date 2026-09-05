@@ -10,6 +10,7 @@ import {
   teleportArenaPlayer,
   type ArenaWorld,
 } from "./arena";
+import { RESPAWN_DELAY_TICKS } from "./damage";
 import { checkInvariants } from "./invariants";
 import { createRng } from "./rng";
 import {
@@ -377,6 +378,45 @@ describe("stepArena firing and death", () => {
       1,
     );
     expect(blasted.player.health).toBe(100);
+  });
+
+  it("keeps respawns off parked cars", () => {
+    const state = boot();
+    // Parked cars avoid the player's own spawn node (MIN_CAR_TO_PLAYER_M), so
+    // booting already occupies the other three of the four spawn nodes.
+    const freeX = state.player.x;
+    expect(
+      state.vehicles.map((vehicle) => vehicle.x).sort((a, b) => a - b),
+    ).toEqual(SPAWN_XS.filter((x) => x !== freeX).sort((a, b) => a - b));
+
+    const dying: ArenaState = {
+      ...state,
+      player: { ...state.player, health: 0, diedAtTick: state.tick },
+    };
+    const respawned = run(dying, EMPTY_INPUT, RESPAWN_DELAY_TICKS);
+    expect(respawned.player.diedAtTick).toBeNull();
+    expect(respawned.player.x).toBe(freeX);
+    expect(respawned.player.y).toBe(0);
+  });
+
+  it("falls back to an unfiltered spawn node when every node is blocked", () => {
+    const state = boot();
+    const blockedEverywhere: ArenaState = {
+      ...state,
+      vehicles: SPAWN_XS.map((x, index) =>
+        createVehicle(500 + index, "compact", [x, 0], 0, 0),
+      ),
+      player: { ...state.player, health: 0, diedAtTick: state.tick },
+    };
+    const respawned = run(blockedEverywhere, EMPTY_INPUT, RESPAWN_DELAY_TICKS);
+    expect(respawned.player.diedAtTick).toBeNull();
+    // Every node has a car on it, so the choice falls back to an unfiltered
+    // node; collision resolution then immediately pushes the player off the
+    // car's hull, so assert proximity to a known node rather than equality.
+    const distanceToNearestNode = Math.min(
+      ...SPAWN_XS.map((x) => Math.abs(respawned.player.x - x)),
+    );
+    expect(distanceToNearestNode).toBeLessThanOrEqual(3);
   });
 
   it("keeps the invariants across a busy run", () => {

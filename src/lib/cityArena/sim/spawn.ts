@@ -2,6 +2,8 @@ import type { MapIndex, MapZone } from "../world/mapTypes";
 import { fromUnits, type Point } from "../world/projection";
 import type { RoadGraph } from "../world/roadGraph";
 import { distanceToZoneEdge, pickSpawn } from "../world/zone";
+import { CAR_BODY_RADIUS_M } from "./collisions";
+import { PLAYER_RADIUS_M } from "./player";
 import type { VehicleKind, VehicleState } from "./types";
 import { VEHICLE_COLOUR_COUNT, createVehicle } from "./vehicle";
 
@@ -11,6 +13,8 @@ export const PARKED_CARS_PER_ZONE = 8;
 export const MIN_CAR_SPACING_M = 12;
 /** Minimum distance between a parked car and a point in the avoid list (the player spawn). */
 export const MIN_CAR_TO_PLAYER_M = 8;
+/** Minimum distance a respawn point keeps from any intact vehicle, so players cannot respawn on a car. */
+export const RESPAWN_CAR_CLEARANCE_M = CAR_BODY_RADIUS_M + PLAYER_RADIUS_M + 1;
 /** Kinds parked cars are drawn from; police cars arrive with the cops in Plan 4b. */
 export const PARKED_CAR_KINDS: VehicleKind[] = ["compact", "sedan", "sport"];
 /** Search radius when snapping a spawn node to the road graph for its heading. */
@@ -129,6 +133,24 @@ export function chooseSpawnNode(
     (_, index) => scores[index] >= best - TIE_TOLERANCE_M,
   );
   return ties[Math.min(ties.length - 1, Math.floor(random() * ties.length))];
+}
+
+/**
+ * Spawn node for a respawn: a seeded random node, skipping any within
+ * `RESPAWN_CAR_CLEARANCE_M` of a point in `blockedBy` (spec §5: never respawn on a car) so a
+ * respawning player cannot land on a parked or driven vehicle. Falls back to
+ * {@link chooseSpawnNode}'s unfiltered pick when every node is blocked.
+ */
+export function chooseRespawnNode(
+  zone: MapZone,
+  blockedBy: Point[],
+  random: () => number,
+): Point {
+  const clear = spawnNodesMetres(zone).filter((node) =>
+    farFromAll(node, blockedBy, RESPAWN_CAR_CLEARANCE_M),
+  );
+  if (clear.length === 0) return chooseSpawnNode(zone, [], random);
+  return clear[Math.min(clear.length - 1, Math.floor(random() * clear.length))];
 }
 
 /** The zone whose edge is nearest to `point`; used to respawn after dying outside every disc. */
