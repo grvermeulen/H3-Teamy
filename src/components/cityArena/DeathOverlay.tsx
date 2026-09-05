@@ -58,12 +58,15 @@ function WastedArtwork({
   const animation = reducedMotion ? FADE_ANIMATION : SLAM_ANIMATION;
   return (
     <div className="absolute inset-0 overflow-hidden bg-[#050505]">
-      <img
-        src={WASTED_JPG}
-        alt=""
-        aria-hidden="true"
-        className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-2xl"
-      />
+      <picture>
+        <source srcSet={WASTED_WEBP} type="image/webp" />
+        <img
+          src={WASTED_JPG}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full scale-110 object-cover opacity-60 blur-2xl"
+        />
+      </picture>
       <picture>
         <source srcSet={WASTED_WEBP} type="image/webp" />
         <img
