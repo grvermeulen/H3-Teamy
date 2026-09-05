@@ -199,3 +199,11 @@ model Feedback {
   @@index([userId])
   @@index([status])
 }
+
+/** Admin-controlled feature flag (see `src/lib/featureFlags.ts`); hidden by default until set. */
+model FeatureFlag {
+  key       String   @id
+  enabled   Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+  updatedBy String
+}

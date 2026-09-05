@@ -44,10 +44,20 @@ describe("FeatureToggles", () => {
       name: "GTA H3 spel tonen",
     });
     expect(toggle).toHaveAttribute("aria-checked", "true");
+    expect(toggle).toHaveClass(
+      "p-0",
+      "border-0",
+      "inline-flex",
+      "items-center",
+    );
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/admin/features",
       expect.objectContaining({ cache: "no-store" }),
     );
+
+    const knob = toggle.querySelector("span");
+    expect(knob).toHaveClass("left-0.5", "top-0.5", "translate-x-5");
+    expect(knob).not.toHaveClass("translate-x-0.5");
   });
 
   it("sends the PATCH body when toggled and updates optimistically", async () => {
@@ -63,10 +73,12 @@ describe("FeatureToggles", () => {
       name: "GTA H3 spel tonen",
     });
     expect(toggle).toHaveAttribute("aria-checked", "false");
+    expect(toggle.querySelector("span")).toHaveClass("translate-x-0");
 
     fireEvent.click(toggle);
 
     await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "true"));
+    expect(toggle.querySelector("span")).toHaveClass("translate-x-5");
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,

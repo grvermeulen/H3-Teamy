@@ -12,9 +12,10 @@ Admin-only endpoints for status and user management.
 ## Functies (feature toggles)
 
 Admin-controlled feature flags gate optional UI for everyone, hidden by default until an admin
-turns them on. State is stored in KV as `{ enabled, updatedAt, updatedBy }` per flag (see
-`src/lib/featureFlags.ts`), with an in-code default used when nothing is stored yet, the stored
-value is malformed, or the read fails.
+turns them on. State is stored in Postgres, one row per flag in the `FeatureFlag` table
+(`key`, `enabled`, `updatedAt`, `updatedBy` — migration `add_feature_flag`; see
+`src/lib/featureFlags.ts`), so every server instance reads the same value. An in-code default
+(hidden) is used when no row is stored yet or the read fails.
 
 - API: `GET /api/admin/features` returns `{ flags }`; `PATCH` with `{ key, enabled }` updates one
   flag (`src/app/api/admin/features/route.ts`, admin-only like the rest of `src/app/api/admin/**`).

@@ -74,13 +74,13 @@ function FeatureToggleRow({
         aria-checked={enabled}
         aria-label={label}
         onClick={onToggle}
-        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-0 p-0 transition-colors ${
           enabled ? "bg-cyan-500" : "bg-[#30363d]"
         }`}
       >
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
-            enabled ? "translate-x-5" : "translate-x-0.5"
+          className={`pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+            enabled ? "translate-x-5" : "translate-x-0"
           }`}
         />
       </button>
