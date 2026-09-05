@@ -262,7 +262,6 @@ function ArenaFooter({ showTouch }: ArenaFooterProps): React.JSX.Element {
   );
 }
 
-/** Full-screen arena session: loading screen, canvas, HUD strip, touch controls, death screen, attribution. */
 /** True when the URL carries `?debug=1` in a non-production build (read once on mount). */
 function useDebugFlag(): boolean {
   const [debug] = useState(
@@ -273,6 +272,7 @@ function useDebugFlag(): boolean {
   return debug;
 }
 
+/** Full-screen arena session: loading screen, canvas, HUD strip, touch controls, death screen, attribution. */
 export default function CityArenaOverlay({
   zone,
   onClose,
