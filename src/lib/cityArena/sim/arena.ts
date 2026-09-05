@@ -362,6 +362,10 @@ function fireShots(
   random: () => number,
 ): FireResult {
   const { player } = state;
+  // canFire only checks that firing is allowed at all; a multi-pellet weapon
+  // (shotgun) can still overflow MAX_BULLETS close to the cap, so trim the
+  // surplus pellets here rather than let applyFire exceed the invariant.
+  const remainingCapacity = Math.max(0, MAX_BULLETS - state.bullets.length);
   const shots = createShots(
     WEAPONS[player.weapon],
     player.weapon,
@@ -373,7 +377,7 @@ function fireShots(
       firstId: state.nextId,
     },
     random,
-  );
+  ).slice(0, remainingCapacity);
   const muzzleId = state.nextId + shots.length;
   const effects =
     player.weapon === "fist"

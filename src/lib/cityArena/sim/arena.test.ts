@@ -10,6 +10,7 @@ import {
   teleportArenaPlayer,
   type ArenaWorld,
 } from "./arena";
+import { MAX_BULLETS } from "./bullets";
 import { RESPAWN_DELAY_TICKS } from "./damage";
 import { checkInvariants } from "./invariants";
 import { createRng } from "./rng";
@@ -18,6 +19,7 @@ import {
   createInput,
   type ArenaPlayerState,
   type ArenaState,
+  type BulletState,
   type WorldInput,
 } from "./types";
 import { createVehicle, distanceToVehicle } from "./vehicle";
@@ -87,6 +89,23 @@ function withCar(
     0,
   );
   return { ...state, vehicles: [{ ...car, wrecked }] };
+}
+
+/** A live bullet far from the player and every zone, so it neither hits anything nor runs out of range within one tick. */
+function makeBullet(id: number): BulletState {
+  return {
+    id,
+    ownerId: -1,
+    ignoreVehicleId: null,
+    x: 50_000,
+    y: 50_000,
+    directionX: 1,
+    directionY: 0,
+    speedMps: 1,
+    rangeLeftM: 1000,
+    damage: 0,
+    weapon: "pistol",
+  };
 }
 
 /** Boards the nearby car, drives off, brakes and coasts to a full stop beside it (shared setup for the Uitstappen tests). */
@@ -271,6 +290,23 @@ describe("stepArena firing and death", () => {
     );
     expect(blast.bullets).toHaveLength(5);
     expect(blast.player.ammo.shotgun).toBe(7);
+  });
+
+  it("caps a shotgun pull at the live-bullet limit instead of overshooting it", () => {
+    const state = boot();
+    const armed: ArenaPlayerState = { ...state.player, weapon: "shotgun" };
+    const nearlyFull: ArenaState = {
+      ...state,
+      player: armed,
+      vehicles: [],
+      bullets: Array.from({ length: MAX_BULLETS - 2 }, (_, index) =>
+        makeBullet(900 + index),
+      ),
+    };
+    const fired = run(nearlyFull, createInput({ fire: true, aim: 0 }), 1);
+    expect(fired.bullets).toHaveLength(MAX_BULLETS);
+    expect(fired.player.ammo.shotgun).toBe(7);
+    expect(checkInvariants(fired)).toEqual([]);
   });
 
   it("falls back to the pistol when a magazine runs dry", () => {
