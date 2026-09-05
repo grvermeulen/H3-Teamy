@@ -263,6 +263,16 @@ function ArenaFooter({ showTouch }: ArenaFooterProps): React.JSX.Element {
 }
 
 /** Full-screen arena session: loading screen, canvas, HUD strip, touch controls, death screen, attribution. */
+/** True when the URL carries `?debug=1` in a non-production build (read once on mount). */
+function useDebugFlag(): boolean {
+  const [debug] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      isDebugEnabled(window.location.search, process.env.NODE_ENV),
+  );
+  return debug;
+}
+
 export default function CityArenaOverlay({
   zone,
   onClose,
@@ -270,11 +280,7 @@ export default function CityArenaOverlay({
   const dialogRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stick = useMemo(() => createStick(), []);
-  const [debug] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      isDebugEnabled(window.location.search, process.env.NODE_ENV),
-  );
+  const debug = useDebugFlag();
   const showTouch = useShowTouchControls();
   const reducedMotion = useReducedMotion();
   const game = useArenaGame({ zoneKey: zone, canvasRef, debug, reducedMotion });
