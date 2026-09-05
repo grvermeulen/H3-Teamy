@@ -2,6 +2,7 @@
 
 ## API Routes
 
+- /api/admin/features
 - /api/admin/feedback
 - /api/admin/feedback/[id]
 - /api/admin/status

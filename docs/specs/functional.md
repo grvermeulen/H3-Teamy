@@ -48,6 +48,7 @@ This document reflects the features that exist in the code today. Planned or fut
 
 ## API Routes
 
+- /api/admin/features
 - /api/admin/feedback
 - /api/admin/feedback/[id]
 - /api/admin/status
