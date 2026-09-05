@@ -293,7 +293,7 @@ function useArenaInput(
   );
   const setButton = useCallback(
     (name: ButtonName, pressed: boolean) =>
-      inputRef.current.setButton("pointer", name, pressed),
+      inputRef.current.setButton("buttons", name, pressed),
     [inputRef],
   );
   return { setInputVector, setButton };

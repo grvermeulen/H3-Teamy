@@ -47,4 +47,14 @@ describe("input state", () => {
       fire: true,
     });
   });
+
+  it("keeps an on-screen button held when the mouse releases the same button", () => {
+    const state = createInputState();
+    state.setButton("buttons", "fire", true);
+    state.setButton("pointer", "fire", true);
+    state.setButton("pointer", "fire", false);
+    expect(state.snapshot().fire).toBe(true);
+    state.setButton("buttons", "fire", false);
+    expect(state.snapshot().fire).toBe(false);
+  });
 });

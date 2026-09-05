@@ -10,8 +10,8 @@ export function clampToUnit(vector: [number, number]): [number, number] {
 /** Buttons a device can hold down. */
 export type ButtonName = "fire" | "enter" | "weaponNext";
 
-/** Where a button press comes from; both sources are OR-ed together. */
-export type InputSource = "keyboard" | "pointer";
+/** Where a button press comes from (keys, the mouse, or the on-screen buttons); the sources are OR-ed together. */
+export type InputSource = "keyboard" | "pointer" | "buttons";
 
 /** Held state of the three buttons. */
 export type ButtonState = Record<ButtonName, boolean>;
@@ -39,9 +39,10 @@ export function createInputState(): InputState {
   const buttons: Record<InputSource, ButtonState> = {
     keyboard: { ...RELEASED },
     pointer: { ...RELEASED },
+    buttons: { ...RELEASED },
   };
   const held = (name: ButtonName): boolean =>
-    buttons.keyboard[name] || buttons.pointer[name];
+    buttons.keyboard[name] || buttons.pointer[name] || buttons.buttons[name];
   return {
     setKeyboard(vector) {
       keyboard = vector;
