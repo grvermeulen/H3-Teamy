@@ -2,13 +2,17 @@ import * as Sentry from "@sentry/nextjs";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { LoadProgress } from "@/lib/cityArena/world/mapLoader";
+import { createCamera } from "@/lib/cityArena/render/camera";
 import { createStaticRaster } from "@/lib/cityArena/render/staticRaster";
 import {
   createFakeContext,
   createFakeTarget,
 } from "@/lib/cityArena/render/testing/fakeContext";
+import { createArenaState } from "@/lib/cityArena/sim/arena";
+import { createRng } from "@/lib/cityArena/sim/rng";
+import { createVehicle } from "@/lib/cityArena/sim/vehicle";
 import { createCollisionGrid } from "@/lib/cityArena/world/collisionGrid";
+import type { LoadProgress } from "@/lib/cityArena/world/mapLoader";
 import type { MapIndex, MapLandmark } from "@/lib/cityArena/world/mapTypes";
 import type { Point } from "@/lib/cityArena/world/projection";
 import { decodeRoadGraph } from "@/lib/cityArena/world/roadGraph";
@@ -26,7 +30,12 @@ vi.mock("@/lib/cityArena/world/worldSession", () => ({
 }));
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
-import { nearestLandmarkTo, useArenaGame } from "./useArenaGame";
+import {
+  aimAngle,
+  computeHud,
+  nearestLandmarkTo,
+  useArenaGame,
+} from "./useArenaGame";
 
 /** Minimal valid index with no zones: `bootSession` falls back to spawning at `[0, 0]`. */
 const testIndex: MapIndex = {
@@ -138,6 +147,7 @@ function renderArenaGame() {
       zoneKey: "wageningen",
       canvasRef: useRef<HTMLCanvasElement>(null),
       debug: false,
+      reducedMotion: false,
     }),
   );
 }
@@ -344,5 +354,79 @@ describe("nearestLandmarkTo", () => {
 
   it("picks the other landmark once the point is closer to it instead", () => {
     expect(nearestLandmarkTo([near, far], [2000, 2000])).toBe(far);
+  });
+});
+
+describe("computeHud and aimAngle", () => {
+  it("reports vitals on foot and the car speed while driving", () => {
+    const state = createArenaState(
+      { index: testIndex, graph: testGraph, seed: 1, zone: null },
+      createRng(1),
+    );
+    const session = { index: () => testIndex, tiles: () => [] };
+    expect(computeHud(session, state)).toMatchObject({
+      zoneName: null,
+      health: 100,
+      weapon: "pistol",
+      speedMps: null,
+      inVehicle: false,
+    });
+    const car = { ...createVehicle(9, "sport", [0, 0], 0, 0), velocityX: 10 };
+    const driving = {
+      ...state,
+      vehicles: [car],
+      player: { ...state.player, vehicleId: 9 },
+    };
+    expect(computeHud(session, driving)).toMatchObject({
+      speedMps: 10,
+      inVehicle: true,
+    });
+  });
+
+  it("aims from the player toward the mouse position", () => {
+    const camera = createCamera([0, 0], 8);
+    const viewport = { width: 200, height: 100 };
+    expect(aimAngle(camera, viewport, [0, 0], null)).toBeNull();
+    expect(aimAngle(camera, viewport, [0, 0], [100, 90])).toBeCloseTo(
+      Math.PI / 2,
+    );
+    expect(aimAngle(camera, viewport, [0, 0], [180, 50])).toBeCloseTo(0);
+  });
+});
+
+describe("debug hooks", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("requestAnimationFrame", vi.fn());
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("installs window.__arena in debug mode and removes it on unmount", async () => {
+    const { session, resolveReady } = createControllableSession();
+    mockCreateWorldSession.mockReturnValue(session);
+    const { unmount } = renderHook(() =>
+      useArenaGame({
+        zoneKey: "wageningen",
+        canvasRef: useRef<HTMLCanvasElement>(null),
+        debug: true,
+        reducedMotion: false,
+      }),
+    );
+    await act(async () => {
+      resolveReady(testReady);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(window.__arena?.getState()?.tick).toBe(0);
+    window.__arena?.dispatch({ fire: true }, 2);
+    expect(window.__arena?.getViolations()).toBe(0);
+    unmount();
+    expect(window.__arena).toBeUndefined();
   });
 });

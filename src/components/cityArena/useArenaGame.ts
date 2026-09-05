@@ -15,32 +15,57 @@ import {
 } from "@/lib/cityArena/debugMetrics";
 import {
   createInputState,
+  type ButtonName,
   type InputState,
 } from "@/lib/cityArena/input/inputState";
 import { attachKeyboard } from "@/lib/cityArena/input/keyboard";
 import {
+  attachPointerAim,
+  type PointerAim,
+} from "@/lib/cityArena/input/pointerAim";
+import {
+  DRIVING_LOOK_AHEAD_MAX_M,
+  LOOK_AHEAD_MAX_M,
   createCamera,
+  screenToWorld,
   updateCamera,
   zoomLevelForViewport,
   type Camera,
+  type Viewport,
 } from "@/lib/cityArena/render/camera";
 import { createDomCanvasFactory } from "@/lib/cityArena/render/canvasTypes";
-import { renderScene } from "@/lib/cityArena/render/renderScene";
-import { rasterBudgetForViewport } from "@/lib/cityArena/render/staticRaster";
-import { createArenaPlayer } from "@/lib/cityArena/sim/arena";
 import {
-  createFreeRoamState,
-  stepFreeRoam,
-  teleportPlayer,
-} from "@/lib/cityArena/sim/freeRoam";
+  deathScreenPhase,
+  type DeathScreenPhase,
+} from "@/lib/cityArena/render/deathScreen";
+import { renderScene, type Scene } from "@/lib/cityArena/render/renderScene";
+import { rasterBudgetForViewport } from "@/lib/cityArena/render/staticRaster";
+import {
+  createArenaState,
+  occupiedVehicle,
+  stepArena,
+  teleportArenaPlayer,
+  type ArenaWorld,
+} from "@/lib/cityArena/sim/arena";
+import { PLAYER_MAX_HEALTH, damagePlayer } from "@/lib/cityArena/sim/damage";
+import { checkInvariants } from "@/lib/cityArena/sim/invariants";
 import { SIM_STEP_S } from "@/lib/cityArena/sim/player";
 import { createRng, seedFromString } from "@/lib/cityArena/sim/rng";
-import type {
-  FreeRoamState,
-  PlayerState,
-  WorldInput,
+import {
+  createInput,
+  type AmmoState,
+  type ArenaPlayerState,
+  type ArenaState,
+  type WeaponKind,
+  type WorldInput,
 } from "@/lib/cityArena/sim/types";
+import { forwardSpeed } from "@/lib/cityArena/sim/vehicle";
+import { SPAWN_AMMO } from "@/lib/cityArena/sim/weapons";
 import { saveArenaSettings } from "@/lib/cityArena/storage";
+import {
+  installArenaHooks,
+  type ArenaTestHooks,
+} from "@/lib/cityArena/test/hooks";
 import {
   createMapLoader,
   type LoadProgress,
@@ -64,11 +89,14 @@ import {
   landmarkCentreMetres,
   pickSpawn,
 } from "@/lib/cityArena/world/zone";
+import type { EntityCounts } from "./ArenaDebugOverlay";
 
 /** How often (ms) the loader streams new tiles around the player during play. */
 const TILE_REFRESH_MS = 500;
-/** How often (ms) the HUD's zone/street text is recomputed. */
-const HUD_REFRESH_MS = 250;
+/** How often (ms) the HUD is recomputed (spec §8: 10 Hz). */
+const HUD_REFRESH_MS = 100;
+/** Prefix of the per-session RNG seed string. */
+const SESSION_SEED_PREFIX = "gta-h3";
 /** How often (ms) the debug panel snapshot is rebuilt. */
 const DEBUG_REFRESH_MS = 500;
 /** Largest per-frame delta time accepted, so a stalled tab cannot cause a huge simulation jump. */
@@ -84,28 +112,46 @@ const MS_PER_SECOND = 1000;
 
 /** Overlay lifecycle phase. */
 export type ArenaPhase = "loading" | "playing" | "error";
-/** Text shown in the HUD strip. */
+/** Zone, street and vitals shown in the HUD strip. */
 export type ArenaHud = {
   zoneName: string | null;
   zoneKey: ZoneKey | null;
   street: string | null;
+  health: number;
+  weapon: WeaponKind;
+  ammo: AmmoState;
+  speedMps: number | null;
+  inVehicle: boolean;
 };
-/** HUD state before the first zone/street resolution runs. */
-const INITIAL_HUD: ArenaHud = { zoneName: null, zoneKey: null, street: null };
+/** HUD state before the first refresh runs. */
+const INITIAL_HUD: ArenaHud = {
+  zoneName: null,
+  zoneKey: null,
+  street: null,
+  health: PLAYER_MAX_HEALTH,
+  weapon: "pistol",
+  ammo: SPAWN_AMMO,
+  speedMps: null,
+  inVehicle: false,
+};
 /** Data for the debug panel. */
 export type DebugSnapshot = {
   metrics: MetricsSnapshot;
   chunks: { chunks: number; bytes: number };
   tiles: number;
   camera: Camera;
-  player: PlayerState;
+  player: ArenaPlayerState;
   routeMetres: number | null;
+  entities: EntityCounts;
 };
+/** The local player's death, stamped with the frame clock, while the death screen is up. */
+export type DeathInfo = { diedAtMs: number };
 /** Hook options. */
 export type UseArenaGameOptions = {
   zoneKey: ZoneKey;
   canvasRef: RefObject<HTMLCanvasElement | null>;
   debug: boolean;
+  reducedMotion?: boolean;
 };
 /** Hook result consumed by the overlay. */
 export type ArenaGame = {
@@ -114,16 +160,22 @@ export type ArenaGame = {
   failed: boolean;
   hud: ArenaHud;
   zones: MapZone[];
+  death: DeathInfo | null;
   setInputVector(vector: [number, number] | null): void;
+  setButton(name: ButtonName, pressed: boolean): void;
   teleportToZone(key: ZoneKey): void;
   debugSnapshot: DebugSnapshot | null;
 };
 
+/** A debug input that replaces the live one for a number of steps. */
+type InjectedInput = { input: WorldInput; ticksLeft: number };
+
 /** Mutable per-frame state shared by the boot, input and frame-loop hooks. */
 type Runtime = {
   session: WorldSession;
-  state: FreeRoamState;
+  state: ArenaState;
   camera: Camera;
+  random: () => number;
   accumulator: number;
   lastTileSync: number;
   /** True while a `session.update` tile sync is awaiting the network. */
@@ -132,6 +184,11 @@ type Runtime = {
   tileSyncRequested: boolean;
   lastHud: number;
   lastDebug: number;
+  diedAtMs: number | null;
+  injected: InjectedInput | null;
+  violations: number;
+  reportedViolations: Set<string>;
+  reducedMotion: boolean;
 };
 
 /** Reports a failure through Sentry, tagged so arena issues are easy to filter. */
@@ -139,13 +196,48 @@ function reportArenaError(error: unknown, kind: string): void {
   Sentry.captureException(error, { tags: { area: "arena", kind } });
 }
 
-/** Resizes the canvas to its layout size (device-pixel aware) and paints the current frame. */
-function paintCanvas(
-  canvas: HTMLCanvasElement,
+/** The death-screen phase for this frame, or `null` while alive. */
+function deathPhase(runtime: Runtime, nowMs: number): DeathScreenPhase | null {
+  if (runtime.diedAtMs === null) return null;
+  return deathScreenPhase(
+    (nowMs - runtime.diedAtMs) / MS_PER_SECOND,
+    runtime.reducedMotion,
+  );
+}
+
+/** Everything the renderer draws this frame. */
+function buildScene(
   runtime: Runtime,
   zone: MapZone | null,
+  aimScreen: [number, number] | null,
+  nowMs: number,
+): Scene {
+  const { session, state } = runtime;
+  return {
+    world: {
+      raster: session.raster,
+      tiles: session.tiles(),
+      landmarks: session.landmarks(),
+      loadedTileRects: session.loadedTileRects(),
+    },
+    zone,
+    player: state.player,
+    vehicles: state.vehicles,
+    bullets: state.bullets,
+    effects: state.effects,
+    tick: state.tick,
+    aimScreen,
+    pushIn: deathPhase(runtime, nowMs)?.pushIn ?? 1,
+  };
+}
+
+/** Resizes the canvas to its layout box (device-pixel aware) and paints the scene. */
+function paintCanvas(
+  canvas: HTMLCanvasElement,
+  rect: DOMRect,
+  camera: Camera,
+  scene: Scene,
 ): void {
-  const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
   const targetWidth = Math.round(rect.width * dpr);
   const targetHeight = Math.round(rect.height * dpr);
@@ -157,30 +249,10 @@ function paintCanvas(
   if (!ctx) return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, rect.width, rect.height);
-  const { session, state, camera } = runtime;
   renderScene(
     ctx,
     { rect: { x: 0, y: 0, width: rect.width, height: rect.height }, camera },
-    {
-      world: {
-        raster: session.raster,
-        tiles: session.tiles(),
-        landmarks: session.landmarks(),
-        loadedTileRects: session.loadedTileRects(),
-      },
-      zone,
-      player: {
-        ...createArenaPlayer([state.player.x, state.player.y], state.tick),
-        facing: state.player.facing,
-        speed: state.player.speed,
-      },
-      vehicles: [],
-      bullets: [],
-      effects: [],
-      tick: state.tick,
-      aimScreen: null,
-      pushIn: 1,
-    },
+    scene,
   );
 }
 
@@ -245,18 +317,10 @@ function rasterBudgetForCanvas(
   return rasterBudgetForViewport(rect, zoomLevelForViewport(rect.width));
 }
 
-/** A pseudo-random spawn point inside `zone`, reseeded from the zone key and the clock each call. */
-function randomSpawnPoint(zone: MapZone): Point {
-  return pickSpawn(
-    zone,
-    createRng(seedFromString(`${zone.key}:${Date.now()}`)),
-  );
-}
-
-/** Moves the player to a random spawn point in `zone` and remembers it as the last-visited zone. */
+/** Moves the player to a seeded spawn node of `zone` and remembers it as the last-visited zone. */
 function applyTeleport(runtime: Runtime, zone: MapZone): void {
-  const target = randomSpawnPoint(zone);
-  runtime.state = teleportPlayer(
+  const target = pickSpawn(zone, runtime.random);
+  runtime.state = teleportArenaPlayer(
     runtime.state,
     target,
     runtime.session.index(),
@@ -266,23 +330,41 @@ function applyTeleport(runtime: Runtime, zone: MapZone): void {
   saveArenaSettings({ lastZone: zone.key });
 }
 
-/** Fresh runtime for a session at `spawn`: free-roam state, camera and refresh timers all zeroed. */
+/** Fresh runtime: an arena state seeded from the zone and the clock, the camera at the spawn, timers zeroed. */
 function createRuntime(
   session: WorldSession,
-  spawn: Point,
   index: MapIndex,
+  zone: MapZone | null,
   viewportWidthPx: number,
+  reducedMotion: boolean,
 ): Runtime {
+  const seed = seedFromString(
+    `${SESSION_SEED_PREFIX}:${zone?.key ?? "none"}:${Date.now()}`,
+  );
+  const random = createRng(seed);
+  const state = createArenaState(
+    { index, graph: session.graph(), seed, zone },
+    random,
+  );
   return {
     session,
-    state: createFreeRoamState(spawn, index),
-    camera: createCamera(spawn, zoomLevelForViewport(viewportWidthPx)),
+    state,
+    camera: createCamera(
+      [state.player.x, state.player.y],
+      zoomLevelForViewport(viewportWidthPx),
+    ),
+    random,
     accumulator: 0,
     lastTileSync: 0,
     tileSyncPending: false,
     tileSyncRequested: false,
     lastHud: 0,
     lastDebug: 0,
+    diedAtMs: null,
+    injected: null,
+    violations: 0,
+    reportedViolations: new Set<string>(),
+    reducedMotion,
   };
 }
 
@@ -290,7 +372,7 @@ function createRuntime(
 type IsCancelled = () => boolean;
 
 /**
- * Awaits the session's index/graph, then builds the initial runtime at a random spawn point.
+ * Awaits the session's index/graph, then builds the initial runtime at a seeded spawn node.
  * Returns `null` without touching `runtimeRef` when `isCancelled` reports true after the wait —
  * the boot effect's cleanup runs synchronously and unconditionally disposes `session` before any
  * later `await` in this function can resume, so a cancelled caller never needs to dispose again.
@@ -300,17 +382,24 @@ async function bootSession(
   zoneKey: ZoneKey,
   canvasRef: RefObject<HTMLCanvasElement | null>,
   runtimeRef: RefObject<Runtime | null>,
+  reducedMotionRef: RefObject<boolean>,
   isCancelled: IsCancelled,
 ): Promise<{ index: MapIndex; spawn: Point } | null> {
   const { index } = await session.ready();
   if (isCancelled()) return null;
-  const zone = findZoneByKey(index, zoneKey) ?? index.zones[0];
-  const spawn: Point = zone ? randomSpawnPoint(zone) : [0, 0];
+  const zone = findZoneByKey(index, zoneKey) ?? index.zones.at(0) ?? null;
   const width =
     canvasRef.current?.getBoundingClientRect().width ??
     DEFAULT_VIEWPORT_WIDTH_PX;
-  runtimeRef.current = createRuntime(session, spawn, index, width);
-  return { index, spawn };
+  const runtime = createRuntime(
+    session,
+    index,
+    zone,
+    width,
+    reducedMotionRef.current,
+  );
+  runtimeRef.current = runtime;
+  return { index, spawn: [runtime.state.player.x, runtime.state.player.y] };
 }
 
 /** Options for {@link useArenaBoot}. */
@@ -318,6 +407,7 @@ type ArenaBootOptions = {
   zoneKey: ZoneKey;
   canvasRef: RefObject<HTMLCanvasElement | null>;
   runtimeRef: RefObject<Runtime | null>;
+  reducedMotionRef: RefObject<boolean>;
 };
 
 /**
@@ -366,7 +456,7 @@ async function finishBoot(
 
 /** Boots the world session for `zoneKey`: loads the map, spawns the player, disposes on unmount. */
 function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
-  const { zoneKey, canvasRef, runtimeRef } = options;
+  const { zoneKey, canvasRef, runtimeRef, reducedMotionRef } = options;
   const [phase, setPhase] = useState<ArenaPhase>("loading");
   const [progress, setProgress] = useState<LoadProgress>({
     loaded: 0,
@@ -382,7 +472,14 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
       () => setFailed(true),
       rasterBudgetForCanvas(canvasRef),
     );
-    bootSession(session, zoneKey, canvasRef, runtimeRef, isCancelled)
+    bootSession(
+      session,
+      zoneKey,
+      canvasRef,
+      runtimeRef,
+      reducedMotionRef,
+      isCancelled,
+    )
       .then((booted) =>
         finishBoot(session, booted, isCancelled, {
           setZones,
@@ -400,34 +497,78 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
       session.dispose();
       runtimeRef.current = null;
     };
-  }, [canvasRef, runtimeRef, zoneKey]);
+    // reducedMotionRef is listed for exhaustive-deps only: ref identity never changes across
+    // renders, so a media-query-driven reducedMotion change never re-runs this effect.
+  }, [canvasRef, runtimeRef, zoneKey, reducedMotionRef]);
 
   return { phase, progress, failed, zones, setProgress, setFailed };
 }
 
-/** Attaches WASD/arrow-key input on mount; returns the setter the touch stick drives. */
-function useArenaInput(inputRef: RefObject<InputState>): {
+/** World angle from the player to the mouse on the canvas, or `null` without a mouse position. */
+export function aimAngle(
+  camera: Camera,
+  viewport: Viewport,
+  player: Point,
+  pointer: [number, number] | null,
+): number | null {
+  if (!pointer) return null;
+  const target = screenToWorld(camera, viewport, pointer);
+  return Math.atan2(target[1] - player[1], target[0] - player[0]);
+}
+
+/** Attaches keyboard and mouse aim on mount; returns the setters the touch controls drive. */
+function useArenaInput(
+  inputRef: RefObject<InputState>,
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  pointerRef: RefObject<PointerAim | null>,
+): {
   setInputVector(vector: [number, number] | null): void;
+  setButton(name: ButtonName, pressed: boolean): void;
 } {
   useEffect(() => attachKeyboard(window, inputRef.current), [inputRef]);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    const aim = attachPointerAim(canvas, inputRef.current);
+    pointerRef.current = aim;
+    return () => {
+      aim.detach();
+      pointerRef.current = null;
+    };
+  }, [canvasRef, inputRef, pointerRef]);
   const setInputVector = useCallback(
     (vector: [number, number] | null) => inputRef.current.setStick(vector),
     [inputRef],
   );
-  return { setInputVector };
+  const setButton = useCallback(
+    (name: ButtonName, pressed: boolean) =>
+      inputRef.current.setButton("pointer", name, pressed),
+    [inputRef],
+  );
+  return { setInputVector, setButton };
 }
 
-/** Zone name/key and nearest named street for the HUD, from the player's current position. */
-function computeHud(session: WorldSession, player: PlayerState): ArenaHud {
+/** Zone, street and vitals for the HUD from the current state. */
+export function computeHud(
+  session: Pick<WorldSession, "index" | "tiles">,
+  state: ArenaState,
+): ArenaHud {
+  const { player } = state;
   const zone = findZone(session.index(), [player.x, player.y]);
+  const car = occupiedVehicle(state);
   return {
     zoneName: zone?.name ?? null,
     zoneKey: zone?.key ?? null,
     street: nearestRoadName(session.tiles(), [player.x, player.y]),
+    health: player.health,
+    weapon: player.weapon,
+    ammo: player.ammo,
+    speedMps: car ? Math.abs(forwardSpeed(car)) : null,
+    inVehicle: car !== null,
   };
 }
 
-/** Debug-panel snapshot: frame metrics, cache stats, camera/player position and route distance. */
+/** Debug-panel snapshot: frame metrics, cache stats, camera/player, route distance and entity counts. */
 function buildDebugSnapshot(
   runtime: Runtime,
   metrics: MetricsSnapshot,
@@ -439,37 +580,95 @@ function buildDebugSnapshot(
     camera: runtime.camera,
     player: runtime.state.player,
     routeMetres: routeToNearestLandmark(runtime),
+    entities: {
+      vehicles: runtime.state.vehicles.length,
+      bullets: runtime.state.bullets.length,
+      effects: runtime.state.effects.length,
+      violations: runtime.violations,
+    },
   };
 }
 
-/** Advances the fixed-step simulation to absorb `dt`, then eases the camera toward the player. */
-function advanceSimulation(
-  runtime: Runtime,
-  dt: number,
-  input: WorldInput,
-): void {
-  runtime.accumulator += dt;
-  const world = {
-    collision: runtime.session.collision,
-    index: runtime.session.index(),
-  };
-  let steps = 0;
-  while (runtime.accumulator >= SIM_STEP_S && steps < MAX_SIM_STEPS_PER_FRAME) {
-    runtime.state = stepFreeRoam(runtime.state, input, SIM_STEP_S, world);
-    runtime.accumulator -= SIM_STEP_S;
-    steps += 1;
+/** The input for the next step: an injected debug input while its ticks last, else the live one. */
+function nextInput(runtime: Runtime, live: WorldInput): WorldInput {
+  const injected = runtime.injected;
+  if (!injected || injected.ticksLeft <= 0) {
+    runtime.injected = null;
+    return live;
   }
+  runtime.injected = { ...injected, ticksLeft: injected.ticksLeft - 1 };
+  return injected.input;
+}
+
+/** Runs the invariant checker (debug mode); each distinct message goes to Sentry once per session. */
+function recordViolations(runtime: Runtime): void {
+  const violations = checkInvariants(runtime.state);
+  runtime.violations += violations.length;
+  for (const message of violations) {
+    if (runtime.reportedViolations.has(message)) continue;
+    runtime.reportedViolations.add(message);
+    Sentry.captureMessage(`Arena invariant: ${message}`, {
+      level: "warning",
+      tags: { area: "arena", kind: "invariant" },
+    });
+  }
+}
+
+/** Stamps a death with the frame clock and clears it on respawn; true when it changed. */
+function trackDeath(runtime: Runtime, nowMs: number): boolean {
+  const dead = runtime.state.player.diedAtTick !== null;
+  if (dead === (runtime.diedAtMs !== null)) return false;
+  runtime.diedAtMs = dead ? nowMs : null;
+  return true;
+}
+
+/** Eases the camera after the player or their car, with the driving or walking look-ahead cap. */
+function followPlayer(runtime: Runtime, dt: number): void {
   const { player } = runtime.state;
-  const velocity: Point = [
-    Math.cos(player.facing) * player.speed,
-    Math.sin(player.facing) * player.speed,
-  ];
+  const car = occupiedVehicle(runtime.state);
+  const velocity: Point = car
+    ? [car.velocityX, car.velocityY]
+    : [
+        Math.cos(player.facing) * player.speed,
+        Math.sin(player.facing) * player.speed,
+      ];
   runtime.camera = updateCamera(
     runtime.camera,
     [player.x, player.y],
     velocity,
     dt,
+    car ? DRIVING_LOOK_AHEAD_MAX_M : LOOK_AHEAD_MAX_M,
   );
+}
+
+/** Absorbs `dt` (slowed by the death screen's time scale) in fixed steps, then follows the player. */
+function advanceSimulation(
+  runtime: Runtime,
+  dt: number,
+  input: WorldInput,
+  nowMs: number,
+  debug: boolean,
+): void {
+  runtime.accumulator += dt * (deathPhase(runtime, nowMs)?.timeScale ?? 1);
+  const world: ArenaWorld = {
+    collision: runtime.session.collision,
+    index: runtime.session.index(),
+  };
+  let steps = 0;
+  while (runtime.accumulator >= SIM_STEP_S && steps < MAX_SIM_STEPS_PER_FRAME) {
+    const stepInput = nextInput(runtime, input);
+    runtime.state = stepArena(
+      runtime.state,
+      stepInput,
+      SIM_STEP_S,
+      world,
+      runtime.random,
+    );
+    runtime.accumulator -= SIM_STEP_S;
+    steps += 1;
+    if (debug) recordViolations(runtime);
+  }
+  followPlayer(runtime, dt);
 }
 
 /** Seconds elapsed since the previous frame, clamped so a stall cannot cause a huge simulation step. */
@@ -486,11 +685,13 @@ type FrameLoopOptions = {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   runtimeRef: RefObject<Runtime | null>;
   inputRef: RefObject<InputState>;
+  pointerRef: RefObject<PointerAim | null>;
   metricsRef: RefObject<FrameMetrics>;
   debug: boolean;
   setProgress: (progress: LoadProgress) => void;
   setFailed: (failed: boolean) => void;
   setHud: (hud: ArenaHud) => void;
+  setDeath: (death: DeathInfo | null) => void;
   setDebugSnapshot: (snapshot: DebugSnapshot | null) => void;
 };
 
@@ -527,7 +728,6 @@ function refreshThrottled(
   timestamp: number,
   options: FrameLoopOptions,
 ): void {
-  const { player } = runtime.state;
   if (timestamp - runtime.lastTileSync >= TILE_REFRESH_MS) {
     runtime.lastTileSync = timestamp;
     if (runtime.tileSyncPending) runtime.tileSyncRequested = true;
@@ -535,7 +735,7 @@ function refreshThrottled(
   }
   if (timestamp - runtime.lastHud >= HUD_REFRESH_MS) {
     runtime.lastHud = timestamp;
-    options.setHud(computeHud(runtime.session, player));
+    options.setHud(computeHud(runtime.session, runtime.state));
   }
   if (options.debug && timestamp - runtime.lastDebug >= DEBUG_REFRESH_MS) {
     runtime.lastDebug = timestamp;
@@ -545,7 +745,7 @@ function refreshThrottled(
   }
 }
 
-/** Simulates, paints and records metrics for one frame, then runs the throttled refreshes. */
+/** Aims, simulates, paints and records metrics for one frame, then runs the throttled refreshes. */
 function runFrame(
   timestamp: number,
   dt: number,
@@ -554,12 +754,34 @@ function runFrame(
   options: FrameLoopOptions,
 ): void {
   const simStart = performance.now();
-  advanceSimulation(runtime, dt, options.inputRef.current.snapshot());
+  const rect = canvas.getBoundingClientRect();
+  const size: Viewport = { width: rect.width, height: rect.height };
+  const pointer = options.pointerRef.current?.position() ?? null;
+  const { player } = runtime.state;
+  options.inputRef.current.setAim(
+    aimAngle(runtime.camera, size, [player.x, player.y], pointer),
+  );
+  advanceSimulation(
+    runtime,
+    dt,
+    options.inputRef.current.snapshot(),
+    timestamp,
+    options.debug,
+  );
+  if (trackDeath(runtime, timestamp))
+    options.setDeath(
+      runtime.diedAtMs === null ? null : { diedAtMs: runtime.diedAtMs },
+    );
   const drawStart = performance.now();
   const zone = runtime.state.zoneKey
     ? findZoneByKey(runtime.session.index(), runtime.state.zoneKey)
     : null;
-  paintCanvas(canvas, runtime, zone);
+  paintCanvas(
+    canvas,
+    rect,
+    runtime.camera,
+    buildScene(runtime, zone, pointer, timestamp),
+  );
   const drawEnd = performance.now();
   options.metricsRef.current.record({
     frameMs: dt * MS_PER_SECOND,
@@ -593,11 +815,13 @@ function useFrameLoop(phase: ArenaPhase, options: FrameLoopOptions): void {
     canvasRef,
     runtimeRef,
     inputRef,
+    pointerRef,
     metricsRef,
     debug,
     setProgress,
     setFailed,
     setHud,
+    setDeath,
     setDebugSnapshot,
   } = options;
   useEffect(() => {
@@ -606,11 +830,13 @@ function useFrameLoop(phase: ArenaPhase, options: FrameLoopOptions): void {
       canvasRef,
       runtimeRef,
       inputRef,
+      pointerRef,
       metricsRef,
       debug,
       setProgress,
       setFailed,
       setHud,
+      setDeath,
       setDebugSnapshot,
     });
   }, [
@@ -618,59 +844,166 @@ function useFrameLoop(phase: ArenaPhase, options: FrameLoopOptions): void {
     canvasRef,
     runtimeRef,
     inputRef,
+    pointerRef,
     metricsRef,
     debug,
     setProgress,
     setFailed,
     setHud,
+    setDeath,
     setDebugSnapshot,
   ]);
 }
 
-/** Owns the world session, the fixed-step loop, the camera and the HUD/debug state. */
+/** Builds the `window.__arena` seam over the runtime ref. */
+function createTestHooks(
+  runtimeRef: RefObject<Runtime | null>,
+): ArenaTestHooks {
+  return {
+    getState: () => runtimeRef.current?.state ?? null,
+    dispatch(input, ticks = 1) {
+      const runtime = runtimeRef.current;
+      if (runtime)
+        runtime.injected = { input: createInput(input), ticksLeft: ticks };
+    },
+    damage(amount) {
+      const runtime = runtimeRef.current;
+      if (!runtime) return;
+      const player = damagePlayer(
+        runtime.state.player,
+        amount,
+        runtime.state.tick,
+      );
+      runtime.state = { ...runtime.state, player };
+    },
+    getViolations: () => runtimeRef.current?.violations ?? 0,
+  };
+}
+
+/** Installs `window.__arena` while `debug` is on. */
+function useArenaTestHooks(
+  debug: boolean,
+  runtimeRef: RefObject<Runtime | null>,
+): void {
+  useEffect(() => {
+    if (!debug) return undefined;
+    return installArenaHooks(window, createTestHooks(runtimeRef));
+  }, [debug, runtimeRef]);
+}
+
+/** Keeps the reduced-motion preference on the boot ref and on the live runtime. */
+function useReducedMotionSync(
+  reducedMotion: boolean,
+  reducedMotionRef: RefObject<boolean>,
+  runtimeRef: RefObject<Runtime | null>,
+): void {
+  useEffect(() => {
+    reducedMotionRef.current = reducedMotion;
+    if (runtimeRef.current) runtimeRef.current.reducedMotion = reducedMotion;
+  }, [reducedMotion, reducedMotionRef, runtimeRef]);
+}
+
+/** The zone-picker teleport: moves the player and refreshes the HUD at once. */
+function useTeleport(
+  runtimeRef: RefObject<Runtime | null>,
+  setHud: (hud: ArenaHud) => void,
+): (key: ZoneKey) => void {
+  return useCallback(
+    (key: ZoneKey) => {
+      const runtime = runtimeRef.current;
+      if (!runtime) return;
+      const zone = findZoneByKey(runtime.session.index(), key);
+      if (!zone) return;
+      applyTeleport(runtime, zone);
+      setHud(computeHud(runtime.session, runtime.state));
+    },
+    [runtimeRef, setHud],
+  );
+}
+
+/** The mutable refs shared across the boot, input and frame-loop hooks. */
+type ArenaRuntimeRefs = {
+  runtimeRef: RefObject<Runtime | null>;
+  inputRef: RefObject<InputState>;
+  pointerRef: RefObject<PointerAim | null>;
+  metricsRef: RefObject<FrameMetrics>;
+  reducedMotionRef: RefObject<boolean>;
+};
+
+/** Creates the refs `useArenaGame` threads through its child hooks; split out to keep it short. */
+function useArenaRuntimeRefs(reducedMotion: boolean): ArenaRuntimeRefs {
+  const runtimeRef = useRef<Runtime | null>(null);
+  const inputRef = useRef(createInputState());
+  const pointerRef = useRef<PointerAim | null>(null);
+  const metricsRef = useRef(createFrameMetrics());
+  const reducedMotionRef = useRef(reducedMotion);
+  return { runtimeRef, inputRef, pointerRef, metricsRef, reducedMotionRef };
+}
+
+/** The hud/death/debug-snapshot state `useArenaGame` renders from; split out to keep it short. */
+type ArenaGameState = {
+  hud: ArenaHud;
+  setHud: (hud: ArenaHud) => void;
+  death: DeathInfo | null;
+  setDeath: (death: DeathInfo | null) => void;
+  debugSnapshot: DebugSnapshot | null;
+  setDebugSnapshot: (snapshot: DebugSnapshot | null) => void;
+};
+
+/** The three state slices the frame loop writes into and the hook exposes to the overlay. */
+function useArenaGameState(): ArenaGameState {
+  const [hud, setHud] = useState<ArenaHud>(INITIAL_HUD);
+  const [death, setDeath] = useState<DeathInfo | null>(null);
+  const [debugSnapshot, setDebugSnapshot] = useState<DebugSnapshot | null>(
+    null,
+  );
+  return { hud, setHud, death, setDeath, debugSnapshot, setDebugSnapshot };
+}
+
+/** Owns the world session, the fixed-step arena loop, the camera, the HUD and the death screen state. */
 export function useArenaGame({
   zoneKey,
   canvasRef,
   debug,
+  reducedMotion = false,
 }: UseArenaGameOptions): ArenaGame {
-  const runtimeRef = useRef<Runtime | null>(null);
-  const inputRef = useRef(createInputState());
-  const metricsRef = useRef(createFrameMetrics());
-  const [hud, setHud] = useState<ArenaHud>(INITIAL_HUD);
-  const [debugSnapshot, setDebugSnapshot] = useState<DebugSnapshot | null>(
-    null,
+  const { runtimeRef, inputRef, pointerRef, metricsRef, reducedMotionRef } =
+    useArenaRuntimeRefs(reducedMotion);
+  const { hud, setHud, death, setDeath, debugSnapshot, setDebugSnapshot } =
+    useArenaGameState();
+  useReducedMotionSync(reducedMotion, reducedMotionRef, runtimeRef);
+  const { phase, progress, failed, zones, setProgress, setFailed } =
+    useArenaBoot({ zoneKey, canvasRef, runtimeRef, reducedMotionRef });
+  const { setInputVector, setButton } = useArenaInput(
+    inputRef,
+    canvasRef,
+    pointerRef,
   );
-
-  const boot = useArenaBoot({ zoneKey, canvasRef, runtimeRef });
-  const { setInputVector } = useArenaInput(inputRef);
-  useFrameLoop(boot.phase, {
+  useArenaTestHooks(debug, runtimeRef);
+  useFrameLoop(phase, {
     canvasRef,
     runtimeRef,
     inputRef,
+    pointerRef,
     metricsRef,
     debug,
-    setProgress: boot.setProgress,
-    setFailed: boot.setFailed,
+    setProgress,
+    setFailed,
     setHud,
+    setDeath,
     setDebugSnapshot,
   });
-
-  const teleportToZone = useCallback((key: ZoneKey) => {
-    const runtime = runtimeRef.current;
-    if (!runtime) return;
-    const zone = findZoneByKey(runtime.session.index(), key);
-    if (!zone) return;
-    applyTeleport(runtime, zone);
-    setHud({ zoneName: zone.name, zoneKey: zone.key, street: null });
-  }, []);
+  const teleportToZone = useTeleport(runtimeRef, setHud);
 
   return {
-    phase: boot.phase,
-    progress: boot.progress,
-    failed: boot.failed,
+    phase,
+    progress,
+    failed,
     hud,
-    zones: boot.zones,
+    zones,
+    death,
     setInputVector,
+    setButton,
     teleportToZone,
     debugSnapshot,
   };
