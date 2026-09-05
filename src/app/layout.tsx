@@ -7,6 +7,7 @@ import SessionStatus from "../components/SessionStatus";
 import FeedbackFab from "../components/FeedbackFab";
 import WhatsNewTour from "../components/WhatsNewTour";
 import AppSplash from "../components/AppSplash";
+import ServiceWorkerRegistration from "../components/ServiceWorkerRegistration";
 import { ToastRegion } from "../components/ui";
 
 export const metadata: Metadata = {
@@ -17,6 +18,11 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Root layout for every page: the global chrome (header, navigation, toasts, splash) around the
+ * page content plus the client-side service worker policy. Applies the Christmas theme when the
+ * `christmas_event` environment flag is set.
+ */
 export default function RootLayout({
   children,
 }: {
@@ -102,37 +108,7 @@ export default function RootLayout({
             </a>
           </footer>
         </Providers>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-          if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function () {
-              navigator.serviceWorker.register('/sw.js').then((registration) => {
-                if (registration.waiting) {
-                  registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-                  return;
-                }
-                registration.addEventListener('updatefound', () => {
-                  const newWorker = registration.installing;
-                  if (!newWorker) return;
-                  newWorker.addEventListener('statechange', () => {
-                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                      newWorker.postMessage({ type: 'SKIP_WAITING' });
-                    }
-                  });
-                });
-                let refreshing = false;
-                navigator.serviceWorker.addEventListener('controllerchange', () => {
-                  if (refreshing) return;
-                  refreshing = true;
-                  window.location.reload();
-                });
-              }).catch(()=>{});
-            });
-          }
-        `,
-          }}
-        />
+        <ServiceWorkerRegistration />
       </body>
     </html>
   );
