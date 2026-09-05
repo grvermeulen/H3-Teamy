@@ -22,6 +22,8 @@ import { fetchJsonIfOkOr } from "../lib/safeClientJson";
 type Props = {
   /** Teamwedstrijden uit de iCal-feed (server component → client). */
   events: TeamEvent[];
+  /** Toont de GTA H3-kaart als de admin-feature-toggle aan staat (standaard verborgen). */
+  gtaH3Enabled?: boolean;
 };
 
 type RsvpMap = Record<string, RsvpStatus>;
@@ -35,8 +37,12 @@ type RsvpMap = Record<string, RsvpStatus>;
  *
  * @param props - Componentprops.
  * @param props.events - Te tonen events (chronologisch gesorteerd in de UI).
+ * @param props.gtaH3Enabled - Toont de GTA H3-kaart onder Space Invaders (standaard verborgen).
  */
-export default function EventList({ events }: Props): React.JSX.Element {
+export default function EventList({
+  events,
+  gtaH3Enabled = false,
+}: Props): React.JSX.Element {
   const [rsvpMap, setRsvpMap] = useState<RsvpMap>({});
   const [counts, setCounts] = useState<
     Record<string, { yes: number; no: number; maybe: number }>
@@ -464,7 +470,7 @@ export default function EventList({ events }: Props): React.JSX.Element {
       ) : null}
       {future.map((evt) => renderEventCard(evt))}
       <SpaceInvadersLauncher />
-      <CityArenaLauncher />
+      {gtaH3Enabled ? <CityArenaLauncher /> : null}
       {visibleCount === 0 ? (
         <div className="muted">Geen recente of aankomende wedstrijden.</div>
       ) : null}

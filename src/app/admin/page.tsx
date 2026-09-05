@@ -3,6 +3,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { useEffect, useMemo, useState } from "react";
 import AdminNav from "../../components/AdminNav";
+import FeatureToggles from "../../components/admin/FeatureToggles";
 import {
   Button,
   Card,
@@ -271,6 +272,8 @@ export default function AdminUsersPage() {
         <h1>Admin</h1>
 
         <AdminNav />
+
+        <FeatureToggles />
 
         <Input
           label="Zoek gebruiker"

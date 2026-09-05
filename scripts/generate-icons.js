@@ -12,6 +12,7 @@ const sharp = require("sharp");
 const APPLE_TOUCH_ICON_SIZE = 180;
 const ICON_SIZES = [192, 512];
 const LOGO_PNG_SIZE = 256;
+const GTA_LOGO_SIZE = 256;
 const MASKABLE_CANVAS_SIZE = 512;
 const MASKABLE_BADGE_SIZE = 410; // 80 % safe zone so circular masks keep the badge visible.
 const SPLASH_APP_WIDTH = 1080;
@@ -33,6 +34,7 @@ const sources = {
     "splash-game-landscape.png",
   ),
   deathScreen: path.join(root, "assets", "branding", "wasted-screen.png"),
+  gtaLogo: path.join(root, "assets", "branding", "gta-h3-logo.png"),
 };
 const iconsDir = path.join(root, "public", "icons");
 const brandingDir = path.join(root, "public", "branding");
@@ -157,6 +159,23 @@ async function generateDeathScreen() {
 }
 
 /**
+ * Generates the GTA H3 launcher icon from the owner's logo artwork: a WebP primary source at
+ * its native resolution, and a 256×256 PNG fallback used directly by the launcher's `<img>`.
+ */
+async function generateGtaLogo() {
+  const gtaLogo = sharp(sources.gtaLogo);
+  await gtaLogo
+    .clone()
+    .webp({ quality: WEBP_QUALITY_APP })
+    .toFile(path.join(brandingDir, "gta-h3-logo.webp"));
+  await gtaLogo
+    .clone()
+    .resize({ width: GTA_LOGO_SIZE, height: GTA_LOGO_SIZE, fit: "cover" })
+    .png()
+    .toFile(path.join(brandingDir, "gta-h3-logo.png"));
+}
+
+/**
  * Logs where the generated branding assets were written.
  */
 function reportDone() {
@@ -174,6 +193,7 @@ async function main() {
   await generateMaskableIcon(logo);
   await generateSplashes();
   await generateDeathScreen();
+  await generateGtaLogo();
 
   reportDone();
 }
