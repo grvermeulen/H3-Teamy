@@ -13,8 +13,11 @@ export const PARKED_CARS_PER_ZONE = 8;
 export const MIN_CAR_SPACING_M = 12;
 /** Minimum distance between a parked car and a point in the avoid list (the player spawn). */
 export const MIN_CAR_TO_PLAYER_M = 8;
+/** Extra room beyond bare contact between a respawning player and a parked car (m). */
+const RESPAWN_CAR_MARGIN_M = 1;
 /** Minimum distance a respawn point keeps from any intact vehicle, so players cannot respawn on a car. */
-export const RESPAWN_CAR_CLEARANCE_M = CAR_BODY_RADIUS_M + PLAYER_RADIUS_M + 1;
+export const RESPAWN_CAR_CLEARANCE_M =
+  CAR_BODY_RADIUS_M + PLAYER_RADIUS_M + RESPAWN_CAR_MARGIN_M;
 /** Kinds parked cars are drawn from; police cars arrive with the cops in Plan 4b. */
 export const PARKED_CAR_KINDS: VehicleKind[] = ["compact", "sedan", "sport"];
 /** Search radius when snapping a spawn node to the road graph for its heading. */
