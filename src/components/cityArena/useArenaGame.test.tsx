@@ -3,14 +3,21 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCamera } from "@/lib/cityArena/render/camera";
+import { CROSSHAIR_STROKE } from "@/lib/cityArena/render/palette";
 import { createStaticRaster } from "@/lib/cityArena/render/staticRaster";
 import {
   createFakeContext,
   createFakeTarget,
+  type FakeContext,
 } from "@/lib/cityArena/render/testing/fakeContext";
 import { createArenaState } from "@/lib/cityArena/sim/arena";
+import {
+  PLAYER_MAX_HEALTH,
+  RESPAWN_DELAY_TICKS,
+} from "@/lib/cityArena/sim/damage";
 import { createRng } from "@/lib/cityArena/sim/rng";
 import { createVehicle } from "@/lib/cityArena/sim/vehicle";
+import { nextWeapon, SPAWN_AMMO } from "@/lib/cityArena/sim/weapons";
 import { createCollisionGrid } from "@/lib/cityArena/world/collisionGrid";
 import type { LoadProgress } from "@/lib/cityArena/world/mapLoader";
 import type { MapIndex, MapLandmark } from "@/lib/cityArena/world/mapTypes";
@@ -28,7 +35,10 @@ const mockCreateWorldSession = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/cityArena/world/worldSession", () => ({
   createWorldSession: mockCreateWorldSession,
 }));
-vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+vi.mock("@sentry/nextjs", () => ({
+  captureException: vi.fn(),
+  captureMessage: vi.fn(),
+}));
 
 import {
   aimAngle,
@@ -36,6 +46,11 @@ import {
   nearestLandmarkTo,
   useArenaGame,
 } from "./useArenaGame";
+
+/** Wall-clock step (ms) between manually driven frames; matches `MAX_FRAME_S` so each is a full 0.1 s step. */
+const FRAME_STEP_MS = 100;
+/** Generous bound on frames driven while waiting for a respawn (needs roughly 33 at `FRAME_STEP_MS`; see deathScreen.ts). */
+const MAX_RESPAWN_FRAMES = 60;
 
 /** Minimal valid index with no zones: `bootSession` falls back to spawning at `[0, 0]`. */
 const testIndex: MapIndex = {
@@ -109,6 +124,18 @@ function createControllableSession(): {
   return { session, resolveReady };
 }
 
+/** Resolves `session.ready()` with {@link testReady} and flushes the boot promise chain: its own `await`, then the `.then` continuation. */
+async function bootReady(
+  resolveReady: (value: WorldReady) => void,
+): Promise<void> {
+  await act(async () => {
+    resolveReady(testReady);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 /**
  * A controllable session whose `session.update` resolves immediately the first time (the
  * boot's own sync) but stays pending on every later call until `settlePendingUpdate` is
@@ -152,25 +179,79 @@ function renderArenaGame() {
   );
 }
 
+/** Options for {@link renderArenaGameWithCanvas}; omitted fields keep the pre-existing defaults. */
+type RenderWithCanvasOptions = { debug?: boolean };
+
 /**
  * Renders the hook with a real (if unattached-to-the-DOM) canvas, and fakes its 2D context —
  * jsdom's own `getContext` returns `null`. Needed only by tests that drive the frame loop
  * manually: `startFrameLoop`'s tick skips `runFrame` (and so the throttled tile-sync/HUD/debug
  * refreshes) entirely when `canvasRef.current` is null, which `renderArenaGame` above leaves it.
+ * Every `getContext` call returns the SAME fake context (as a real canvas would), so callers can
+ * inspect `fakeContext.calls` across frames; it and the raw `canvas` come back alongside the hook
+ * result so a test can dispatch pointer events and assert on paint calls.
  */
-function renderArenaGameWithCanvas() {
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
-    () => createFakeContext() as unknown as CanvasRenderingContext2D,
+function renderArenaGameWithCanvas(options: RenderWithCanvasOptions = {}) {
+  const fakeContext = createFakeContext();
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+    fakeContext as unknown as CanvasRenderingContext2D,
   );
-  const canvasRef = { current: document.createElement("canvas") };
-  return renderHook(() =>
-    useArenaGame({ zoneKey: "wageningen", canvasRef, debug: false }),
+  const canvas = document.createElement("canvas");
+  // `canvasRef` must keep one stable identity across re-renders: `useArenaBoot` and
+  // `useArenaInput`'s effects list it as a dependency, so a fresh object every render would
+  // re-run them (and so re-boot the session) on every re-render instead of once on mount.
+  const canvasRef = { current: canvas };
+  const hook = renderHook(() =>
+    useArenaGame({
+      zoneKey: "wageningen",
+      canvasRef,
+      debug: options.debug ?? false,
+    }),
   );
+  return { ...hook, canvas, fakeContext };
+}
+
+/**
+ * Wires a fresh controllable session into the mocked factory, renders the hook on a real canvas,
+ * and boots it — the setup every debug-seam test needing real frames otherwise repeats.
+ */
+async function bootArenaWithCanvas(
+  options: RenderWithCanvasOptions = {},
+): Promise<ReturnType<typeof renderArenaGameWithCanvas>> {
+  const { session, resolveReady } = createControllableSession();
+  mockCreateWorldSession.mockReturnValue(session);
+  const rendered = renderArenaGameWithCanvas(options);
+  await bootReady(resolveReady);
+  return rendered;
 }
 
 /** Grabs the frame-loop's `tick` callback handed to the mocked `requestAnimationFrame`. */
 function getTick(): (timestamp: number) => void {
   return vi.mocked(window.requestAnimationFrame).mock.calls[0][0];
+}
+
+/** True once the fake context has drawn the mouse crosshair (`drawCrosshair` in drawProjectiles.ts). */
+function hasCrosshairStroke(fakeContext: FakeContext): boolean {
+  const crosshairStroke = `stroke(${CROSSHAIR_STROKE}`;
+  return fakeContext.calls.some((call) => call.startsWith(crosshairStroke));
+}
+
+/**
+ * Calls `tick` with timestamps `FRAME_STEP_MS` apart, starting after `fromMs`, until `isDone`
+ * reports true or `MAX_RESPAWN_FRAMES` frames have run — whichever comes first, so a regression
+ * that stops the state from ever satisfying `isDone` fails the caller's own assertion instead of
+ * hanging the test.
+ */
+function driveFramesUntil(
+  tick: (timestamp: number) => void,
+  fromMs: number,
+  isDone: () => boolean,
+): void {
+  let timestamp = fromMs;
+  for (let frame = 0; frame < MAX_RESPAWN_FRAMES && !isDone(); frame++) {
+    timestamp += FRAME_STEP_MS;
+    act(() => tick(timestamp));
+  }
 }
 
 describe("useArenaGame", () => {
@@ -402,6 +483,7 @@ describe("debug hooks", () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -428,5 +510,73 @@ describe("debug hooks", () => {
     expect(window.__arena?.getViolations()).toBe(0);
     unmount();
     expect(window.__arena).toBeUndefined();
+  });
+
+  it("switches the held weapon once, stamps and clears a death, and hides the crosshair while dead", async () => {
+    const { result, canvas, fakeContext } = await bootArenaWithCanvas({
+      debug: true,
+    });
+    expect(result.current.phase).toBe("playing");
+    const tick = getTick();
+    // A live mouse position, so a crosshair would be drawn if the death fix below didn't hide it.
+    canvas.dispatchEvent(
+      new PointerEvent("pointermove", {
+        pointerType: "mouse",
+        clientX: 50,
+        clientY: 50,
+        bubbles: true,
+      }),
+    );
+
+    // (a) held for 3 ticks, the edge-trigger contract (detectEdges in arena.ts) switches once.
+    window.__arena?.dispatch({ weaponNext: true }, 3);
+    act(() => tick(0));
+    act(() => tick(FRAME_STEP_MS));
+    expect(window.__arena?.getState()?.player.weapon).toBe(
+      nextWeapon("pistol", SPAWN_AMMO),
+    );
+    expect(hasCrosshairStroke(fakeContext)).toBe(true);
+    fakeContext.calls.length = 0;
+
+    // (b) damage() stamps the death on the very next frame, at that frame's clock, and hides
+    // the crosshair; (c) it clears once the tick passes the respawn delay (damage.ts).
+    window.__arena?.damage(PLAYER_MAX_HEALTH);
+    const diedAtTick = window.__arena?.getState()?.player.diedAtTick ?? 0;
+    act(() => tick(2 * FRAME_STEP_MS));
+    expect(result.current.death).toEqual({ diedAtMs: 2 * FRAME_STEP_MS });
+    expect(hasCrosshairStroke(fakeContext)).toBe(false);
+
+    const respawnTick = diedAtTick + RESPAWN_DELAY_TICKS;
+    driveFramesUntil(
+      tick,
+      2 * FRAME_STEP_MS,
+      () => (window.__arena?.getState()?.tick ?? 0) >= respawnTick,
+    );
+    expect(result.current.death).toBeNull();
+
+    // None of the frames above broke an invariant.
+    expect(window.__arena?.getViolations()).toBe(0);
+  });
+
+  it("reports a broken invariant to Sentry once, even though it recurs every later frame", async () => {
+    const { result } = await bootArenaWithCanvas({ debug: true });
+    expect(result.current.phase).toBe("playing");
+    const tick = getTick();
+
+    // No live input ever produces NaN; this is the cheapest way to put the state into a shape
+    // checkInvariants (invariants.ts) rejects, so the once-per-message dedupe can be exercised.
+    // The break is permanent (stepPlayer's dead-zone branch only overwrites facing/speed), so the
+    // same message recurs on every later tick without any further help from this test.
+    window.__arena?.dispatch({ move: [Number.NaN, Number.NaN] }, 1);
+    act(() => tick(0));
+    act(() => tick(FRAME_STEP_MS));
+    act(() => tick(2 * FRAME_STEP_MS));
+
+    expect(window.__arena?.getViolations()).toBeGreaterThan(0);
+    expect(vi.mocked(Sentry.captureMessage)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(Sentry.captureMessage)).toHaveBeenCalledWith(
+      "Arena invariant: player position is not finite",
+      { level: "warning", tags: { area: "arena", kind: "invariant" } },
+    );
   });
 });

@@ -226,7 +226,9 @@ function buildScene(
     bullets: state.bullets,
     effects: state.effects,
     tick: state.tick,
-    aimScreen,
+    // Hidden during the death screen: the push-in transform would otherwise draw it up to 8%
+    // off from the physical cursor (spec §7's push-in tops out at 1.08×).
+    aimScreen: runtime.diedAtMs === null ? aimScreen : null,
     pushIn: deathPhase(runtime, nowMs)?.pushIn ?? 1,
   };
 }
