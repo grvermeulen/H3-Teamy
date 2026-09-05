@@ -1,7 +1,10 @@
+import { Prisma } from "@prisma/client";
+import * as Sentry from "@sentry/nextjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
+  addBreadcrumb: vi.fn(),
 }));
 
 const mockUserRoleFindUnique = vi.fn();
@@ -119,5 +122,35 @@ describe("user role storage", () => {
       player: true,
     });
     expect(roles.user_other).toEqual({ player: true });
+  });
+
+  it("falls back without Sentry when the UserRole table is missing", async () => {
+    mockKvRestStore();
+    mockUserRoleFindUnique.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError(
+        "The table `public.UserRole` does not exist in the current database.",
+        { code: "P2021", clientVersion: "test" },
+      ),
+    );
+
+    const { getUserRoles } = await import("./kv");
+    vi.mocked(Sentry.captureException).mockClear();
+    vi.mocked(Sentry.addBreadcrumb).mockClear();
+
+    const roles = await getUserRoles("user_arjen");
+
+    expect(roles).toEqual({ player: true });
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        tags: expect.objectContaining({ operation: "getUserRoles_db" }),
+      }),
+    );
+    expect(vi.mocked(Sentry.addBreadcrumb)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: "postgres",
+        level: "warning",
+      }),
+    );
   });
 });
