@@ -56,6 +56,19 @@ describe("attachKeyboard", () => {
     detach();
   });
 
+  it("keeps button held while any of its key aliases is pressed", () => {
+    const state = createInputState();
+    const detach = attachKeyboard(window, state);
+    press("KeyE");
+    press("KeyF");
+    expect(state.snapshot().enter).toBe(true);
+    release("KeyE");
+    expect(state.snapshot().enter).toBe(true); // Still held by KeyF
+    release("KeyF");
+    expect(state.snapshot().enter).toBe(false);
+    detach();
+  });
+
   it("ignores keys typed into form fields or pressed on a focused button, and resets on blur", () => {
     const state = createInputState();
     const detach = attachKeyboard(window, state);

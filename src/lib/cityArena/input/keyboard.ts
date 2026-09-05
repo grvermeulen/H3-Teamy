@@ -49,12 +49,38 @@ function movementVector(pressed: Set<string>): [number, number] {
   return [Math.sign(x), Math.sign(y)];
 }
 
+/** Recomputes which buttons are held from the set of pressed key codes. */
+function publishButtonStates(
+  pressedButtons: Set<string>,
+  state: InputState,
+): void {
+  const heldButtons = new Map<ButtonName, boolean>();
+  for (const code of pressedButtons) {
+    const button = KEY_BUTTONS[code];
+    if (button) {
+      heldButtons.set(button, true);
+    }
+  }
+  // Publish: held buttons stay true, others implicitly false (cleared below)
+  for (const [button, _held] of heldButtons) {
+    state.setButton("keyboard", button, true);
+  }
+  // Mark released buttons as false (keys that were held before, now absent)
+  const allButtons: ButtonName[] = ["fire", "enter", "weaponNext"];
+  for (const button of allButtons) {
+    if (!heldButtons.has(button)) {
+      state.setButton("keyboard", button, false);
+    }
+  }
+}
+
 /** Binds WASD/arrows and the Space/E/F/Enter/Q buttons to the input state; returns the detach function. */
 export function attachKeyboard(
   target: KeyboardTarget,
   state: InputState,
 ): () => void {
   const pressed = new Set<string>();
+  const pressedButtons = new Set<string>();
   const onKeyDown = (event: KeyboardEvent): void => {
     if (isTypingTarget(event.target)) return;
     if (KEY_VECTORS[event.code]) {
@@ -66,18 +92,20 @@ export function attachKeyboard(
     const button = KEY_BUTTONS[event.code];
     if (!button || event.target instanceof HTMLButtonElement) return;
     event.preventDefault();
-    state.setButton("keyboard", button, true);
+    pressedButtons.add(event.code);
+    publishButtonStates(pressedButtons, state);
   };
   const onKeyUp = (event: KeyboardEvent): void => {
     if (pressed.delete(event.code)) {
       state.setKeyboard(movementVector(pressed));
       return;
     }
-    const button = KEY_BUTTONS[event.code];
-    if (button) state.setButton("keyboard", button, false);
+    pressedButtons.delete(event.code);
+    publishButtonStates(pressedButtons, state);
   };
   const onBlur = (): void => {
     pressed.clear();
+    pressedButtons.clear();
     state.clearKeyboard();
   };
   target.addEventListener("keydown", onKeyDown);
