@@ -83,3 +83,36 @@ export const PLAYER_FILL = "#f5f5f5";
 export const PLAYER_RING = "#e11d48";
 /** Zone boundary ring. */
 export const ZONE_RING = "rgba(29,78,216,0.7)";
+/** Car body colours indexed by `VehicleState.colour` (six entries, matching `VEHICLE_COLOUR_COUNT`). */
+export const CAR_BODY_COLOURS: string[] = [
+  "#c0392b",
+  "#2e86de",
+  "#f1c40f",
+  "#27ae60",
+  "#8e44ad",
+  "#ecf0f1",
+];
+/** Car window glass. */
+export const CAR_WINDOW = "#1b2631";
+/** Headlight lenses. */
+export const CAR_HEADLIGHT = "#fff3b0";
+/** Burnt-out wreck. */
+export const CAR_WRECK = "#3d3d3d";
+/** Smoke puffs of a damaged car. */
+export const CAR_SMOKE = "rgba(90,90,90,0.55)";
+/** Bullet tracer. */
+export const BULLET_STROKE = "#fff8dc";
+/** Muzzle flash. */
+export const MUZZLE_FILL = "#ffd54a";
+/** Impact dot. */
+export const IMPACT_FILL = "#f5f5f5";
+/** Explosion disc. */
+export const EXPLOSION_FILL = "rgba(255,140,0,0.8)";
+/** Explosion ring. */
+export const EXPLOSION_RING = "#ff5722";
+/** Mouse crosshair. */
+export const CROSSHAIR_STROKE = "rgba(255,255,255,0.9)";
+/** Body of a player waiting to respawn. */
+export const PLAYER_DEAD_FILL = "#6b6b6b";
+/** Outline of a dead body. */
+export const PLAYER_DEAD_RING = "#3a3a3a";

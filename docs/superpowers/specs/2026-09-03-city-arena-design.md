@@ -445,7 +445,7 @@ mobile layout; either can be forced in settings.
 | Move / drive           | WASD or arrows (car: W/↑ gas, S/↓ brake→reverse, A/D steer)               |
 | Aim                    | mouse → world position; canvas crosshair, native cursor hidden            |
 | Fire                   | left mouse or Space (hold = auto)                                         |
-| Instappen / Uitstappen | F or Enter                                                                |
+| Instappen / Uitstappen | E, F, or Enter                                                            |
 | Wapen                  | Q, mouse wheel, or 1/2/3                                                  |
 | Scorebord              | hold Tab                                                                  |
 | Menu                   | Esc (Geluid, Trillen, Besturing, Potje verlaten) — does not pause a match |
@@ -486,7 +486,9 @@ the letterbox on wide screens). **2.6–3.0 s** fade to black, then the respawn 
 colour at the new spawn. Under `prefers-reduced-motion` the slow motion, push-in and overshoot
 are skipped and the art fades in. No dedicated audio beyond the SFX plan. The overlay is a pure
 phase function of elapsed time (unit-tested with fake timers); the e2e harness triggers a death
-through a bot and screenshots the overlay. The artwork contains third-party wording; the owner
+through a bot and screenshots the overlay. In single-player (PR 3) the slow motion scales the local
+simulation's `dt` (Plan 4a scope decision 6) until Plan 3 moves it into the interpolation layer. The
+artwork contains third-party wording; the owner
 accepted that trade-off (see §15).
 
 ---
@@ -755,18 +757,18 @@ public/branding/              wasted-screen.{webp,jpg} (death screen; source ass
 src/lib/cityArena/
   constants.ts · schemas.ts · storage.ts · debugFlag.ts · debugMetrics.ts (types.ts folded into sim/types)
   mapBuild/  geometry · osmTypes · overpassQueries · landmarks.config · landmarks · roads · areas · zones · tiles · assemble · errors · fixtures/overpassMini
-  world/     mapTypes · projection · decode · lru · mapLoader · collisionGrid · roadGraph · nearestRoad · zone · worldSession
-  sim/       types · rng · player · freeRoam (PR 4: state · step · vehicle · weapons · bullets · peds · cops · pickups · spawn · round · bots · invariants)
+  world/     mapTypes · projection · decode · lru · mapLoader · collisionGrid · roadGraph · nearestRoad · raycast · zone · worldSession
+  sim/       types · rng · player · freeRoam · vehicle · weapons · bullets · collisions · damage · effects · spawn · arena · invariants (PR 4b+: peds · cops · pickups · round · bots)
   net/       transport · ablyTransport · memoryTransport · wsRelayTransport · messages · election · hostLoop · clientLoop · roomCode · clock
-  input/     inputState · keyboard · touchStick (PR 6: keyboardMouse · haptics)
-  render/    palette · camera · streetLabels · canvasTypes · drawStatic · staticRaster · drawWorld · drawEntities · renderScene · testing/fakeContext (PR 4+: radar · particles · feedback · deathOverlay · splitScreen)
+  input/     inputState · keyboard · pointerAim · touchStick (PR 6: haptics)
+  render/    palette · camera · streetLabels · canvasTypes · drawStatic · staticRaster · drawWorld · drawEntities · drawVehicles · drawProjectiles · renderScene · deathScreen · testing/fakeContext (PR 4b+: radar · particles · feedback · splitScreen)
   audio/     sfx
-  test/      hooks (window.__arena) · sessionLog
+  test/      hooks (window.__arena) (PR 8: sessionLog)
 src/lib/ably/server.ts
 src/lib/services/arenaService.ts (+ .test.ts)
 src/lib/schemas/arena.ts (+ .test.ts)
 src/app/api/arena/            realtime-token/route.ts · rooms/route.ts · matches/route.ts · leaderboard/route.ts
-src/components/cityArena/     CityArenaLaunchIcon · CityArenaLauncher · CityArenaOverlay · useArenaGame · useDialogFocusTrap · TouchStick · ArenaLoadingScreen · ArenaDebugOverlay (PR 3+: Lobby · MatchView · Hud · DeathOverlay)
+src/components/cityArena/     CityArenaLaunchIcon · CityArenaLauncher · CityArenaOverlay · useArenaGame · useDialogFocusTrap · TouchStick · ArenaLoadingScreen · ArenaDebugOverlay · DeathOverlay · ArenaVitals · ArenaTouchButtons (PR 4b+: Hud · Lobby · MatchView)
                               Scoreboard · Leaderboard · ConnectionBanner · useArenaSession
 e2e/arena/                    dsl.ts · budgets.ts · fixtures/auth.ts · fixtures/touch.ts · *.spec.ts
 playwright.arena.config.ts · docker-compose.e2e.yml
@@ -782,11 +784,15 @@ docs/tech/arena/README.md · docs/tech/arena/TESTING.md
   on lint, `tsc --noEmit`, Vitest and CodeRabbit, with review threads resolved:
   1. map pipeline + committed assets + cache headers;
   2. world model + renderer + single-player free-roam (no network) behind the launcher;
-  3. netcode (transport, election, prediction, lobby, rooms API, token route);
-  4. gameplay completion (cars, weapons, peds, cops, pickups, zone, round);
-  5. persistence (migration, matches, leaderboard) + launcher card lists;
-  6. controls polish, haptics, SFX, settings;
-  7. test seams, relay, DSL, CI jobs, docs.
+  3. gameplay 4a on the local simulation: cars, weapons, bullets, damage, death screen, HUD
+     (owner decision 2026-09-04: gameplay before multiplayer; the simulation stays pure and
+     deterministic so the host loop can drive it unchanged later);
+  4. gameplay 4b: pedestrians, cops/wanted, pickups, zone boundary, radar, SFX;
+  5. netcode (transport, election, prediction, lobby, rooms API, token route) plus the
+     multiplayer-only rules: rounds, scoreboard;
+  6. persistence (migration, matches, leaderboard) + launcher card lists;
+  7. controls polish, haptics, settings;
+  8. test seams, relay, DSL, CI jobs, docs.
      The implementation plan (writing-plans) breaks these into tasks.
 - Migration policy: preview database first, production after merge.
 - Docs: `docs/tech/arena/README.md` (summary, entry points, data model, env, runbook for
@@ -823,4 +829,6 @@ naar het strijdgebied! · Scorebord · Nieuwe host: {naam} · Verbinding verbrok
 verbinden · Kon geen verbinding maken, probeer het later opnieuw · Dit potje bestaat niet
 meer · Potje is vol · Kaart laden… · Kaart kon niet volledig laden · Uitslag wordt later
 opgeslagen · Geluid · Trillen · Enkele stick · Besturing · Potje verlaten · Kaart ©
-OpenStreetMap-bijdragers. PR 2 additions: Startpunt · Ga naar · Spel laden… · Sluiten.
+OpenStreetMap-bijdragers. PR 2 additions: Startpunt · Ga naar · Spel laden… · Sluiten. PR 3 additions:
+Gezondheid · Vuist · Pistool · Uzi · Shotgun · Compact · Sedan · Sportwagen · Politieauto · km/u · Je bent
+uitgeschakeld · Vrij rondlopen.

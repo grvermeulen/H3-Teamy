@@ -8,7 +8,7 @@
 
 **Tech Stack:** Next.js 16 App Router (client components, `next/dynamic`), React 19, TypeScript 6 strict, Tailwind v4 utilities, Canvas 2D (`OffscreenCanvas` when available), Zod 4, Vitest + Testing Library, `@sentry/nextjs`.
 
-**Spec:** `docs/superpowers/specs/2026-09-03-city-arena-design.md` §2 (placement/flow), §4 (runtime world model), §5 "Players on foot" only, §7 keyboard movement + single floating stick only, §8 (rendering/performance), §9.3 (settings key), §11 (errors), §13 (file layout). This is PR 2 of 7; it consumes the PR 1 asset (`public/arena/map/v1/`, types in `src/lib/cityArena/world/mapTypes.ts`).
+**Spec:** `docs/superpowers/specs/2026-09-03-city-arena-design.md` §2 (placement/flow), §4 (runtime world model), §5 "Players on foot" only, §7 keyboard movement + single floating stick only, §8 (rendering/performance), §9.3 (settings key), §11 (errors), §13 (file layout). This is PR 2 of 8; it consumes the PR 1 asset (`public/arena/map/v1/`, types in `src/lib/cityArena/world/mapTypes.ts`).
 
 **Scope decisions for this plan (recorded so nobody re-litigates them):**
 
@@ -6054,7 +6054,7 @@ The controller confirms with the owner before pushing. Then:
 
 ```bash
 git push -u origin feat/city-arena-plan2
-gh pr create --base feat/city-arena --title "feat(arena): free-roam world renderer on the real map (2/7)" --body "$(cat <<'EOF'
+gh pr create --base feat/city-arena --title "feat(arena): free-roam world renderer on the real map (2/8)" --body "$(cat <<'EOF'
 ## Summary
 
 PR 2 of the Stadsstrijd stack (design `docs/superpowers/specs/2026-09-03-city-arena-design.md`, plan `docs/superpowers/plans/2026-09-04-city-arena-plan-2-world-renderer.md`). Stacked on PR 1 (`feat/city-arena`); retarget to `image` once it merges.
@@ -6079,10 +6079,11 @@ Fill in the `<N>`, `<phone model>`, `<fps>` and `<observations>` fields from Ste
 
 ## Roadmap after this plan
 
-| Plan | PR  | Deliverable                                                                                                                                                                                                        | Depends on                                                  |
-| ---- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
-| 3    | 3/7 | `RealtimeTransport` + `ablyTransport` + `memoryTransport`; token route; `arena:lobby` registry + rooms API; host election; `hostLoop`/`clientLoop` with prediction and interpolation; Lobby UI; `ConnectionBanner` | This plan's `renderScene`, `worldSession`, `freeRoam` types |
-| 4    | 4/7 | Cars, weapons, bullets, pedestrians, cops/wanted, pickups, zone out-of-bounds, rounds, scoreboard, HUD, radar, SFX                                                                                                 | Plan 3                                                      |
-| 5    | 5/7 | Prisma migration `add_arena_match`, `arenaService`, matches + leaderboard routes, launcher lists                                                                                                                   | Plan 4                                                      |
-| 6    | 6/7 | Twin-stick aim, buttons, haptics, feedback effects, settings UI, first-run tip                                                                                                                                     | Plan 4                                                      |
-| 7    | 7/7 | Test seams, relay transport, Playwright hermetic suite + DSL + budgets, CI jobs, TESTING.md                                                                                                                        | Plans 3–6                                                   |
+| Plan | PR  | Deliverable                                                                                                                                                                                                                            | Depends on                                                        |
+| ---- | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 3    | 5/8 | `RealtimeTransport` + `ablyTransport` + `memoryTransport`; token route; `arena:lobby` registry + rooms API; host election; `hostLoop`/`clientLoop` with prediction and interpolation; Lobby UI; `ConnectionBanner`; rounds, scoreboard | Plan 4a `stepArena` (players lifted to a map)                     |
+| 4a   | 3/8 | Cars, weapons, bullets, damage/death + the death screen (spec §7 artwork overlay), HUD vitals, mouse aim, touch buttons                                                                                                                | Plan 2 world runtime (`renderScene`, `worldSession`, input state) |
+| 4b   | 4/8 | Pedestrians, cops/wanted, pickups (spawn loadout back to pistol-only), zone out-of-bounds, radar, SFX                                                                                                                                  | Plan 4a                                                           |
+| 5    | 6/8 | Prisma migration `add_arena_match`, `arenaService`, matches + leaderboard routes, launcher lists                                                                                                                                       | Plan 3 round results                                              |
+| 6    | 7/8 | Twin-stick aim, buttons, haptics, feedback effects, settings UI, first-run tip                                                                                                                                                         | Plan 4b input model                                               |
+| 7    | 8/8 | Test seams, relay transport, Playwright hermetic suite + DSL + budgets, CI jobs, TESTING.md                                                                                                                                            | Plans 3–6                                                         |

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createCamera,
+  DRIVING_LOOK_AHEAD_MAX_M,
   screenToWorld,
   updateCamera,
   visibleRect,
@@ -40,5 +41,18 @@ describe("camera", () => {
     for (let step = 0; step < 300; step++)
       fast = updateCamera(fast, [0, 0], [1000, 0], 1 / 60);
     expect(fast.x).toBeCloseTo(15, 1);
+  });
+
+  it("leads further ahead when driving asks for the larger cap", () => {
+    let camera = createCamera([0, 0], 6);
+    for (let step = 0; step < 300; step++)
+      camera = updateCamera(
+        camera,
+        [0, 0],
+        [1000, 0],
+        1 / 60,
+        DRIVING_LOOK_AHEAD_MAX_M,
+      );
+    expect(camera.x).toBeCloseTo(30, 1);
   });
 });

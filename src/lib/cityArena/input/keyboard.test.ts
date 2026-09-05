@@ -2,6 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createInputState } from "./inputState";
 import { attachKeyboard } from "./keyboard";
 
+function press(code: string, target: EventTarget = window): void {
+  target.dispatchEvent(new KeyboardEvent("keydown", { code, bubbles: true }));
+}
+
+function release(code: string): void {
+  window.dispatchEvent(new KeyboardEvent("keyup", { code }));
+}
+
 describe("attachKeyboard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -10,41 +18,73 @@ describe("attachKeyboard", () => {
   it("maps WASD and arrows to a movement vector and releases on keyup", () => {
     const state = createInputState();
     const detach = attachKeyboard(window, state);
-    window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyD" }));
-    window.dispatchEvent(new KeyboardEvent("keydown", { code: "ArrowUp" }));
+    press("KeyD");
+    press("ArrowUp");
     expect(state.snapshot().move[0]).toBeCloseTo(Math.SQRT1_2);
     expect(state.snapshot().move[1]).toBeCloseTo(-Math.SQRT1_2);
-    window.dispatchEvent(new KeyboardEvent("keyup", { code: "KeyD" }));
-    expect(state.snapshot()).toEqual({ move: [0, -1] });
+    release("KeyD");
+    expect(state.snapshot().move).toEqual([0, -1]);
     detach();
-    expect(state.snapshot()).toEqual({ move: [0, 0] }); // detach zeroes the vector itself
-    window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyA" }));
-    expect(state.snapshot()).toEqual({ move: [0, 0] }); // and stops listening entirely
+    press("KeyA");
+    expect(state.snapshot().move).toEqual([0, 0]); // detach resets the keyboard vector
   });
 
-  it("ignores keys typed into form fields and resets on blur", () => {
+  it("holds Space as fire, E/F/Enter as enter and Q as weapon", () => {
+    const state = createInputState();
+    const detach = attachKeyboard(window, state);
+    press("Space");
+    press("KeyE");
+    press("KeyQ");
+    expect(state.snapshot()).toMatchObject({
+      fire: true,
+      enter: true,
+      weaponNext: true,
+    });
+    release("Space");
+    release("KeyE");
+    expect(state.snapshot()).toMatchObject({
+      fire: false,
+      enter: false,
+      weaponNext: true,
+    });
+    press("KeyF");
+    expect(state.snapshot().enter).toBe(true);
+    release("KeyF");
+    release("KeyQ");
+    press("Enter");
+    expect(state.snapshot().enter).toBe(true);
+    detach();
+  });
+
+  it("keeps button held while any of its key aliases is pressed", () => {
+    const state = createInputState();
+    const detach = attachKeyboard(window, state);
+    press("KeyE");
+    press("KeyF");
+    expect(state.snapshot().enter).toBe(true);
+    release("KeyE");
+    expect(state.snapshot().enter).toBe(true); // Still held by KeyF
+    release("KeyF");
+    expect(state.snapshot().enter).toBe(false);
+    detach();
+  });
+
+  it("ignores keys typed into form fields or pressed on a focused button, and resets on blur", () => {
     const state = createInputState();
     const detach = attachKeyboard(window, state);
     const input = document.createElement("input");
-    document.body.append(input);
-    input.dispatchEvent(
-      new KeyboardEvent("keydown", { code: "KeyW", bubbles: true }),
-    );
-    expect(state.snapshot()).toEqual({ move: [0, 0] });
-    window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyW" }));
-    expect(state.snapshot()).toEqual({ move: [0, -1] });
+    const button = document.createElement("button");
+    document.body.append(input, button);
+    press("KeyW", input);
+    press("Space", button);
+    expect(state.snapshot()).toMatchObject({ move: [0, 0], fire: false });
+    press("KeyW");
+    press("Space");
+    expect(state.snapshot()).toMatchObject({ move: [0, -1], fire: true });
     window.dispatchEvent(new Event("blur"));
-    expect(state.snapshot()).toEqual({ move: [0, 0] });
+    expect(state.snapshot()).toMatchObject({ move: [0, 0], fire: false });
     detach();
     input.remove();
-  });
-
-  it("resets the movement vector to zero on detach", () => {
-    const state = createInputState();
-    const detach = attachKeyboard(window, state);
-    window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyW" }));
-    expect(state.snapshot()).toEqual({ move: [0, -1] });
-    detach();
-    expect(state.snapshot()).toEqual({ move: [0, 0] });
+    button.remove();
   });
 });

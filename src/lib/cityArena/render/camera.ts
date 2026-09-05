@@ -14,6 +14,8 @@ export type Camera = { x: number; y: number; zoom: ZoomLevel };
 export const LOOK_AHEAD_S = 0.4;
 /** Maximum look-ahead distance in metres (spec §8). */
 export const LOOK_AHEAD_MAX_M = 15;
+/** Look-ahead cap while driving; the on-foot cap stays spec §8's 15 m. */
+export const DRIVING_LOOK_AHEAD_MAX_M = 30;
 /** Exponential easing rate per second. */
 export const CAMERA_EASE_PER_S = 6;
 /** Target width of the view in metres on phones. */
@@ -40,19 +42,20 @@ export function createCamera(centre: Point, zoom: ZoomLevel): Camera {
   return { x: centre[0], y: centre[1], zoom };
 }
 
-/** Eases the camera toward the target plus a velocity look-ahead capped at 15 m. */
+/** Eases the camera toward the target plus a velocity look-ahead capped at `maxLookAheadM`. */
 export function updateCamera(
   camera: Camera,
   target: Point,
   velocity: Point,
   dt: number,
+  maxLookAheadM: number = LOOK_AHEAD_MAX_M,
 ): Camera {
   let aheadX = velocity[0] * LOOK_AHEAD_S;
   let aheadY = velocity[1] * LOOK_AHEAD_S;
   const aheadLength = Math.hypot(aheadX, aheadY);
-  if (aheadLength > LOOK_AHEAD_MAX_M) {
-    aheadX *= LOOK_AHEAD_MAX_M / aheadLength;
-    aheadY *= LOOK_AHEAD_MAX_M / aheadLength;
+  if (aheadLength > maxLookAheadM) {
+    aheadX *= maxLookAheadM / aheadLength;
+    aheadY *= maxLookAheadM / aheadLength;
   }
   const ease = 1 - Math.exp(-CAMERA_EASE_PER_S * dt);
   return {

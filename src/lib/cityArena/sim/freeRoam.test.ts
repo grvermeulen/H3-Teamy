@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MapIndex } from "../world/mapTypes";
 import type { Point } from "../world/projection";
 import { createFreeRoamState, stepFreeRoam, teleportPlayer } from "./freeRoam";
+import { createInput } from "./types";
 
 const index: MapIndex = {
   version: 1,
@@ -33,7 +34,12 @@ describe("free roam", () => {
     const state = createFreeRoamState([10, 10], index);
     expect(state.player).toMatchObject({ x: 10, y: 10, speed: 0 });
     expect(state.zoneKey).toBe("campus");
-    const next = stepFreeRoam(state, { move: [0, -1] }, 1 / 30, world);
+    const next = stepFreeRoam(
+      state,
+      createInput({ move: [0, -1] }),
+      1 / 30,
+      world,
+    );
     expect(next.tick).toBe(1);
     expect(next.player.y).toBeCloseTo(10 - 4 / 30);
   });
@@ -41,7 +47,7 @@ describe("free roam", () => {
   it("leaves the zone when walking out of the disc and teleports back", () => {
     let state = createFreeRoamState([480, 0], index);
     for (let step = 0; step < 300; step++)
-      state = stepFreeRoam(state, { move: [1, 0] }, 1 / 30, world);
+      state = stepFreeRoam(state, createInput({ move: [1, 0] }), 1 / 30, world);
     expect(state.player.x).toBeGreaterThan(500);
     expect(state.zoneKey).toBeNull();
     const back = teleportPlayer(state, [0, 0], index);
