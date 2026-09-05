@@ -41,29 +41,42 @@ self.addEventListener("message", (event) => {
   }
 });
 
-async function networkFirst(request) {
+/**
+ * Stores a successful response in the cache, keeping the worker alive until the write completes
+ * (`respondWith` only covers the response itself).
+ */
+function cacheResponse(event, cache, response) {
+  if (!response.ok) return;
+  event.waitUntil(cache.put(event.request, response.clone()));
+}
+
+/**
+ * Fetches from the network and refreshes the cache on success; serves the cached copy only when
+ * the network fails, so a fresh response always wins while the server is reachable.
+ */
+async function networkFirst(event) {
   const cache = await caches.open(STATIC_CACHE);
   try {
-    const response = await fetch(request);
-    if (response.ok) {
-      cache.put(request, response.clone());
-    }
+    const response = await fetch(event.request);
+    cacheResponse(event, cache, response);
     return response;
   } catch (error) {
-    const cached = await cache.match(request);
+    const cached = await cache.match(event.request);
     if (cached) return cached;
     throw error;
   }
 }
 
-async function cacheFirst(request) {
+/**
+ * Serves the cached copy when present and otherwise fetches and caches the response, so the
+ * precached shell and images keep working offline.
+ */
+async function cacheFirst(event) {
   const cache = await caches.open(STATIC_CACHE);
-  const cached = await cache.match(request);
+  const cached = await cache.match(event.request);
   if (cached) return cached;
-  const response = await fetch(request);
-  if (response.ok) {
-    cache.put(request, response.clone());
-  }
+  const response = await fetch(event.request);
+  cacheResponse(event, cache, response);
   return response;
 }
 
@@ -86,11 +99,11 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
 
   if (url.pathname.startsWith(NEXT_BUILD_PREFIX)) {
-    event.respondWith(networkFirst(request));
+    event.respondWith(networkFirst(event));
     return;
   }
 
   if (CACHE_FIRST_DESTINATIONS.includes(request.destination)) {
-    event.respondWith(cacheFirst(request));
+    event.respondWith(cacheFirst(event));
   }
 });

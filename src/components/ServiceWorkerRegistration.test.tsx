@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ServiceWorkerRegistration from "./ServiceWorkerRegistration";
 import { setupServiceWorker } from "../lib/serviceWorkerRegistration";
@@ -16,6 +16,7 @@ describe("ServiceWorkerRegistration", () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.unstubAllEnvs();
   });
 

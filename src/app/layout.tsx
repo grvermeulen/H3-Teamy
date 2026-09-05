@@ -18,6 +18,11 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * Root layout for every page: the global chrome (header, navigation, toasts, splash) around the
+ * page content plus the client-side service worker policy. Applies the Christmas theme when the
+ * `christmas_event` environment flag is set.
+ */
 export default function RootLayout({
   children,
 }: {

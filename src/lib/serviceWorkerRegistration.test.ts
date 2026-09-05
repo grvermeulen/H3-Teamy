@@ -27,10 +27,12 @@ type FakeContainer = EventTarget & {
   getRegistrations: ReturnType<typeof vi.fn>;
 };
 
+/** Builds a `ServiceWorker` stand-in with a mutable `state` and a recorded `postMessage`. */
 function createFakeWorker(state: ServiceWorkerState): FakeWorker {
   return Object.assign(new EventTarget(), { state, postMessage: vi.fn() });
 }
 
+/** Builds a `ServiceWorkerRegistration` stand-in whose `unregister` resolves `true`. */
 function createFakeRegistration(
   overrides: Partial<Pick<FakeRegistration, "waiting" | "installing">> = {},
 ): FakeRegistration {
@@ -59,6 +61,7 @@ function installFakeContainer(
   return container;
 }
 
+/** Overrides `document.readyState`; `afterEach` drops the override via `Reflect.deleteProperty`. */
 function setDocumentReadyState(readyState: DocumentReadyState): void {
   Object.defineProperty(document, "readyState", {
     configurable: true,
