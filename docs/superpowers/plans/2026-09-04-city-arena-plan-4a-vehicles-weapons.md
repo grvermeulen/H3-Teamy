@@ -8,7 +8,7 @@
 
 **Tech Stack:** Next.js 16 App Router (client components, `next/dynamic`), React 19, TypeScript 6 strict, Tailwind v4 utilities, Canvas 2D (`OffscreenCanvas` when available), Zod 4, Vitest + Testing Library, `@sentry/nextjs`.
 
-**Spec:** `docs/superpowers/specs/2026-09-03-city-arena-design.md` §5 (weapons table, cars, health/death/respawn, spawn selection), §7 (desktop keys, touch buttons, input model, **death screen**), §8 (frame order, camera look-ahead), §12.A3–A4 (`window.__arena`, invariants — minimal subset), §13 (file layout), §16 (glossary). This is PR 3 of 7 in the owner's reordered roadmap (gameplay before multiplayer); it consumes the Plan 2 runtime (`src/lib/cityArena/{world,sim,input,render}/**`, `src/components/cityArena/**`).
+**Spec:** `docs/superpowers/specs/2026-09-03-city-arena-design.md` §5 (weapons table, cars, health/death/respawn, spawn selection), §7 (desktop keys, touch buttons, input model, **death screen**), §8 (frame order, camera look-ahead), §12.A3–A4 (`window.__arena`, invariants — minimal subset), §13 (file layout), §16 (glossary). This is PR 3 of 8 in the owner's reordered roadmap (gameplay before multiplayer); it consumes the Plan 2 runtime (`src/lib/cityArena/{world,sim,input,render}/**`, `src/components/cityArena/**`).
 
 **Scope decisions for this plan (recorded so nobody re-litigates them):**
 
@@ -7001,7 +7001,7 @@ The controller confirms with the owner before pushing. Then:
 
 ```bash
 git push -u origin feat/city-arena-plan4a
-gh pr create --base image --title "feat(arena): cars, weapons and the death screen (3/7)" --body "$(cat <<'EOF'
+gh pr create --base image --title "feat(arena): cars, weapons and the death screen (3/8)" --body "$(cat <<'EOF'
 ## Summary
 
 PR 3 of the GTA H3 stack (design `docs/superpowers/specs/2026-09-03-city-arena-design.md`, plan `docs/superpowers/plans/2026-09-04-city-arena-plan-4a-vehicles-weapons-death.md`). Gameplay lands before multiplayer per the owner's reordered roadmap; if PR 2 (`feat/city-arena-plan2`) has not merged yet, this PR is temporarily based on it and retargeted to `image` afterwards.
@@ -7047,8 +7047,8 @@ Fill in `<N>`, `<phone model>`, `<fps>` and `<observations>` from Steps 2–3 be
 
 | Plan | PR  | Deliverable                                                                                                                   | Depends on |
 | ---- | --- | ----------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| 4b   | 4/7 | Pedestrians, cops and wanted levels, pickups (spawn loadout back to pistol-only), zone out-of-bounds, radar, SFX              | This plan  |
-| 3    | 5/7 | Transport, election, host loop running `stepArena` unchanged (players lifted to a map), prediction, lobby, rounds, scoreboard | This plan  |
-| 5    | 6/7 | Persistence: migration, matches and leaderboard routes, launcher lists                                                        | Plan 3     |
-| 6    | 7/7 | Twin-stick aim, haptics, feedback effects, settings UI, zoom-out while driving                                                | Plan 4b    |
-| 7    | —   | Test seams beyond `window.__arena`, relay, Playwright DSL, CI jobs, TESTING.md                                                | Plans 3–6  |
+| 4b   | 4/8 | Pedestrians, cops and wanted levels, pickups (spawn loadout back to pistol-only), zone out-of-bounds, radar, SFX              | This plan  |
+| 3    | 5/8 | Transport, election, host loop running `stepArena` unchanged (players lifted to a map), prediction, lobby, rounds, scoreboard | This plan  |
+| 5    | 6/8 | Persistence: migration, matches and leaderboard routes, launcher lists                                                        | Plan 3     |
+| 6    | 7/8 | Twin-stick aim, haptics, feedback effects, settings UI, zoom-out while driving                                                | Plan 4b    |
+| 7    | 8/8 | Test seams beyond `window.__arena`, relay, Playwright DSL, CI jobs, TESTING.md                                                | Plans 3–6  |

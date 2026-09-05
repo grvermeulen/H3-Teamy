@@ -8,7 +8,7 @@
 
 **Tech Stack:** Node 22, TypeScript 6 (strict), `tsx` for the CLI, Vitest, `osm2geojson-lite@2.0.1` (multipolygon assembly), Node built-in `fetch` and `zlib`, Next.js 16 `headers()`.
 
-**Spec:** `docs/superpowers/specs/2026-09-03-city-arena-design.md` §3, §4 (types only), §9.4, §13, §14 (PR 1). This plan is PR 1 of the seven-PR stack; Plans 2–7 are written after this one lands, against the interfaces this plan produces.
+**Spec:** `docs/superpowers/specs/2026-09-03-city-arena-design.md` §3, §4 (types only), §9.4, §13, §14 (PR 1). This plan is PR 1 of the eight-PR stack; Plans 2–7 are written after this one lands, against the interfaces this plan produces.
 
 **Deviations from the spec, decided here (spec updated in Task 13):**
 
@@ -4404,11 +4404,11 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 The JSON files are compact (no whitespace); do **not** run Prettier on `public/arena/map/**` (add `public/arena/map/` to `.prettierignore` if the pre-commit hook tries to format them — create the file with that single line if it does not exist).
 
-- [ ] **Step 6: Open PR 1 of 7**
+- [ ] **Step 6: Open PR 1 of 8**
 
 ```bash
 git push -u origin feat/city-arena
-gh pr create --base image --title "feat(arena): real-world map pipeline and committed asset (1/7)" --body "$(cat <<'EOF'
+gh pr create --base image --title "feat(arena): real-world map pipeline and committed asset (1/8)" --body "$(cat <<'EOF'
 ## Summary
 
 First PR of the Stadsstrijd (city arena) stack — design in `docs/superpowers/specs/2026-09-03-city-arena-design.md`, plan in `docs/superpowers/plans/2026-09-03-city-arena-plan-1-map-pipeline.md`.
@@ -4448,13 +4448,13 @@ Each plan produces working, testable software and consumes the interfaces of the
 > both on the local simulation; Plan 3 (netcode) follows and adds rounds and the scoreboard. PR numbering
 > continues in delivery order (4a = 3/8, 4b = 4/8, netcode = 5/8, …).
 
-| Plan | PR  | Deliverable                                                                                                                                                                                                           | Depends on                     |
-| ---- | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| 2    | 2/7 | `MapLoader`, `StaticRaster` chunk renderer, `CollisionGrid`, `RoadGraph` A\*, `Zone`; single-player free-roam (walk only) behind `CityArenaLauncher` + `CityArenaOverlay`; OSM attribution footer; `?debug=1` overlay | Plan 1 asset and `mapTypes.ts` |
-| 3    | 3/7 | `RealtimeTransport` + `ablyTransport` + `memoryTransport`; token route; host election; `hostLoop`/`clientLoop` with prediction and interpolation; Lobby, rooms API, `arena:lobby` registry; `ConnectionBanner`        | Plan 2 world model             |
-| 4    | 4/7 | Cars, weapons, bullets, pedestrians, cops/wanted, pickups, zone out-of-bounds, rounds, scoreboard, HUD, radar, SFX, death screen (spec §7 artwork overlay)                                                            | Plan 3 netcode                 |
-| 5    | 5/7 | Prisma migration `add_arena_match`, `arenaService`, matches + leaderboard routes, launcher lists (active rooms, leaderboard), pending-results queue                                                                   | Plan 4 round results           |
-| 6    | 6/7 | Twin-stick touch controls, mouse aim + keyboard map, haptics, feedback effects, settings storage, first-run tip                                                                                                       | Plan 4 input model             |
-| 7    | 7/7 | Test seams (`window.__arena`, invariants, bots, session log), `wsRelayTransport` + relay, Playwright hermetic config + DSL + budgets, CI jobs (`arena-e2e`, `arena-nightly`), `docs/tech/arena/TESTING.md`            | Plans 3–6                      |
+| Plan | PR        | Deliverable                                                                                                                                                                                                           | Depends on                     |
+| ---- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| 2    | 2/8       | `MapLoader`, `StaticRaster` chunk renderer, `CollisionGrid`, `RoadGraph` A\*, `Zone`; single-player free-roam (walk only) behind `CityArenaLauncher` + `CityArenaOverlay`; OSM attribution footer; `?debug=1` overlay | Plan 1 asset and `mapTypes.ts` |
+| 3    | 5/8       | `RealtimeTransport` + `ablyTransport` + `memoryTransport`; token route; host election; `hostLoop`/`clientLoop` with prediction and interpolation; Lobby, rooms API, `arena:lobby` registry; `ConnectionBanner`        | Plan 2 world model             |
+| 4    | 3/8 + 4/8 | Cars, weapons, bullets, pedestrians, cops/wanted, pickups, zone out-of-bounds, rounds, scoreboard, HUD, radar, SFX, death screen (spec §7 artwork overlay)                                                            | Plan 3 netcode                 |
+| 5    | 6/8       | Prisma migration `add_arena_match`, `arenaService`, matches + leaderboard routes, launcher lists (active rooms, leaderboard), pending-results queue                                                                   | Plan 4 round results           |
+| 6    | 7/8       | Twin-stick touch controls, mouse aim + keyboard map, haptics, feedback effects, settings storage, first-run tip                                                                                                       | Plan 4 input model             |
+| 7    | 8/8       | Test seams (`window.__arena`, invariants, bots, session log), `wsRelayTransport` + relay, Playwright hermetic config + DSL + budgets, CI jobs (`arena-e2e`, `arena-nightly`), `docs/tech/arena/TESTING.md`            | Plans 3–6                      |
 
-Slice 2 (TV mode) gets its own spec addendum and plans after 7/7 ships.
+Slice 2 (TV mode) gets its own spec addendum and plans after 8/8 ships.
