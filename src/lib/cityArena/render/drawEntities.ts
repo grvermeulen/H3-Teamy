@@ -1,10 +1,17 @@
+import { isDead, isInvulnerable } from "../sim/damage";
 import { PLAYER_RADIUS_M } from "../sim/player";
-import type { PlayerState } from "../sim/types";
+import type { ArenaPlayerState, PlayerState } from "../sim/types";
 import type { MapZone } from "../world/mapTypes";
 import { zoneCentreMetres, zoneRadiusMetres } from "../world/zone";
 import { worldToScreen, type Camera, type Viewport } from "./camera";
 import type { RasterContext } from "./canvasTypes";
-import { PLAYER_FILL, PLAYER_RING, ZONE_RING } from "./palette";
+import {
+  PLAYER_DEAD_FILL,
+  PLAYER_DEAD_RING,
+  PLAYER_FILL,
+  PLAYER_RING,
+  ZONE_RING,
+} from "./palette";
 
 /** Smallest on-screen player radius, in pixels — keeps the sprite visible when zoomed out. */
 const MIN_PLAYER_RADIUS_PX = 6;
@@ -17,20 +24,47 @@ const ZONE_RING_WIDTH_PX = 2;
 /** Zone boundary ring dash pattern (dash length, gap length), in screen pixels. */
 const ZONE_RING_DASH_PX: number[] = [8, 6];
 
-/** Draws the local player: a filled circle, a coloured outline ring and a facing tick. */
+/** Colours of the player sprite. */
+export type PlayerStyle = { fill: string; ring: string };
+/** The living player. */
+export const DEFAULT_PLAYER_STYLE: PlayerStyle = {
+  fill: PLAYER_FILL,
+  ring: PLAYER_RING,
+};
+/** A body waiting to respawn. */
+export const DEAD_PLAYER_STYLE: PlayerStyle = {
+  fill: PLAYER_DEAD_FILL,
+  ring: PLAYER_DEAD_RING,
+};
+/** How the player is drawn this frame. */
+export type PlayerLook = "normal" | "dead" | "hidden" | "blink";
+/** Ticks per half-period of the invulnerability blink. */
+const BLINK_HALF_PERIOD_TICKS = 4;
+
+/** Hidden inside a car, a body while dead, invisible every other 4 ticks while shielded, else normal. */
+export function playerLook(player: ArenaPlayerState, tick: number): PlayerLook {
+  if (player.vehicleId !== null) return "hidden";
+  if (isDead(player)) return "dead";
+  const blinkPhase = Math.floor(tick / BLINK_HALF_PERIOD_TICKS) % 2;
+  if (isInvulnerable(player, tick) && blinkPhase === 1) return "blink";
+  return "normal";
+}
+
+/** Draws the local player: a filled circle, a coloured outline ring and a facing tick, in the given style. */
 export function drawPlayer(
   context: RasterContext,
   camera: Camera,
   viewport: Viewport,
   player: PlayerState,
+  style: PlayerStyle = DEFAULT_PLAYER_STYLE,
 ): void {
   const [x, y] = worldToScreen(camera, viewport, [player.x, player.y]);
   const radius = Math.max(MIN_PLAYER_RADIUS_PX, PLAYER_RADIUS_M * camera.zoom);
   context.beginPath();
   context.arc(x, y, radius, 0, Math.PI * 2, false);
-  context.fillStyle = PLAYER_FILL;
+  context.fillStyle = style.fill;
   context.fill();
-  context.strokeStyle = PLAYER_RING;
+  context.strokeStyle = style.ring;
   context.lineWidth = PLAYER_RING_WIDTH_PX;
   context.setLineDash([]);
   context.stroke();

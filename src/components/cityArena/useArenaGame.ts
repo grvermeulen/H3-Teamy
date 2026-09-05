@@ -27,6 +27,7 @@ import {
 import { createDomCanvasFactory } from "@/lib/cityArena/render/canvasTypes";
 import { renderScene } from "@/lib/cityArena/render/renderScene";
 import { rasterBudgetForViewport } from "@/lib/cityArena/render/staticRaster";
+import { createArenaPlayer } from "@/lib/cityArena/sim/arena";
 import {
   createFreeRoamState,
   stepFreeRoam,
@@ -167,8 +168,18 @@ function paintCanvas(
         landmarks: session.landmarks(),
         loadedTileRects: session.loadedTileRects(),
       },
-      player: state.player,
       zone,
+      player: {
+        ...createArenaPlayer([state.player.x, state.player.y], state.tick),
+        facing: state.player.facing,
+        speed: state.player.speed,
+      },
+      vehicles: [],
+      bullets: [],
+      effects: [],
+      tick: state.tick,
+      aimScreen: null,
+      pushIn: 1,
     },
   );
 }
