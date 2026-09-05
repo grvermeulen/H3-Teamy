@@ -178,6 +178,19 @@ describe("CityArenaOverlay", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("preloads the death-screen artwork once the overlay mounts", async () => {
+    render(<CityArenaOverlay zone="wageningen" onClose={vi.fn()} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    const link = document.head.querySelector('link[rel="preload"][as="image"]');
+    expect(link?.getAttribute("href")).toMatch(
+      /\/branding\/wasted-screen\.webp$/,
+    );
+  });
+
   it("disables the zone picker until the world finishes booting, then lets it teleport", async () => {
     render(<CityArenaOverlay zone="wageningen" onClose={vi.fn()} />);
     expect(screen.getByLabelText("Ga naar")).toBeDisabled();

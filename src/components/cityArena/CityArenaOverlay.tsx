@@ -8,7 +8,7 @@ import {
   type ReactPortal,
   type RefObject,
 } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, preload } from "react-dom";
 import { isDebugEnabled } from "@/lib/cityArena/debugFlag";
 import {
   createStick,
@@ -22,7 +22,7 @@ import ArenaLoadingScreen, {
 } from "./ArenaLoadingScreen";
 import ArenaTouchButtons from "./ArenaTouchButtons";
 import ArenaVitals from "./ArenaVitals";
-import DeathOverlay from "./DeathOverlay";
+import DeathOverlay, { WASTED_WEBP } from "./DeathOverlay";
 import TouchStick from "./TouchStick";
 import { useArenaGame, type ArenaGame, type ArenaHud } from "./useArenaGame";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
@@ -64,6 +64,13 @@ function useReducedMotion(): boolean {
     return () => query.removeEventListener("change", apply);
   }, []);
   return reduced;
+}
+
+/** Warms the browser's cache for the death-screen artwork so it is ready before the first death. */
+function useWarmDeathArtwork(): void {
+  useEffect(() => {
+    preload(WASTED_WEBP, { as: "image", type: "image/webp" });
+  }, []);
 }
 
 /** Locks page scroll behind the full-screen overlay for as long as it is mounted. */
@@ -286,6 +293,7 @@ export default function CityArenaOverlay({
   const game = useArenaGame({ zoneKey: zone, canvasRef, debug, reducedMotion });
   useDialogFocusTrap(dialogRef, onClose);
   useLockBodyScroll();
+  useWarmDeathArtwork();
 
   const overlay = (
     <div
