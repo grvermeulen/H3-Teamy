@@ -110,6 +110,7 @@ describe("POST /api/report/extract", () => {
     await expect(response.json()).resolves.toEqual({
       result: { homeScore: 2, awayScore: 1 },
       raw_text: "2-1",
+      meta: { providerUsed: "openai", model: "gpt-4o", fallbackUsed: false },
     });
     expect(vi.mocked(extractReportFromImage)).toHaveBeenCalledTimes(1);
   });
