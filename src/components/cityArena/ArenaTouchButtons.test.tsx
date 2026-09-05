@@ -76,4 +76,14 @@ describe("ArenaTouchButtons", () => {
     fireEvent.keyUp(fire, { key: "Tab" });
     expect(onButton).not.toHaveBeenCalled();
   });
+
+  it("releases a keyboard-held button when it loses focus", () => {
+    const onButton = vi.fn();
+    render(<ArenaTouchButtons inVehicle={false} onButton={onButton} />);
+    const fire = screen.getByRole("button", { name: "Schieten" });
+    fireEvent.keyDown(fire, { key: " " });
+    fireEvent.blur(fire);
+    expect(onButton).toHaveBeenCalledTimes(2);
+    expect(onButton).toHaveBeenLastCalledWith("fire", false);
+  });
 });

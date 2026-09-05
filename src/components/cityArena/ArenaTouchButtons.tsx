@@ -38,7 +38,8 @@ const isActivationKey = (key: string): boolean =>
 /**
  * A button that reports `pressed` while held and releases on up, leave or
  * cancel. Pointer and keyboard (Enter/Space) both drive the same press/release
- * semantics so keyboard and screen-reader users can hold it too.
+ * semantics so keyboard and screen-reader users can hold it too; losing focus
+ * releases as well, so a key held while tabbing away cannot stick.
  */
 function HoldButton({
   name,
@@ -71,6 +72,7 @@ function HoldButton({
       onPointerCancel={release}
       onKeyDown={pressOnKey}
       onKeyUp={releaseOnKey}
+      onBlur={release}
       onContextMenu={(event) => event.preventDefault()}
     >
       {label}
