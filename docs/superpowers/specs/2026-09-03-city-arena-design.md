@@ -445,7 +445,7 @@ mobile layout; either can be forced in settings.
 | Move / drive           | WASD or arrows (car: W/↑ gas, S/↓ brake→reverse, A/D steer)               |
 | Aim                    | mouse → world position; canvas crosshair, native cursor hidden            |
 | Fire                   | left mouse or Space (hold = auto)                                         |
-| Instappen / Uitstappen | F or Enter                                                                |
+| Instappen / Uitstappen | E, F, or Enter                                                            |
 | Wapen                  | Q, mouse wheel, or 1/2/3                                                  |
 | Scorebord              | hold Tab                                                                  |
 | Menu                   | Esc (Geluid, Trillen, Besturing, Potje verlaten) — does not pause a match |

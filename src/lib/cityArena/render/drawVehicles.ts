@@ -38,6 +38,8 @@ const SMOKE_RADIUS_M = 0.6;
 const SMOKE_SPACING_M = 0.9;
 /** Ticks per drift cycle of the smoke trail. */
 const SMOKE_DRIFT_TICKS = 20;
+/** Tick offset between the three smoke puffs so they drift out of phase. */
+const SMOKE_PUFF_STAGGER_TICKS = 7;
 /** Cars within this margin outside the view are still drawn, metres. */
 const CULL_MARGIN_M = 5;
 
@@ -106,7 +108,9 @@ function drawBody(
 function drawSmoke(context: RasterContext, zoom: number, tick: number): void {
   context.fillStyle = CAR_SMOKE;
   for (let puff = 0; puff < SMOKE_PUFFS; puff++) {
-    const drift = ((tick + puff * 7) % SMOKE_DRIFT_TICKS) / SMOKE_DRIFT_TICKS;
+    const drift =
+      ((tick + puff * SMOKE_PUFF_STAGGER_TICKS) % SMOKE_DRIFT_TICKS) /
+      SMOKE_DRIFT_TICKS;
     const forward = -VEHICLE_LENGTH_M / 2 - (puff + drift) * SMOKE_SPACING_M;
     context.beginPath();
     context.arc(

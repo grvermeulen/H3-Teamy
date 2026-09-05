@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   installArenaHooks,
   type ArenaHookHost,
@@ -8,8 +8,8 @@ import {
 function fakeHooks(): ArenaTestHooks {
   return {
     getState: () => null,
-    dispatch: vi.fn(),
-    damage: vi.fn(),
+    dispatch: () => {},
+    damage: () => {},
     getViolations: () => 0,
   };
 }
