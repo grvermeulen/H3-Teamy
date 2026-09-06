@@ -7,6 +7,9 @@ import {
   nearestPointOnSegment,
   pushCircleOutOfRing,
 } from "./collisionGrid";
+import { HULL_CIRCLE_OFFSET_M, HULL_CIRCLE_RADIUS_M } from "../sim/vehicle";
+import { createRoadCorridors } from "./roadCorridor";
+import type { RoadGraph } from "./roadGraph";
 
 const square: Point[] = [
   [10, 10],
@@ -168,4 +171,107 @@ describe("createCollisionGrid", () => {
       );
     },
   );
+});
+
+/** A river band y ∈ [−6, 6] spanning x ∈ [−100, 100]. */
+const RIVER: Point[] = [
+  [-100, -6],
+  [100, -6],
+  [100, 6],
+  [-100, 6],
+];
+
+/** A hut inside the bridge's corridor, to prove buildings are never exempted. */
+const HUT: Point[] = [
+  [2, -30],
+  [4, -30],
+  [4, -28],
+  [2, -28],
+];
+
+/**
+ * A residential bridge running north–south along x = 0 across the river, and a residential quay
+ * along y = 9 whose southern kerb (9 − 3 = 6) sits exactly on the north bank.
+ */
+function bridgeGraph(): Pick<RoadGraph, "nodes" | "edges"> {
+  return {
+    nodes: [
+      [0, -40],
+      [0, 40],
+      [20, 9],
+      [90, 9],
+    ],
+    edges: [
+      { a: 0, b: 1, roadClass: "residential", oneway: false, length: 80 },
+      { a: 2, b: 3, roadClass: "residential", oneway: false, length: 70 },
+    ],
+  };
+}
+
+describe("collision grid road corridors", () => {
+  it("still blocks water on a bridge when no corridors are installed", () => {
+    const grid = createCollisionGrid();
+    grid.insertTile(tileWith([], [RIVER]));
+    const pushed = grid.resolveCircle([0, 2], 0.4);
+    expect(pushed[0]).toBeCloseTo(0);
+    expect(pushed[1]).toBeCloseTo(6.4);
+  });
+
+  it("lets a walker cross the bridge and pushes them out beside it", () => {
+    const grid = createCollisionGrid();
+    grid.setRoadCorridors(createRoadCorridors(bridgeGraph()));
+    grid.insertTile(tileWith([], [RIVER]));
+    expect(grid.resolveCircle([0, 2], 0.4)).toEqual([0, 2]);
+    const beside = grid.resolveCircle([5.6, 2], 0.4);
+    expect(beside[0]).toBeCloseTo(5.6);
+    expect(beside[1]).toBeCloseTo(6.4);
+  });
+
+  it("carries both car hull circles across and stops the one that leaves the deck", () => {
+    const grid = createCollisionGrid();
+    grid.setRoadCorridors(createRoadCorridors(bridgeGraph()));
+    grid.insertTile(tileWith([], [RIVER]));
+    // Heading south: both circles sit on the centre line.
+    for (const offset of [HULL_CIRCLE_OFFSET_M, -HULL_CIRCLE_OFFSET_M]) {
+      expect(grid.resolveCircle([0, offset], HULL_CIRCLE_RADIUS_M)).toEqual([
+        0,
+        offset,
+      ]);
+    }
+    // Heading east, centred 6.5 m off the deck: the rear circle is still on it.
+    expect(grid.resolveCircle([5.4, 2], HULL_CIRCLE_RADIUS_M)).toEqual([
+      5.4, 2,
+    ]);
+    const front = grid.resolveCircle([7.6, 2], HULL_CIRCLE_RADIUS_M);
+    expect(front[0]).toBeCloseTo(7.6);
+    expect(front[1]).toBeCloseTo(6.95);
+  });
+
+  it("still pushes a swimmer out of open water away from every road", () => {
+    const grid = createCollisionGrid();
+    grid.setRoadCorridors(createRoadCorridors(bridgeGraph()));
+    grid.insertTile(tileWith([], [RIVER]));
+    const pushed = grid.resolveCircle([-60, 2], 0.4);
+    expect(pushed[0]).toBeCloseTo(-60);
+    expect(pushed[1]).toBeCloseTo(6.4);
+  });
+
+  it("lets a quay road reach two metres into the water and no further", () => {
+    const grid = createCollisionGrid();
+    grid.setRoadCorridors(createRoadCorridors(bridgeGraph()));
+    grid.insertTile(tileWith([], [RIVER]));
+    expect(grid.resolveCircle([60, 5], 0.4)).toEqual([60, 5]);
+    const pushed = grid.resolveCircle([60, 3.5], 0.4);
+    expect(pushed[0]).toBeCloseTo(60);
+    expect(pushed[1]).toBeCloseTo(6.4);
+  });
+
+  it("keeps buildings solid inside a road corridor", () => {
+    const grid = createCollisionGrid();
+    grid.setRoadCorridors(createRoadCorridors(bridgeGraph()));
+    grid.insertTile(tileWith([HUT], [RIVER]));
+    const pushed = grid.resolveCircle([1.8, -29], 0.4);
+    expect(pushed[0]).toBeCloseTo(1.6);
+    expect(pushed[1]).toBeCloseTo(-29);
+  });
 });

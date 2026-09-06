@@ -16,6 +16,14 @@ export type Obstacle = {
   kind: "building" | "water";
 };
 
+/**
+ * The road-corridor test the grid consults before treating water as solid. Implemented by
+ * `createRoadCorridors` in `roadCorridor.ts`; declared here so the dependency stays one-way.
+ */
+export type RoadCorridorTest = {
+  isOnRoad(point: Point, radiusM: number): boolean;
+};
+
 /** Spatial index of obstacles from the loaded tiles. */
 export type CollisionGrid = {
   insertTile(tile: DecodedTile): void;
@@ -23,6 +31,8 @@ export type CollisionGrid = {
   query(rect: Rect): Obstacle[];
   resolveCircle(centre: Point, radius: number): Point;
   obstacleCount(): number;
+  /** Installs (or clears with `null`) the corridors that make water crossable on a road. */
+  setRoadCorridors(corridors: RoadCorridorTest | null): void;
 };
 
 /**
@@ -232,13 +242,30 @@ function createSpatialIndex(cellMetres: number): SpatialIndex {
 const MAX_RESOLVE_PASSES = 3;
 
 /**
+ * True for a water obstacle this circle may ignore because its centre sits on a road surface —
+ * the runtime stand-in for the OSM `bridge` tag the map asset never captured. Buildings are
+ * never exempt, and water away from a road corridor still blocks, so swimming stays impossible.
+ */
+function crossesOnBridge(
+  obstacle: Obstacle,
+  centre: Point,
+  radius: number,
+  corridors: RoadCorridorTest | null,
+): boolean {
+  if (obstacle.kind !== "water" || corridors === null) return false;
+  return corridors.isOnRoad(centre, radius);
+}
+
+/**
  * Iteratively pushes a circle out of every obstacle in `index` that overlaps it, re-querying
  * after each pass so a push out of one obstacle can be resolved against its neighbours too.
+ * Water obstacles a road corridor covers are skipped so bridges stay crossable.
  */
 function resolveCircleAgainst(
   index: SpatialIndex,
   centre: Point,
   radius: number,
+  corridors: RoadCorridorTest | null,
 ): Point {
   let position: Point = [centre[0], centre[1]];
   for (let pass = 0; pass < MAX_RESOLVE_PASSES; pass++) {
@@ -250,6 +277,7 @@ function resolveCircleAgainst(
     };
     let moved = false;
     for (const obstacle of index.query(probe)) {
+      if (crossesOnBridge(obstacle, position, radius, corridors)) continue;
       const pushed = pushCircleOutOfRing(position, radius, obstacle.ring);
       if (pushed) {
         position = pushed;
@@ -261,9 +289,14 @@ function resolveCircleAgainst(
   return position;
 }
 
-/** Creates an empty grid; tiles are inserted/removed as the loader streams them. */
+/**
+ * Creates an empty grid; tiles are inserted/removed as the loader streams them. Pass or install
+ * road corridors to make water crossable wherever a road runs over it (see `roadCorridor.ts`);
+ * without them every water polygon blocks, exactly as before.
+ */
 export function createCollisionGrid(
   cellMetres = COLLISION_CELL_M,
+  corridors: RoadCorridorTest | null = null,
 ): CollisionGrid {
   if (!Number.isFinite(cellMetres) || cellMetres <= 0) {
     throw new Error(
@@ -271,12 +304,16 @@ export function createCollisionGrid(
     );
   }
   const index = createSpatialIndex(cellMetres);
+  let roadCorridors = corridors;
   return {
     insertTile: index.insertTile,
     removeTile: index.removeTile,
     query: index.query,
     resolveCircle: (centre, radius) =>
-      resolveCircleAgainst(index, centre, radius),
+      resolveCircleAgainst(index, centre, radius, roadCorridors),
     obstacleCount: index.obstacleCount,
+    setRoadCorridors: (next) => {
+      roadCorridors = next;
+    },
   };
 }

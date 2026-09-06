@@ -170,6 +170,58 @@ describe("createWorldSession", () => {
     ).toBeUndefined();
     session.dispose();
   });
+
+  it("installs road corridors on ready so a bridge road crosses water", async () => {
+    const bridgeFetch = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input);
+      if (url.endsWith("index.json"))
+        return new Response(JSON.stringify(index), { status: 200 });
+      if (url.endsWith("roads.json"))
+        return new Response(
+          JSON.stringify({
+            nodes: [0, 0, 400, 0],
+            edges: [0, 1, 0, -1, 0, 400],
+            classes: ["residential"],
+            names: [],
+          }),
+          { status: 200 },
+        );
+      const match = /tile_(\d+)_(\d+)\.json$/.exec(url);
+      if (!match) return new Response("null", { status: 404 });
+      const tileX = Number(match[1]);
+      const tileY = Number(match[2]);
+      const water =
+        tileX === 1 && tileY === 1
+          ? [{ points: [120, -80, 280, -80, 280, 80, 120, 80] }]
+          : [];
+      return new Response(
+        JSON.stringify({
+          x: tileX,
+          y: tileY,
+          roads: [],
+          buildings: [],
+          ground: [],
+          water,
+        }),
+        { status: 200 },
+      );
+    });
+    const session = createWorldSession({
+      loader: createMapLoader({
+        baseUrl: "/map",
+        fetchImpl: bridgeFetch,
+        sleep: async () => {},
+      }),
+      canvasFactory: (width, height) => createFakeTarget(width, height),
+    });
+    await session.ready();
+    await session.update([0, 0]);
+    expect(session.collision.obstacleCount()).toBe(1);
+    expect(session.collision.resolveCircle([50, 0], 0.4)).toEqual([50, 0]);
+    const pushed = session.collision.resolveCircle([50, 10], 0.4);
+    expect(pushed[0]).toBeCloseTo(50);
+    expect(pushed[1]).toBeCloseTo(20.4);
+  });
 });
 
 /** Minimal empty index; the fake loader below ignores it beyond what ready() decodes. */
