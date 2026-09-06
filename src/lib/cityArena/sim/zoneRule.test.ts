@@ -84,4 +84,23 @@ describe("zone rule", () => {
       ).player.health,
     ).toBe(100);
   });
+
+  it("keeps enforcing the selected zone when population moves elsewhere", () => {
+    const other: MapZone = {
+      key: "other",
+      name: "Other",
+      center: [10000, 0],
+      radius: 2000,
+      spawnNodes: [[10000, 0]],
+      landmarks: [],
+    };
+    const selected = { ...index, zones: [zone, other] };
+    const state = {
+      ...enforcedAt(400),
+      activeZoneKey: "other" as const,
+      enforcedZoneKey: "campus" as const,
+    };
+    const checked = applyZoneRule(state, selected, 10);
+    expect(checked.player.outsideSinceTick).toBeNull();
+  });
 });

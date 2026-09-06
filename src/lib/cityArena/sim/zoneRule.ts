@@ -64,8 +64,9 @@ function applyOutside(
 }
 
 function enforcedZone(state: ArenaState, index: MapIndex): MapZone | null {
-  if (!state.zoneEnforced || state.activeZoneKey === null) return null;
-  return findZoneByKey(index, state.activeZoneKey);
+  if (!state.zoneEnforced) return null;
+  const key = state.enforcedZoneKey ?? state.activeZoneKey;
+  return key === null ? null : findZoneByKey(index, key);
 }
 
 /** Applies the warning and out-of-zone damage for every living player. */

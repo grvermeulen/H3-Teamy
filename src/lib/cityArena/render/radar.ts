@@ -1,5 +1,6 @@
 import type { MapRoads } from "../world/mapTypes";
 import { fromUnits, type Point } from "../world/projection";
+import type { RoadGraph } from "../world/roadGraph";
 import type { PickupKind } from "../sim/types";
 import {
   PICKUP_HEALTH,
@@ -56,6 +57,76 @@ function distanceToSegment(point: Point, start: Point, end: Point): number {
   );
 }
 
+const RADAR_BUCKET_M = RADAR_RANGE_M;
+
+/** Cached spatial index for graph segments used by the small radar. */
+export type RadarRoadIndex = {
+  segments: Array<readonly [Point, Point]>;
+  buckets: Map<string, number[]>;
+};
+
+function radarBucket(value: number): number {
+  return Math.floor(value / RADAR_BUCKET_M);
+}
+
+function radarBucketKey(x: number, y: number): string {
+  return `${x}:${y}`;
+}
+
+/** Builds the radar's one-time segment index instead of rescanning the full road graph per tick. */
+export function createRadarRoadIndex(
+  nodes: readonly Point[],
+  edges: readonly Pick<RoadGraph["edges"][number], "a" | "b">[],
+): RadarRoadIndex {
+  const segments: Array<readonly [Point, Point]> = [];
+  const buckets = new Map<string, number[]>();
+  for (const edge of edges) {
+    const start = nodes[edge.a];
+    const end = nodes[edge.b];
+    if (!start || !end) continue;
+    const segmentIndex = segments.push([start, end]) - 1;
+    const minX = radarBucket(Math.min(start[0], end[0]));
+    const maxX = radarBucket(Math.max(start[0], end[0]));
+    const minY = radarBucket(Math.min(start[1], end[1]));
+    const maxY = radarBucket(Math.max(start[1], end[1]));
+    for (let y = minY; y <= maxY; y += 1) {
+      for (let x = minX; x <= maxX; x += 1) {
+        const key = radarBucketKey(x, y);
+        const bucket = buckets.get(key) ?? [];
+        bucket.push(segmentIndex);
+        buckets.set(key, bucket);
+      }
+    }
+  }
+  return { segments, buckets };
+}
+
+/** Returns only indexed road segments that intersect the radar range. */
+export function nearbyRadarRoads(
+  index: RadarRoadIndex,
+  centre: Point,
+  rangeM: number,
+): Array<readonly [Point, Point]> {
+  const candidates = new Set<number>();
+  const minX = radarBucket(centre[0] - rangeM);
+  const maxX = radarBucket(centre[0] + rangeM);
+  const minY = radarBucket(centre[1] - rangeM);
+  const maxY = radarBucket(centre[1] + rangeM);
+  for (let y = minY; y <= maxY; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      for (const segment of index.buckets.get(radarBucketKey(x, y)) ?? [])
+        candidates.add(segment);
+    }
+  }
+  return [...candidates]
+    .map((segment) => index.segments[segment])
+    .filter(
+      (segment): segment is readonly [Point, Point] =>
+        segment !== undefined &&
+        distanceToSegment(centre, segment[0], segment[1]) <= rangeM,
+    );
+}
+
 /** Returns road centre-line segments that intersect the radar range. */
 export function radarRoads(
   roads: MapRoads,
@@ -68,15 +139,10 @@ export function radarRoads(
       fromUnits(roads.nodes[index]),
       fromUnits(roads.nodes[index + 1]),
     ]);
-  const result: Array<readonly [Point, Point]> = [];
-  for (let index = 0; index + 5 < roads.edges.length; index += 6) {
-    const start = nodes[roads.edges[index]];
-    const end = nodes[roads.edges[index + 1]];
-    if (!start || !end || distanceToSegment(centre, start, end) > rangeM)
-      continue;
-    result.push([start, end]);
-  }
-  return result;
+  const edges = [];
+  for (let index = 0; index + 5 < roads.edges.length; index += 6)
+    edges.push({ a: roads.edges[index], b: roads.edges[index + 1] });
+  return nearbyRadarRoads(createRadarRoadIndex(nodes, edges), centre, rangeM);
 }
 
 function pickupRadarColour(kind: PickupKind): string {

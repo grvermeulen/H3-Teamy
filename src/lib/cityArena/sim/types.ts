@@ -233,5 +233,7 @@ export type ArenaState = {
   traffic: DriverState[];
   events: ArenaEvent[];
   activeZoneKey: ZoneKey | null;
+  /** Zone selected when the out-of-zone rule was enabled; population may move independently. */
+  enforcedZoneKey?: ZoneKey | null;
   zoneEnforced: boolean;
 };

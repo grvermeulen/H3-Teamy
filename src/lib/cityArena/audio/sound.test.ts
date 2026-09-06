@@ -17,6 +17,7 @@ describe("createArenaSound", () => {
     expect(context.resumeCalls).toBe(0);
     sound.setEnabled(true);
     sound.unlock();
+    sound.unlock();
     expect(context.resumeCalls).toBe(1);
   });
 

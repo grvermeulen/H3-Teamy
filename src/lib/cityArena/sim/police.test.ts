@@ -197,4 +197,17 @@ describe("managePoliceCars", () => {
     };
     expect(managePoliceCars(stolen, { graph }, 1, createRng(2))).toBe(stolen);
   });
+
+  it("does not replace a stolen police car while it remains an active vehicle", () => {
+    const police = createPoliceCar(900, graph, [100, 0], 0);
+    const stolen: ArenaState = {
+      ...playerWithHeat(80),
+      vehicles: [police.vehicle],
+      traffic: [],
+      player: { ...playerWithHeat(80).player, vehicleId: police.vehicle.id },
+    };
+    const managed = managePoliceCars(stolen, { graph }, 1, createRng(2));
+    expect(managed.vehicles).toHaveLength(1);
+    expect(managed.traffic).toEqual([]);
+  });
 });

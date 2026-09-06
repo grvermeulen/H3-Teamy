@@ -105,6 +105,7 @@ export function createArenaSound(
   let engine: OscillatorLike | null = null;
   let engineGain: GainNodeLike | null = null;
   let disposed = false;
+  let unlocked = false;
 
   try {
     context = factory();
@@ -163,13 +164,17 @@ export function createArenaSound(
   return {
     unlock(): void {
       if (!enabled || !context || disposed) return;
+      if (unlocked) return;
+      unlocked = true;
       try {
         const result = context.resume();
         if (result instanceof Promise)
-          result.catch((error: unknown) =>
-            reportAudioError(error, "audio-unlock"),
-          );
+          result.catch((error: unknown) => {
+            unlocked = false;
+            reportAudioError(error, "audio-unlock");
+          });
       } catch (error: unknown) {
+        unlocked = false;
         reportAudioError(error, "audio-unlock");
       }
     },

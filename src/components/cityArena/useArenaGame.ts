@@ -273,7 +273,10 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
       });
     return () => {
       cancelled = true;
-      runtimeRef.current?.sound.dispose();
+      if (runtimeRef.current) {
+        runtimeRef.current.disposed = true;
+        runtimeRef.current.sound.dispose();
+      }
       session.dispose();
       runtimeRef.current = null;
     };
@@ -289,6 +292,7 @@ function useArenaInput(
   inputRef: RefObject<InputState>,
   canvasRef: RefObject<HTMLCanvasElement | null>,
   pointerRef: RefObject<PointerAim | null>,
+  runtimeRef: RefObject<Runtime | null>,
 ): {
   setInputVector(vector: [number, number] | null): void;
   setButton(name: ButtonName, pressed: boolean): void;
@@ -305,13 +309,18 @@ function useArenaInput(
     };
   }, [canvasRef, inputRef, pointerRef]);
   const setInputVector = useCallback(
-    (vector: [number, number] | null) => inputRef.current.setStick(vector),
-    [inputRef],
+    (vector: [number, number] | null) => {
+      if (vector) runtimeRef.current?.sound.unlock();
+      inputRef.current.setStick(vector);
+    },
+    [inputRef, runtimeRef],
   );
   const setButton = useCallback(
-    (name: ButtonName, pressed: boolean) =>
-      inputRef.current.setButton("buttons", name, pressed),
-    [inputRef],
+    (name: ButtonName, pressed: boolean) => {
+      if (pressed) runtimeRef.current?.sound.unlock();
+      inputRef.current.setButton("buttons", name, pressed);
+    },
+    [inputRef, runtimeRef],
   );
   return { setInputVector, setButton };
 }
@@ -388,7 +397,12 @@ function createTestHooks(
     },
     setZoneEnforced(enabled) {
       const runtime = runtimeRef.current;
-      if (runtime) runtime.state = { ...runtime.state, zoneEnforced: enabled };
+      if (runtime)
+        runtime.state = {
+          ...runtime.state,
+          zoneEnforced: enabled,
+          enforcedZoneKey: enabled ? runtime.state.activeZoneKey : null,
+        };
     },
     addHeat(amount) {
       const runtime = runtimeRef.current;
@@ -531,6 +545,7 @@ export function useArenaGame({
     inputRef,
     canvasRef,
     pointerRef,
+    runtimeRef,
   );
   useArenaTestHooks(debug, runtimeRef);
   useFrameLoop(phase, {
@@ -556,6 +571,7 @@ export function useArenaGame({
       if (runtime) {
         runtime.soundEnabled = enabled;
         runtime.sound.setEnabled(enabled);
+        if (enabled) runtime.sound.unlock();
       }
       setHud({ ...hud, soundEnabled: enabled });
       saveArenaSettings({ sound: enabled });

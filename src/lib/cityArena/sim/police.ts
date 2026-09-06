@@ -196,7 +196,10 @@ function spawnMissingPoliceCars(
   random: () => number,
 ): ArenaState {
   const wantedCars = POLICE_CARS_PER_LEVEL[level] ?? 0;
-  const missing = wantedCars - policeDrivers(state.traffic).length;
+  const activePoliceCars = state.vehicles.filter(
+    (vehicle) => vehicle.kind === "police" && !vehicle.wrecked,
+  ).length;
+  const missing = wantedCars - activePoliceCars;
   const room = Math.min(
     missing,
     MAX_TRAFFIC - state.traffic.length,

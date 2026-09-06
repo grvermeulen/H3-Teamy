@@ -24,7 +24,13 @@ import {
   type DeathScreenPhase,
 } from "@/lib/cityArena/render/deathScreen";
 import { renderScene, type Scene } from "@/lib/cityArena/render/renderScene";
-import type { RadarSnapshot } from "@/lib/cityArena/render/radar";
+import {
+  createRadarRoadIndex,
+  nearbyRadarRoads,
+  RADAR_RANGE_M,
+  type RadarRoadIndex,
+  type RadarSnapshot,
+} from "@/lib/cityArena/render/radar";
 import {
   createArenaState,
   occupiedVehicle,
@@ -128,7 +134,16 @@ export type Runtime = {
   reducedMotion: boolean;
   sound: ArenaSound;
   soundEnabled: boolean;
+  radarRoadIndex: RadarRoadIndex;
+  disposed: boolean;
 };
+
+/** True while async frame-loop callbacks may still publish state. */
+export function canApplyRuntimeUpdate(
+  runtime: Pick<Runtime, "disposed">,
+): boolean {
+  return !runtime.disposed;
+}
 
 /** Reports a failure through Sentry, tagged so arena issues are easy to filter. */
 export function reportArenaError(error: unknown, kind: string): void {
@@ -287,6 +302,11 @@ export function createRuntime(
     reducedMotion,
     sound: createArenaSound(audioContextFactory, soundEnabled),
     soundEnabled,
+    radarRoadIndex: createRadarRoadIndex(
+      session.graph().nodes,
+      session.graph().edges,
+    ),
+    disposed: false,
   };
 }
 
@@ -466,18 +486,21 @@ export type FrameLoopOptions = {
  * (at whatever position the player has reached by then) if that flag was set.
  */
 function startTileSync(runtime: Runtime, options: FrameLoopOptions): void {
+  if (!canApplyRuntimeUpdate(runtime)) return;
   runtime.tileSyncPending = true;
   const { player } = runtime.state;
   runtime.session
     .update([player.x, player.y])
     .then(
       (progress) => {
+        if (!canApplyRuntimeUpdate(runtime)) return;
         options.setProgress(progress);
         options.setFailed(runtime.session.hasFailures());
       },
       (error: unknown) => reportArenaError(error, "tile-sync"),
     )
     .finally(() => {
+      if (!canApplyRuntimeUpdate(runtime)) return;
       runtime.tileSyncPending = false;
       if (runtime.tileSyncRequested) {
         runtime.tileSyncRequested = false;
@@ -502,14 +525,20 @@ function refreshThrottled(
     options.setHud(
       computeHud(runtime.session, runtime.state, runtime.soundEnabled),
     );
-    const graph = runtime.session.graph();
-    const roads = graph.edges.map(
-      (edge) => [graph.nodes[edge.a], graph.nodes[edge.b]] as const,
-    );
     const zone = runtime.state.zoneKey
       ? findZoneByKey(runtime.session.index(), runtime.state.zoneKey)
       : null;
-    options.setRadar(buildRadarSnapshot(runtime.state, zone, roads));
+    options.setRadar(
+      buildRadarSnapshot(
+        runtime.state,
+        zone,
+        nearbyRadarRoads(
+          runtime.radarRoadIndex,
+          [runtime.state.player.x, runtime.state.player.y],
+          RADAR_RANGE_M,
+        ),
+      ),
+    );
   }
   if (options.debug && timestamp - runtime.lastDebug >= DEBUG_REFRESH_MS) {
     runtime.lastDebug = timestamp;

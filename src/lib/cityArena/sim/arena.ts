@@ -162,6 +162,7 @@ export function createArenaState(
     traffic: [],
     events: [],
     activeZoneKey: null,
+    enforcedZoneKey: null,
     zoneEnforced: false,
   };
   return activeZone

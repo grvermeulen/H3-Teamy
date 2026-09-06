@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { radarRoads, drawRadar, RADAR_RANGE_M } from "./radar";
+import {
+  createRadarRoadIndex,
+  drawRadar,
+  nearbyRadarRoads,
+  radarRoads,
+  RADAR_RANGE_M,
+} from "./radar";
 import { RADAR_BACKGROUND, RADAR_PLAYER } from "./palette";
 import { createFakeContext } from "./testing/fakeContext";
 
@@ -12,6 +18,27 @@ describe("radar", () => {
       names: [],
     };
     expect(radarRoads(roads, [0, 0], RADAR_RANGE_M)).toEqual([
+      [
+        [0, 0],
+        [100, 0],
+      ],
+    ]);
+  });
+
+  it("uses a spatial index to return only nearby graph segments", () => {
+    const index = createRadarRoadIndex(
+      [
+        [0, 0],
+        [100, 0],
+        [1000, 0],
+        [1100, 0],
+      ],
+      [
+        { a: 0, b: 1 },
+        { a: 2, b: 3 },
+      ],
+    );
+    expect(nearbyRadarRoads(index, [0, 0], 150)).toEqual([
       [
         [0, 0],
         [100, 0],

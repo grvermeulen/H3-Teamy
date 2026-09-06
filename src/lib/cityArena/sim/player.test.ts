@@ -21,6 +21,12 @@ describe("stepPlayer", () => {
     expect(halfSpeed.facing).toBeCloseTo(Math.PI / 2);
   });
 
+  it("clamps oversized debug input before applying displacement", () => {
+    const moved = stepPlayer(start, createInput({ move: [2, 0] }), 1, free);
+    expect(moved.x).toBeCloseTo(WALK_SPEED_MPS);
+    expect(moved.speed).toBeCloseTo(WALK_SPEED_MPS);
+  });
+
   it("keeps the last facing when standing still and ignores dead-zone noise", () => {
     const facingRight = stepPlayer(
       start,
