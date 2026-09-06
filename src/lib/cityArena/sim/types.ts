@@ -119,6 +119,8 @@ export type ArenaPlayerState = PlayerState & {
   heat: number;
   heatTick: number;
   outsideSinceTick: number | null;
+  /** Rate-limited steering command (−1..1) of the car being driven; 0 while on foot. */
+  driveSteer: number;
 };
 
 /** Buttons whose previous held state the simulation remembers for edge detection. */

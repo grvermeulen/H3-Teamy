@@ -11,6 +11,7 @@ import {
   type PlayerTarget,
   type BulletHit,
 } from "./bullets";
+import { driveStep, type DriveStep } from "./driveInput";
 import {
   CAR_BODY_RADIUS_M,
   resolveVehicleAgainstPlayer,
@@ -127,6 +128,7 @@ export function createArenaPlayer(
     heat: 0,
     heatTick: tick,
     outsideSinceTick: null,
+    driveSteer: 0,
   };
 }
 
@@ -216,6 +218,7 @@ function enterVehicle(state: ArenaState): ArenaState {
       y: best.y,
       facing: best.heading,
       speed: 0,
+      driveSteer: 0,
     },
   };
 }
@@ -245,6 +248,7 @@ function exitVehicle(state: ArenaState, world: ArenaWorld): ArenaState {
       y,
       facing: vehicle ? vehicle.heading : state.player.facing,
       speed: 0,
+      driveSteer: 0,
     },
   };
 }
@@ -266,11 +270,6 @@ function applyWeaponSwitch(state: ArenaState, pressed: boolean): ArenaState {
   if (!pressed || isDead(state.player)) return state;
   const weapon = nextWeapon(state.player.weapon, state.player.ammo);
   return { ...state, player: { ...state.player, weapon } };
-}
-
-/** Stick or keys to car controls: up is gas, down is brake/reverse, x steers. */
-function controlsFromInput(input: WorldInput): VehicleControls {
-  return { throttle: -input.move[1], steer: input.move[0] };
 }
 
 /** Steps every car (only the occupied one gets controls), then applies building and car–car impact damage. */
@@ -343,6 +342,7 @@ function stepVehicles(
 function ridePlayer(
   player: ArenaPlayerState,
   vehicle: VehicleState,
+  driveSteer: number,
 ): ArenaPlayerState {
   return {
     ...player,
@@ -351,6 +351,7 @@ function ridePlayer(
     facing: vehicle.heading,
     speed: Math.abs(forwardSpeed(vehicle)),
     boardingTicksLeft: Math.max(0, player.boardingTicksLeft - 1),
+    driveSteer,
   };
 }
 
@@ -387,12 +388,19 @@ function moveEntities(
 ): ArenaState {
   const driving = occupiedVehicle(state);
   const canDrive =
-    driving !== null &&
-    !isDead(state.player) &&
-    state.player.boardingTicksLeft === 0;
-  const controls = canDrive ? controlsFromInput(input) : NO_CONTROLS;
+    !isDead(state.player) && state.player.boardingTicksLeft === 0;
+  const drive: DriveStep =
+    driving && canDrive
+      ? driveStep(input, driving.heading, state.player.driveSteer, dt)
+      : { controls: NO_CONTROLS, steer: 0 };
   const drivers = stepDrivers(state, world, random, policeChase(state));
-  const moved = stepVehicles(state, controls, dt, world, drivers.controls);
+  const moved = stepVehicles(
+    state,
+    drive.controls,
+    dt,
+    world,
+    drivers.controls,
+  );
   const next: ArenaState = {
     ...state,
     traffic: drivers.traffic,
@@ -402,7 +410,7 @@ function moveEntities(
   if (driving) {
     const ridden =
       moved.vehicles.find((vehicle) => vehicle.id === driving.id) ?? driving;
-    return { ...next, player: ridePlayer(state.player, ridden) };
+    return { ...next, player: ridePlayer(state.player, ridden, drive.steer) };
   }
   return {
     ...next,

@@ -31,6 +31,13 @@ export const STEER_RATE_RAD_S = 2.6;
 export const STEER_FULL_SPEED_MPS = 6;
 /** Steering loss at top speed (spec §5: 1 − 0.5·v/vmax). */
 export const STEER_HIGH_SPEED_FACTOR = 0.5;
+/**
+ * Steering authority a rolling car has straight away, before speed adds the rest. Without it the
+ * spec's `clamp(v/6, 0, 1)` curve leaves the wheel almost dead below walking pace and then snaps.
+ */
+export const STEER_GRIP_FLOOR = 0.45;
+/** Below this speed the car does not turn at all, so a parked car never pivots on the spot. */
+export const STEER_MIN_SPEED_MPS = 0.5;
 /** Fraction of the lateral velocity that survives one second (spec §5: decays 90 %/s). */
 export const LATERAL_KEEP_PER_S = 0.1;
 /** Deceleration when neither throttle nor brake is applied (documented choice). */
@@ -172,14 +179,28 @@ function driveForward(
   return forward - Math.sign(forward) * rollOff;
 }
 
-/** Turn rate in rad/s: steer × 2.6 × clamp(v/6, 0, 1) × (1 − 0.5·v/vmax), mirrored in reverse. */
+/**
+ * Steering authority at `speed`: none while the car is effectively parked, {@link STEER_GRIP_FLOOR}
+ * the moment it rolls, and a full 1 from {@link STEER_FULL_SPEED_MPS} upward — so nothing about
+ * cornering at speed changes.
+ */
+function steerGrip(speed: number): number {
+  if (speed < STEER_MIN_SPEED_MPS) return 0;
+  return (
+    STEER_GRIP_FLOOR +
+    (1 - STEER_GRIP_FLOOR) * Math.min(1, speed / STEER_FULL_SPEED_MPS)
+  );
+}
+
+/** Turn rate in rad/s: steer × 2.6 × {@link steerGrip} × (1 − 0.5·v/vmax), mirrored in reverse. */
 function turnRate(forward: number, steer: number, spec: VehicleSpec): number {
   const speed = Math.abs(forward);
-  const grip = Math.min(1, speed / STEER_FULL_SPEED_MPS);
   const highSpeedLoss =
     1 - STEER_HIGH_SPEED_FACTOR * (speed / spec.maxSpeedMps);
   const direction = forward < 0 ? -1 : 1;
-  return steer * STEER_RATE_RAD_S * grip * highSpeedLoss * direction;
+  return (
+    steer * STEER_RATE_RAD_S * steerGrip(speed) * highSpeedLoss * direction
+  );
 }
 
 /** Applies the controls to velocity and heading; wrecks ignore their controls. */

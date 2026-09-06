@@ -102,6 +102,21 @@ describe("checkInvariants", () => {
     ).toContain("effect 2 expired");
   });
 
+  it("rejects a steering command out of range or held on foot", () => {
+    expect(
+      checkInvariants({
+        ...healthy,
+        player: { ...healthy.player, driveSteer: 0.5 },
+      }),
+    ).toEqual(["player.driveSteer 0.5 out of range or set on foot"]);
+    expect(
+      checkInvariants({
+        ...healthy,
+        player: { ...healthy.player, vehicleId: 1, driveSteer: 1.5 },
+      }),
+    ).toEqual(["player.driveSteer 1.5 out of range or set on foot"]);
+  });
+
   it("reports population caps, duplicate ids and invalid driver references", () => {
     const crowd = Array.from({ length: MAX_PEDS + 1 }, (_, index) =>
       pedAt(100 + index, index),
