@@ -3,6 +3,7 @@ import type { MapIndex } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
 import { createArenaState } from "./arena";
 import type { BulletHit } from "./bullets";
+import { createCop } from "./cops";
 import { applyEntityHit } from "./hits";
 import { createRng } from "./rng";
 import type { ArenaState, BulletState, PedState } from "./types";
@@ -102,5 +103,29 @@ describe("applyEntityHit", () => {
         4,
       ),
     ).toBeNull();
+  });
+
+  it("damages and kills cops with player bullets, while absorbing other bullets", () => {
+    const state = {
+      ...withPed(),
+      peds: [],
+      cops: [createCop(300, [5, 0], "pistol", 0)],
+    };
+    const hurt = applyEntityHit(state, hitOn(300, bulletFrom(0, 20)), 4);
+    expect(hurt?.cops[0]).toMatchObject({ health: 80, diedAtTick: null });
+    expect(hurt?.events).toEqual([
+      { kind: "hit", target: "cop", x: 4.6, y: 0 },
+    ]);
+    const killed = applyEntityHit(state, hitOn(300, bulletFrom(0, 100)), 4);
+    expect(killed?.cops[0]).toMatchObject({ health: 0, diedAtTick: 4 });
+    expect(killed?.events).toContainEqual({
+      kind: "kill",
+      victim: "cop",
+      killerId: 0,
+      x: 5,
+      y: 0,
+    });
+    const absorbed = applyEntityHit(state, hitOn(300, bulletFrom(77, 100)), 4);
+    expect(absorbed?.cops[0].health).toBe(100);
   });
 });

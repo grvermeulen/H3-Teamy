@@ -33,6 +33,7 @@ import { addEffect, pruneEffects } from "./effects";
 import { pushEvent } from "./events";
 import { applyEntityHit } from "./hits";
 import { applyPopulation, populateZone } from "./populate";
+import { aliveCops, blastCops, manageCops, stepCops } from "./cops";
 import { alivePeds, blastPeds, stepPeds } from "./peds";
 import { stepPickups } from "./pickups";
 import { PLAYER_RADIUS_M, stepPlayer } from "./player";
@@ -550,6 +551,8 @@ function bulletTargets(state: ArenaState): PlayerTarget[] {
       : [];
   for (const ped of alivePeds(state.peds))
     targets.push({ id: ped.id, x: ped.x, y: ped.y });
+  for (const cop of aliveCops(state.cops))
+    targets.push({ id: cop.id, x: cop.x, y: cop.y });
   return targets;
 }
 
@@ -611,6 +614,7 @@ function explodeVehicle(
       : other;
   });
   const blast = blastPeds(state.peds, vehicle, tick);
+  const copBlast = blastCops(state.cops, vehicle, tick);
   let events = pushEvent(state.events, {
     kind: "explosion",
     x: vehicle.x,
@@ -624,10 +628,19 @@ function explodeVehicle(
       x: ped.x,
       y: ped.y,
     });
+  for (const cop of copBlast.killed)
+    events = pushEvent(events, {
+      kind: "kill",
+      victim: "cop",
+      killerId: null,
+      x: cop.x,
+      y: cop.y,
+    });
   return {
     ...state,
     vehicles,
     peds: blast.peds,
+    cops: copBlast.cops,
     nextId: state.nextId + 1,
     player: blastPlayer(state.player, vehicle, tick),
     events,
@@ -716,11 +729,13 @@ export function stepArena(
   next = applyEnterExit(next, edges.enterPressed, world);
   next = moveEntities(next, input, dt, world, tick, random);
   next = applyFire(next, input, tick, random);
+  next = stepCops(next, world, dt, tick, random);
   next = stepPeds(next, world, dt, tick, random);
   next = advanceBullets(next, dt, world, tick);
   next = applyExplosions(next, world, tick);
   next = applyZoneRule(next, world.index, tick);
   next = applyWanted(next, tick);
+  next = manageCops(next, world, tick, random);
   next = ejectIfDead(next, world);
   const zone = findZone(world.index, [next.player.x, next.player.y]);
   return {
