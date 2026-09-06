@@ -91,6 +91,54 @@ describe("findPath", () => {
     expect(findPath(graph, 0, 1, { respectOneway: true })).toEqual([0, 1]);
     expect(findPath(graph, 1, 0, { respectOneway: true })).toBeNull();
   });
+
+  it("finds a shortest lattice path with the heap open set", () => {
+    const size = 20;
+    const nodes: number[] = [];
+    const edges: number[] = [];
+    for (let row = 0; row < size; row++)
+      for (let column = 0; column < size; column++) {
+        nodes.push(column * 40, row * 40);
+        const index = row * size + column;
+        if (column + 1 < size) edges.push(index, index + 1, 0, -1, 0, 40);
+        if (row + 1 < size) edges.push(index, index + size, 0, -1, 0, 40);
+      }
+    const lattice = decodeRoadGraph({
+      nodes,
+      edges,
+      classes: ["residential"],
+      names: [],
+    });
+    const path = findPath(lattice, 0, size * size - 1);
+    expect(path).toHaveLength(2 * size - 1);
+    expect(path?.[0]).toBe(0);
+    expect(path?.at(-1)).toBe(size * size - 1);
+    expect(pathLength(lattice, path ?? [])).toBe(380);
+  });
+
+  it("skips edges rejected by allowEdge", () => {
+    const graph = decodeRoadGraph(roads);
+    expect(findPath(graph, 0, 4)).toEqual([0, 1, 4]);
+    expect(
+      findPath(graph, 0, 4, {
+        allowEdge: (edge) => edge.roadClass !== "service",
+      }),
+    ).toBeNull();
+  });
+
+  it("prefers three short hops over one long declared edge", () => {
+    const detour = decodeRoadGraph({
+      nodes: [0, 0, 200, 0, 400, 0, 600, 0],
+      edges: [
+        0, 1, 0, -1, 0, 200, 1, 2, 0, -1, 0, 200, 2, 3, 0, -1, 0, 200, 0, 2, 0,
+        -1, 0, 1200,
+      ],
+      classes: ["residential"],
+      names: [],
+    });
+    const path = findPath(detour, 0, 3);
+    expect(path).toEqual([0, 1, 2, 3]);
+  });
 });
 
 describe("pathLength", () => {

@@ -3,6 +3,16 @@ import type { Point } from "../world/projection";
 /** Axis-aligned rectangle in the same unit as the points it is used with. */
 export type Rect = { minX: number; minY: number; maxX: number; maxY: number };
 
+/** Returns whether a point lies inside or on the boundary of an axis-aligned rectangle. */
+export function pointInRect(point: Point, rect: Rect): boolean {
+  return (
+    point[0] >= rect.minX &&
+    point[0] <= rect.maxX &&
+    point[1] >= rect.minY &&
+    point[1] <= rect.maxY
+  );
+}
+
 /** Euclidean distance between two points. */
 export function distance(a: Point, b: Point): number {
   return Math.hypot(b[0] - a[0], b[1] - a[1]);
