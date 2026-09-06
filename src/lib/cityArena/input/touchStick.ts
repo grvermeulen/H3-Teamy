@@ -4,6 +4,13 @@ export const STICK_RADIUS_PX = 48;
 /** Fraction of the radius that counts as "not moving". */
 export const STICK_DEAD_ZONE = 0.15;
 
+/**
+ * Per-axis dead zone as a fraction of full deflection. A component smaller than this snaps to
+ * zero while the other axis is left untouched (never renormalised), so a thumb held forward with
+ * a small wobble reports dead-straight movement instead of a permanent small steering command.
+ */
+export const STICK_AXIS_DEAD_ZONE = 0.2;
+
 /** Current stick geometry for rendering and the resulting movement vector. */
 export type StickState = {
   pointerId: number | null;
@@ -25,10 +32,16 @@ function scaleThroughDeadZone(deflection: number, deadZone: number): number {
   return (deflection - deadZone) / (1 - deadZone);
 }
 
-/** Creates a stick; `radiusPx` and `deadZone` default to the spec values. */
+/** Zeroes a component inside the per-axis dead zone. */
+function snapAxis(component: number, axisDeadZone: number): number {
+  return Math.abs(component) < axisDeadZone ? 0 : component;
+}
+
+/** Creates a stick; `radiusPx`, `deadZone` and `axisDeadZone` default to the spec values. */
 export function createStick(
   radiusPx = STICK_RADIUS_PX,
   deadZone = STICK_DEAD_ZONE,
+  axisDeadZone = STICK_AXIS_DEAD_ZONE,
 ): StickController {
   let current: StickState = {
     pointerId: null,
@@ -56,7 +69,10 @@ export function createStick(
           current.origin[0] + unitX * clamped * radiusPx,
           current.origin[1] + unitY * clamped * radiusPx,
         ],
-        vector: [unitX * magnitude, unitY * magnitude],
+        vector: [
+          snapAxis(unitX * magnitude, axisDeadZone),
+          snapAxis(unitY * magnitude, axisDeadZone),
+        ],
       };
     },
     end(pointerId) {

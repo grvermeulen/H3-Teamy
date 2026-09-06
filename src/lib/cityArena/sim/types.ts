@@ -3,9 +3,13 @@ import type { ZoneKey } from "../world/mapTypes";
 /**
  * Device-agnostic input (spec §7): a movement vector with length ≤ 1 (x east, y south), an
  * aim angle in radians or `null` to fire along the facing, and three held buttons.
+ * `moveIsAnalog` is the device kind, not a control: it is true only while a touch stick drives
+ * `move`, and it selects the heading-seeking car steering in `driveInput.ts`. Keyboard and
+ * replayed/debug inputs leave it false and keep the original tank steering.
  */
 export type WorldInput = {
   move: [number, number];
+  moveIsAnalog: boolean;
   aim: number | null;
   fire: boolean;
   enter: boolean;
@@ -15,6 +19,7 @@ export type WorldInput = {
 /** An input with nothing pressed. */
 export const EMPTY_INPUT: WorldInput = {
   move: [0, 0],
+  moveIsAnalog: false,
   aim: null,
   fire: false,
   enter: false,
@@ -25,6 +30,7 @@ export const EMPTY_INPUT: WorldInput = {
 export function createInput(partial: Partial<WorldInput>): WorldInput {
   return {
     move: partial.move ?? [0, 0],
+    moveIsAnalog: partial.moveIsAnalog ?? false,
     aim: partial.aim ?? null,
     fire: partial.fire ?? false,
     enter: partial.enter ?? false,

@@ -21,6 +21,7 @@ describe("input state", () => {
     const state = createInputState();
     expect(state.snapshot()).toEqual({
       move: [0, 0],
+      moveIsAnalog: false,
       aim: null,
       fire: false,
       enter: false,
@@ -56,5 +57,24 @@ describe("input state", () => {
     expect(state.snapshot().fire).toBe(true);
     state.setButton("buttons", "fire", false);
     expect(state.snapshot().fire).toBe(false);
+  });
+
+  it("marks movement analog only while a finger owns the stick", () => {
+    const state = createInputState();
+    expect(state.snapshot().moveIsAnalog).toBe(false);
+    state.setKeyboard([1, 0]);
+    expect(state.snapshot().moveIsAnalog).toBe(false);
+    state.setStick([0.3, -0.4]);
+    expect(state.snapshot()).toMatchObject({
+      move: [0.3, -0.4],
+      moveIsAnalog: true,
+    });
+    state.setStick([0, 0]);
+    expect(state.snapshot().moveIsAnalog).toBe(true);
+    state.setStick(null);
+    expect(state.snapshot()).toMatchObject({
+      move: [1, 0],
+      moveIsAnalog: false,
+    });
   });
 });

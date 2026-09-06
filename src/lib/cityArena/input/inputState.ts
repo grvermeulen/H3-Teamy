@@ -18,7 +18,8 @@ export type ButtonState = Record<ButtonName, boolean>;
 
 /**
  * Merges keyboard movement, the floating stick, held buttons and the aim into one
- * {@link WorldInput}; the stick wins over keyboard movement while a finger is down.
+ * {@link WorldInput}; the stick wins over keyboard movement while a finger is down, and the
+ * snapshot reports which of the two produced `move` so the car steering can pick its mapping.
  */
 export type InputState = {
   setKeyboard(vector: [number, number]): void;
@@ -63,6 +64,7 @@ export function createInputState(): InputState {
     snapshot: () => ({
       ...EMPTY_INPUT,
       move: clampToUnit(stick ?? keyboard),
+      moveIsAnalog: stick !== null,
       aim,
       fire: held("fire"),
       enter: held("enter"),
