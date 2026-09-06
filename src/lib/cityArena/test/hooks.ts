@@ -5,6 +5,8 @@ export type ArenaTestHooks = {
   getState(): ArenaState | null;
   dispatch(input: Partial<WorldInput>, ticks?: number): void;
   damage(amount: number): void;
+  setZoneEnforced(enabled: boolean): void;
+  addHeat(amount: number): void;
   getViolations(): number;
 };
 

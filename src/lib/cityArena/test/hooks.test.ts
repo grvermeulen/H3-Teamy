@@ -10,6 +10,8 @@ function fakeHooks(): ArenaTestHooks {
     getState: () => null,
     dispatch: () => {},
     damage: () => {},
+    setZoneEnforced: () => {},
+    addHeat: () => {},
     getViolations: () => 0,
   };
 }

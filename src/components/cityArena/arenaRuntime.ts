@@ -14,6 +14,7 @@ import {
   createCamera,
   screenToWorld,
   updateCamera,
+  visibleRect,
   zoomLevelForViewport,
   type Camera,
   type Viewport,
@@ -23,6 +24,7 @@ import {
   type DeathScreenPhase,
 } from "@/lib/cityArena/render/deathScreen";
 import { renderScene, type Scene } from "@/lib/cityArena/render/renderScene";
+import type { RadarSnapshot } from "@/lib/cityArena/render/radar";
 import {
   createArenaState,
   occupiedVehicle,
@@ -33,6 +35,9 @@ import {
 import { checkInvariants } from "@/lib/cityArena/sim/invariants";
 import { SIM_STEP_S } from "@/lib/cityArena/sim/player";
 import { createRng, seedFromString } from "@/lib/cityArena/sim/rng";
+import { forwardSpeed } from "@/lib/cityArena/sim/vehicle";
+import { currentWantedLevel } from "@/lib/cityArena/sim/wanted";
+import { zoneSecondsLeft } from "@/lib/cityArena/sim/zoneRule";
 import type {
   ArenaPlayerState,
   ArenaState,
@@ -50,12 +55,17 @@ import type { Point } from "@/lib/cityArena/world/projection";
 import { findPath, pathLength } from "@/lib/cityArena/world/roadGraph";
 import type { WorldSession } from "@/lib/cityArena/world/worldSession";
 import {
+  createArenaSound,
+  type ArenaSound,
+  type AudioContextFactory,
+} from "@/lib/cityArena/audio/sound";
+import {
   findZoneByKey,
   landmarkCentreMetres,
   pickSpawn,
 } from "@/lib/cityArena/world/zone";
 import type { EntityCounts } from "./ArenaDebugOverlay";
-import { computeHud, type ArenaHud } from "./arenaHud";
+import { buildRadarSnapshot, computeHud, type ArenaHud } from "./arenaHud";
 
 /**
  * The arena runtime and frame-loop layer used by `useArenaGame`: the mutable per-frame
@@ -116,6 +126,8 @@ export type Runtime = {
   violations: number;
   reportedViolations: Set<string>;
   reducedMotion: boolean;
+  sound: ArenaSound;
+  soundEnabled: boolean;
 };
 
 /** Reports a failure through Sentry, tagged so arena issues are easy to filter. */
@@ -243,6 +255,8 @@ export function createRuntime(
   zone: MapZone | null,
   viewportWidthPx: number,
   reducedMotion: boolean,
+  soundEnabled = true,
+  audioContextFactory?: AudioContextFactory,
 ): Runtime {
   const seed = seedFromString(
     `${SESSION_SEED_PREFIX}:${zone?.key ?? "none"}:${Date.now()}`,
@@ -271,6 +285,8 @@ export function createRuntime(
     violations: 0,
     reportedViolations: new Set<string>(),
     reducedMotion,
+    sound: createArenaSound(audioContextFactory, soundEnabled),
+    soundEnabled,
   };
 }
 
@@ -302,6 +318,16 @@ function buildDebugSnapshot(
       vehicles: runtime.state.vehicles.length,
       bullets: runtime.state.bullets.length,
       effects: runtime.state.effects.length,
+      peds: runtime.state.peds.length,
+      cops: runtime.state.cops.length,
+      traffic: runtime.state.traffic.length,
+      pickups: runtime.state.pickups.length,
+      wantedLevel: currentWantedLevel(runtime.state),
+      zoneSecondsLeft: zoneSecondsLeft(
+        runtime.state.player,
+        runtime.state.tick,
+      ),
+      eventCount: runtime.state.events.length,
       violations: runtime.violations,
     },
   };
@@ -366,22 +392,40 @@ function advanceSimulation(
   input: WorldInput,
   nowMs: number,
   debug: boolean,
+  viewport: Viewport,
 ): void {
   runtime.accumulator += dt * (deathPhase(runtime, nowMs)?.timeScale ?? 1);
   const world: ArenaWorld = {
     collision: runtime.session.collision,
     index: runtime.session.index(),
     graph: runtime.session.graph(),
+    viewRect: visibleRect(runtime.camera, viewport),
   };
   let steps = 0;
   while (runtime.accumulator >= SIM_STEP_S && steps < MAX_SIM_STEPS_PER_FRAME) {
     const stepInput = nextInput(runtime, input);
+    if (
+      stepInput.move[0] !== 0 ||
+      stepInput.move[1] !== 0 ||
+      stepInput.fire ||
+      stepInput.enter ||
+      stepInput.weaponNext
+    )
+      runtime.sound.unlock();
     runtime.state = stepArena(
       runtime.state,
       stepInput,
       SIM_STEP_S,
       world,
       runtime.random,
+    );
+    runtime.sound.handleEvents(runtime.state.events);
+    const car = occupiedVehicle(runtime.state);
+    runtime.sound.updateEngine(
+      car ? Math.abs(forwardSpeed(car)) : 0,
+      car !== null &&
+        !car.wrecked &&
+        runtime.state.player.boardingTicksLeft === 0,
     );
     runtime.accumulator -= SIM_STEP_S;
     steps += 1;
@@ -410,6 +454,7 @@ export type FrameLoopOptions = {
   setProgress: (progress: LoadProgress) => void;
   setFailed: (failed: boolean) => void;
   setHud: (hud: ArenaHud) => void;
+  setRadar: (radar: RadarSnapshot) => void;
   setDeath: (death: DeathInfo | null) => void;
   setDebugSnapshot: (snapshot: DebugSnapshot | null) => void;
 };
@@ -454,7 +499,17 @@ function refreshThrottled(
   }
   if (timestamp - runtime.lastHud >= HUD_REFRESH_MS) {
     runtime.lastHud = timestamp;
-    options.setHud(computeHud(runtime.session, runtime.state));
+    options.setHud(
+      computeHud(runtime.session, runtime.state, runtime.soundEnabled),
+    );
+    const graph = runtime.session.graph();
+    const roads = graph.edges.map(
+      (edge) => [graph.nodes[edge.a], graph.nodes[edge.b]] as const,
+    );
+    const zone = runtime.state.zoneKey
+      ? findZoneByKey(runtime.session.index(), runtime.state.zoneKey)
+      : null;
+    options.setRadar(buildRadarSnapshot(runtime.state, zone, roads));
   }
   if (options.debug && timestamp - runtime.lastDebug >= DEBUG_REFRESH_MS) {
     runtime.lastDebug = timestamp;
@@ -486,6 +541,7 @@ function runFrame(
     options.inputRef.current.snapshot(),
     timestamp,
     options.debug,
+    size,
   );
   if (trackDeath(runtime, timestamp))
     options.setDeath(
