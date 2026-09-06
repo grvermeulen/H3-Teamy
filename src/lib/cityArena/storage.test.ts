@@ -19,20 +19,26 @@ describe("arena settings storage", () => {
   });
 
   it("returns defaults when nothing is stored", () => {
-    expect(loadArenaSettings()).toEqual({ lastZone: "wageningen" });
+    expect(loadArenaSettings()).toEqual({
+      lastZone: "wageningen",
+      sound: true,
+    });
   });
 
   it("round-trips a patch", () => {
     saveArenaSettings({ lastZone: "rhenen" });
     expect(
       JSON.parse(localStorage.getItem(ARENA_SETTINGS_KEY) ?? "{}"),
-    ).toEqual({ lastZone: "rhenen" });
+    ).toEqual({ lastZone: "rhenen", sound: true });
     expect(loadArenaSettings().lastZone).toBe("rhenen");
   });
 
   it("falls back to defaults and reports invalid JSON", () => {
     localStorage.setItem(ARENA_SETTINGS_KEY, "{ not json");
-    expect(loadArenaSettings()).toEqual({ lastZone: "wageningen" });
+    expect(loadArenaSettings()).toEqual({
+      lastZone: "wageningen",
+      sound: true,
+    });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(Error),
       expect.objectContaining({
@@ -46,7 +52,10 @@ describe("arena settings storage", () => {
       ARENA_SETTINGS_KEY,
       JSON.stringify({ lastZone: "onbekend" }),
     );
-    expect(loadArenaSettings()).toEqual({ lastZone: "wageningen" });
+    expect(loadArenaSettings()).toEqual({
+      lastZone: "wageningen",
+      sound: true,
+    });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(Error),
       expect.objectContaining({

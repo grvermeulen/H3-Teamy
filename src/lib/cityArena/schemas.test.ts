@@ -109,7 +109,10 @@ describe("isMapRoads", () => {
 
 describe("ArenaSettingsSchema", () => {
   it("fills defaults and rejects unknown zones", () => {
-    expect(ArenaSettingsSchema.parse({})).toEqual({ lastZone: "wageningen" });
+    expect(ArenaSettingsSchema.parse({})).toEqual({
+      lastZone: "wageningen",
+      sound: true,
+    });
     expect(ArenaSettingsSchema.safeParse({ lastZone: "mars" }).success).toBe(
       false,
     );
