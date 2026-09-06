@@ -10,10 +10,21 @@ import {
   polygonCentroid,
   clipPolygonToRect,
   clipPolylineToRect,
+  pointInRect,
   rectsIntersect,
   simplifyPolyline,
   simplifyRing,
 } from "./geometry";
+
+describe("pointInRect", () => {
+  it("treats the edges as inside", () => {
+    const rect = { minX: 0, minY: 0, maxX: 10, maxY: 10 };
+    expect(pointInRect([5, 5], rect)).toBe(true);
+    expect(pointInRect([10, 10], rect)).toBe(true);
+    expect(pointInRect([11, 5], rect)).toBe(false);
+    expect(pointInRect([5, -1], rect)).toBe(false);
+  });
+});
 
 const unitSquare: Point[] = [
   [0, 0],

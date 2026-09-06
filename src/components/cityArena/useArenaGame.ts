@@ -22,9 +22,14 @@ import {
   type PointerAim,
 } from "@/lib/cityArena/input/pointerAim";
 import { zoomLevelForViewport } from "@/lib/cityArena/render/camera";
+import {
+  EMPTY_RADAR_SNAPSHOT,
+  type RadarSnapshot,
+} from "@/lib/cityArena/render/radar";
 import { createDomCanvasFactory } from "@/lib/cityArena/render/canvasTypes";
 import { rasterBudgetForViewport } from "@/lib/cityArena/render/staticRaster";
 import { PLAYER_MAX_HEALTH, damagePlayer } from "@/lib/cityArena/sim/damage";
+import { addHeat } from "@/lib/cityArena/sim/wanted";
 import { createInput } from "@/lib/cityArena/sim/types";
 import { SPAWN_AMMO } from "@/lib/cityArena/sim/weapons";
 import {
@@ -46,15 +51,15 @@ import {
   type WorldSession,
 } from "@/lib/cityArena/world/worldSession";
 import { findZoneByKey } from "@/lib/cityArena/world/zone";
+import { loadArenaSettings, saveArenaSettings } from "@/lib/cityArena/storage";
+import { computeHud, type ArenaHud } from "./arenaHud";
 import {
   aimAngle,
   applyTeleport,
-  computeHud,
   createRuntime,
   nearestLandmarkTo,
   reportArenaError,
   startFrameLoop,
-  type ArenaHud,
   type DeathInfo,
   type DebugSnapshot,
   type FrameLoopOptions,
@@ -83,6 +88,10 @@ const INITIAL_HUD: ArenaHud = {
   ammo: SPAWN_AMMO,
   speedMps: null,
   inVehicle: false,
+  wantedLevel: 0,
+  zoneSecondsLeft: null,
+  zoneWarning: false,
+  soundEnabled: true,
 };
 /** Hook options. */
 export type UseArenaGameOptions = {
@@ -99,6 +108,8 @@ export type ArenaGame = {
   hud: ArenaHud;
   zones: MapZone[];
   death: DeathInfo | null;
+  radar: RadarSnapshot;
+  setSound(enabled: boolean): void;
   setInputVector(vector: [number, number] | null): void;
   setButton(name: ButtonName, pressed: boolean): void;
   teleportToZone(key: ZoneKey): void;
@@ -146,6 +157,7 @@ async function bootSession(
   canvasRef: RefObject<HTMLCanvasElement | null>,
   runtimeRef: RefObject<Runtime | null>,
   reducedMotionRef: RefObject<boolean>,
+  initialSoundRef: RefObject<boolean>,
   isCancelled: IsCancelled,
 ): Promise<{ index: MapIndex; spawn: Point } | null> {
   const { index } = await session.ready();
@@ -160,6 +172,7 @@ async function bootSession(
     zone,
     width,
     reducedMotionRef.current,
+    initialSoundRef.current,
   );
   runtimeRef.current = runtime;
   return { index, spawn: [runtime.state.player.x, runtime.state.player.y] };
@@ -171,6 +184,7 @@ type ArenaBootOptions = {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   runtimeRef: RefObject<Runtime | null>;
   reducedMotionRef: RefObject<boolean>;
+  initialSoundRef: RefObject<boolean>;
 };
 
 /**
@@ -219,7 +233,8 @@ async function finishBoot(
 
 /** Boots the world session for `zoneKey`: loads the map, spawns the player, disposes on unmount. */
 function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
-  const { zoneKey, canvasRef, runtimeRef, reducedMotionRef } = options;
+  const { zoneKey, canvasRef, runtimeRef, reducedMotionRef, initialSoundRef } =
+    options;
   const [phase, setPhase] = useState<ArenaPhase>("loading");
   const [progress, setProgress] = useState<LoadProgress>({
     loaded: 0,
@@ -241,6 +256,7 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
       canvasRef,
       runtimeRef,
       reducedMotionRef,
+      initialSoundRef,
       isCancelled,
     )
       .then((booted) =>
@@ -257,12 +273,16 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
       });
     return () => {
       cancelled = true;
+      if (runtimeRef.current) {
+        runtimeRef.current.disposed = true;
+        runtimeRef.current.sound.dispose();
+      }
       session.dispose();
       runtimeRef.current = null;
     };
     // reducedMotionRef is listed for exhaustive-deps only: ref identity never changes across
     // renders, so a media-query-driven reducedMotion change never re-runs this effect.
-  }, [canvasRef, runtimeRef, zoneKey, reducedMotionRef]);
+  }, [canvasRef, runtimeRef, zoneKey, reducedMotionRef, initialSoundRef]);
 
   return { phase, progress, failed, zones, setProgress, setFailed };
 }
@@ -272,29 +292,43 @@ function useArenaInput(
   inputRef: RefObject<InputState>,
   canvasRef: RefObject<HTMLCanvasElement | null>,
   pointerRef: RefObject<PointerAim | null>,
+  runtimeRef: RefObject<Runtime | null>,
 ): {
   setInputVector(vector: [number, number] | null): void;
   setButton(name: ButtonName, pressed: boolean): void;
 } {
-  useEffect(() => attachKeyboard(window, inputRef.current), [inputRef]);
+  useEffect(
+    () =>
+      attachKeyboard(window, inputRef.current, () =>
+        runtimeRef.current?.sound.unlock(),
+      ),
+    [inputRef, runtimeRef],
+  );
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
-    const aim = attachPointerAim(canvas, inputRef.current);
+    const aim = attachPointerAim(canvas, inputRef.current, () =>
+      runtimeRef.current?.sound.unlock(),
+    );
     pointerRef.current = aim;
     return () => {
       aim.detach();
       pointerRef.current = null;
     };
-  }, [canvasRef, inputRef, pointerRef]);
+  }, [canvasRef, inputRef, pointerRef, runtimeRef]);
   const setInputVector = useCallback(
-    (vector: [number, number] | null) => inputRef.current.setStick(vector),
-    [inputRef],
+    (vector: [number, number] | null) => {
+      if (vector) runtimeRef.current?.sound.unlock();
+      inputRef.current.setStick(vector);
+    },
+    [inputRef, runtimeRef],
   );
   const setButton = useCallback(
-    (name: ButtonName, pressed: boolean) =>
-      inputRef.current.setButton("buttons", name, pressed),
-    [inputRef],
+    (name: ButtonName, pressed: boolean) => {
+      if (pressed) runtimeRef.current?.sound.unlock();
+      inputRef.current.setButton("buttons", name, pressed);
+    },
+    [inputRef, runtimeRef],
   );
   return { setInputVector, setButton };
 }
@@ -311,6 +345,7 @@ function useFrameLoop(phase: ArenaPhase, options: FrameLoopOptions): void {
     setProgress,
     setFailed,
     setHud,
+    setRadar,
     setDeath,
     setDebugSnapshot,
   } = options;
@@ -326,6 +361,7 @@ function useFrameLoop(phase: ArenaPhase, options: FrameLoopOptions): void {
       setProgress,
       setFailed,
       setHud,
+      setRadar,
       setDeath,
       setDebugSnapshot,
     });
@@ -340,6 +376,7 @@ function useFrameLoop(phase: ArenaPhase, options: FrameLoopOptions): void {
     setProgress,
     setFailed,
     setHud,
+    setRadar,
     setDeath,
     setDebugSnapshot,
   ]);
@@ -364,6 +401,21 @@ function createTestHooks(
         amount,
         runtime.state.tick,
       );
+      runtime.state = { ...runtime.state, player };
+    },
+    setZoneEnforced(enabled) {
+      const runtime = runtimeRef.current;
+      if (runtime)
+        runtime.state = {
+          ...runtime.state,
+          zoneEnforced: enabled,
+          enforcedZoneKey: enabled ? runtime.state.activeZoneKey : null,
+        };
+    },
+    addHeat(amount) {
+      const runtime = runtimeRef.current;
+      if (!runtime) return;
+      const player = addHeat(runtime.state.player, amount, runtime.state.tick);
       runtime.state = { ...runtime.state, player };
     },
     getViolations: () => runtimeRef.current?.violations ?? 0,
@@ -405,7 +457,7 @@ function useTeleport(
       const zone = findZoneByKey(runtime.session.index(), key);
       if (!zone) return;
       applyTeleport(runtime, zone);
-      setHud(computeHud(runtime.session, runtime.state));
+      setHud(computeHud(runtime.session, runtime.state, runtime.soundEnabled));
     },
     [runtimeRef, setHud],
   );
@@ -438,16 +490,31 @@ type ArenaGameState = {
   setDeath: (death: DeathInfo | null) => void;
   debugSnapshot: DebugSnapshot | null;
   setDebugSnapshot: (snapshot: DebugSnapshot | null) => void;
+  radar: RadarSnapshot;
+  setRadar: (radar: RadarSnapshot) => void;
 };
 
 /** The three state slices the frame loop writes into and the hook exposes to the overlay. */
-function useArenaGameState(): ArenaGameState {
-  const [hud, setHud] = useState<ArenaHud>(INITIAL_HUD);
+function useArenaGameState(soundEnabled: boolean): ArenaGameState {
+  const [hud, setHud] = useState<ArenaHud>(() => ({
+    ...INITIAL_HUD,
+    soundEnabled,
+  }));
   const [death, setDeath] = useState<DeathInfo | null>(null);
   const [debugSnapshot, setDebugSnapshot] = useState<DebugSnapshot | null>(
     null,
   );
-  return { hud, setHud, death, setDeath, debugSnapshot, setDebugSnapshot };
+  const [radar, setRadar] = useState<RadarSnapshot>(EMPTY_RADAR_SNAPSHOT);
+  return {
+    hud,
+    setHud,
+    death,
+    setDeath,
+    debugSnapshot,
+    setDebugSnapshot,
+    radar,
+    setRadar,
+  };
 }
 
 /** Owns the world session, the fixed-step arena loop, the camera, the HUD and the death screen state. */
@@ -457,17 +524,36 @@ export function useArenaGame({
   debug,
   reducedMotion = false,
 }: UseArenaGameOptions): ArenaGame {
+  const [soundEnabled, setSoundEnabled] = useState(
+    () => loadArenaSettings().sound,
+  );
+  const initialSoundRef = useRef(soundEnabled);
   const { runtimeRef, inputRef, pointerRef, metricsRef, reducedMotionRef } =
     useArenaRuntimeRefs(reducedMotion);
-  const { hud, setHud, death, setDeath, debugSnapshot, setDebugSnapshot } =
-    useArenaGameState();
+  const {
+    hud,
+    setHud,
+    death,
+    setDeath,
+    debugSnapshot,
+    setDebugSnapshot,
+    radar,
+    setRadar,
+  } = useArenaGameState(soundEnabled);
   useReducedMotionSync(reducedMotion, reducedMotionRef, runtimeRef);
   const { phase, progress, failed, zones, setProgress, setFailed } =
-    useArenaBoot({ zoneKey, canvasRef, runtimeRef, reducedMotionRef });
+    useArenaBoot({
+      zoneKey,
+      canvasRef,
+      runtimeRef,
+      reducedMotionRef,
+      initialSoundRef,
+    });
   const { setInputVector, setButton } = useArenaInput(
     inputRef,
     canvasRef,
     pointerRef,
+    runtimeRef,
   );
   useArenaTestHooks(debug, runtimeRef);
   useFrameLoop(phase, {
@@ -480,10 +566,26 @@ export function useArenaGame({
     setProgress,
     setFailed,
     setHud,
+    setRadar,
     setDeath,
     setDebugSnapshot,
   });
   const teleportToZone = useTeleport(runtimeRef, setHud);
+  const setSound = useCallback(
+    (enabled: boolean) => {
+      setSoundEnabled(enabled);
+      initialSoundRef.current = enabled;
+      const runtime = runtimeRef.current;
+      if (runtime) {
+        runtime.soundEnabled = enabled;
+        runtime.sound.setEnabled(enabled);
+        if (enabled) runtime.sound.unlock();
+      }
+      setHud({ ...hud, soundEnabled: enabled });
+      saveArenaSettings({ sound: enabled });
+    },
+    [hud, initialSoundRef, runtimeRef, setHud],
+  );
 
   return {
     phase,
@@ -492,6 +594,8 @@ export function useArenaGame({
     hud,
     zones,
     death,
+    radar,
+    setSound,
     setInputVector,
     setButton,
     teleportToZone,

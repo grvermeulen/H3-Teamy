@@ -52,7 +52,7 @@ describe("CityArenaLauncher", () => {
     expect(screen.getByTestId("overlay-stub")).toHaveTextContent("rhenen");
     expect(
       JSON.parse(localStorage.getItem(ARENA_SETTINGS_KEY) ?? "{}"),
-    ).toEqual({ lastZone: "rhenen" });
+    ).toEqual({ lastZone: "rhenen", sound: true });
     fireEvent.click(screen.getByText("dicht"));
     expect(screen.queryByTestId("overlay-stub")).toBeNull();
   });

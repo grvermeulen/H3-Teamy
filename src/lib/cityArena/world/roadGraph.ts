@@ -1,5 +1,6 @@
 import { ROAD_EDGE_STRIDE, type MapRoads, type RoadClass } from "./mapTypes";
 import { fromUnits, type Point } from "./projection";
+import { createBinaryHeap, type BinaryHeap } from "./binaryHeap";
 
 /** Decoded edge between two vertex indices; `length` in metres. */
 export type RoadGraphEdge = {
@@ -133,45 +134,69 @@ function reconstruct(cameFrom: Map<number, number>, current: number): number[] {
   return path.reverse();
 }
 
-/** A* over the graph; by default one-way flags are ignored (pedestrians and cops may walk both ways). Pass `{ respectOneway: true }` to restrict traversal to the defined direction. */
+/** Search options for one-way handling and road-class filtering. */
+export type PathOptions = {
+  respectOneway?: boolean;
+  allowEdge?: (edge: RoadGraphEdge) => boolean;
+};
+
+type Search = {
+  open: BinaryHeap<number>;
+  cameFrom: Map<number, number>;
+  bestCost: Map<number, number>;
+  closed: Set<number>;
+};
+
+function relaxNeighbours(
+  graph: RoadGraph,
+  current: number,
+  options: PathOptions,
+  heuristic: (index: number) => number,
+  search: Search,
+): void {
+  const currentCost = search.bestCost.get(current) ?? Infinity;
+  for (const edgeIndex of graph.adjacency[current]) {
+    const edge = graph.edges[edgeIndex];
+    const neighbour = edge.a === current ? edge.b : edge.a;
+    if (options.respectOneway && edge.oneway && edge.a !== current) continue;
+    if (options.allowEdge && !options.allowEdge(edge)) continue;
+    if (search.closed.has(neighbour)) continue;
+    const tentative = currentCost + edge.length;
+    if (tentative >= (search.bestCost.get(neighbour) ?? Infinity)) continue;
+    search.cameFrom.set(neighbour, current);
+    search.bestCost.set(neighbour, tentative);
+    search.open.push(neighbour, tentative + heuristic(neighbour));
+  }
+}
+
+/** A* over the graph with a binary-heap open set. */
 export function findPath(
   graph: RoadGraph,
   from: number,
   to: number,
-  options: { respectOneway?: boolean } = {},
+  options: PathOptions = {},
 ): number[] | null {
   const heuristic = (index: number): number =>
     Math.hypot(
       graph.nodes[to][0] - graph.nodes[index][0],
       graph.nodes[to][1] - graph.nodes[index][1],
     );
-  const open = new Set<number>([from]);
-  const cameFrom = new Map<number, number>();
-  const bestCost = new Map<number, number>([[from, 0]]);
-  const estimate = new Map<number, number>([[from, heuristic(from)]]);
-  while (open.size > 0) {
-    let current = -1;
-    let currentEstimate = Infinity;
-    for (const candidate of open) {
-      const value = estimate.get(candidate) ?? Infinity;
-      if (value < currentEstimate) {
-        currentEstimate = value;
-        current = candidate;
-      }
-    }
-    if (current === to) return reconstruct(cameFrom, current);
-    open.delete(current);
-    for (const edgeIndex of graph.adjacency[current]) {
-      const edge = graph.edges[edgeIndex];
-      const neighbour = edge.a === current ? edge.b : edge.a;
-      if (options.respectOneway && edge.oneway && edge.a !== current) continue;
-      const tentative = (bestCost.get(current) ?? Infinity) + edge.length;
-      if (tentative >= (bestCost.get(neighbour) ?? Infinity)) continue;
-      cameFrom.set(neighbour, current);
-      bestCost.set(neighbour, tentative);
-      estimate.set(neighbour, tentative + heuristic(neighbour));
-      open.add(neighbour);
-    }
+  const search: Search = {
+    open: createBinaryHeap<number>(),
+    cameFrom: new Map<number, number>(),
+    bestCost: new Map<number, number>([[from, 0]]),
+    closed: new Set<number>(),
+  };
+  search.open.push(from, heuristic(from));
+  for (
+    let current = search.open.pop();
+    current !== null;
+    current = search.open.pop()
+  ) {
+    if (current === to) return reconstruct(search.cameFrom, current);
+    if (search.closed.has(current)) continue;
+    search.closed.add(current);
+    relaxNeighbours(graph, current, options, heuristic, search);
   }
   return null;
 }

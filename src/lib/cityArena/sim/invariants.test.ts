@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createArenaPlayer } from "./arena";
 import { createShots } from "./bullets";
+import { COP_BODY_TICKS, createCop } from "./cops";
 import { checkInvariants } from "./invariants";
-import type { ArenaState } from "./types";
+import { MAX_PEDS } from "./limits";
+import { PED_BODY_TICKS } from "./peds";
+import type { ArenaState, PedState } from "./types";
 import { createVehicle } from "./vehicle";
 import { WEAPONS } from "./weapons";
 
@@ -16,7 +19,29 @@ const healthy: ArenaState = {
   effects: [],
   held: { enter: false, weaponNext: false },
   zoneKey: null,
+  peds: [],
+  cops: [],
+  pickups: [],
+  traffic: [],
+  events: [],
+  activeZoneKey: null,
+  zoneEnforced: false,
 };
+
+function pedAt(id: number, x: number): PedState {
+  return {
+    id,
+    x,
+    y: 0,
+    facing: 0,
+    health: 40,
+    mode: "walk",
+    modeUntilTick: 0,
+    rail: null,
+    fleeX: 0,
+    fleeY: 0,
+  };
+}
 
 describe("checkInvariants", () => {
   it("accepts a healthy state", () => {
@@ -75,5 +100,83 @@ describe("checkInvariants", () => {
         ],
       }),
     ).toContain("effect 2 expired");
+  });
+
+  it("reports population caps, duplicate ids and invalid driver references", () => {
+    const crowd = Array.from({ length: MAX_PEDS + 1 }, (_, index) =>
+      pedAt(100 + index, index),
+    );
+    expect(checkInvariants({ ...healthy, peds: crowd })).toContain(
+      "too many pedestrians",
+    );
+    expect(checkInvariants({ ...healthy, peds: [pedAt(1, 0)] })).toContain(
+      "duplicate entity id 1",
+    );
+    expect(
+      checkInvariants({
+        ...healthy,
+        traffic: [
+          {
+            vehicleId: 42,
+            role: "traffic",
+            cruiseMps: 10,
+            fromNode: null,
+            path: [],
+            repathTick: 0,
+          },
+        ],
+      }),
+    ).toContain("driver of vehicle 42 has no intact car");
+  });
+
+  it("reports cop health, police drivers, expired bodies and overdue pickups", () => {
+    const cop = createCop(5, [0, 0], "pistol", 0);
+    expect(
+      checkInvariants({ ...healthy, cops: [{ ...cop, health: 150 }] }),
+    ).toContain("cop 5 health out of range");
+    expect(
+      checkInvariants({
+        ...healthy,
+        traffic: [
+          {
+            vehicleId: 1,
+            role: "police",
+            cruiseMps: 18,
+            fromNode: null,
+            path: [],
+            repathTick: 0,
+          },
+        ],
+      }),
+    ).toContain("driver of vehicle 1 is not in a police car");
+    const staleBody = {
+      ...pedAt(50, 0),
+      health: 0,
+      mode: "dead" as const,
+      modeUntilTick: healthy.tick,
+    };
+    expect(checkInvariants({ ...healthy, peds: [staleBody] })).toContain(
+      "ped 50 body expired",
+    );
+    const staleCop = {
+      ...cop,
+      health: 0,
+      diedAtTick: healthy.tick - COP_BODY_TICKS,
+    };
+    expect(checkInvariants({ ...healthy, cops: [staleCop] })).toContain(
+      "cop 5 body expired",
+    );
+    const freshBody = {
+      ...staleBody,
+      modeUntilTick: healthy.tick + PED_BODY_TICKS,
+    };
+    expect(checkInvariants({ ...healthy, peds: [freshBody] })).toEqual([]);
+    expect(
+      checkInvariants({
+        ...healthy,
+        tick: 700,
+        pickups: [{ id: 60, kind: "uzi", x: 0, y: 0, takenAtTick: 100 }],
+      }),
+    ).toContain("pickup 60 overdue for its respawn");
   });
 });

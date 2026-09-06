@@ -57,4 +57,31 @@ describe("drawVehicles", () => {
     ).toHaveLength(1);
     expect(context.calls).toContain(`stroke(${PLAYER_RING},2)`);
   });
+
+  it("paints an alternating light bar on intact police cars only", () => {
+    const context = createFakeContext();
+    drawVehicle(
+      context,
+      camera,
+      viewport,
+      createVehicle(3, "police", [10, 10], 0, 5),
+      0,
+      false,
+    );
+    expect(
+      context.calls.filter((call) => call.startsWith("fillRect")).length,
+    ).toBe(6);
+    const wreckContext = createFakeContext();
+    drawVehicle(
+      wreckContext,
+      camera,
+      viewport,
+      { ...createVehicle(4, "police", [10, 10], 0, 5), wrecked: true },
+      0,
+      false,
+    );
+    expect(
+      wreckContext.calls.filter((call) => call.startsWith("fillRect")).length,
+    ).toBe(1);
+  });
 });

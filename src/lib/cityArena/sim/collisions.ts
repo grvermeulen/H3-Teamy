@@ -1,6 +1,7 @@
 import { PLAYER_RADIUS_M } from "./player";
 import type { ArenaPlayerState, VehicleState } from "./types";
 import { RESTITUTION } from "./vehicle";
+import type { Point } from "../world/projection";
 
 /** Radius of the single circle that stands in for a car in car–car and car–player contacts. */
 export const CAR_BODY_RADIUS_M = 1.6;
@@ -77,16 +78,19 @@ export function resolveVehiclePairs(vehicles: VehicleState[]): {
   return { vehicles: resolved, impacts };
 }
 
-/** Pushes a player on foot clear of a car and reports run-over damage (5 × speed above 5 m/s). */
-export function resolveVehicleAgainstPlayer(
+/** Contact of a car with a person-sized circle: push-out point, damage and whether they touched. */
+export type CircleContact = { point: Point; damage: number; touched: boolean };
+
+/** Pushes a person-sized circle clear of a car and reports run-over damage. */
+export function resolveVehicleAgainstCircle(
   vehicle: VehicleState,
-  player: ArenaPlayerState,
-): { player: ArenaPlayerState; damage: number } {
-  const dx = player.x - vehicle.x;
-  const dy = player.y - vehicle.y;
+  point: Point,
+): CircleContact {
+  const dx = point[0] - vehicle.x;
+  const dy = point[1] - vehicle.y;
   const distance = Math.hypot(dx, dy);
   const minimum = CAR_BODY_RADIUS_M + PLAYER_RADIUS_M;
-  if (distance >= minimum) return { player, damage: 0 };
+  if (distance >= minimum) return { point, damage: 0, touched: false };
   const normalX = distance === 0 ? 1 : dx / distance;
   const normalY = distance === 0 ? 0 : dy / distance;
   const speed = Math.hypot(vehicle.velocityX, vehicle.velocityY);
@@ -96,11 +100,21 @@ export function resolveVehicleAgainstPlayer(
   // contact-free without oscillating; a moving car that hurt them gets the extra clearance.
   const clearance = damage > 0 ? minimum + RUN_OVER_CLEARANCE_M : minimum;
   return {
-    player: {
-      ...player,
-      x: vehicle.x + normalX * clearance,
-      y: vehicle.y + normalY * clearance,
-    },
+    point: [vehicle.x + normalX * clearance, vehicle.y + normalY * clearance],
     damage,
+    touched: true,
+  };
+}
+
+/** Pushes a player on foot clear of a car and reports run-over damage. */
+export function resolveVehicleAgainstPlayer(
+  vehicle: VehicleState,
+  player: ArenaPlayerState,
+): { player: ArenaPlayerState; damage: number } {
+  const contact = resolveVehicleAgainstCircle(vehicle, [player.x, player.y]);
+  if (!contact.touched) return { player, damage: 0 };
+  return {
+    player: { ...player, x: contact.point[0], y: contact.point[1] },
+    damage: contact.damage,
   };
 }

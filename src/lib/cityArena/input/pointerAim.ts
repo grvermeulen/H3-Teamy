@@ -26,6 +26,7 @@ const PRIMARY_BUTTON_MASK = 1;
 export function attachPointerAim(
   target: PointerAimTarget,
   state: InputState,
+  onUserGesture?: () => void,
 ): PointerAim {
   let position: [number, number] | null = null;
   const releaseFireIfPrimaryUp = (event: PointerEvent): void => {
@@ -42,6 +43,7 @@ export function attachPointerAim(
   const onDown = (event: PointerEvent): void => {
     if (event.pointerType !== "mouse" || event.button !== PRIMARY_BUTTON)
       return;
+    onUserGesture?.();
     onMove(event);
     state.setButton("pointer", "fire", true);
   };

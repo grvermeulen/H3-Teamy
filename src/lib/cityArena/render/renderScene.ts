@@ -1,7 +1,10 @@
 import type {
   ArenaPlayerState,
   BulletState,
+  CopState,
   EffectState,
+  PedState,
+  PickupState,
   VehicleState,
 } from "../sim/types";
 import type { MapZone } from "../world/mapTypes";
@@ -15,6 +18,8 @@ import {
   playerLook,
 } from "./drawEntities";
 import { drawBullets, drawCrosshair, drawEffects } from "./drawProjectiles";
+import { drawPeople } from "./drawPeople";
+import { drawPickups } from "./drawPickups";
 import { drawVehicles } from "./drawVehicles";
 import {
   drawVisibleChunks,
@@ -33,6 +38,9 @@ export type Scene = {
   world: WorldDrawSource;
   zone: MapZone | null;
   player: ArenaPlayerState;
+  peds: PedState[];
+  cops: CopState[];
+  pickups: PickupState[];
   vehicles: VehicleState[];
   bullets: BulletState[];
   effects: EffectState[];
@@ -85,6 +93,7 @@ export function renderScene(
   applyPushIn(context, size, scene.pushIn);
   const stats = drawVisibleChunks(context, camera, size, scene.world);
   if (scene.zone) drawZoneRing(context, camera, size, scene.zone);
+  drawPickups(context, camera, size, scene.pickups, scene.tick);
   drawVehicles(
     context,
     camera,
@@ -93,6 +102,7 @@ export function renderScene(
     scene.tick,
     scene.player.vehicleId,
   );
+  drawPeople(context, camera, size, scene.peds, scene.cops);
   drawBullets(context, camera, size, scene.bullets);
   drawEffects(context, camera, size, scene.effects, scene.tick);
   drawPlayerLook(context, camera, size, scene);

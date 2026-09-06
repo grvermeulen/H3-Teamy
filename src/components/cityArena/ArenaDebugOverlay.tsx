@@ -15,6 +15,13 @@ export type EntityCounts = {
   vehicles: number;
   bullets: number;
   effects: number;
+  peds: number;
+  cops: number;
+  traffic: number;
+  pickups: number;
+  wantedLevel: number;
+  zoneSecondsLeft: number | null;
+  eventCount: number;
   violations: number;
 };
 
@@ -40,6 +47,10 @@ function debugLines({
   entities,
 }: ArenaDebugOverlayProps): string[] {
   const chunkSizeMb = (chunks.bytes / BYTES_PER_MEBIBYTE).toFixed(1);
+  const zoneTimer =
+    entities.zoneSecondsLeft === null
+      ? "zone onbekend"
+      : `${entities.zoneSecondsLeft}s`;
   const route = routeMetres === null ? "—" : `${Math.round(routeMetres)} m`;
   return [
     `fps ${metrics.fps} · frame p95 ${metrics.frameP95Ms.toFixed(1)} ms`,
@@ -48,6 +59,8 @@ function debugLines({
     `camera ${camera.x.toFixed(1)}, ${camera.y.toFixed(1)} · zoom ${camera.zoom}`,
     `speler ${player.x.toFixed(1)}, ${player.y.toFixed(1)} · ${player.speed.toFixed(1)} m/s`,
     `route ${route}`,
+    `verkeer ${entities.traffic} · voetgangers ${entities.peds} · agenten ${entities.cops}`,
+    `pickups ${entities.pickups} · wanted ${entities.wantedLevel} · zone ${zoneTimer} · events ${entities.eventCount}`,
     `auto's ${entities.vehicles} · kogels ${entities.bullets} · effecten ${entities.effects} · schendingen ${entities.violations}`,
   ];
 }

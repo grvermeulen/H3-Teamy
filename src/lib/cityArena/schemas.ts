@@ -104,10 +104,14 @@ export function isMapRoads(value: unknown): value is MapRoads {
 /** Persisted player preferences (extended by later plans). */
 export const ArenaSettingsSchema = z.object({
   lastZone: z.enum(zoneKeys).default(DEFAULT_ZONE),
+  sound: z.boolean().default(true),
 });
 
 /** Parsed settings type, inferred from {@link ArenaSettingsSchema} so the two cannot drift. */
 export type ArenaSettings = z.infer<typeof ArenaSettingsSchema>;
 
 /** Defaults used when nothing valid is stored. */
-export const DEFAULT_ARENA_SETTINGS: ArenaSettings = { lastZone: DEFAULT_ZONE };
+export const DEFAULT_ARENA_SETTINGS: ArenaSettings = {
+  lastZone: DEFAULT_ZONE,
+  sound: true,
+};

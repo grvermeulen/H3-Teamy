@@ -14,6 +14,7 @@ import {
   createCamera,
   screenToWorld,
   updateCamera,
+  visibleRect,
   zoomLevelForViewport,
   type Camera,
   type Viewport,
@@ -24,6 +25,13 @@ import {
 } from "@/lib/cityArena/render/deathScreen";
 import { renderScene, type Scene } from "@/lib/cityArena/render/renderScene";
 import {
+  createRadarRoadIndex,
+  nearbyRadarRoads,
+  RADAR_RANGE_M,
+  type RadarRoadIndex,
+  type RadarSnapshot,
+} from "@/lib/cityArena/render/radar";
+import {
   createArenaState,
   occupiedVehicle,
   stepArena,
@@ -33,14 +41,14 @@ import {
 import { checkInvariants } from "@/lib/cityArena/sim/invariants";
 import { SIM_STEP_S } from "@/lib/cityArena/sim/player";
 import { createRng, seedFromString } from "@/lib/cityArena/sim/rng";
+import { forwardSpeed } from "@/lib/cityArena/sim/vehicle";
+import { currentWantedLevel } from "@/lib/cityArena/sim/wanted";
+import { zoneSecondsLeft } from "@/lib/cityArena/sim/zoneRule";
 import type {
-  AmmoState,
   ArenaPlayerState,
   ArenaState,
-  WeaponKind,
   WorldInput,
 } from "@/lib/cityArena/sim/types";
-import { forwardSpeed } from "@/lib/cityArena/sim/vehicle";
 import { saveArenaSettings } from "@/lib/cityArena/storage";
 import type { LoadProgress } from "@/lib/cityArena/world/mapLoader";
 import type {
@@ -49,17 +57,26 @@ import type {
   MapZone,
   ZoneKey,
 } from "@/lib/cityArena/world/mapTypes";
-import { nearestRoadName } from "@/lib/cityArena/world/nearestRoad";
 import type { Point } from "@/lib/cityArena/world/projection";
 import { findPath, pathLength } from "@/lib/cityArena/world/roadGraph";
 import type { WorldSession } from "@/lib/cityArena/world/worldSession";
 import {
-  findZone,
+  createArenaSound,
+  type ArenaSound,
+  type AudioContextFactory,
+} from "@/lib/cityArena/audio/sound";
+import {
   findZoneByKey,
   landmarkCentreMetres,
   pickSpawn,
 } from "@/lib/cityArena/world/zone";
 import type { EntityCounts } from "./ArenaDebugOverlay";
+import {
+  buildRadarSnapshot,
+  computeHud,
+  radarZone,
+  type ArenaHud,
+} from "./arenaHud";
 
 /**
  * The arena runtime and frame-loop layer used by `useArenaGame`: the mutable per-frame
@@ -85,17 +102,6 @@ const LANDMARK_SNAP_DISTANCE_M = 200;
 /** Milliseconds per second, for converting between frame timestamps and simulation seconds. */
 const MS_PER_SECOND = 1000;
 
-/** Zone, street and vitals shown in the HUD strip. */
-export type ArenaHud = {
-  zoneName: string | null;
-  zoneKey: ZoneKey | null;
-  street: string | null;
-  health: number;
-  weapon: WeaponKind;
-  ammo: AmmoState;
-  speedMps: number | null;
-  inVehicle: boolean;
-};
 /** Data for the debug panel. */
 export type DebugSnapshot = {
   metrics: MetricsSnapshot;
@@ -131,7 +137,18 @@ export type Runtime = {
   violations: number;
   reportedViolations: Set<string>;
   reducedMotion: boolean;
+  sound: ArenaSound;
+  soundEnabled: boolean;
+  radarRoadIndex: RadarRoadIndex;
+  disposed: boolean;
 };
+
+/** True while async frame-loop callbacks may still publish state. */
+export function canApplyRuntimeUpdate(
+  runtime: Pick<Runtime, "disposed">,
+): boolean {
+  return !runtime.disposed;
+}
 
 /** Reports a failure through Sentry, tagged so arena issues are easy to filter. */
 export function reportArenaError(error: unknown, kind: string): void {
@@ -164,6 +181,9 @@ function buildScene(
     },
     zone,
     player: state.player,
+    peds: state.peds,
+    cops: state.cops,
+    pickups: state.pickups,
     vehicles: state.vehicles,
     bullets: state.bullets,
     effects: state.effects,
@@ -255,6 +275,8 @@ export function createRuntime(
   zone: MapZone | null,
   viewportWidthPx: number,
   reducedMotion: boolean,
+  soundEnabled = true,
+  audioContextFactory?: AudioContextFactory,
 ): Runtime {
   const seed = seedFromString(
     `${SESSION_SEED_PREFIX}:${zone?.key ?? "none"}:${Date.now()}`,
@@ -283,6 +305,13 @@ export function createRuntime(
     violations: 0,
     reportedViolations: new Set<string>(),
     reducedMotion,
+    sound: createArenaSound(audioContextFactory, soundEnabled),
+    soundEnabled,
+    radarRoadIndex: createRadarRoadIndex(
+      session.graph().nodes,
+      session.graph().edges,
+    ),
+    disposed: false,
   };
 }
 
@@ -296,26 +325,6 @@ export function aimAngle(
   if (!pointer) return null;
   const target = screenToWorld(camera, viewport, pointer);
   return Math.atan2(target[1] - player[1], target[0] - player[0]);
-}
-
-/** Zone, street and vitals for the HUD from the current state. */
-export function computeHud(
-  session: Pick<WorldSession, "index" | "tiles">,
-  state: ArenaState,
-): ArenaHud {
-  const { player } = state;
-  const zone = findZone(session.index(), [player.x, player.y]);
-  const car = occupiedVehicle(state);
-  return {
-    zoneName: zone?.name ?? null,
-    zoneKey: zone?.key ?? null,
-    street: nearestRoadName(session.tiles(), [player.x, player.y]),
-    health: player.health,
-    weapon: player.weapon,
-    ammo: player.ammo,
-    speedMps: car ? Math.abs(forwardSpeed(car)) : null,
-    inVehicle: car !== null,
-  };
 }
 
 /** Debug-panel snapshot: frame metrics, cache stats, camera/player, route distance and entity counts. */
@@ -334,6 +343,16 @@ function buildDebugSnapshot(
       vehicles: runtime.state.vehicles.length,
       bullets: runtime.state.bullets.length,
       effects: runtime.state.effects.length,
+      peds: runtime.state.peds.length,
+      cops: runtime.state.cops.length,
+      traffic: runtime.state.traffic.length,
+      pickups: runtime.state.pickups.length,
+      wantedLevel: currentWantedLevel(runtime.state),
+      zoneSecondsLeft: zoneSecondsLeft(
+        runtime.state.player,
+        runtime.state.tick,
+      ),
+      eventCount: runtime.state.events.length,
       violations: runtime.violations,
     },
   };
@@ -398,21 +417,40 @@ function advanceSimulation(
   input: WorldInput,
   nowMs: number,
   debug: boolean,
+  viewport: Viewport,
 ): void {
   runtime.accumulator += dt * (deathPhase(runtime, nowMs)?.timeScale ?? 1);
   const world: ArenaWorld = {
     collision: runtime.session.collision,
     index: runtime.session.index(),
+    graph: runtime.session.graph(),
+    viewRect: visibleRect(runtime.camera, viewport),
   };
   let steps = 0;
   while (runtime.accumulator >= SIM_STEP_S && steps < MAX_SIM_STEPS_PER_FRAME) {
     const stepInput = nextInput(runtime, input);
+    if (
+      stepInput.move[0] !== 0 ||
+      stepInput.move[1] !== 0 ||
+      stepInput.fire ||
+      stepInput.enter ||
+      stepInput.weaponNext
+    )
+      runtime.sound.unlock();
     runtime.state = stepArena(
       runtime.state,
       stepInput,
       SIM_STEP_S,
       world,
       runtime.random,
+    );
+    runtime.sound.handleEvents(runtime.state.events);
+    const car = occupiedVehicle(runtime.state);
+    runtime.sound.updateEngine(
+      car ? Math.abs(forwardSpeed(car)) : 0,
+      car !== null &&
+        !car.wrecked &&
+        runtime.state.player.boardingTicksLeft === 0,
     );
     runtime.accumulator -= SIM_STEP_S;
     steps += 1;
@@ -441,6 +479,7 @@ export type FrameLoopOptions = {
   setProgress: (progress: LoadProgress) => void;
   setFailed: (failed: boolean) => void;
   setHud: (hud: ArenaHud) => void;
+  setRadar: (radar: RadarSnapshot) => void;
   setDeath: (death: DeathInfo | null) => void;
   setDebugSnapshot: (snapshot: DebugSnapshot | null) => void;
 };
@@ -452,18 +491,21 @@ export type FrameLoopOptions = {
  * (at whatever position the player has reached by then) if that flag was set.
  */
 function startTileSync(runtime: Runtime, options: FrameLoopOptions): void {
+  if (!canApplyRuntimeUpdate(runtime)) return;
   runtime.tileSyncPending = true;
   const { player } = runtime.state;
   runtime.session
     .update([player.x, player.y])
     .then(
       (progress) => {
+        if (!canApplyRuntimeUpdate(runtime)) return;
         options.setProgress(progress);
         options.setFailed(runtime.session.hasFailures());
       },
       (error: unknown) => reportArenaError(error, "tile-sync"),
     )
     .finally(() => {
+      if (!canApplyRuntimeUpdate(runtime)) return;
       runtime.tileSyncPending = false;
       if (runtime.tileSyncRequested) {
         runtime.tileSyncRequested = false;
@@ -485,7 +527,21 @@ function refreshThrottled(
   }
   if (timestamp - runtime.lastHud >= HUD_REFRESH_MS) {
     runtime.lastHud = timestamp;
-    options.setHud(computeHud(runtime.session, runtime.state));
+    options.setHud(
+      computeHud(runtime.session, runtime.state, runtime.soundEnabled),
+    );
+    const zone = radarZone(runtime.session.index(), runtime.state);
+    options.setRadar(
+      buildRadarSnapshot(
+        runtime.state,
+        zone,
+        nearbyRadarRoads(
+          runtime.radarRoadIndex,
+          [runtime.state.player.x, runtime.state.player.y],
+          RADAR_RANGE_M,
+        ),
+      ),
+    );
   }
   if (options.debug && timestamp - runtime.lastDebug >= DEBUG_REFRESH_MS) {
     runtime.lastDebug = timestamp;
@@ -517,6 +573,7 @@ function runFrame(
     options.inputRef.current.snapshot(),
     timestamp,
     options.debug,
+    size,
   );
   if (trackDeath(runtime, timestamp))
     options.setDeath(

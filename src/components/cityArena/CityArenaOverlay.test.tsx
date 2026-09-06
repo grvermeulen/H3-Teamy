@@ -101,6 +101,7 @@ import CityArenaOverlay from "./CityArenaOverlay";
 describe("CityArenaOverlay", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     vi.stubGlobal("fetch", fetchImpl);
     // jsdom does not implement matchMedia; the overlay's touch-control detection needs a stub
     // (same pattern as src/components/spaceInvaders/SpaceInvadersGame.test.tsx).
@@ -279,6 +280,10 @@ describe("CityArenaOverlay", () => {
     expect(screen.getByLabelText("GTA H3 speelveld").className).toContain(
       "cursor-none",
     );
+    expect(screen.getByLabelText("Radar")).toBeInTheDocument();
+    expect(screen.getByLabelText("Geluid")).toBeChecked();
+    fireEvent.click(screen.getByLabelText("Geluid"));
+    expect(screen.getByLabelText("Geluid")).not.toBeChecked();
   });
 
   it("shows the touch buttons next to the stick on coarse pointers", async () => {

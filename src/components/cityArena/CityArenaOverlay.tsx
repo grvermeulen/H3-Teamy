@@ -16,12 +16,16 @@ import {
 } from "@/lib/cityArena/input/touchStick";
 import type { MapZone, ZoneKey } from "@/lib/cityArena/world/mapTypes";
 import ArenaDebugOverlay from "./ArenaDebugOverlay";
+import ArenaRadar from "./ArenaRadar";
 import ArenaLoadingScreen, {
   ATTRIBUTION_TEXT,
   MAP_LOAD_FAILURE_TEXT,
 } from "./ArenaLoadingScreen";
 import ArenaTouchButtons from "./ArenaTouchButtons";
 import ArenaVitals from "./ArenaVitals";
+import ArenaSoundToggle from "./ArenaSoundToggle";
+import ArenaWanted from "./ArenaWanted";
+import ArenaZoneWarning from "./ArenaZoneWarning";
 import DeathOverlay, { WASTED_WEBP } from "./DeathOverlay";
 import TouchStick from "./TouchStick";
 import { useArenaGame, type ArenaGame, type ArenaHud } from "./useArenaGame";
@@ -132,6 +136,7 @@ type ArenaHudBarProps = {
   pickerDisabled: boolean;
   showLoadWarning: boolean;
   onTeleport: (key: ZoneKey) => void;
+  onSoundChange: (enabled: boolean) => void;
   onClose: () => void;
 };
 
@@ -142,6 +147,7 @@ function ArenaHudBar({
   pickerDisabled,
   showLoadWarning,
   onTeleport,
+  onSoundChange,
   onClose,
 }: ArenaHudBarProps): React.JSX.Element {
   return (
@@ -162,6 +168,7 @@ function ArenaHudBar({
           ammo={hud.ammo}
           speedMps={hud.speedMps}
         />
+        <ArenaWanted wantedLevel={hud.wantedLevel} />
         {showLoadWarning ? (
           <span className="text-xs text-[#f0b429]">
             {MAP_LOAD_FAILURE_TEXT}
@@ -169,6 +176,7 @@ function ArenaHudBar({
         ) : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">
+        <ArenaSoundToggle enabled={hud.soundEnabled} onChange={onSoundChange} />
         <ArenaZonePicker
           zones={zones}
           currentKey={hud.zoneKey ?? ""}
@@ -221,6 +229,11 @@ function ArenaPlayfield({
         ref={canvasRef}
         className="block h-full w-full touch-none [@media(pointer:fine)]:cursor-none"
         aria-label="GTA H3 speelveld"
+      />
+      <ArenaRadar snapshot={game.radar} />
+      <ArenaZoneWarning
+        zoneWarning={game.hud.zoneWarning}
+        secondsLeft={game.hud.zoneSecondsLeft}
       />
       {playing && showTouch ? (
         <TouchStick stick={stick} onVector={game.setInputVector} />
@@ -311,6 +324,7 @@ export default function CityArenaOverlay({
         pickerDisabled={game.phase !== "playing"}
         showLoadWarning={game.phase === "playing" && game.failed}
         onTeleport={game.teleportToZone}
+        onSoundChange={game.setSound}
         onClose={onClose}
       />
       <ArenaPlayfield

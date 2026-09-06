@@ -8,6 +8,8 @@ import {
   BULLET_STROKE,
   CROSSHAIR_STROKE,
   MUZZLE_FILL,
+  PED_FILL,
+  PICKUP_UZI,
   PLAYER_FILL,
 } from "./palette";
 import { renderScene, type Scene } from "./renderScene";
@@ -39,6 +41,9 @@ function sceneWith(partial: Partial<Scene>): Scene {
     },
     zone: null,
     player: createArenaPlayer([0, 0], 0),
+    peds: [],
+    cops: [],
+    pickups: [],
     vehicles: [createVehicle(1, "sedan", [5, 0], 0, 0)],
     bullets: [bullet],
     effects: [
@@ -89,5 +94,42 @@ describe("renderScene", () => {
     expect(context.calls).not.toContain(`fill(${PLAYER_FILL})`);
     expect(context.calls.some((call) => call.startsWith("scale("))).toBe(false);
     expect(context.calls).not.toContain(`stroke(${CROSSHAIR_STROKE},1.5)`);
+  });
+
+  it("keeps pickups before cars and people before bullets", () => {
+    const context = createFakeContext();
+    renderScene(
+      context,
+      viewport,
+      sceneWith({
+        pickups: [{ id: 4, kind: "uzi", x: 0, y: 0, takenAtTick: null }],
+        peds: [
+          {
+            id: 5,
+            x: 0,
+            y: 0,
+            facing: 0,
+            health: 40,
+            mode: "walk",
+            modeUntilTick: 0,
+            rail: null,
+            fleeX: 0,
+            fleeY: 0,
+          },
+        ],
+      }),
+    );
+    const order = [
+      context.calls.indexOf(`fill(${PICKUP_UZI})`),
+      context.calls.findIndex(
+        (call, index) =>
+          index > context.calls.indexOf(`fill(${PICKUP_UZI})`) &&
+          call.startsWith("translate("),
+      ),
+      context.calls.indexOf(`fill(${PED_FILL})`),
+      context.calls.indexOf(`stroke(${BULLET_STROKE},2)`),
+    ];
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect([...order].sort((left, right) => left - right)).toEqual(order);
   });
 });

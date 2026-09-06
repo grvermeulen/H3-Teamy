@@ -20,13 +20,16 @@ export function stepPlayer(
   dt: number,
   collision: Pick<CollisionGrid, "resolveCircle">,
 ): PlayerState {
-  const magnitude = Math.min(1, Math.hypot(input.move[0], input.move[1]));
+  const inputMagnitude = Math.hypot(input.move[0], input.move[1]);
+  const magnitude = Math.min(1, inputMagnitude);
   if (magnitude < MOVE_DEAD_ZONE)
     return { ...player, facing: input.aim ?? player.facing, speed: 0 };
   const [resolvedX, resolvedY] = collision.resolveCircle(
     [
-      player.x + input.move[0] * WALK_SPEED_MPS * dt,
-      player.y + input.move[1] * WALK_SPEED_MPS * dt,
+      player.x +
+        (input.move[0] / Math.max(1, inputMagnitude)) * WALK_SPEED_MPS * dt,
+      player.y +
+        (input.move[1] / Math.max(1, inputMagnitude)) * WALK_SPEED_MPS * dt,
     ],
     PLAYER_RADIUS_M,
   );

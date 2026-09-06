@@ -110,10 +110,111 @@ export type ArenaPlayerState = PlayerState & {
   nextShotTick: number;
   diedAtTick: number | null;
   invulnerableUntilTick: number;
+  heat: number;
+  heatTick: number;
+  outsideSinceTick: number | null;
 };
 
 /** Buttons whose previous held state the simulation remembers for edge detection. */
 export type HeldButtons = { enter: boolean; weaponNext: boolean };
+
+/** Kinds of pickups: magazine ammunition or health. */
+export type PickupKind = "uzi" | "shotgun" | "health";
+
+/** A pickup spot; taken pickups wait for their respawn timer. */
+export type PickupState = {
+  id: number;
+  kind: PickupKind;
+  x: number;
+  y: number;
+  takenAtTick: number | null;
+};
+
+/** A pavement rail position used by pedestrian path following. */
+export type RailPosition = {
+  edge: number;
+  direction: 1 | -1;
+  edgeT: number;
+  side: 1 | -1;
+};
+
+/** Current pedestrian behaviour. */
+export type PedMode = "walk" | "flee" | "dead";
+
+/** A pedestrian walking, fleeing or waiting as a body. */
+export type PedState = {
+  id: number;
+  x: number;
+  y: number;
+  facing: number;
+  health: number;
+  mode: PedMode;
+  modeUntilTick: number;
+  rail: RailPosition | null;
+  fleeX: number;
+  fleeY: number;
+};
+
+/** Weapons available to police officers. */
+export type CopWeapon = "pistol" | "shotgun";
+
+/** A police officer pursuing the wanted player. */
+export type CopState = {
+  id: number;
+  x: number;
+  y: number;
+  facing: number;
+  health: number;
+  weapon: CopWeapon;
+  path: number[];
+  repathTick: number;
+  nextShotTick: number;
+  diedAtTick: number | null;
+};
+
+/** The role of an AI car driver. */
+export type DriverRole = "traffic" | "police";
+
+/** AI driver state bound to one vehicle. */
+export type DriverState = {
+  vehicleId: number;
+  role: DriverRole;
+  cruiseMps: number;
+  fromNode: number | null;
+  path: number[];
+  repathTick: number;
+};
+
+/** Entity kinds that can be hit by a projectile. */
+export type HitTargetKind = "player" | "ped" | "cop" | "vehicle";
+
+/** A serialisable simulation event consumed by audio and future netcode. */
+export type ArenaEvent =
+  | { kind: "shot"; weapon: WeaponKind; ownerId: number; x: number; y: number }
+  | { kind: "hit"; target: HitTargetKind; x: number; y: number }
+  | {
+      kind: "impact";
+      vehicleId: number;
+      otherVehicleId: number | null;
+      impactSpeed: number;
+    }
+  | { kind: "explosion"; x: number; y: number }
+  | {
+      kind: "pickup";
+      pickupKind: PickupKind;
+      playerId: number;
+      x: number;
+      y: number;
+    }
+  | {
+      kind: "kill";
+      victim: "ped" | "cop";
+      killerId: number | null;
+      x: number;
+      y: number;
+    }
+  | { kind: "wanted"; playerId: number; level: number }
+  | { kind: "zone"; playerId: number; phase: "warning" | "damage" };
 
 /** Full arena simulation state: plain, JSON-serialisable data. */
 export type ArenaState = {
@@ -126,4 +227,13 @@ export type ArenaState = {
   effects: EffectState[];
   held: HeldButtons;
   zoneKey: ZoneKey | null;
+  peds: PedState[];
+  cops: CopState[];
+  pickups: PickupState[];
+  traffic: DriverState[];
+  events: ArenaEvent[];
+  activeZoneKey: ZoneKey | null;
+  /** Zone selected when the out-of-zone rule was enabled; population may move independently. */
+  enforcedZoneKey?: ZoneKey | null;
+  zoneEnforced: boolean;
 };

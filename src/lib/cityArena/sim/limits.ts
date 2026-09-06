@@ -1,0 +1,12 @@
+/** Maximum pedestrians, including temporary bodies. */
+export const MAX_PEDS = 40;
+/** Maximum cops, including temporary bodies. */
+export const MAX_COPS = 8;
+/** Maximum AI drivers, including ambient and police drivers. */
+export const MAX_TRAFFIC = 12;
+/** Maximum pickups in the active zone. */
+export const MAX_PICKUPS = 10;
+/** Maximum simulation events retained for one tick. */
+export const MAX_EVENTS = 128;
+/** Maximum vehicles retained by the arena state. */
+export const MAX_VEHICLES = 140;

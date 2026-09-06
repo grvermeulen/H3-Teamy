@@ -68,6 +68,7 @@ function publishButtons(pressedButtons: Set<string>, state: InputState): void {
 export function attachKeyboard(
   target: KeyboardTarget,
   state: InputState,
+  onUserGesture?: () => void,
 ): () => void {
   const pressed = new Set<string>();
   const pressedButtons = new Set<string>();
@@ -75,6 +76,7 @@ export function attachKeyboard(
     if (isTypingTarget(event.target)) return;
     if (KEY_VECTORS[event.code]) {
       if (event.code.startsWith("Arrow")) event.preventDefault();
+      onUserGesture?.();
       pressed.add(event.code);
       state.setKeyboard(movementVector(pressed));
       return;
@@ -82,6 +84,7 @@ export function attachKeyboard(
     const button = KEY_BUTTONS[event.code];
     if (!button || event.target instanceof HTMLButtonElement) return;
     event.preventDefault();
+    onUserGesture?.();
     pressedButtons.add(event.code);
     publishButtons(pressedButtons, state);
   };

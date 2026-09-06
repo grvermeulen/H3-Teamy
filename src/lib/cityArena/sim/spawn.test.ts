@@ -5,10 +5,12 @@ import { createRng } from "./rng";
 import {
   PARKED_CARS_PER_ZONE,
   chooseSpawnNode,
+  edgeParkingSpots,
   nearestZone,
   roadHeadingAt,
   shuffle,
   spawnParkedCars,
+  zoneParkingSpots,
 } from "./spawn";
 
 /** Twenty spawn nodes 10 m apart along y = 0 (40 units per node). */
@@ -66,17 +68,44 @@ describe("spawn", () => {
     expect(roadHeadingAt(graph, [500, 500])).toBe(0);
   });
 
-  it("parks up to eight seeded cars per zone on spawn nodes, spaced apart and away from the player", () => {
+  it("lays seeded spots every 40 m along a kerb", () => {
+    const left = edgeParkingSpots(graph, 0, () => 0);
+    expect(left).toHaveLength(3);
+    expect(left[0].point[0]).toBeCloseTo(0);
+    expect(left[0].point[1]).toBeCloseTo(-3.3);
+    expect(left[1].point[0]).toBeCloseTo(40);
+    expect(left[2].point[0]).toBeCloseTo(80);
+    for (const spot of left) expect(spot.heading).toBeCloseTo(Math.PI);
+    const right = edgeParkingSpots(graph, 0, () => 0.99);
+    expect(right).toHaveLength(2);
+    expect(right[0].point[0]).toBeCloseTo(39.6);
+    expect(right[0].point[1]).toBeCloseTo(3.3);
+    expect(right[1].point[0]).toBeCloseTo(79.6);
+    for (const spot of right) expect(spot.heading).toBeCloseTo(0);
+  });
+
+  it("collects parking spots for every residential edge in the zone", () => {
+    const spots = zoneParkingSpots(graph, zone, () => 0);
+    expect(spots).toHaveLength(9);
+    expect(spots[3].point[0]).toBeCloseTo(100);
+    expect(spots[3].point[1]).toBeCloseTo(-3.3);
+    expect(zoneParkingSpots(graph, otherZone, () => 0)).toEqual([]);
+  });
+
+  it("parks seeded cars along kerbs, spaced and away from the player", () => {
     const avoid: [number, number] = [0, 0];
     const cars = spawnParkedCars(index, graph, createRng(11), [avoid], 50);
     const campusCars = cars.filter((car) => car.x < 1000);
-    expect(campusCars.length).toBeGreaterThanOrEqual(6);
+    expect(campusCars.length).toBeGreaterThanOrEqual(3);
     expect(campusCars.length).toBeLessThanOrEqual(PARKED_CARS_PER_ZONE);
     expect(cars.map((car) => car.id)).toEqual(
       cars.map((_, offset) => 50 + offset),
     );
     for (const car of campusCars) {
-      expect(car.x % 10).toBe(0);
+      expect(
+        Math.abs(Math.abs(car.y) - 3.3) < 1e-6 ||
+          Math.abs(Math.abs(car.x - 100) - 3.3) < 1e-6,
+      ).toBe(true);
       expect(
         Math.hypot(car.x - avoid[0], car.y - avoid[1]),
       ).toBeGreaterThanOrEqual(8);
@@ -91,7 +120,7 @@ describe("spawn", () => {
         ).toBeGreaterThanOrEqual(12);
       }
     }
-    expect(cars.filter((car) => car.x >= 1000)).toHaveLength(1);
+    expect(cars.filter((car) => car.x >= 1000)).toHaveLength(0);
     expect(spawnParkedCars(index, graph, createRng(11), [avoid], 50)).toEqual(
       cars,
     );

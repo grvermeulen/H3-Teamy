@@ -13,6 +13,7 @@ import {
 import { MAX_BULLETS } from "./bullets";
 import { RESPAWN_DELAY_TICKS } from "./damage";
 import { checkInvariants } from "./invariants";
+import { POLICE_COLOUR, policeDrivers } from "./police";
 import { createRng } from "./rng";
 import {
   EMPTY_INPUT,
@@ -20,6 +21,7 @@ import {
   type ArenaPlayerState,
   type ArenaState,
   type BulletState,
+  type DriverState,
   type WorldInput,
 } from "./types";
 import { createVehicle, distanceToVehicle } from "./vehicle";
@@ -55,9 +57,26 @@ const graph = decodeRoadGraph({
   classes: ["residential"],
   names: [],
 });
-const world: ArenaWorld = { collision: createCollisionGrid(), index };
+const world: ArenaWorld = { collision: createCollisionGrid(), index, graph };
+/** A tertiary road chain with nodes every 50 m, so police cars can route and spawn 60–120 m out. */
+const chaseGraph = decodeRoadGraph({
+  nodes: [0, 0, 200, 0, 400, 0, 600, 0, 800, 0, 1000, 0, 1200, 0],
+  edges: [
+    0, 1, 0, -1, 0, 200, 1, 2, 0, -1, 0, 200, 2, 3, 0, -1, 0, 200, 3, 4, 0, -1,
+    0, 200, 4, 5, 0, -1, 0, 200, 5, 6, 0, -1, 0, 200,
+  ],
+  classes: ["tertiary"],
+  names: [],
+});
+const chaseWorld: ArenaWorld = {
+  collision: createCollisionGrid(),
+  index,
+  graph: chaseGraph,
+  viewRect: { minX: 130, minY: -50, maxX: 170, maxY: 50 },
+};
 const step = 1 / 30;
 const SPAWN_XS = [0, 100, 200, 300];
+const FULL_AMMO = { uzi: 60, shotgun: 8 };
 
 function boot(seed = 1): ArenaState {
   return createArenaState({ index, graph, seed, zone }, createRng(seed));
@@ -73,6 +92,35 @@ function run(
   for (let index = 0; index < ticks; index++)
     current = stepArena(current, input, step, world, random);
   return current;
+}
+
+/** Steps `state` on the police chase world. */
+function runChase(
+  state: ArenaState,
+  input: WorldInput,
+  ticks: number,
+): ArenaState {
+  const random = createRng(99);
+  let current = state;
+  for (let index = 0; index < ticks; index++)
+    current = stepArena(current, input, step, chaseWorld, random);
+  return current;
+}
+
+/** Steps a state while retaining the per-tick event batches. */
+function runCollecting(
+  state: ArenaState,
+  input: WorldInput,
+  ticks: number,
+): { state: ArenaState; events: ArenaState["events"] } {
+  const random = createRng(99);
+  const events: ArenaState["events"] = [];
+  let current = state;
+  for (let index = 0; index < ticks; index++) {
+    current = stepArena(current, input, step, world, random);
+    events.push(...current.events);
+  }
+  return { state: current, events };
 }
 
 /** Replaces the parked cars by one compact `offsetX` metres east of the player. */
@@ -126,16 +174,42 @@ describe("createArenaState", () => {
       id: 0,
       health: 100,
       weapon: "pistol",
-      ammo: { uzi: 60, shotgun: 8 },
+      ammo: { uzi: 0, shotgun: 0 },
       vehicleId: null,
       diedAtTick: null,
     });
+    expect(state.player).toMatchObject({ heat: 0, outsideSinceTick: null });
+    expect(state).toMatchObject({
+      cops: [],
+      traffic: [],
+      events: [],
+      activeZoneKey: "campus",
+      zoneEnforced: false,
+    });
     expect(SPAWN_XS).toContain(state.player.x);
     expect(state.vehicles.length).toBeGreaterThanOrEqual(1);
-    expect(state.vehicles.length).toBeLessThanOrEqual(3);
+    expect(state.vehicles.length).toBeLessThanOrEqual(30);
     for (const car of state.vehicles)
-      expect(Math.abs(car.x - state.player.x)).toBeGreaterThanOrEqual(8);
-    expect(state.nextId).toBe(1 + state.vehicles.length);
+      expect(
+        Math.hypot(car.x - state.player.x, car.y - state.player.y),
+      ).toBeGreaterThanOrEqual(8);
+    expect(state.pickups.map((pickup) => pickup.kind)).toEqual([
+      "uzi",
+      "shotgun",
+      "uzi",
+    ]);
+    for (const pickup of state.pickups)
+      expect(Math.abs(pickup.x - state.player.x)).toBeGreaterThanOrEqual(8);
+    expect(state.peds).toHaveLength(25);
+    for (const ped of state.peds) {
+      expect(Math.abs(ped.y)).toBeCloseTo(4);
+      expect(
+        Math.hypot(ped.x - state.player.x, ped.y - state.player.y),
+      ).toBeGreaterThanOrEqual(30);
+    }
+    expect(state.nextId).toBe(
+      1 + state.vehicles.length + state.pickups.length + state.peds.length,
+    );
     expect(boot(4)).toEqual(boot(4));
   });
 });
@@ -150,13 +224,50 @@ describe("stepArena on foot", () => {
     expect(walked.held).toEqual({ enter: false, weaponNext: false });
   });
 
-  it("cycles the weapon on a rising edge only", () => {
+  it("cycles the weapon on a rising edge only, skipping empty magazines", () => {
     const pressed = run(boot(), createInput({ weaponNext: true }), 5);
-    expect(pressed.player.weapon).toBe("uzi");
+    expect(pressed.player.weapon).toBe("fist");
     const released = run(pressed, createInput({}), 1);
+    const armed = run(
+      { ...released, player: { ...released.player, ammo: FULL_AMMO } },
+      createInput({ weaponNext: true }),
+      1,
+    );
+    expect(armed.player.weapon).toBe("pistol");
+    const releasedAgain = run(armed, createInput({}), 1);
     expect(
-      run(released, createInput({ weaponNext: true }), 1).player.weapon,
-    ).toBe("shotgun");
+      run(releasedAgain, createInput({ weaponNext: true }), 1).player.weapon,
+    ).toBe("uzi");
+  });
+});
+
+describe("stepArena pickups", () => {
+  it("takes a pickup and respawns it 600 ticks later", () => {
+    const state = boot();
+    const [pickup] = state.pickups;
+    const beside: ArenaState = {
+      ...state,
+      player: { ...state.player, x: pickup.x + 0.5, y: pickup.y },
+    };
+    const taken = run(beside, EMPTY_INPUT, 1);
+    expect(taken.player.ammo.uzi).toBe(60);
+    expect(taken.player.weapon).toBe("uzi");
+    expect(taken.pickups[0].takenAtTick).toBe(1);
+    expect(taken.events).toEqual([
+      {
+        kind: "pickup",
+        pickupKind: "uzi",
+        playerId: 0,
+        x: pickup.x,
+        y: pickup.y,
+      },
+    ]);
+    const away: ArenaState = {
+      ...taken,
+      player: { ...taken.player, x: pickup.x + 50 },
+    };
+    expect(run(away, EMPTY_INPUT, 599).pickups[0].takenAtTick).toBe(1);
+    expect(run(away, EMPTY_INPUT, 600).pickups[0].takenAtTick).toBeNull();
   });
 });
 
@@ -278,11 +389,19 @@ describe("stepArena firing and death", () => {
   });
 
   it("spends Uzi rounds at 10 per second and shotgun shells five pellets at a time", () => {
-    const uzi = run(boot(), createInput({ weaponNext: true, fire: true }), 30);
+    const state = boot();
+    const withUzi: ArenaState = {
+      ...state,
+      player: { ...state.player, weapon: "uzi", ammo: FULL_AMMO },
+    };
+    const uzi = run(withUzi, createInput({ fire: true }), 30);
     expect(uzi.player.weapon).toBe("uzi");
     expect(uzi.player.ammo.uzi).toBe(50);
-    const state = boot();
-    const armed: ArenaPlayerState = { ...state.player, weapon: "shotgun" };
+    const armed: ArenaPlayerState = {
+      ...state.player,
+      weapon: "shotgun",
+      ammo: FULL_AMMO,
+    };
     const blast = run(
       { ...state, player: armed },
       createInput({ fire: true }),
@@ -294,7 +413,11 @@ describe("stepArena firing and death", () => {
 
   it("caps a shotgun pull at the live-bullet limit instead of overshooting it", () => {
     const state = boot();
-    const armed: ArenaPlayerState = { ...state.player, weapon: "shotgun" };
+    const armed: ArenaPlayerState = {
+      ...state.player,
+      weapon: "shotgun",
+      ammo: FULL_AMMO,
+    };
     const nearlyFull: ArenaState = {
       ...state,
       player: armed,
@@ -387,7 +510,7 @@ describe("stepArena firing and death", () => {
       diedAtTick: null,
       weapon: "pistol",
       invulnerableUntilTick: 152,
-      ammo: { uzi: 60, shotgun: 8 },
+      ammo: { uzi: 0, shotgun: 0 },
     });
     expect(SPAWN_XS).toContain(alive.player.x);
   });
@@ -418,12 +541,10 @@ describe("stepArena firing and death", () => {
 
   it("keeps respawns off parked cars", () => {
     const state = boot();
-    // Parked cars avoid the player's own spawn node (MIN_CAR_TO_PLAYER_M), so
-    // booting already occupies the other three of the four spawn nodes.
-    const freeX = state.player.x;
-    expect(
-      state.vehicles.map((vehicle) => vehicle.x).sort((a, b) => a - b),
-    ).toEqual(SPAWN_XS.filter((x) => x !== freeX).sort((a, b) => a - b));
+    for (const vehicle of state.vehicles)
+      expect(
+        Math.hypot(vehicle.x - state.player.x, vehicle.y - state.player.y),
+      ).toBeGreaterThanOrEqual(8);
 
     const dying: ArenaState = {
       ...state,
@@ -431,8 +552,15 @@ describe("stepArena firing and death", () => {
     };
     const respawned = run(dying, EMPTY_INPUT, RESPAWN_DELAY_TICKS);
     expect(respawned.player.diedAtTick).toBeNull();
-    expect(respawned.player.x).toBe(freeX);
+    expect(SPAWN_XS).toContain(respawned.player.x);
     expect(respawned.player.y).toBe(0);
+    for (const vehicle of state.vehicles)
+      expect(
+        Math.hypot(
+          vehicle.x - respawned.player.x,
+          vehicle.y - respawned.player.y,
+        ),
+      ).toBeGreaterThanOrEqual(3.6);
   });
 
   it("falls back to an unfiltered spawn node when every node is blocked", () => {
@@ -467,5 +595,171 @@ describe("stepArena firing and death", () => {
       200,
     );
     expect(checkInvariants(busy)).toEqual([]);
+  });
+
+  it("records one-tick shot and explosion events and resets heat on death", () => {
+    const state = boot();
+    const fired = run(state, createInput({ fire: true }), 1);
+    expect(fired.events).toEqual([
+      {
+        kind: "shot",
+        weapon: "pistol",
+        ownerId: 0,
+        x: state.player.x,
+        y: state.player.y,
+      },
+    ]);
+    expect(run(fired, createInput({ fire: true }), 1).events).toEqual([]);
+    const fragile = {
+      ...createVehicle(
+        501,
+        "compact",
+        [state.player.x + 6, state.player.y],
+        0,
+        0,
+      ),
+      health: 20,
+    };
+    const boom = run(
+      { ...state, vehicles: [fragile] },
+      createInput({ fire: true, aim: 0 }),
+      1,
+    );
+    expect(boom.events.map((event) => event.kind)).toEqual([
+      "shot",
+      "hit",
+      "explosion",
+    ]);
+    const heated: ArenaState = {
+      ...state,
+      player: { ...state.player, heat: 80, health: 0, diedAtTick: state.tick },
+    };
+    expect(run(heated, EMPTY_INPUT, RESPAWN_DELAY_TICKS).player.heat).toBe(0);
+  });
+});
+
+describe("stepArena police cars", () => {
+  it("sends a police car after a two-star player and rams them", () => {
+    const state = boot();
+    const wanted: ArenaState = {
+      ...state,
+      vehicles: [],
+      traffic: [],
+      peds: [],
+      player: { ...state.player, x: 240, y: 0, heat: 80, heatTick: 0 },
+    };
+    const dispatched = runChase(wanted, EMPTY_INPUT, 1);
+    const [driver] = policeDrivers(dispatched.traffic);
+    expect(driver).toMatchObject({ role: "police", cruiseMps: 18 });
+    const car = dispatched.vehicles.find(
+      (vehicle) => vehicle.id === driver.vehicleId,
+    );
+    expect(car).toMatchObject({ kind: "police", colour: POLICE_COLOUR, y: 0 });
+    expect(Math.abs((car?.x ?? 0) - 240)).toBe(60);
+    const chased = runChase(wanted, EMPTY_INPUT, 150);
+    const rammed =
+      chased.player.health < 100 || chased.player.diedAtTick !== null;
+    expect(rammed).toBe(true);
+    expect(checkInvariants(chased)).toEqual([]);
+  });
+
+  it("gives 20 heat for ramming a police car and hurts both cars", () => {
+    const state = boot();
+    const own = {
+      ...createVehicle(600, "compact", [state.player.x, state.player.y], 0, 0),
+      velocityX: 8,
+    };
+    const police = createVehicle(
+      601,
+      "police",
+      [state.player.x + 3.5, state.player.y],
+      Math.PI,
+      POLICE_COLOUR,
+    );
+    const driver: DriverState = {
+      vehicleId: 601,
+      role: "police",
+      cruiseMps: 18,
+      fromNode: null,
+      path: [],
+      repathTick: 0,
+    };
+    const ramming: ArenaState = {
+      ...state,
+      vehicles: [own, police],
+      traffic: [driver],
+      peds: [],
+      player: {
+        ...state.player,
+        vehicleId: 600,
+        boardingTicksLeft: 0,
+        heat: 40,
+        heatTick: 0,
+      },
+    };
+    const { state: crashed, events } = runCollecting(ramming, EMPTY_INPUT, 3);
+    expect(crashed.player.heat).toBe(60);
+    expect(crashed.vehicles[1].health).toBeCloseTo(86.8);
+    expect(crashed.vehicles[0].health).toBeCloseTo(86.8);
+    const impact = events.find((event) => event.kind === "impact");
+    expect(impact).toMatchObject({ vehicleId: 600, otherVehicleId: 601 });
+    if (impact?.kind === "impact") expect(impact.impactSpeed).toBeCloseTo(8.4);
+  });
+
+  it("escalates to two police cars and shotgun cops at three stars", () => {
+    const state = boot();
+    const hunted: ArenaState = {
+      ...state,
+      vehicles: [],
+      traffic: [],
+      peds: [],
+      zoneEnforced: true,
+      player: { ...state.player, x: 200, y: 0, heat: 120, heatTick: 0 },
+    };
+    const escalated = runChase(hunted, EMPTY_INPUT, 2);
+    expect(policeDrivers(escalated.traffic)).toHaveLength(2);
+    expect(
+      escalated.vehicles.filter((vehicle) => vehicle.kind === "police"),
+    ).toHaveLength(2);
+    expect(escalated.cops).toHaveLength(2);
+    for (const cop of escalated.cops) expect(cop.weapon).toBe("shotgun");
+    const busy = runChase(
+      hunted,
+      createInput({
+        move: [0.7, -0.7],
+        fire: true,
+        enter: true,
+        weaponNext: true,
+      }),
+      300,
+    );
+    expect(checkInvariants(busy)).toEqual([]);
+  });
+
+  it("releases police drivers and tows far cars once the heat is gone", () => {
+    const state = boot();
+    const police = createVehicle(
+      601,
+      "police",
+      [state.player.x + 200, state.player.y],
+      0,
+      POLICE_COLOUR,
+    );
+    const driver: DriverState = {
+      vehicleId: 601,
+      role: "police",
+      cruiseMps: 18,
+      fromNode: null,
+      path: [],
+      repathTick: 0,
+    };
+    const calm: ArenaState = {
+      ...state,
+      vehicles: [police],
+      traffic: [driver],
+    };
+    const released = run(calm, EMPTY_INPUT, 1);
+    expect(released.traffic).toEqual([]);
+    expect(released.vehicles).toEqual([]);
   });
 });
