@@ -98,3 +98,38 @@ The asset is a derived database of OpenStreetMap data © OpenStreetMap contribut
 - Debug: `?debug=1` adds an entity/violation line to the panel and installs `window.__arena`
   (`getState()`, `dispatch(input, ticks)`, `damage(amount)`, `getViolations()`); invariant violations are also sent to
   Sentry as warnings (`kind: "invariant"`), once per distinct message per session.
+
+## Runtime (PR 4 — pedestrians, cops, pickups and audio)
+
+- Active-zone population is bounded by the simulation caps: 25 living pedestrians per zone (40
+  pedestrians including bodies), 6–10 ambient traffic cars per zone, at most 12 AI drivers, 8 cops
+  including bodies, 140 vehicles and 10 pickups. Pedestrians use pavement rails and flee nearby
+  gunfire/explosions; traffic uses the road graph and is kept outside the current camera view when
+  it spawns. Pickups are placed near landmarks and zone spawn nodes (6 weapon and 4 health pickups),
+  stay at least 15 m apart and respawn after 600 ticks (20 seconds). The pistol and fist are the
+  initial loadout; Uzi and shotgun ammunition comes from pickups.
+- Wanted heat: a pedestrian kill adds 30, a cop kill 60, firing within 15 m of a living cop 10 and
+  ramming a police car 20 heat. Heat converts to up to three wanted stars at 40 heat per level,
+  starts decaying by 5 per second after 8 quiet seconds, and is cleared on player death. Foot cops
+  are 2 at one star, 2 more at two stars and 4 at three stars; they spawn 60–120 m away, repath
+  every 30 ticks and switch to shotguns at three stars. Police cars are added at two stars (one)
+  and three stars (two), pursue at 18 m/s and are towed when driverless, out of view and more than
+  150 m from every player. Police vehicles use the normal traffic/vehicle caps.
+- The 500 m-style zone rule is represented by each active map zone's configured disc. With
+  `zoneEnforced` enabled, leaving the selected `activeZoneKey` starts a 5-second warning and then
+  deals 10 damage per second; free roam keeps the seam disabled. The HUD shows the Dutch countdown
+  and wanted stars.
+- Radar: `ArenaRadar` draws a 90 px north-up radar covering 150 m, with roads, the zone ring, the
+  player, pickups and police. Its canvas has the accessible label `Radar`; the warning and sound
+  checkbox are Dutch and remain keyboard reachable. The radar remains on screen during the death
+  overlay.
+- Sound: `localStorage["h3-arena-settings-v1"]` stores `{ "lastZone": "...", "sound": true }`;
+  sound defaults to enabled. `src/lib/cityArena/audio/sound.ts` uses Web Audio for shots,
+  explosions, pickups, impacts and engine pitch, resumes on user input, and safely no-ops when Web
+  Audio is unavailable. The runtime owns one sound object and disposes it before the world session.
+- Debug: `?debug=1` extends the panel with pedestrians, cops, traffic, pickups, wanted level, zone
+  seconds and event count. The test-only `window.__arena` seam additionally exposes
+  `setZoneEnforced(boolean)` and `addHeat(number)`; it remains unavailable without the debug flag.
+- Verification: `npx tsc --noEmit`, `npm run lint`, and `npx vitest run src/components/cityArena
+src/lib/cityArena`. The arena tests use fake map/audio/canvas inputs and do not require external
+  services. The existing lint warnings in `EventList.tsx` and `src/types/ical.d.ts` are unrelated.
