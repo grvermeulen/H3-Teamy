@@ -71,7 +71,12 @@ import {
   pickSpawn,
 } from "@/lib/cityArena/world/zone";
 import type { EntityCounts } from "./ArenaDebugOverlay";
-import { buildRadarSnapshot, computeHud, type ArenaHud } from "./arenaHud";
+import {
+  buildRadarSnapshot,
+  computeHud,
+  radarZone,
+  type ArenaHud,
+} from "./arenaHud";
 
 /**
  * The arena runtime and frame-loop layer used by `useArenaGame`: the mutable per-frame
@@ -525,9 +530,7 @@ function refreshThrottled(
     options.setHud(
       computeHud(runtime.session, runtime.state, runtime.soundEnabled),
     );
-    const zone = runtime.state.zoneKey
-      ? findZoneByKey(runtime.session.index(), runtime.state.zoneKey)
-      : null;
+    const zone = radarZone(runtime.session.index(), runtime.state);
     options.setRadar(
       buildRadarSnapshot(
         runtime.state,

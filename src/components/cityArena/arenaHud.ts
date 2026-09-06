@@ -4,6 +4,7 @@ import {
   zoneCentreMetres,
   zoneRadiusMetres,
   findZone,
+  findZoneByKey,
 } from "@/lib/cityArena/world/zone";
 import { nearestRoadName } from "@/lib/cityArena/world/nearestRoad";
 import { currentWantedLevel } from "@/lib/cityArena/sim/wanted";
@@ -78,6 +79,17 @@ function withinRadar(
   return (
     Math.hypot(point[0] - player[0], point[1] - player[1]) <= RADAR_RANGE_M
   );
+}
+
+/** Resolves the ring the radar should show, preserving the selected enforcement zone. */
+export function radarZone(
+  index: Parameters<typeof findZone>[0],
+  state: ArenaState,
+): MapZone | null {
+  if (!state.zoneEnforced)
+    return findZone(index, [state.player.x, state.player.y]);
+  const key = state.enforcedZoneKey ?? state.activeZoneKey;
+  return key === null ? null : findZoneByKey(index, key);
 }
 
 /** Builds the radar projection; optional road segments are supplied by the runtime world boundary. */

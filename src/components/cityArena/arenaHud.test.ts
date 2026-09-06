@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import { createArenaState } from "@/lib/cityArena/sim/arena";
 import { createRng } from "@/lib/cityArena/sim/rng";
 import { createVehicle } from "@/lib/cityArena/sim/vehicle";
-import { buildRadarSnapshot, computeHud, zoneWarningText } from "./arenaHud";
+import {
+  buildRadarSnapshot,
+  computeHud,
+  radarZone,
+  zoneWarningText,
+} from "./arenaHud";
 
 const zone = {
   key: "wageningen" as const,
@@ -72,6 +77,23 @@ describe("arena HUD projections", () => {
     expect(snapshot.police).toEqual([[12, 0]]);
     expect(snapshot.zoneCentre).toEqual([0, 0]);
     expect(snapshot.zoneRadiusM).toBe(1000);
+  });
+
+  it("keeps the radar ring on the enforced zone after population moves", () => {
+    const other = {
+      ...zone,
+      key: "other" as const,
+      center: [5000, 0] as [number, number],
+    };
+    const current = {
+      ...state(),
+      zoneKey: "other" as const,
+      activeZoneKey: "other" as const,
+      enforcedZoneKey: zone.key,
+      zoneEnforced: true,
+    };
+    const selectedIndex = { ...index, zones: [zone, other] };
+    expect(radarZone(selectedIndex, current)?.key).toBe(zone.key);
   });
 
   it("formats the countdown only while active", () => {

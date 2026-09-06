@@ -95,6 +95,21 @@ describe("attachPointerAim", () => {
     expect(aim.position()).toBeNull();
   });
 
+  it("notifies a user gesture before mouse fire reaches the simulation", () => {
+    const canvas = document.createElement("canvas");
+    const state = createInputState();
+    const unlock = vi.fn();
+    const aim = attachPointerAim(canvas, state, unlock);
+    fireEvent.pointerDown(canvas, {
+      pointerType: "mouse",
+      button: 0,
+      clientX: 10,
+      clientY: 20,
+    });
+    expect(unlock).toHaveBeenCalledTimes(1);
+    aim.detach();
+  });
+
   it("releases fire when the primary button lifts while another button is still chorded", () => {
     const canvas = document.createElement("canvas");
     const state = createInputState();

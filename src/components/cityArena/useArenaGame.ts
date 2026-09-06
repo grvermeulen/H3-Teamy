@@ -297,17 +297,25 @@ function useArenaInput(
   setInputVector(vector: [number, number] | null): void;
   setButton(name: ButtonName, pressed: boolean): void;
 } {
-  useEffect(() => attachKeyboard(window, inputRef.current), [inputRef]);
+  useEffect(
+    () =>
+      attachKeyboard(window, inputRef.current, () =>
+        runtimeRef.current?.sound.unlock(),
+      ),
+    [inputRef, runtimeRef],
+  );
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
-    const aim = attachPointerAim(canvas, inputRef.current);
+    const aim = attachPointerAim(canvas, inputRef.current, () =>
+      runtimeRef.current?.sound.unlock(),
+    );
     pointerRef.current = aim;
     return () => {
       aim.detach();
       pointerRef.current = null;
     };
-  }, [canvasRef, inputRef, pointerRef]);
+  }, [canvasRef, inputRef, pointerRef, runtimeRef]);
   const setInputVector = useCallback(
     (vector: [number, number] | null) => {
       if (vector) runtimeRef.current?.sound.unlock();

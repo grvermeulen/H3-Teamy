@@ -116,7 +116,7 @@ The asset is a derived database of OpenStreetMap data © OpenStreetMap contribut
   and three stars (two), pursue at 18 m/s and are towed when driverless, out of view and more than
   150 m from every player. Police vehicles use the normal traffic/vehicle caps.
 - The 500 m-style zone rule is represented by each active map zone's configured disc. With
-  `zoneEnforced` enabled, leaving the selected `activeZoneKey` starts a 5-second warning and then
+  `zoneEnforced` enabled, leaving the selected `enforcedZoneKey` starts a 5-second warning and then
   deals 10 damage per second; free roam keeps the seam disabled. The HUD shows the Dutch countdown
   and wanted stars.
 - Radar: `ArenaRadar` draws a 90 px north-up radar covering 150 m, with roads, the zone ring, the

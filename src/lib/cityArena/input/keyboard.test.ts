@@ -56,6 +56,15 @@ describe("attachKeyboard", () => {
     detach();
   });
 
+  it("notifies a user gesture before keyboard input reaches the simulation", () => {
+    const state = createInputState();
+    const unlock = vi.fn();
+    const detach = attachKeyboard(window, state, unlock);
+    press("KeyW");
+    expect(unlock).toHaveBeenCalledTimes(1);
+    detach();
+  });
+
   it("keeps button held while any of its key aliases is pressed", () => {
     const state = createInputState();
     const detach = attachKeyboard(window, state);
