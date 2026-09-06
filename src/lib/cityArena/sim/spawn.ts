@@ -59,7 +59,11 @@ function spawnNodesMetres(zone: MapZone): Point[] {
 }
 
 /** True when `point` is at least `minimum` metres from every point in `others`. */
-function farFromAll(point: Point, others: Point[], minimum: number): boolean {
+export function farFromAll(
+  point: Point,
+  others: Point[],
+  minimum: number,
+): boolean {
   return others.every(
     (other) => Math.hypot(other[0] - point[0], other[1] - point[1]) >= minimum,
   );

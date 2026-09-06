@@ -135,7 +135,6 @@ describe("createArenaState", () => {
     expect(state).toMatchObject({
       peds: [],
       cops: [],
-      pickups: [],
       traffic: [],
       events: [],
       activeZoneKey: "campus",
@@ -146,7 +145,14 @@ describe("createArenaState", () => {
     expect(state.vehicles.length).toBeLessThanOrEqual(3);
     for (const car of state.vehicles)
       expect(Math.abs(car.x - state.player.x)).toBeGreaterThanOrEqual(8);
-    expect(state.nextId).toBe(1 + state.vehicles.length);
+    expect(state.pickups.map((pickup) => pickup.kind)).toEqual([
+      "uzi",
+      "shotgun",
+      "uzi",
+    ]);
+    for (const pickup of state.pickups)
+      expect(Math.abs(pickup.x - state.player.x)).toBeGreaterThanOrEqual(8);
+    expect(state.nextId).toBe(1 + state.vehicles.length + state.pickups.length);
     expect(boot(4)).toEqual(boot(4));
   });
 });
@@ -175,6 +181,36 @@ describe("stepArena on foot", () => {
     expect(
       run(releasedAgain, createInput({ weaponNext: true }), 1).player.weapon,
     ).toBe("uzi");
+  });
+});
+
+describe("stepArena pickups", () => {
+  it("takes a pickup and respawns it 600 ticks later", () => {
+    const state = boot();
+    const [pickup] = state.pickups;
+    const beside: ArenaState = {
+      ...state,
+      player: { ...state.player, x: pickup.x + 0.5, y: pickup.y },
+    };
+    const taken = run(beside, EMPTY_INPUT, 1);
+    expect(taken.player.ammo.uzi).toBe(60);
+    expect(taken.player.weapon).toBe("uzi");
+    expect(taken.pickups[0].takenAtTick).toBe(1);
+    expect(taken.events).toEqual([
+      {
+        kind: "pickup",
+        pickupKind: "uzi",
+        playerId: 0,
+        x: pickup.x,
+        y: pickup.y,
+      },
+    ]);
+    const away: ArenaState = {
+      ...taken,
+      player: { ...taken.player, x: pickup.x + 50 },
+    };
+    expect(run(away, EMPTY_INPUT, 599).pickups[0].takenAtTick).toBe(1);
+    expect(run(away, EMPTY_INPUT, 600).pickups[0].takenAtTick).toBeNull();
   });
 });
 

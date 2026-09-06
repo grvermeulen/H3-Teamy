@@ -29,6 +29,8 @@ import {
 } from "./damage";
 import { addEffect, pruneEffects } from "./effects";
 import { pushEvent } from "./events";
+import { applyPopulation, populateZone } from "./populate";
+import { stepPickups } from "./pickups";
 import { PLAYER_RADIUS_M, stepPlayer } from "./player";
 import {
   chooseRespawnNode,
@@ -132,7 +134,8 @@ export function createArenaState(
     [spawn],
     FIRST_ENTITY_ID,
   );
-  return {
+  const activeZone = setup.zone ?? nearestZone(setup.index, spawn);
+  const base: ArenaState = {
     tick: 0,
     seed: setup.seed,
     nextId: FIRST_ENTITY_ID + vehicles.length,
@@ -147,9 +150,12 @@ export function createArenaState(
     pickups: [],
     traffic: [],
     events: [],
-    activeZoneKey: (setup.zone ?? nearestZone(setup.index, spawn))?.key ?? null,
+    activeZoneKey: null,
     zoneEnforced: false,
   };
+  return activeZone
+    ? populateZone(base, activeZone, setup.index, setup.graph, random)
+    : base;
 }
 
 /** Rising edges of the edge-triggered buttons plus the held state to remember. */
@@ -575,8 +581,12 @@ function applyRespawn(
   const intactVehicles: Point[] = state.vehicles
     .filter((vehicle) => !vehicle.wrecked)
     .map((vehicle) => [vehicle.x, vehicle.y]);
+  const pickupSpots: Point[] = state.pickups.map((pickup) => [
+    pickup.x,
+    pickup.y,
+  ]);
   const spawn: Point = zone
-    ? chooseRespawnNode(zone, intactVehicles, random)
+    ? chooseRespawnNode(zone, [...intactVehicles, ...pickupSpots], random)
     : [player.x, player.y];
   return {
     ...state,
@@ -598,7 +608,9 @@ export function stepArena(
   const tick = state.tick + 1;
   const edges = detectEdges(state.held, input);
   let next: ArenaState = { ...state, tick, held: edges.held, events: [] };
+  next = applyPopulation(next, world, random);
   next = applyRespawn(next, world, tick, random);
+  next = stepPickups(next, tick);
   next = applyWeaponSwitch(next, edges.weaponPressed);
   next = applyEnterExit(next, edges.enterPressed, world);
   next = moveEntities(next, input, dt, world, tick);
