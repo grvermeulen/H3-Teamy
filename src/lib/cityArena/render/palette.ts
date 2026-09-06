@@ -116,3 +116,33 @@ export const CROSSHAIR_STROKE = "rgba(255,255,255,0.9)";
 export const PLAYER_DEAD_FILL = "#6b6b6b";
 /** Outline of a dead body. */
 export const PLAYER_DEAD_RING = "#3a3a3a";
+/** Pedestrian body colour. */
+export const PED_FILL = "#f59e0b";
+/** Pedestrian outline. */
+export const PED_RING = "#78350f";
+/** Dead pedestrian body colour. */
+export const PED_DEAD_FILL = "#77706a";
+/** Police officer body colour. */
+export const COP_FILL = "#1d4ed8";
+/** Police officer badge/accent colour. */
+export const COP_ACCENT = "#bfdbfe";
+/** Dead police officer body colour. */
+export const COP_DEAD_FILL = "#4b5563";
+/** Damaged-person health cue. */
+export const PERSON_HEALTH = "#ef4444";
+/** Weapon pickup colours by weapon kind. */
+export const PICKUP_UZI = "#16a34a";
+export const PICKUP_SHOTGUN = "#f97316";
+/** Health pickup diamond. */
+export const PICKUP_HEALTH = "#22c55e";
+/** Health pickup cross. */
+export const PICKUP_HEALTH_CROSS = "#ffffff";
+/** Police light bar colours. */
+export const POLICE_LIGHT_BLUE = "#2563eb";
+export const POLICE_LIGHT_RED = "#dc2626";
+/** Radar background and road colours. */
+export const RADAR_BACKGROUND = "rgba(15,23,42,0.9)";
+export const RADAR_ROAD = "rgba(226,232,240,0.7)";
+export const RADAR_ZONE = "#60a5fa";
+export const RADAR_POLICE = "#38bdf8";
+export const RADAR_PLAYER = "#f8fafc";

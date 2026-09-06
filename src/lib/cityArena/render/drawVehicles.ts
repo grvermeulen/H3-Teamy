@@ -17,6 +17,8 @@ import {
   CAR_SMOKE,
   CAR_WINDOW,
   CAR_WRECK,
+  POLICE_LIGHT_BLUE,
+  POLICE_LIGHT_RED,
   PLAYER_RING,
 } from "./palette";
 
@@ -67,6 +69,7 @@ function drawBody(
   context: RasterContext,
   vehicle: VehicleState,
   zoom: number,
+  tick: number,
 ): void {
   const fill = vehicle.wrecked
     ? CAR_WRECK
@@ -102,6 +105,27 @@ function drawBody(
     HEADLIGHT_SIZE_M,
     CAR_HEADLIGHT,
   );
+  if (vehicle.kind === "police") {
+    const blue = Math.floor(tick / 6) % 2 === 0;
+    fillLocalRect(
+      context,
+      zoom,
+      VEHICLE_LENGTH_M / 2 - 0.35,
+      -0.25,
+      0.7,
+      0.25,
+      blue ? POLICE_LIGHT_BLUE : POLICE_LIGHT_RED,
+    );
+    fillLocalRect(
+      context,
+      zoom,
+      VEHICLE_LENGTH_M / 2 - 0.35,
+      0.25,
+      0.7,
+      0.25,
+      blue ? POLICE_LIGHT_RED : POLICE_LIGHT_BLUE,
+    );
+  }
 }
 
 /** Grey puffs trailing behind a damaged car, drifting with the tick. */
@@ -153,7 +177,7 @@ export function drawVehicle(
   context.save();
   context.translate(x, y);
   context.rotate(vehicle.heading);
-  drawBody(context, vehicle, camera.zoom);
+  drawBody(context, vehicle, camera.zoom, tick);
   if (!vehicle.wrecked && vehicle.health < SMOKE_HEALTH)
     drawSmoke(context, camera.zoom, tick);
   if (occupied) drawOccupiedRing(context, camera.zoom);
