@@ -13,6 +13,26 @@ function formatCallArg(arg: unknown): string {
     : String(arg);
 }
 
+/**
+ * Builds the fake's `createPattern`, which hands back a numbered stand-in so a pattern fill
+ * records as `fill(pattern(#0))` and stays distinguishable from a flat colour and from the other
+ * patterns made by the same painter.
+ */
+function createPatternFactory(calls: string[]): RasterContext["createPattern"] {
+  let created = 0;
+  return (_image, repetition) => {
+    const label = `pattern(#${created})`;
+    created += 1;
+    calls.push(`createPattern(${String(repetition)})`);
+    return {
+      setTransform: (matrix) => {
+        calls.push(`patternTransform(${label},${String(matrix?.a)})`);
+      },
+      toString: () => label,
+    };
+  };
+}
+
 /** Builds a recorder for one method name, appending `name(arg1,arg2,…)` to `calls`. */
 function createRecorder(
   calls: string[],
@@ -38,6 +58,8 @@ export function createFakeContext(): FakeContext {
     textAlign: "start",
     textBaseline: "alphabetic",
     globalAlpha: 1,
+    globalCompositeOperation: "source-over",
+    createPattern: createPatternFactory(calls),
     save: record("save"),
     restore: record("restore"),
     translate: record("translate"),

@@ -3,10 +3,16 @@ import { createVehicle } from "../sim/vehicle";
 import { createCamera } from "./camera";
 import { drawVehicle, drawVehicles } from "./drawVehicles";
 import { PLAYER_RING } from "./palette";
+import type { VehicleSprite } from "./sprites";
 import { createFakeContext } from "./testing/fakeContext";
 
 const camera = createCamera([10, 10], 8);
 const viewport = { width: 200, height: 100 };
+/** A loaded car sprite; jsdom canvases are valid `CanvasImageSource` values. */
+const sprite: VehicleSprite = {
+  base: document.createElement("canvas"),
+  tinted: [document.createElement("canvas")],
+};
 
 describe("drawVehicles", () => {
   it("draws a rotated body with a window and two headlights", () => {
@@ -83,5 +89,46 @@ describe("drawVehicles", () => {
     expect(
       wreckContext.calls.filter((call) => call.startsWith("fillRect")).length,
     ).toBe(1);
+  });
+
+  it("draws the sprite over the body's metre box instead of the vector body", () => {
+    const context = createFakeContext();
+    const car = createVehicle(1, "sedan", [10, 10], 0, 0);
+    drawVehicle(context, camera, viewport, car, 0, false, sprite);
+    // The art is drawn nose-up, so it takes a quarter turn onto the car frame's forward axis.
+    expect(context.calls).toContain("rotate(1.57)");
+    expect(
+      context.calls.some((call) => call.endsWith(",-7.2,-16.8,14.4,33.6)")),
+    ).toBe(true);
+    expect(
+      context.calls.filter((call) => call.startsWith("fillRect")),
+    ).toHaveLength(0);
+  });
+
+  it("still flashes the light bars over a police car's sprite", () => {
+    const context = createFakeContext();
+    const police = createVehicle(2, "police", [10, 10], 0, 0);
+    drawVehicle(context, camera, viewport, police, 0, false, sprite);
+    expect(context.calls.some((call) => call.startsWith("drawImage"))).toBe(
+      true,
+    );
+    expect(context.calls.filter((call) => call.startsWith("fillRect"))).toEqual(
+      ["fillRect(11.2,-3,5.6,2)", "fillRect(11.2,1,5.6,2)"],
+    );
+  });
+
+  it("keeps a wreck as one dark slab even once the sprite has loaded", () => {
+    const context = createFakeContext();
+    const wreck = {
+      ...createVehicle(3, "sedan", [10, 10], 0, 0),
+      wrecked: true,
+    };
+    drawVehicle(context, camera, viewport, wreck, 0, false, sprite);
+    expect(context.calls.some((call) => call.startsWith("drawImage"))).toBe(
+      false,
+    );
+    expect(context.calls.filter((call) => call.startsWith("fillRect"))).toEqual(
+      ["fillRect(-16.8,-7.2,33.6,14.4)"],
+    );
   });
 });

@@ -21,6 +21,7 @@ import {
   POLICE_LIGHT_RED,
   PLAYER_RING,
 } from "./palette";
+import { vehicleSpriteFor, type VehicleSprite } from "./sprites";
 
 /** Window glass size along the body, metres. */
 const WINDOW_LENGTH_M = 1.4;
@@ -44,6 +45,21 @@ const SMOKE_DRIFT_TICKS = 20;
 const SMOKE_PUFF_STAGGER_TICKS = 7;
 /** Cars within this margin outside the view are still drawn, metres. */
 const CULL_MARGIN_M = 5;
+/** Police light bar size along the body, metres. */
+const LIGHT_BAR_LENGTH_M = 0.7;
+/** Police light bar size across the body, metres. */
+const LIGHT_BAR_WIDTH_M = 0.25;
+/** Offset of each light bar from the centre line, metres. */
+const LIGHT_BAR_SIDE_M = 0.25;
+/** Distance from the nose back to the light bar's centre, metres. */
+const LIGHT_BAR_INSET_M = 0.35;
+/** Ticks each colour of the light bar stays lit before the pair swaps. */
+const LIGHT_BAR_FLASH_TICKS = 6;
+/**
+ * Quarter turn that maps the sprite art, drawn nose-up, onto the car frame's forward +X axis.
+ * `drawVehicle` has already rotated the context by the car's heading when this is applied.
+ */
+const SPRITE_NOSE_UP_TURN_RAD = Math.PI / 2;
 
 /** Fills a car-local rectangle centred at (forward, right); the context is already in the car frame. */
 function fillLocalRect(
@@ -64,18 +80,21 @@ function fillLocalRect(
   );
 }
 
-/** Body, window and headlights of an intact car, or one dark slab for a wreck. */
-function drawBody(
+/** Body, window and headlights of an intact car, drawn as flat rectangles. */
+function drawVectorBody(
   context: RasterContext,
   vehicle: VehicleState,
   zoom: number,
-  tick: number,
 ): void {
-  const fill = vehicle.wrecked
-    ? CAR_WRECK
-    : CAR_BODY_COLOURS[vehicle.colour % CAR_BODY_COLOURS.length];
-  fillLocalRect(context, zoom, 0, 0, VEHICLE_LENGTH_M, VEHICLE_WIDTH_M, fill);
-  if (vehicle.wrecked) return;
+  fillLocalRect(
+    context,
+    zoom,
+    0,
+    0,
+    VEHICLE_LENGTH_M,
+    VEHICLE_WIDTH_M,
+    CAR_BODY_COLOURS[vehicle.colour % CAR_BODY_COLOURS.length],
+  );
   fillLocalRect(
     context,
     zoom,
@@ -87,45 +106,90 @@ function drawBody(
   );
   const front = VEHICLE_LENGTH_M / 2 - HEADLIGHT_SIZE_M / 2;
   const side = VEHICLE_WIDTH_M / 2 - HEADLIGHT_SIZE_M / 2;
+  for (const offset of [-side, side])
+    fillLocalRect(
+      context,
+      zoom,
+      front,
+      offset,
+      HEADLIGHT_SIZE_M,
+      HEADLIGHT_SIZE_M,
+      CAR_HEADLIGHT,
+    );
+}
+
+/** The car sprite stretched over the body's metre box, so art and collision hull agree. */
+function drawSpriteBody(
+  context: RasterContext,
+  sprite: CanvasImageSource,
+  zoom: number,
+): void {
+  context.save();
+  context.rotate(SPRITE_NOSE_UP_TURN_RAD);
+  context.drawImage(
+    sprite,
+    (-VEHICLE_WIDTH_M / 2) * zoom,
+    (-VEHICLE_LENGTH_M / 2) * zoom,
+    VEHICLE_WIDTH_M * zoom,
+    VEHICLE_LENGTH_M * zoom,
+  );
+  context.restore();
+}
+
+/** The pair of light bars on a police car's roof, swapping colour every few ticks. */
+function drawPoliceLights(
+  context: RasterContext,
+  zoom: number,
+  tick: number,
+): void {
+  const blue = Math.floor(tick / LIGHT_BAR_FLASH_TICKS) % 2 === 0;
+  const forward = VEHICLE_LENGTH_M / 2 - LIGHT_BAR_INSET_M;
   fillLocalRect(
     context,
     zoom,
-    front,
-    -side,
-    HEADLIGHT_SIZE_M,
-    HEADLIGHT_SIZE_M,
-    CAR_HEADLIGHT,
+    forward,
+    -LIGHT_BAR_SIDE_M,
+    LIGHT_BAR_LENGTH_M,
+    LIGHT_BAR_WIDTH_M,
+    blue ? POLICE_LIGHT_BLUE : POLICE_LIGHT_RED,
   );
   fillLocalRect(
     context,
     zoom,
-    front,
-    side,
-    HEADLIGHT_SIZE_M,
-    HEADLIGHT_SIZE_M,
-    CAR_HEADLIGHT,
+    forward,
+    LIGHT_BAR_SIDE_M,
+    LIGHT_BAR_LENGTH_M,
+    LIGHT_BAR_WIDTH_M,
+    blue ? POLICE_LIGHT_RED : POLICE_LIGHT_BLUE,
   );
-  if (vehicle.kind === "police") {
-    const blue = Math.floor(tick / 6) % 2 === 0;
+}
+
+/**
+ * One car's body: the sprite when its art has loaded, else the vector body it was drawn as
+ * before. A wreck stays a dark slab either way — the sprite is an intact sedan.
+ */
+function drawBody(
+  context: RasterContext,
+  vehicle: VehicleState,
+  zoom: number,
+  tick: number,
+  sprite: CanvasImageSource | undefined,
+): void {
+  if (vehicle.wrecked) {
     fillLocalRect(
       context,
       zoom,
-      VEHICLE_LENGTH_M / 2 - 0.35,
-      -0.25,
-      0.7,
-      0.25,
-      blue ? POLICE_LIGHT_BLUE : POLICE_LIGHT_RED,
+      0,
+      0,
+      VEHICLE_LENGTH_M,
+      VEHICLE_WIDTH_M,
+      CAR_WRECK,
     );
-    fillLocalRect(
-      context,
-      zoom,
-      VEHICLE_LENGTH_M / 2 - 0.35,
-      0.25,
-      0.7,
-      0.25,
-      blue ? POLICE_LIGHT_RED : POLICE_LIGHT_BLUE,
-    );
+    return;
   }
+  if (sprite) drawSpriteBody(context, sprite, zoom);
+  else drawVectorBody(context, vehicle, zoom);
+  if (vehicle.kind === "police") drawPoliceLights(context, zoom, tick);
 }
 
 /** Grey puffs trailing behind a damaged car, drifting with the tick. */
@@ -172,12 +236,19 @@ export function drawVehicle(
   vehicle: VehicleState,
   tick: number,
   occupied: boolean,
+  sprite?: VehicleSprite,
 ): void {
   const [x, y] = worldToScreen(camera, viewport, [vehicle.x, vehicle.y]);
   context.save();
   context.translate(x, y);
   context.rotate(vehicle.heading);
-  drawBody(context, vehicle, camera.zoom, tick);
+  drawBody(
+    context,
+    vehicle,
+    camera.zoom,
+    tick,
+    vehicleSpriteFor(sprite, vehicle.colour),
+  );
   if (!vehicle.wrecked && vehicle.health < SMOKE_HEALTH)
     drawSmoke(context, camera.zoom, tick);
   if (occupied) drawOccupiedRing(context, camera.zoom);
@@ -192,6 +263,7 @@ export function drawVehicles(
   vehicles: VehicleState[],
   tick: number,
   occupiedId: number | null,
+  sprite?: VehicleSprite,
 ): void {
   const view = visibleRect(camera, viewport);
   for (const vehicle of vehicles) {
@@ -208,6 +280,7 @@ export function drawVehicles(
       vehicle,
       tick,
       vehicle.id === occupiedId,
+      sprite,
     );
   }
 }

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "surfaces": {
+    "road": {
+      "file": "/arena/sprites/road-tarmac.png",
+      "tileMetres": 8,
+      "tilePixels": 128
+    },
+    "pavement": {
+      "file": "/arena/sprites/pavement-slabs.png",
+      "tileMetres": 8,
+      "tilePixels": 128
+    }
+  },
+  "vehicles": {
+    "sedan": {
+      "file": "/arena/sprites/car-sedan.png",
+      "lengthMetres": 4.2,
+      "widthMetres": 1.8,
+      "pixelWidth": 58,
+      "pixelHeight": 134
+    }
+  }
+}

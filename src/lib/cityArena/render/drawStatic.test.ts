@@ -4,10 +4,12 @@ import { paintChunk, type LandmarkLookup } from "./drawStatic";
 import {
   GROUND_FILL,
   LANDMARK_FILL,
+  PAVEMENT_FILL,
   ROAD_CENTRE_LINE,
   ROAD_FILL,
   WATER_FILL,
 } from "./palette";
+import type { ArenaSprites } from "./sprites";
 import { createFakeContext } from "./testing/fakeContext";
 
 const tile: DecodedTile = {
@@ -230,5 +232,54 @@ describe("paintChunk", () => {
     expect(Math.max(...roadFillStrokeIndices)).toBeLessThan(
       centreLineStrokeIndex,
     );
+  });
+  it("strokes road and pavement with a repeating texture, leaving every other layer flat", () => {
+    const context = createFakeContext();
+    const image = document.createElement("canvas");
+    const sprites: ArenaSprites = {
+      pavement: { image, tileMetres: 8, tilePixels: 128 },
+      road: { image, tileMetres: 8, tilePixels: 128 },
+    };
+    paintChunk(
+      context,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [tile],
+      landmarks,
+      sprites,
+    );
+    // Pavement is filled first, so it takes the first pattern; the primary road is 9 m wide and
+    // its pavement adds 2 m on each side.
+    expect(context.calls).toContain("stroke(pattern(#0),13)");
+    expect(context.calls).toContain("stroke(pattern(#1),9)");
+    expect(context.calls).toContain("patternTransform(pattern(#1),0.0625)");
+    expect(context.calls).not.toContain(`stroke(${ROAD_FILL},9)`);
+    expect(context.calls).not.toContain(`stroke(${PAVEMENT_FILL},13)`);
+    expect(context.calls).toContain(`fill(${WATER_FILL})`);
+    expect(context.calls).toContain(`stroke(${ROAD_CENTRE_LINE},0.3)`);
+  });
+
+  it("keeps the flat road colour when only the pavement texture has loaded", () => {
+    const context = createFakeContext();
+    const sprites: ArenaSprites = {
+      pavement: {
+        image: document.createElement("canvas"),
+        tileMetres: 8,
+        tilePixels: 128,
+      },
+    };
+    paintChunk(
+      context,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [tile],
+      landmarks,
+      sprites,
+    );
+    expect(context.calls).toContain("stroke(pattern(#0),13)");
+    expect(context.calls).toContain(`stroke(${ROAD_FILL},9)`);
+    expect(
+      context.calls.filter((call) => call.startsWith("createPattern(")),
+    ).toHaveLength(1);
   });
 });

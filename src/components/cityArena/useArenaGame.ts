@@ -27,6 +27,8 @@ import {
   type RadarSnapshot,
 } from "@/lib/cityArena/render/radar";
 import { createDomCanvasFactory } from "@/lib/cityArena/render/canvasTypes";
+import { createSpriteStore } from "@/lib/cityArena/render/loadSprites";
+import { WHOLE_WORLD_RECT } from "@/lib/cityArena/render/staticRaster";
 import { rasterBudgetForViewport } from "@/lib/cityArena/render/staticRaster";
 import { PLAYER_MAX_HEALTH, damagePlayer } from "@/lib/cityArena/sim/damage";
 import { addHeat } from "@/lib/cityArena/sim/wanted";
@@ -126,11 +128,20 @@ function createArenaSession(
   rasterBudgetBytes: number | undefined,
 ): WorldSession {
   const loader = createMapLoader({ onError: onFailed });
-  return createWorldSession({
+  const canvasFactory = createDomCanvasFactory();
+  const sprites = createSpriteStore({ canvasFactory });
+  const session = createWorldSession({
     loader,
-    canvasFactory: createDomCanvasFactory(),
+    canvasFactory,
     rasterBudgetBytes,
+    readSprites: () => sprites.current(),
   });
+  // Chunks rasterised before the art arrives hold flat fills, so drop them once it has: the
+  // frame loop re-rasterises them one per frame, the same way it streams them in the first time.
+  void sprites.load().then((loaded) => {
+    if (loaded) session.raster.invalidateRect(WHOLE_WORLD_RECT);
+  });
+  return session;
 }
 
 /** Raster budget sized to the canvas's current layout box, or `undefined` before it has one. */

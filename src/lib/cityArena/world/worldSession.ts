@@ -1,6 +1,7 @@
 import type { Rect } from "../mapBuild/geometry";
 import type { CanvasFactory } from "../render/canvasTypes";
 import type { LandmarkInfo, LandmarkLookup } from "../render/drawStatic";
+import { NO_SPRITES, type ArenaSprites } from "../render/sprites";
 import { createStaticRaster, type StaticRaster } from "../render/staticRaster";
 import { createCollisionGrid, type CollisionGrid } from "./collisionGrid";
 import type { DecodedTile } from "./decode";
@@ -16,6 +17,8 @@ export type WorldSessionOptions = {
   canvasFactory: CanvasFactory;
   /** Overrides the raster cache's byte budget; defaults to the raster's own fixed budget. */
   rasterBudgetBytes?: number;
+  /** Read per rasterisation so chunks painted after the sprite art loads pick it up. */
+  readSprites?: () => ArenaSprites;
 };
 
 /** Resolved once the map index and the decoded road graph are both available. */
@@ -34,6 +37,8 @@ export type WorldSession = {
   graph(): RoadGraph;
   collision: CollisionGrid;
   raster: StaticRaster;
+  /** Sprite art currently loaded; empty until the sprite store resolves. */
+  sprites(): ArenaSprites;
   landmarks(): LandmarkLookup;
   update(
     centre: Point,
@@ -57,6 +62,7 @@ type WorldSessionState = {
   raster: StaticRaster;
   synced: Map<string, DecodedTile>;
   landmarks: LandmarkLookup;
+  readSprites: () => ArenaSprites;
   readyPromise: Promise<WorldReady> | null;
   loadedIndex: MapIndex | null;
   loadedGraph: RoadGraph | null;
@@ -155,9 +161,11 @@ function createWorldSessionState(
     raster: createStaticRaster(
       options.canvasFactory,
       options.rasterBudgetBytes,
+      options.readSprites,
     ),
     synced: new Map<string, DecodedTile>(),
     landmarks: new Map<string, LandmarkInfo>(),
+    readSprites: options.readSprites ?? (() => NO_SPRITES),
     readyPromise: null,
     loadedIndex: null,
     loadedGraph: null,
@@ -187,6 +195,7 @@ function assembleWorldSession(state: WorldSessionState): WorldSession {
     collision: state.collision,
     raster: state.raster,
     landmarks: () => state.landmarks,
+    sprites: () => state.readSprites(),
     update: (centre, onProgress) => performUpdate(state, centre, onProgress),
     tiles: () => [...state.synced.values()],
     loadedTileRects: () => [...state.synced.values()].map((tile) => tile.rect),

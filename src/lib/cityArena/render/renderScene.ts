@@ -26,6 +26,7 @@ import {
   type DrawStats,
   type WorldDrawSource,
 } from "./drawWorld";
+import type { VehicleSprite } from "./sprites";
 
 /** A rectangle of the canvas (CSS px) rendered through one camera — several of these make a split screen. */
 export type SceneViewport = {
@@ -47,6 +48,8 @@ export type Scene = {
   tick: number;
   aimScreen: [number, number] | null;
   pushIn: number;
+  /** Car sprite, absent until its art has loaded — cars fall back to the vector body. */
+  carSprite?: VehicleSprite;
 };
 
 /** Scales the viewport around its centre by `pushIn`. */
@@ -101,6 +104,7 @@ export function renderScene(
     scene.vehicles,
     scene.tick,
     scene.player.vehicleId,
+    scene.carSprite,
   );
   drawPeople(context, camera, size, scene.peds, scene.cops);
   drawBullets(context, camera, size, scene.bullets);
