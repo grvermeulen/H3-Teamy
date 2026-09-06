@@ -141,9 +141,11 @@ describe("createArenaState", () => {
     });
     expect(SPAWN_XS).toContain(state.player.x);
     expect(state.vehicles.length).toBeGreaterThanOrEqual(1);
-    expect(state.vehicles.length).toBeLessThanOrEqual(3);
+    expect(state.vehicles.length).toBeLessThanOrEqual(30);
     for (const car of state.vehicles)
-      expect(Math.abs(car.x - state.player.x)).toBeGreaterThanOrEqual(8);
+      expect(
+        Math.hypot(car.x - state.player.x, car.y - state.player.y),
+      ).toBeGreaterThanOrEqual(8);
     expect(state.pickups.map((pickup) => pickup.kind)).toEqual([
       "uzi",
       "shotgun",
@@ -492,12 +494,10 @@ describe("stepArena firing and death", () => {
 
   it("keeps respawns off parked cars", () => {
     const state = boot();
-    // Parked cars avoid the player's own spawn node (MIN_CAR_TO_PLAYER_M), so
-    // booting already occupies the other three of the four spawn nodes.
-    const freeX = state.player.x;
-    expect(
-      state.vehicles.map((vehicle) => vehicle.x).sort((a, b) => a - b),
-    ).toEqual(SPAWN_XS.filter((x) => x !== freeX).sort((a, b) => a - b));
+    for (const vehicle of state.vehicles)
+      expect(
+        Math.hypot(vehicle.x - state.player.x, vehicle.y - state.player.y),
+      ).toBeGreaterThanOrEqual(8);
 
     const dying: ArenaState = {
       ...state,
@@ -505,8 +505,15 @@ describe("stepArena firing and death", () => {
     };
     const respawned = run(dying, EMPTY_INPUT, RESPAWN_DELAY_TICKS);
     expect(respawned.player.diedAtTick).toBeNull();
-    expect(respawned.player.x).toBe(freeX);
+    expect(SPAWN_XS).toContain(respawned.player.x);
     expect(respawned.player.y).toBe(0);
+    for (const vehicle of state.vehicles)
+      expect(
+        Math.hypot(
+          vehicle.x - respawned.player.x,
+          vehicle.y - respawned.player.y,
+        ),
+      ).toBeGreaterThanOrEqual(3.6);
   });
 
   it("falls back to an unfiltered spawn node when every node is blocked", () => {

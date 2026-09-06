@@ -1,14 +1,29 @@
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import { fromUnits, type Point } from "../world/projection";
+import {
+  PARKING_ROAD_CLASSES,
+  edgeLengthM,
+  kerbOffsetM,
+  railHeading,
+  railPoint,
+} from "../world/pavements";
 import type { RoadGraph } from "../world/roadGraph";
-import { distanceToZoneEdge, pickSpawn } from "../world/zone";
+import type { RoadGraphEdge } from "../world/roadGraph";
+import {
+  distanceToZoneEdge,
+  pickSpawn,
+  zoneCentreMetres,
+  zoneRadiusMetres,
+} from "../world/zone";
 import { CAR_BODY_RADIUS_M } from "./collisions";
 import { PLAYER_RADIUS_M } from "./player";
-import type { VehicleKind, VehicleState } from "./types";
+import type { RailPosition, VehicleKind, VehicleState } from "./types";
 import { VEHICLE_COLOUR_COUNT, createVehicle } from "./vehicle";
 
 /** Parked cars placed per zone at session start (scope decision 3). */
-export const PARKED_CARS_PER_ZONE = 8;
+export const PARKED_CARS_PER_ZONE = 30;
+/** Spacing of parking spots along a kerb. */
+export const PARKING_INTERVAL_M = 40;
 /** Minimum distance between two parked cars. */
 export const MIN_CAR_SPACING_M = 12;
 /** Minimum distance between a parked car and a point in the avoid list (the player spawn). */
@@ -24,6 +39,7 @@ export const PARKED_CAR_KINDS: VehicleKind[] = ["compact", "sedan", "sport"];
 const ROAD_SNAP_M = 30;
 /** Candidate scores within this distance of the best count as ties for the seeded tie-break. */
 const TIE_TOLERANCE_M = 1;
+const COIN_FLIP = 0.5;
 
 /** The part of the road graph the spawner reads. */
 export type SpawnGraph = Pick<
@@ -69,23 +85,84 @@ export function farFromAll(
   );
 }
 
-/** Up to PARKED_CARS_PER_ZONE nodes of one zone in seeded order, honouring spacing and the avoid list. */
-function pickParkingNodes(
+/** A kerb-side parking spot with a car centre and heading. */
+export type ParkingSpot = { point: Point; heading: number };
+
+/** True for road classes that may hold parked cars. */
+export function isParkingEdge(edge: RoadGraphEdge): boolean {
+  return PARKING_ROAD_CLASSES.includes(edge.roadClass);
+}
+
+/** Creates seeded parking spots every 40 m along one edge. */
+export function edgeParkingSpots(
+  graph: SpawnGraph,
+  edgeIndex: number,
+  random: () => number,
+): ParkingSpot[] {
+  const edge = graph.edges[edgeIndex];
+  const length = edgeLengthM(graph, edgeIndex);
+  const direction: 1 | -1 = random() < COIN_FLIP ? -1 : 1;
+  const start = random() * PARKING_INTERVAL_M;
+  const spots: ParkingSpot[] = [];
+  for (let along = start; along < length; along += PARKING_INTERVAL_M) {
+    const progress = along / length;
+    const rail: RailPosition = {
+      edge: edgeIndex,
+      direction,
+      edgeT: direction === 1 ? progress : 1 - progress,
+      side: 1,
+    };
+    spots.push({
+      point: railPoint(graph, rail, kerbOffsetM(edge.roadClass)),
+      heading: railHeading(graph, rail),
+    });
+  }
+  return spots;
+}
+
+/** Collects parking spots on parking-class edges inside a zone. */
+export function zoneParkingSpots(
+  graph: SpawnGraph,
+  zone: MapZone,
+  random: () => number,
+): ParkingSpot[] {
+  const centre = zoneCentreMetres(zone);
+  const radius = zoneRadiusMetres(zone);
+  const spots: ParkingSpot[] = [];
+  graph.edges.forEach((edge, index) => {
+    if (!isParkingEdge(edge)) return;
+    const middleX = (graph.nodes[edge.a][0] + graph.nodes[edge.b][0]) / 2;
+    const middleY = (graph.nodes[edge.a][1] + graph.nodes[edge.b][1]) / 2;
+    if (Math.hypot(middleX - centre[0], middleY - centre[1]) > radius) return;
+    spots.push(...edgeParkingSpots(graph, index, random));
+  });
+  return spots;
+}
+
+function pickParkingSpots(
+  graph: SpawnGraph,
   zone: MapZone,
   random: () => number,
   avoid: Point[],
-): Point[] {
-  const chosen: Point[] = [];
-  for (const node of shuffle(spawnNodesMetres(zone), random)) {
+): ParkingSpot[] {
+  const chosen: ParkingSpot[] = [];
+  for (const spot of shuffle(zoneParkingSpots(graph, zone, random), random)) {
     if (chosen.length >= PARKED_CARS_PER_ZONE) break;
-    if (!farFromAll(node, avoid, MIN_CAR_TO_PLAYER_M)) continue;
-    if (!farFromAll(node, chosen, MIN_CAR_SPACING_M)) continue;
-    chosen.push(node);
+    if (!farFromAll(spot.point, avoid, MIN_CAR_TO_PLAYER_M)) continue;
+    if (
+      !farFromAll(
+        spot.point,
+        chosen.map((item) => item.point),
+        MIN_CAR_SPACING_M,
+      )
+    )
+      continue;
+    chosen.push(spot);
   }
   return chosen;
 }
 
-/** Parks seeded cars on spawn nodes of every zone, headed along the nearest road; ids count up from `firstId`. */
+/** Parks seeded cars along the kerbs of every zone's residential and service roads. */
 export function spawnParkedCars(
   index: MapIndex,
   graph: SpawnGraph,
@@ -95,7 +172,7 @@ export function spawnParkedCars(
 ): VehicleState[] {
   const cars: VehicleState[] = [];
   for (const zone of index.zones) {
-    for (const node of pickParkingNodes(zone, random, avoid)) {
+    for (const spot of pickParkingSpots(graph, zone, random, avoid)) {
       const kind =
         PARKED_CAR_KINDS[Math.floor(random() * PARKED_CAR_KINDS.length)];
       const colour = Math.floor(random() * VEHICLE_COLOUR_COUNT);
@@ -103,8 +180,8 @@ export function spawnParkedCars(
         createVehicle(
           firstId + cars.length,
           kind,
-          node,
-          roadHeadingAt(graph, node),
+          spot.point,
+          spot.heading,
           colour,
         ),
       );

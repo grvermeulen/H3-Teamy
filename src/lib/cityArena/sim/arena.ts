@@ -18,6 +18,7 @@ import {
 } from "./collisions";
 import {
   EXPLOSION_DAMAGE,
+  IMPACT_DAMAGE_THRESHOLD_MPS,
   INVULNERABLE_TICKS,
   LETHAL_DAMAGE,
   PLAYER_MAX_HEALTH,
@@ -42,6 +43,7 @@ import {
   spawnParkedCars,
   type SpawnGraph,
 } from "./spawn";
+import { stepDrivers } from "./traffic";
 import type {
   ArenaPlayerState,
   ArenaState,
@@ -49,6 +51,7 @@ import type {
   EffectState,
   HeldButtons,
   HitTargetKind,
+  ArenaEvent,
   VehicleState,
   WorldInput,
 } from "./types";
@@ -196,8 +199,10 @@ function enterVehicle(state: ArenaState): ArenaState {
     }
   }
   if (!best) return state;
+  const boarded = best.id;
   return {
     ...state,
+    traffic: state.traffic.filter((driver) => driver.vehicleId !== boarded),
     player: {
       ...state.player,
       vehicleId: best.id,
@@ -264,15 +269,53 @@ function controlsFromInput(input: WorldInput): VehicleControls {
 }
 
 /** Steps every car (only the occupied one gets controls), then applies building and car–car impact damage. */
+function isAsleep(
+  vehicle: VehicleState,
+  controls: VehicleControls | undefined,
+): boolean {
+  return (
+    controls === undefined && vehicle.velocityX === 0 && vehicle.velocityY === 0
+  );
+}
+
+function withImpactEvent(
+  events: ArenaEvent[],
+  vehicleId: number,
+  otherVehicleId: number | null,
+  impactSpeed: number,
+): ArenaEvent[] {
+  if (impactSpeed <= IMPACT_DAMAGE_THRESHOLD_MPS) return events;
+  return pushEvent(events, {
+    kind: "impact",
+    vehicleId,
+    otherVehicleId,
+    impactSpeed,
+  });
+}
+
+type VehiclesStep = { vehicles: VehicleState[]; events: ArenaEvent[] };
+
 function stepVehicles(
   state: ArenaState,
-  controls: VehicleControls,
+  playerControls: VehicleControls,
   dt: number,
   world: ArenaWorld,
-): VehicleState[] {
+  aiControls: Map<number, VehicleControls>,
+): VehiclesStep {
+  let events = state.events;
   const stepped = state.vehicles.map((vehicle) => {
-    const own = vehicle.id === state.player.vehicleId ? controls : NO_CONTROLS;
-    const result = stepVehicle(vehicle, own, dt, world.collision);
+    const controls =
+      vehicle.id === state.player.vehicleId
+        ? playerControls
+        : aiControls.get(vehicle.id);
+    if (isAsleep(vehicle, controls)) return vehicle;
+    const result = stepVehicle(
+      vehicle,
+      controls ?? NO_CONTROLS,
+      dt,
+      world.collision,
+    );
+    events = withImpactEvent(events, vehicle.id, null, result.impactSpeed);
     return damageVehicle(result.vehicle, impactDamage(result.impactSpeed));
   });
   const pairs = resolveVehiclePairs(stepped);
@@ -281,8 +324,14 @@ function stepVehicles(
     const amount = impactDamage(impact.impactSpeed);
     damaged[impact.first] = damageVehicle(damaged[impact.first], amount);
     damaged[impact.second] = damageVehicle(damaged[impact.second], amount);
+    events = withImpactEvent(
+      events,
+      damaged[impact.first].id,
+      damaged[impact.second].id,
+      impact.impactSpeed,
+    );
   }
-  return damaged;
+  return { vehicles: damaged, events };
 }
 
 /** The driver follows the car while the boarding countdown runs out. */
@@ -329,6 +378,7 @@ function moveEntities(
   dt: number,
   world: ArenaWorld,
   tick: number,
+  random: () => number,
 ): ArenaState {
   const driving = occupiedVehicle(state);
   const canDrive =
@@ -336,16 +386,22 @@ function moveEntities(
     !isDead(state.player) &&
     state.player.boardingTicksLeft === 0;
   const controls = canDrive ? controlsFromInput(input) : NO_CONTROLS;
-  const vehicles = stepVehicles(state, controls, dt, world);
+  const drivers = stepDrivers(state, world, random, null);
+  const moved = stepVehicles(state, controls, dt, world, drivers.controls);
+  const next: ArenaState = {
+    ...state,
+    traffic: drivers.traffic,
+    vehicles: moved.vehicles,
+    events: moved.events,
+  };
   if (driving) {
     const ridden =
-      vehicles.find((vehicle) => vehicle.id === driving.id) ?? driving;
-    return { ...state, vehicles, player: ridePlayer(state.player, ridden) };
+      moved.vehicles.find((vehicle) => vehicle.id === driving.id) ?? driving;
+    return { ...next, player: ridePlayer(state.player, ridden) };
   }
   return {
-    ...state,
-    vehicles,
-    player: walkPlayer(state, input, dt, world, vehicles, tick),
+    ...next,
+    player: walkPlayer(next, input, dt, world, moved.vehicles, tick),
   };
 }
 
@@ -656,7 +712,7 @@ export function stepArena(
   next = stepPickups(next, tick);
   next = applyWeaponSwitch(next, edges.weaponPressed);
   next = applyEnterExit(next, edges.enterPressed, world);
-  next = moveEntities(next, input, dt, world, tick);
+  next = moveEntities(next, input, dt, world, tick, random);
   next = applyFire(next, input, tick, random);
   next = stepPeds(next, world, dt, tick, random);
   next = advanceBullets(next, dt, world, tick);
