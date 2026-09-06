@@ -9184,7 +9184,7 @@ debug hook mutations and the existing cancellation/teleport paths. Verify a zero
 not call any sound voice method.
 
 - [x] **Step 1: Write runtime and overlay wiring tests**
-- [ ] **Step 2: Run focused tests and capture failures before implementation**
+- [x] **Step 2: Run focused tests and capture failures before implementation**
 - [x] **Step 3: Thread the sound object and camera view rectangle through the frame loop**
 - [x] **Step 4: Add throttled HUD/radar projections and the overlay layout**
 - [x] **Step 5: Extend debug hooks and entity counters**
@@ -9261,3 +9261,14 @@ admin/branding changes and that the Plan 4a parent remains the only base depende
 - [x] Task 12 runtime, overlay, debug hooks and cleanup wired without duplicate event playback.
 - [ ] Task 13 runbook updated and the complete verification loop passed.
 - [x] Final diff reviewed for scope, slop, unsafe casts, magic numbers and unrelated files.
+
+### Post-merge verification status — 2026-09-06
+
+- The `image` branch post-merge workflow passed, including its read-only HTTP and
+  Playwright smoke checks: [run 34035378318](https://github.com/grvermeulen/H3-Teamy/actions/runs/34035378318).
+- Those repository smoke checks cover the homepage and login page, not the arena
+  interaction path. The arena-specific browser smoke in Task 13 Step 7 remains open
+  because no local browser provider was available during verification.
+- Local merged-branch verification after regenerating the Prisma client: TypeScript
+  passed, the arena suite passed (`86 files`, `425 tests`), lint passed with the two
+  existing warnings, and merge-marker checks passed.
