@@ -321,9 +321,11 @@ export function obstaclePoints(
     if (driver.role === "police" && driverPlayer(state, vehicle.id)) continue;
     points.push([vehicle.x, vehicle.y]);
   }
-  for (const ped of alivePeds(state.peds)) points.push([ped.x, ped.y]);
-  for (const cop of state.cops)
-    if (cop.diedAtTick === null) points.push([cop.x, cop.y]);
+  if (driver.role !== "police") {
+    for (const ped of alivePeds(state.peds)) points.push([ped.x, ped.y]);
+    for (const cop of state.cops)
+      if (cop.diedAtTick === null) points.push([cop.x, cop.y]);
+  }
   if (driver.role === "police") return points;
   for (const player of playersOf(state))
     if (!isDead(player) && player.vehicleId === null)
@@ -351,7 +353,9 @@ function ramPoint(
     chase.point[0] - vehicle.x,
     chase.point[1] - vehicle.y,
   );
-  return distance <= chase.rangeM ? chase.point : null;
+  // Start the final approach before the ram radius so a routed police car does
+  // not brake at the last road node and get stranded just outside the target.
+  return distance <= Math.max(chase.rangeM, 80) ? chase.point : null;
 }
 
 /** Steps every AI driver and returns the controls for its car. */

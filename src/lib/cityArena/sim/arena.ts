@@ -36,6 +36,7 @@ import { applyPopulation, populateZone } from "./populate";
 import { aliveCops, blastCops, manageCops, stepCops } from "./cops";
 import { alivePeds, blastPeds, stepPeds } from "./peds";
 import { stepPickups } from "./pickups";
+import { managePoliceCars, policeChase } from "./police";
 import { PLAYER_RADIUS_M, stepPlayer } from "./player";
 import {
   chooseRespawnNode,
@@ -389,7 +390,7 @@ function moveEntities(
     !isDead(state.player) &&
     state.player.boardingTicksLeft === 0;
   const controls = canDrive ? controlsFromInput(input) : NO_CONTROLS;
-  const drivers = stepDrivers(state, world, random, null);
+  const drivers = stepDrivers(state, world, random, policeChase(state));
   const moved = stepVehicles(state, controls, dt, world, drivers.controls);
   const next: ArenaState = {
     ...state,
@@ -736,6 +737,7 @@ export function stepArena(
   next = applyZoneRule(next, world.index, tick);
   next = applyWanted(next, tick);
   next = manageCops(next, world, tick, random);
+  next = managePoliceCars(next, world, tick, random);
   next = ejectIfDead(next, world);
   const zone = findZone(world.index, [next.player.x, next.player.y]);
   return {

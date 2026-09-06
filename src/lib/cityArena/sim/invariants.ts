@@ -1,4 +1,5 @@
 import { MAX_BULLETS } from "./bullets";
+import { COP_BODY_TICKS, COP_MAX_HEALTH } from "./cops";
 import { PLAYER_MAX_HEALTH } from "./damage";
 import { MAX_EFFECTS } from "./effects";
 import {
@@ -11,6 +12,7 @@ import {
 } from "./limits";
 import type { ArenaState } from "./types";
 import { VEHICLE_MAX_HEALTH } from "./vehicle";
+import { PICKUP_RESPAWN_TICKS } from "./pickups";
 
 /** Records `message` when `condition` is false. */
 function check(
@@ -103,23 +105,18 @@ function checkVehicles(
   }
 }
 
-/** Checks population caps, serialisable positions and globally unique ids. */
-function checkPopulation(
+/** Pedestrians and cops: caps, finite positions, death and health agreeing, bodies not overdue, and unique ids. */
+function checkPeople(
   state: ArenaState,
   violations: string[],
   ids: Set<number>,
 ): void {
   check(violations, state.peds.length <= MAX_PEDS, "too many pedestrians");
   check(violations, state.cops.length <= MAX_COPS, "too many cops");
-  check(violations, state.pickups.length <= MAX_PICKUPS, "too many pickups");
-  check(violations, state.traffic.length <= MAX_TRAFFIC, "too many drivers");
-  check(violations, state.events.length <= MAX_EVENTS, "too many events");
   for (const ped of state.peds) {
     check(
       violations,
-      Number.isFinite(ped.x) &&
-        Number.isFinite(ped.y) &&
-        Number.isFinite(ped.facing),
+      finite(ped.x, ped.y, ped.facing),
       `ped ${ped.id} is not finite`,
     );
     check(
@@ -127,30 +124,60 @@ function checkPopulation(
       (ped.mode === "dead") === (ped.health === 0),
       `ped ${ped.id} death and health disagree`,
     );
+    check(
+      violations,
+      ped.mode !== "dead" || ped.modeUntilTick > state.tick,
+      `ped ${ped.id} body expired`,
+    );
     check(violations, !ids.has(ped.id), `duplicate entity id ${ped.id}`);
     ids.add(ped.id);
   }
   for (const cop of state.cops) {
     check(
       violations,
-      Number.isFinite(cop.x) &&
-        Number.isFinite(cop.y) &&
-        Number.isFinite(cop.facing),
+      finite(cop.x, cop.y, cop.facing),
       `cop ${cop.id} is not finite`,
+    );
+    check(
+      violations,
+      cop.health >= 0 && cop.health <= COP_MAX_HEALTH,
+      `cop ${cop.id} health out of range`,
     );
     check(
       violations,
       (cop.diedAtTick !== null) === (cop.health === 0),
       `cop ${cop.id} death and health disagree`,
     );
+    check(
+      violations,
+      cop.diedAtTick === null || cop.diedAtTick + COP_BODY_TICKS > state.tick,
+      `cop ${cop.id} body expired`,
+    );
     check(violations, !ids.has(cop.id), `duplicate entity id ${cop.id}`);
     ids.add(cop.id);
   }
+}
+
+/** Pickups, AI drivers and the per-tick event list. */
+function checkPopulation(
+  state: ArenaState,
+  violations: string[],
+  ids: Set<number>,
+): void {
+  check(violations, state.pickups.length <= MAX_PICKUPS, "too many pickups");
+  check(violations, state.traffic.length <= MAX_TRAFFIC, "too many drivers");
+  check(violations, state.events.length <= MAX_EVENTS, "too many events");
   for (const pickup of state.pickups) {
     check(
       violations,
       pickup.takenAtTick === null || pickup.takenAtTick <= state.tick,
       `pickup ${pickup.id} taken in the future`,
+    );
+    check(
+      violations,
+      pickup.takenAtTick === null ||
+        state.tick - pickup.takenAtTick < PICKUP_RESPAWN_TICKS,
+      `pickup ${pickup.id} overdue for its respawn`,
     );
     check(violations, !ids.has(pickup.id), `duplicate entity id ${pickup.id}`);
     ids.add(pickup.id);
@@ -164,6 +191,13 @@ function checkPopulation(
       violations,
       vehicle !== undefined && !vehicle.wrecked,
       `driver of vehicle ${driver.vehicleId} has no intact car`,
+    );
+    check(
+      violations,
+      driver.role !== "police" ||
+        vehicle === undefined ||
+        vehicle.kind === "police",
+      `driver of vehicle ${driver.vehicleId} is not in a police car`,
     );
     check(
       violations,
@@ -205,6 +239,7 @@ export function checkInvariants(state: ArenaState): string[] {
   const ids = new Set<number>();
   checkVehicles(state, violations, ids);
   checkProjectiles(state, violations);
+  checkPeople(state, violations, ids);
   checkPopulation(state, violations, ids);
   return violations;
 }
