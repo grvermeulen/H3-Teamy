@@ -34,13 +34,10 @@ import { checkInvariants } from "@/lib/cityArena/sim/invariants";
 import { SIM_STEP_S } from "@/lib/cityArena/sim/player";
 import { createRng, seedFromString } from "@/lib/cityArena/sim/rng";
 import type {
-  AmmoState,
   ArenaPlayerState,
   ArenaState,
-  WeaponKind,
   WorldInput,
 } from "@/lib/cityArena/sim/types";
-import { forwardSpeed } from "@/lib/cityArena/sim/vehicle";
 import { saveArenaSettings } from "@/lib/cityArena/storage";
 import type { LoadProgress } from "@/lib/cityArena/world/mapLoader";
 import type {
@@ -49,17 +46,16 @@ import type {
   MapZone,
   ZoneKey,
 } from "@/lib/cityArena/world/mapTypes";
-import { nearestRoadName } from "@/lib/cityArena/world/nearestRoad";
 import type { Point } from "@/lib/cityArena/world/projection";
 import { findPath, pathLength } from "@/lib/cityArena/world/roadGraph";
 import type { WorldSession } from "@/lib/cityArena/world/worldSession";
 import {
-  findZone,
   findZoneByKey,
   landmarkCentreMetres,
   pickSpawn,
 } from "@/lib/cityArena/world/zone";
 import type { EntityCounts } from "./ArenaDebugOverlay";
+import { computeHud, type ArenaHud } from "./arenaHud";
 
 /**
  * The arena runtime and frame-loop layer used by `useArenaGame`: the mutable per-frame
@@ -85,17 +81,6 @@ const LANDMARK_SNAP_DISTANCE_M = 200;
 /** Milliseconds per second, for converting between frame timestamps and simulation seconds. */
 const MS_PER_SECOND = 1000;
 
-/** Zone, street and vitals shown in the HUD strip. */
-export type ArenaHud = {
-  zoneName: string | null;
-  zoneKey: ZoneKey | null;
-  street: string | null;
-  health: number;
-  weapon: WeaponKind;
-  ammo: AmmoState;
-  speedMps: number | null;
-  inVehicle: boolean;
-};
 /** Data for the debug panel. */
 export type DebugSnapshot = {
   metrics: MetricsSnapshot;
@@ -299,26 +284,6 @@ export function aimAngle(
   if (!pointer) return null;
   const target = screenToWorld(camera, viewport, pointer);
   return Math.atan2(target[1] - player[1], target[0] - player[0]);
-}
-
-/** Zone, street and vitals for the HUD from the current state. */
-export function computeHud(
-  session: Pick<WorldSession, "index" | "tiles">,
-  state: ArenaState,
-): ArenaHud {
-  const { player } = state;
-  const zone = findZone(session.index(), [player.x, player.y]);
-  const car = occupiedVehicle(state);
-  return {
-    zoneName: zone?.name ?? null,
-    zoneKey: zone?.key ?? null,
-    street: nearestRoadName(session.tiles(), [player.x, player.y]),
-    health: player.health,
-    weapon: player.weapon,
-    ammo: player.ammo,
-    speedMps: car ? Math.abs(forwardSpeed(car)) : null,
-    inVehicle: car !== null,
-  };
 }
 
 /** Debug-panel snapshot: frame metrics, cache stats, camera/player, route distance and entity counts. */

@@ -46,15 +46,14 @@ import {
   type WorldSession,
 } from "@/lib/cityArena/world/worldSession";
 import { findZoneByKey } from "@/lib/cityArena/world/zone";
+import { computeHud, type ArenaHud } from "./arenaHud";
 import {
   aimAngle,
   applyTeleport,
-  computeHud,
   createRuntime,
   nearestLandmarkTo,
   reportArenaError,
   startFrameLoop,
-  type ArenaHud,
   type DeathInfo,
   type DebugSnapshot,
   type FrameLoopOptions,
@@ -83,6 +82,10 @@ const INITIAL_HUD: ArenaHud = {
   ammo: SPAWN_AMMO,
   speedMps: null,
   inVehicle: false,
+  wantedLevel: 0,
+  zoneSecondsLeft: null,
+  zoneWarning: false,
+  soundEnabled: true,
 };
 /** Hook options. */
 export type UseArenaGameOptions = {
