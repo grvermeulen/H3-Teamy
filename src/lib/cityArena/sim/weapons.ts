@@ -64,8 +64,27 @@ export const WEAPONS: Record<WeaponKind, WeaponSpec> = {
 /** Cycling order of the Wapen button. */
 export const WEAPON_ORDER: WeaponKind[] = ["fist", "pistol", "uzi", "shotgun"];
 
-/** Ammo the player spawns with in this plan (scope decision 2). */
-export const SPAWN_AMMO: AmmoState = { uzi: 60, shotgun: 8 };
+/** Ammo the player spawns with: pistol and fist only. */
+export const SPAWN_AMMO: AmmoState = { uzi: 0, shotgun: 0 };
+
+/** Maximum carried rounds for each magazine weapon. */
+export const MAX_AMMO: AmmoState = { uzi: 120, shotgun: 16 };
+
+/** Adds magazine ammunition without exceeding the carried-round cap. */
+export function addAmmo(
+  ammo: AmmoState,
+  kind: WeaponKind,
+  rounds: number,
+): AmmoState {
+  if (kind === "uzi")
+    return { ...ammo, uzi: Math.min(MAX_AMMO.uzi, ammo.uzi + rounds) };
+  if (kind === "shotgun")
+    return {
+      ...ammo,
+      shotgun: Math.min(MAX_AMMO.shotgun, ammo.shotgun + rounds),
+    };
+  return ammo;
+}
 
 /** Ticks between two shots: fist 15, pistol 12, Uzi 3, shotgun 25. */
 export function cooldownTicks(kind: WeaponKind): number {

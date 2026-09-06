@@ -1,6 +1,14 @@
 import { MAX_BULLETS } from "./bullets";
 import { PLAYER_MAX_HEALTH } from "./damage";
 import { MAX_EFFECTS } from "./effects";
+import {
+  MAX_COPS,
+  MAX_EVENTS,
+  MAX_PEDS,
+  MAX_PICKUPS,
+  MAX_TRAFFIC,
+  MAX_VEHICLES,
+} from "./limits";
 import type { ArenaState } from "./types";
 import { VEHICLE_MAX_HEALTH } from "./vehicle";
 
@@ -38,6 +46,11 @@ function checkPlayer(state: ArenaState, violations: string[]): void {
   );
   check(
     violations,
+    Number.isFinite(player.heat) && player.heat >= 0,
+    "player heat negative or not finite",
+  );
+  check(
+    violations,
     player.vehicleId === null ||
       state.vehicles.some(
         (vehicle) => vehicle.id === player.vehicleId && !vehicle.wrecked,
@@ -58,8 +71,12 @@ function checkPlayer(state: ArenaState, violations: string[]): void {
 }
 
 /** Car positions, health and unique ids. */
-function checkVehicles(state: ArenaState, violations: string[]): void {
-  const ids = new Set<number>();
+function checkVehicles(
+  state: ArenaState,
+  violations: string[],
+  ids: Set<number>,
+): void {
+  check(violations, state.vehicles.length <= MAX_VEHICLES, "too many vehicles");
   for (const vehicle of state.vehicles) {
     check(
       violations,
@@ -80,9 +97,81 @@ function checkVehicles(state: ArenaState, violations: string[]): void {
     check(
       violations,
       !ids.has(vehicle.id),
-      `duplicate vehicle id ${vehicle.id}`,
+      `duplicate entity id ${vehicle.id}`,
     );
     ids.add(vehicle.id);
+  }
+}
+
+/** Checks population caps, serialisable positions and globally unique ids. */
+function checkPopulation(
+  state: ArenaState,
+  violations: string[],
+  ids: Set<number>,
+): void {
+  check(violations, state.peds.length <= MAX_PEDS, "too many pedestrians");
+  check(violations, state.cops.length <= MAX_COPS, "too many cops");
+  check(violations, state.pickups.length <= MAX_PICKUPS, "too many pickups");
+  check(violations, state.traffic.length <= MAX_TRAFFIC, "too many drivers");
+  check(violations, state.events.length <= MAX_EVENTS, "too many events");
+  for (const ped of state.peds) {
+    check(
+      violations,
+      Number.isFinite(ped.x) &&
+        Number.isFinite(ped.y) &&
+        Number.isFinite(ped.facing),
+      `ped ${ped.id} is not finite`,
+    );
+    check(
+      violations,
+      (ped.mode === "dead") === (ped.health === 0),
+      `ped ${ped.id} death and health disagree`,
+    );
+    check(violations, !ids.has(ped.id), `duplicate entity id ${ped.id}`);
+    ids.add(ped.id);
+  }
+  for (const cop of state.cops) {
+    check(
+      violations,
+      Number.isFinite(cop.x) &&
+        Number.isFinite(cop.y) &&
+        Number.isFinite(cop.facing),
+      `cop ${cop.id} is not finite`,
+    );
+    check(
+      violations,
+      (cop.diedAtTick !== null) === (cop.health === 0),
+      `cop ${cop.id} death and health disagree`,
+    );
+    check(violations, !ids.has(cop.id), `duplicate entity id ${cop.id}`);
+    ids.add(cop.id);
+  }
+  for (const pickup of state.pickups) {
+    check(
+      violations,
+      pickup.takenAtTick === null || pickup.takenAtTick <= state.tick,
+      `pickup ${pickup.id} taken in the future`,
+    );
+    check(violations, !ids.has(pickup.id), `duplicate entity id ${pickup.id}`);
+    ids.add(pickup.id);
+  }
+  const driven = new Set<number>();
+  for (const driver of state.traffic) {
+    const vehicle = state.vehicles.find(
+      (candidate) => candidate.id === driver.vehicleId,
+    );
+    check(
+      violations,
+      vehicle !== undefined && !vehicle.wrecked,
+      `driver of vehicle ${driver.vehicleId} has no intact car`,
+    );
+    check(
+      violations,
+      !driven.has(driver.vehicleId) &&
+        driver.vehicleId !== state.player.vehicleId,
+      `vehicle ${driver.vehicleId} has more than one driver`,
+    );
+    driven.add(driver.vehicleId);
   }
 }
 
@@ -113,7 +202,9 @@ export function checkInvariants(state: ArenaState): string[] {
     "tick must be a non-negative integer",
   );
   checkPlayer(state, violations);
-  checkVehicles(state, violations);
+  const ids = new Set<number>();
+  checkVehicles(state, violations, ids);
   checkProjectiles(state, violations);
+  checkPopulation(state, violations, ids);
   return violations;
 }

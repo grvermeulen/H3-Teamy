@@ -403,6 +403,7 @@ function advanceSimulation(
   const world: ArenaWorld = {
     collision: runtime.session.collision,
     index: runtime.session.index(),
+    graph: runtime.session.graph(),
   };
   let steps = 0;
   while (runtime.accumulator >= SIM_STEP_S && steps < MAX_SIM_STEPS_PER_FRAME) {

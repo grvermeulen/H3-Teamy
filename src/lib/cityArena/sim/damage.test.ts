@@ -24,6 +24,9 @@ const walker: ArenaPlayerState = {
   nextShotTick: 0,
   diedAtTick: null,
   invulnerableUntilTick: 0,
+  heat: 0,
+  heatTick: 0,
+  outsideSinceTick: null,
 };
 
 describe("damage", () => {

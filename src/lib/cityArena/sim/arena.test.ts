@@ -55,9 +55,10 @@ const graph = decodeRoadGraph({
   classes: ["residential"],
   names: [],
 });
-const world: ArenaWorld = { collision: createCollisionGrid(), index };
+const world: ArenaWorld = { collision: createCollisionGrid(), index, graph };
 const step = 1 / 30;
 const SPAWN_XS = [0, 100, 200, 300];
+const FULL_AMMO = { uzi: 60, shotgun: 8 };
 
 function boot(seed = 1): ArenaState {
   return createArenaState({ index, graph, seed, zone }, createRng(seed));
@@ -126,9 +127,19 @@ describe("createArenaState", () => {
       id: 0,
       health: 100,
       weapon: "pistol",
-      ammo: { uzi: 60, shotgun: 8 },
+      ammo: { uzi: 0, shotgun: 0 },
       vehicleId: null,
       diedAtTick: null,
+    });
+    expect(state.player).toMatchObject({ heat: 0, outsideSinceTick: null });
+    expect(state).toMatchObject({
+      peds: [],
+      cops: [],
+      pickups: [],
+      traffic: [],
+      events: [],
+      activeZoneKey: "campus",
+      zoneEnforced: false,
     });
     expect(SPAWN_XS).toContain(state.player.x);
     expect(state.vehicles.length).toBeGreaterThanOrEqual(1);
@@ -150,13 +161,20 @@ describe("stepArena on foot", () => {
     expect(walked.held).toEqual({ enter: false, weaponNext: false });
   });
 
-  it("cycles the weapon on a rising edge only", () => {
+  it("cycles the weapon on a rising edge only, skipping empty magazines", () => {
     const pressed = run(boot(), createInput({ weaponNext: true }), 5);
-    expect(pressed.player.weapon).toBe("uzi");
+    expect(pressed.player.weapon).toBe("fist");
     const released = run(pressed, createInput({}), 1);
+    const armed = run(
+      { ...released, player: { ...released.player, ammo: FULL_AMMO } },
+      createInput({ weaponNext: true }),
+      1,
+    );
+    expect(armed.player.weapon).toBe("pistol");
+    const releasedAgain = run(armed, createInput({}), 1);
     expect(
-      run(released, createInput({ weaponNext: true }), 1).player.weapon,
-    ).toBe("shotgun");
+      run(releasedAgain, createInput({ weaponNext: true }), 1).player.weapon,
+    ).toBe("uzi");
   });
 });
 
@@ -278,11 +296,19 @@ describe("stepArena firing and death", () => {
   });
 
   it("spends Uzi rounds at 10 per second and shotgun shells five pellets at a time", () => {
-    const uzi = run(boot(), createInput({ weaponNext: true, fire: true }), 30);
+    const state = boot();
+    const withUzi: ArenaState = {
+      ...state,
+      player: { ...state.player, weapon: "uzi", ammo: FULL_AMMO },
+    };
+    const uzi = run(withUzi, createInput({ fire: true }), 30);
     expect(uzi.player.weapon).toBe("uzi");
     expect(uzi.player.ammo.uzi).toBe(50);
-    const state = boot();
-    const armed: ArenaPlayerState = { ...state.player, weapon: "shotgun" };
+    const armed: ArenaPlayerState = {
+      ...state.player,
+      weapon: "shotgun",
+      ammo: FULL_AMMO,
+    };
     const blast = run(
       { ...state, player: armed },
       createInput({ fire: true }),
@@ -294,7 +320,11 @@ describe("stepArena firing and death", () => {
 
   it("caps a shotgun pull at the live-bullet limit instead of overshooting it", () => {
     const state = boot();
-    const armed: ArenaPlayerState = { ...state.player, weapon: "shotgun" };
+    const armed: ArenaPlayerState = {
+      ...state.player,
+      weapon: "shotgun",
+      ammo: FULL_AMMO,
+    };
     const nearlyFull: ArenaState = {
       ...state,
       player: armed,
@@ -387,7 +417,7 @@ describe("stepArena firing and death", () => {
       diedAtTick: null,
       weapon: "pistol",
       invulnerableUntilTick: 152,
-      ammo: { uzi: 60, shotgun: 8 },
+      ammo: { uzi: 0, shotgun: 0 },
     });
     expect(SPAWN_XS).toContain(alive.player.x);
   });
@@ -467,5 +497,44 @@ describe("stepArena firing and death", () => {
       200,
     );
     expect(checkInvariants(busy)).toEqual([]);
+  });
+
+  it("records one-tick shot and explosion events and resets heat on death", () => {
+    const state = boot();
+    const fired = run(state, createInput({ fire: true }), 1);
+    expect(fired.events).toEqual([
+      {
+        kind: "shot",
+        weapon: "pistol",
+        ownerId: 0,
+        x: state.player.x,
+        y: state.player.y,
+      },
+    ]);
+    expect(run(fired, createInput({ fire: true }), 1).events).toEqual([]);
+    const fragile = {
+      ...createVehicle(
+        501,
+        "compact",
+        [state.player.x + 6, state.player.y],
+        0,
+        0,
+      ),
+      health: 20,
+    };
+    const boom = run(
+      { ...state, vehicles: [fragile] },
+      createInput({ fire: true, aim: 0 }),
+      1,
+    );
+    expect(boom.events.map((event) => event.kind)).toEqual([
+      "shot",
+      "explosion",
+    ]);
+    const heated: ArenaState = {
+      ...state,
+      player: { ...state.player, heat: 80, health: 0, diedAtTick: state.tick },
+    };
+    expect(run(heated, EMPTY_INPUT, RESPAWN_DELAY_TICKS).player.heat).toBe(0);
   });
 });

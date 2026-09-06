@@ -1,6 +1,8 @@
+import type { Rect } from "../mapBuild/geometry";
 import type { CollisionGrid } from "../world/collisionGrid";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import type { Point } from "../world/projection";
+import type { RoadGraph } from "../world/roadGraph";
 import { findZone, findZoneByKey } from "../world/zone";
 import {
   MAX_BULLETS,
@@ -26,6 +28,7 @@ import {
   isDead,
 } from "./damage";
 import { addEffect, pruneEffects } from "./effects";
+import { pushEvent } from "./events";
 import { PLAYER_RADIUS_M, stepPlayer } from "./player";
 import {
   chooseRespawnNode,
@@ -77,6 +80,8 @@ const EXIT_OFFSET_M = CAR_BODY_RADIUS_M + PLAYER_RADIUS_M + EXIT_CLEARANCE_M;
 export type ArenaWorld = {
   collision: Pick<CollisionGrid, "resolveCircle" | "query">;
   index: MapIndex;
+  graph: RoadGraph;
+  viewRect?: Rect;
 };
 
 /** What a session is created from. */
@@ -106,6 +111,9 @@ export function createArenaPlayer(
     nextShotTick: tick,
     diedAtTick: null,
     invulnerableUntilTick: tick,
+    heat: 0,
+    heatTick: tick,
+    outsideSinceTick: null,
   };
 }
 
@@ -134,6 +142,13 @@ export function createArenaState(
     effects: [],
     held: { enter: false, weaponNext: false },
     zoneKey: findZone(setup.index, spawn)?.key ?? null,
+    peds: [],
+    cops: [],
+    pickups: [],
+    traffic: [],
+    events: [],
+    activeZoneKey: (setup.zone ?? nearestZone(setup.index, spawn))?.key ?? null,
+    zoneEnforced: false,
   };
 }
 
@@ -408,6 +423,13 @@ function applyFire(
     nextId,
     bullets: [...state.bullets, ...shots],
     effects,
+    events: pushEvent(state.events, {
+      kind: "shot",
+      weapon: state.player.weapon,
+      ownerId: state.player.id,
+      x: state.player.x,
+      y: state.player.y,
+    }),
     player: afterShot(state.player, tick),
   };
 }
@@ -497,6 +519,11 @@ function explodeVehicle(
     vehicles,
     nextId: state.nextId + 1,
     player: blastPlayer(state.player, vehicle, tick),
+    events: pushEvent(state.events, {
+      kind: "explosion",
+      x: vehicle.x,
+      y: vehicle.y,
+    }),
     effects: addEffect(state.effects, {
       id: state.nextId,
       kind: "explosion",
@@ -570,7 +597,7 @@ export function stepArena(
 ): ArenaState {
   const tick = state.tick + 1;
   const edges = detectEdges(state.held, input);
-  let next: ArenaState = { ...state, tick, held: edges.held };
+  let next: ArenaState = { ...state, tick, held: edges.held, events: [] };
   next = applyRespawn(next, world, tick, random);
   next = applyWeaponSwitch(next, edges.weaponPressed);
   next = applyEnterExit(next, edges.enterPressed, world);

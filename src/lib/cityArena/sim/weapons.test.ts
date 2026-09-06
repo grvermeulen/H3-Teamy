@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_AMMO,
   SPAWN_AMMO,
   WEAPONS,
+  addAmmo,
   ammoFor,
   consumeAmmo,
   cooldownTicks,
@@ -33,15 +35,36 @@ describe("weapons", () => {
 
   it("tracks ammo only for the magazine weapons", () => {
     expect(ammoFor(SPAWN_AMMO, "pistol")).toBeNull();
-    expect(ammoFor(SPAWN_AMMO, "uzi")).toBe(60);
-    expect(consumeAmmo(SPAWN_AMMO, "uzi")).toEqual({ uzi: 59, shotgun: 8 });
+    expect(ammoFor({ uzi: 60, shotgun: 8 }, "uzi")).toBe(60);
+    expect(consumeAmmo({ uzi: 60, shotgun: 8 }, "uzi")).toEqual({
+      uzi: 59,
+      shotgun: 8,
+    });
     expect(consumeAmmo(SPAWN_AMMO, "pistol")).toBe(SPAWN_AMMO);
     expect(hasAmmo({ uzi: 0, shotgun: 0 }, "uzi")).toBe(false);
     expect(hasAmmo({ uzi: 0, shotgun: 0 }, "fist")).toBe(true);
   });
 
+  it("adds pickup rounds up to the magazine caps", () => {
+    expect(SPAWN_AMMO).toEqual({ uzi: 0, shotgun: 0 });
+    expect(MAX_AMMO).toEqual({ uzi: 120, shotgun: 16 });
+    expect(addAmmo(SPAWN_AMMO, "uzi", 60)).toEqual({ uzi: 60, shotgun: 0 });
+    expect(addAmmo({ uzi: 100, shotgun: 0 }, "uzi", 60)).toEqual({
+      uzi: 120,
+      shotgun: 0,
+    });
+    expect(addAmmo({ uzi: 0, shotgun: 12 }, "shotgun", 8)).toEqual({
+      uzi: 0,
+      shotgun: 16,
+    });
+    expect(addAmmo({ uzi: 60, shotgun: 8 }, "pistol", 5)).toEqual({
+      uzi: 60,
+      shotgun: 8,
+    });
+  });
+
   it("cycles to the next weapon that has ammo and wraps around", () => {
-    expect(nextWeapon("pistol", SPAWN_AMMO)).toBe("uzi");
+    expect(nextWeapon("pistol", SPAWN_AMMO)).toBe("fist");
     expect(nextWeapon("pistol", { uzi: 0, shotgun: 8 })).toBe("shotgun");
     expect(nextWeapon("shotgun", SPAWN_AMMO)).toBe("fist");
     expect(nextWeapon("pistol", { uzi: 0, shotgun: 0 })).toBe("fist");
