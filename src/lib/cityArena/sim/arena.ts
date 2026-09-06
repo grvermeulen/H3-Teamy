@@ -44,6 +44,8 @@ import {
   type SpawnGraph,
 } from "./spawn";
 import { stepDrivers } from "./traffic";
+import { applyWanted } from "./wanted";
+import { applyZoneRule } from "./zoneRule";
 import type {
   ArenaPlayerState,
   ArenaState,
@@ -717,6 +719,8 @@ export function stepArena(
   next = stepPeds(next, world, dt, tick, random);
   next = advanceBullets(next, dt, world, tick);
   next = applyExplosions(next, world, tick);
+  next = applyZoneRule(next, world.index, tick);
+  next = applyWanted(next, tick);
   next = ejectIfDead(next, world);
   const zone = findZone(world.index, [next.player.x, next.player.y]);
   return {

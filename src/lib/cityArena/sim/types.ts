@@ -213,7 +213,8 @@ export type ArenaEvent =
       x: number;
       y: number;
     }
-  | { kind: "wanted"; playerId: number; level: number };
+  | { kind: "wanted"; playerId: number; level: number }
+  | { kind: "zone"; playerId: number; phase: "warning" | "damage" };
 
 /** Full arena simulation state: plain, JSON-serialisable data. */
 export type ArenaState = {
