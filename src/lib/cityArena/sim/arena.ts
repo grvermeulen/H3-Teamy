@@ -8,6 +8,7 @@ import {
   MAX_BULLETS,
   createShots,
   stepBullets,
+  type PlayerTarget,
   type BulletHit,
 } from "./bullets";
 import {
@@ -29,7 +30,9 @@ import {
 } from "./damage";
 import { addEffect, pruneEffects } from "./effects";
 import { pushEvent } from "./events";
+import { applyEntityHit } from "./hits";
 import { applyPopulation, populateZone } from "./populate";
+import { alivePeds, blastPeds, stepPeds } from "./peds";
 import { stepPickups } from "./pickups";
 import { PLAYER_RADIUS_M, stepPlayer } from "./player";
 import {
@@ -45,6 +48,7 @@ import type {
   BulletState,
   EffectState,
   HeldButtons,
+  HitTargetKind,
   VehicleState,
   WorldInput,
 } from "./types";
@@ -440,25 +444,55 @@ function applyFire(
   };
 }
 
-/** Applies one bullet hit: car damage, or damage to a player on foot (never the shooter). */
+/** Adds a hit event for an entity impact. */
+function withHitEvent(
+  state: ArenaState,
+  target: HitTargetKind,
+  point: Point,
+): ArenaState {
+  return {
+    ...state,
+    events: pushEvent(state.events, {
+      kind: "hit",
+      target,
+      x: point[0],
+      y: point[1],
+    }),
+  };
+}
+
+/** Applies one bullet hit to a pedestrian, car or player on foot. */
 function applyHit(state: ArenaState, hit: BulletHit, tick: number): ArenaState {
+  const entity = applyEntityHit(state, hit, tick);
+  if (entity) return entity;
   if (hit.target.kind === "vehicle") {
     const vehicleId = hit.target.vehicleId;
-    return {
-      ...state,
-      vehicles: state.vehicles.map((vehicle) =>
-        vehicle.id === vehicleId
-          ? damageVehicle(vehicle, hit.bullet.damage)
-          : vehicle,
-      ),
-    };
+    const vehicles = state.vehicles.map((vehicle) =>
+      vehicle.id === vehicleId
+        ? damageVehicle(vehicle, hit.bullet.damage)
+        : vehicle,
+    );
+    return withHitEvent({ ...state, vehicles }, "vehicle", hit.point);
   }
   if (hit.target.kind === "player" && hit.target.playerId === state.player.id)
-    return {
-      ...state,
-      player: damagePlayer(state.player, hit.bullet.damage, tick),
-    };
+    return withHitEvent(
+      { ...state, player: damagePlayer(state.player, hit.bullet.damage, tick) },
+      "player",
+      hit.point,
+    );
   return state;
+}
+
+/** Every circle a bullet can hit this tick: the player on foot and living pedestrians. */
+function bulletTargets(state: ArenaState): PlayerTarget[] {
+  const { player } = state;
+  const targets: PlayerTarget[] =
+    !isDead(player) && player.vehicleId === null
+      ? [{ id: player.id, x: player.x, y: player.y }]
+      : [];
+  for (const ped of alivePeds(state.peds))
+    targets.push({ id: ped.id, x: ped.x, y: ped.y });
+  return targets;
 }
 
 /** Sweeps the bullets, applies their hits and spawns an impact effect per hit. */
@@ -468,12 +502,10 @@ function advanceBullets(
   world: ArenaWorld,
   tick: number,
 ): ArenaState {
-  const { player } = state;
-  const onFoot = !isDead(player) && player.vehicleId === null;
   const swept = stepBullets(state.bullets, dt, {
     collision: world.collision,
     vehicles: state.vehicles,
-    players: onFoot ? [{ id: player.id, x: player.x, y: player.y }] : [],
+    players: bulletTargets(state),
   });
   let next: ArenaState = { ...state, bullets: swept.bullets };
   for (const hit of swept.hits) {
@@ -507,7 +539,7 @@ function blastPlayer(
   return player;
 }
 
-/** Wrecks one car that reached 0 health: explosion effect, blast damage to the player and to cars nearby. */
+/** Wrecks one car that reached 0 health and applies its explosion blast. */
 function explodeVehicle(
   state: ArenaState,
   vehicle: VehicleState,
@@ -520,16 +552,27 @@ function explodeVehicle(
       ? damageVehicle(other, EXPLOSION_DAMAGE)
       : other;
   });
+  const blast = blastPeds(state.peds, vehicle, tick);
+  let events = pushEvent(state.events, {
+    kind: "explosion",
+    x: vehicle.x,
+    y: vehicle.y,
+  });
+  for (const ped of blast.killed)
+    events = pushEvent(events, {
+      kind: "kill",
+      victim: "ped",
+      killerId: null,
+      x: ped.x,
+      y: ped.y,
+    });
   return {
     ...state,
     vehicles,
+    peds: blast.peds,
     nextId: state.nextId + 1,
     player: blastPlayer(state.player, vehicle, tick),
-    events: pushEvent(state.events, {
-      kind: "explosion",
-      x: vehicle.x,
-      y: vehicle.y,
-    }),
+    events,
     effects: addEffect(state.effects, {
       id: state.nextId,
       kind: "explosion",
@@ -608,13 +651,14 @@ export function stepArena(
   const tick = state.tick + 1;
   const edges = detectEdges(state.held, input);
   let next: ArenaState = { ...state, tick, held: edges.held, events: [] };
-  next = applyPopulation(next, world, random);
+  next = applyPopulation(next, world, tick, random);
   next = applyRespawn(next, world, tick, random);
   next = stepPickups(next, tick);
   next = applyWeaponSwitch(next, edges.weaponPressed);
   next = applyEnterExit(next, edges.enterPressed, world);
   next = moveEntities(next, input, dt, world, tick);
   next = applyFire(next, input, tick, random);
+  next = stepPeds(next, world, dt, tick, random);
   next = advanceBullets(next, dt, world, tick);
   next = applyExplosions(next, world, tick);
   next = ejectIfDead(next, world);

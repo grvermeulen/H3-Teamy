@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
 import { createArenaState } from "./arena";
-import { applyPopulation, populateZone } from "./populate";
+import { PEDS_PER_ZONE } from "./peds";
+import { applyPopulation, populateZone, topUpPeds } from "./populate";
 import { createRng } from "./rng";
 
 const west: MapZone = {
@@ -57,14 +58,39 @@ describe("population", () => {
     expect(state.pickups).toHaveLength(2);
     for (const pickup of state.pickups) expect(pickup.x).toBeLessThan(1000);
     const random = createRng(9);
-    expect(applyPopulation(state, { index, graph }, random)).toBe(state);
+    expect(applyPopulation(state, { index, graph }, 1, random)).toBe(state);
     const moved = { ...state, player: { ...state.player, x: 3050, y: 0 } };
-    const repopulated = applyPopulation(moved, { index, graph }, random);
+    const repopulated = applyPopulation(moved, { index, graph }, 1, random);
     expect(repopulated.activeZoneKey).toBe("campus");
     expect(repopulated.pickups).toHaveLength(3);
     for (const pickup of repopulated.pickups)
       expect(pickup.x).toBeGreaterThanOrEqual(3000);
-    expect(repopulated.nextId).toBe(state.nextId + 3);
+    expect(repopulated.nextId).toBe(state.nextId + 3 + repopulated.peds.length);
+  });
+
+  it("spawns pedestrians and tops them up in batches", () => {
+    const state = createArenaState(
+      { index, graph, seed: 5, zone: west },
+      createRng(5),
+    );
+    expect(state.peds).toHaveLength(PEDS_PER_ZONE);
+    for (const ped of state.peds) {
+      expect(Math.abs(ped.y)).toBeCloseTo(4);
+      expect(
+        Math.hypot(ped.x - state.player.x, ped.y - state.player.y),
+      ).toBeGreaterThanOrEqual(30);
+    }
+    const thinned = { ...state, peds: state.peds.slice(0, 10) };
+    const random = createRng(8);
+    expect(applyPopulation(thinned, { index, graph }, 29, random)).toBe(
+      thinned,
+    );
+    const topped = applyPopulation(thinned, { index, graph }, 30, random);
+    expect(topped.peds).toHaveLength(15);
+    expect(topUpPeds(topped, west, { index, graph }, random).peds).toHaveLength(
+      20,
+    );
+    expect(topUpPeds(state, west, { index, graph }, random)).toBe(state);
   });
 
   it("keeps the player's car when changing zones", () => {

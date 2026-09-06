@@ -133,7 +133,6 @@ describe("createArenaState", () => {
     });
     expect(state.player).toMatchObject({ heat: 0, outsideSinceTick: null });
     expect(state).toMatchObject({
-      peds: [],
       cops: [],
       traffic: [],
       events: [],
@@ -152,7 +151,16 @@ describe("createArenaState", () => {
     ]);
     for (const pickup of state.pickups)
       expect(Math.abs(pickup.x - state.player.x)).toBeGreaterThanOrEqual(8);
-    expect(state.nextId).toBe(1 + state.vehicles.length + state.pickups.length);
+    expect(state.peds).toHaveLength(25);
+    for (const ped of state.peds) {
+      expect(Math.abs(ped.y)).toBeCloseTo(4);
+      expect(
+        Math.hypot(ped.x - state.player.x, ped.y - state.player.y),
+      ).toBeGreaterThanOrEqual(30);
+    }
+    expect(state.nextId).toBe(
+      1 + state.vehicles.length + state.pickups.length + state.peds.length,
+    );
     expect(boot(4)).toEqual(boot(4));
   });
 });
@@ -565,6 +573,7 @@ describe("stepArena firing and death", () => {
     );
     expect(boom.events.map((event) => event.kind)).toEqual([
       "shot",
+      "hit",
       "explosion",
     ]);
     const heated: ArenaState = {

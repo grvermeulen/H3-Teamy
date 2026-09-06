@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveVehicleAgainstPlayer, resolveVehiclePairs } from "./collisions";
+import {
+  resolveVehicleAgainstCircle,
+  resolveVehicleAgainstPlayer,
+  resolveVehiclePairs,
+} from "./collisions";
 import type { ArenaPlayerState } from "./types";
 import { createVehicle } from "./vehicle";
 
@@ -101,5 +105,21 @@ describe("resolveVehicleAgainstPlayer", () => {
     const hurt = resolveVehicleAgainstPlayer(moving, overlapping);
     expect(hurt.player.x).toBeCloseTo(2.5);
     expect(hurt.damage).toBe(60);
+  });
+});
+
+describe("resolveVehicleAgainstCircle", () => {
+  it("reports push-out and run-over damage for a person-sized circle", () => {
+    const fast = { ...createVehicle(1, "sport", [0, 0], 0, 0), velocityX: 12 };
+    expect(resolveVehicleAgainstCircle(fast, [1, 0])).toEqual({
+      point: [2.5, 0],
+      damage: 60,
+      touched: true,
+    });
+    expect(resolveVehicleAgainstCircle(fast, [5, 0])).toEqual({
+      point: [5, 0],
+      damage: 0,
+      touched: false,
+    });
   });
 });
