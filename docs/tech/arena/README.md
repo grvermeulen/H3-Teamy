@@ -220,3 +220,50 @@ src/lib/cityArena`. The arena tests use fake map/audio/canvas inputs and do not 
   `smart_crop: false`). Prompts state the 8 × 8 m footprint, demand flat orthographic lighting with
   no shadows or gradient, forbid objects and text, and require the edges to continue into each
   other — the seam is what makes the pattern usable.
+
+## Runtime (PR 7 — the simulation carries several players)
+
+Plan 3a widened the simulation from one player to N so the netcode in Plan 3b can run it as a
+host loop. No network code exists yet; offline play still has exactly one player and behaves
+exactly as it did.
+
+- **State.** `ArenaState.players` is an array in join order, replacing the single `player`.
+  Everything that reads it goes through the seam in `sim/players.ts` — `playersOf`, `playerById`,
+  `replacePlayer`, `driverPlayer`, `orderedPlayers`, and `localPlayer` for the one this client
+  drives. Plan 4 left that module behind for exactly this, so the nine sim modules already using
+  it needed no shape change.
+- **Buttons.** `HeldButtons` moved from the state onto each player: with one set for the world,
+  one player holding Enter swallowed another player's press.
+- **Inputs.** `stepArena(state, inputs, dt, world, random)` takes `ArenaInputs`, a
+  `ReadonlyMap<playerId, WorldInput>`. A player with no entry is stepped with `EMPTY_INPUT`,
+  because a hosted match drops packets and a silent client must not freeze the tick. The step
+  runs in three passes: per-player buttons, respawn, weapon and boarding; then one vehicle step
+  for the whole world; then per-player firing. Movement sits between them because cars step once
+  for everyone.
+- **Cars.** `stepVehicles` takes one map of controls keyed by vehicle id. A driving player's
+  commands override that car's AI driver, which removed the old special case for "the player's
+  car" and lets two players in two cars steer independently.
+- **Ordering.** Per-player stages iterate `orderedPlayers` (ascending id), so a tick never
+  depends on the order people joined in. `wantedTarget` breaks equal heat on the lower id for the
+  same reason: the host and a client replaying the same inputs must chase the same player.
+- **Population.** `populationAnchorZone` pins NPCs to the enforced match zone while the zone rule
+  is on (spec §6.4), and follows the lowest-id living player in free roam. Clearing a zone keeps
+  every car with a player at the wheel, not just this client's, and respawn uses the zone the
+  dying player was actually in.
+- **Join and leave.** `addArenaPlayer` spawns a joiner on a spawn node of the anchor zone clear of
+  cars and pickups, taking the next free entity id so a rejoining client never collides with a
+  live entity; it refuses the ninth (`MAX_ARENA_PLAYERS = 8`, spec §6.7). `removeArenaPlayer`
+  drops the player and leaves their car standing.
+- **Rendering.** `Scene` carries `players` and `localPlayerId`. Everyone is drawn with the same
+  character art and walk cycle; remote players get a sky ring instead of your crimson, and your
+  own is painted last so nobody standing on you can hide you. The radar stays centred on you and
+  plots nobody else — that is a Plan 3b feature, when there are remote players to plot.
+- **Acceptance** (replacing the four-player session the owner descoped on 2026-09-07):
+  `sim/multiplayer.test.ts` runs 600 ticks of two scripted players with `checkInvariants` on every
+  tick and replays the whole match to prove determinism. The invariant checker itself now covers
+  every player and adds two rules that only bite with more than one — no shared ids, and no two
+  players driving the same car.
+- **Known debt.** `sim/arena.ts` is ~950 lines against the spec's 400-line target. It was already
+  780 before this work; lifting the per-player half into `playerStep.ts` means moving the shared
+  helpers too or accepting a cycle, so it is its own task rather than a rider on a behaviour
+  change.

@@ -743,12 +743,21 @@ Body: what changed, why (Plan 3b needs it), the acceptance criteria above and th
 
 ---
 
+## Status
+
+All nine tasks are complete on `feat/city-arena-plan3` (PR #658). What each task actually
+produced, and where it differed from the text below, is in the deviations section.
+
 ## Deviations recorded while executing
 
 - **`EMPTY_INPUT`, not `NEUTRAL_INPUT`.** `sim/types.ts` already exported exactly this constant; the plan invented a second name for it. Tasks 3 and 8 use the existing one.
 - **Tasks 2 and 7's mechanical half landed together.** The state shape and every reader have to move in one commit: the pre-commit hook runs lint, `tsc` and the full suite, so a red tree cannot be committed in between. Task 7 keeps its semantic work — drawing every player, and a style for remote ones.
 - **`playerStep.ts` is deferred to its own task (3b).** Task 3 fanned the stages out inside `arena.ts` instead. The file is 889 lines against the spec's 400-line target, but it was already 780 before this plan, and lifting the per-player half out means moving the shared helpers (`occupiedVehicle`, `exitPosition`, the boarding constants) too or accepting a cycle between the two modules. That is a self-contained move worth its own review, not a rider on a behaviour change.
 - **`stepArena` runs the per-player stages in three passes**, not one: buttons/respawn/weapon/boarding for every player, then one vehicle step for the world, then firing. Movement has to sit between them because cars step once for everyone.
+- **Task 4 anchors on the enforced match zone, not on `activeZoneKey`.** The plan's rule would have frozen free-roam repopulation: `activeZoneKey` is set the moment a zone is populated, so anchoring on it means the population never follows a player into a new zone again. Two neighbouring single-player assumptions came out with it — clearing a zone deleted any car it did not recognise as the local player's, and respawn read the state's one `zoneKey` rather than the zone the dying player was in.
+- **Join and leave live in `arena.ts`, not `players.ts`.** They need the spawn helpers and `ArenaWorld`; putting them in the seam would have pulled world dependencies into a module that is deliberately nothing but state access.
+- **Task 6 found the simulation already fit for several players.** The audit turned up no NPC rule that assumed one: they work off events and the most-wanted player rather than off "the" player, so pedestrians already flee the nearest gunfire and cops already chase whoever has the most heat. The only real gap was `wantedTarget` resolving equal heat by array order, which is join order. `nearestPlayerTo` — added speculatively in Task 2 for targeting that turned out not to need it — was removed rather than left as an exported helper with no caller.
+- **The radar stays local-only.** It is centred on this client's player; plotting other players is a Plan 3b feature, when there are remote players to plot.
 
 ## Self-review
 
