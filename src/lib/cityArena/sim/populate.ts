@@ -10,8 +10,9 @@ import {
   spawnPeds,
 } from "./peds";
 import { placePickups } from "./pickups";
-import { localPlayer, playersOf } from "./players";
+import { orderedPlayers, playersOf } from "./players";
 import { nearestZone, type SpawnGraph } from "./spawn";
+import { findZoneByKey } from "../world/zone";
 import {
   TRAFFIC_MAX_PER_ZONE,
   TRAFFIC_MIN_PER_ZONE,
@@ -40,10 +41,16 @@ function vehiclePoints(state: ArenaState): Point[] {
 
 function clearPopulation(state: ArenaState): ArenaState {
   const driven = new Set(state.traffic.map((driver) => driver.vehicleId));
+  // Any car with a player at the wheel survives the clear-out, not just the local player's:
+  // clearing a zone must never delete the car somebody else is driving out of it.
+  const occupied = new Set(
+    playersOf(state)
+      .map((player) => player.vehicleId)
+      .filter((id): id is number => id !== null),
+  );
   const vehicles = state.vehicles.filter(
     (vehicle) =>
-      vehicle.id === localPlayer(state).vehicleId ||
-      (!driven.has(vehicle.id) && !vehicle.wrecked),
+      occupied.has(vehicle.id) || (!driven.has(vehicle.id) && !vehicle.wrecked),
   );
   return { ...state, vehicles, peds: [], cops: [], pickups: [], traffic: [] };
 }
@@ -180,15 +187,34 @@ export function topUpTraffic(
   );
 }
 
-/** Re-populates when the zone nearest the player changes. */
+/**
+ * The zone the NPC population is kept around.
+ *
+ * While a match is running the zone rule pins it: spec §6.4 has the host simulate NPCs inside
+ * the zone disc, and anchoring on a player instead would let one person who wandered off drag
+ * the whole crowd across the map. In free roam there is no match zone, so it follows the
+ * lowest-id living player — which is exactly today's behaviour when there is only one.
+ */
+export function populationAnchorZone(
+  state: ArenaState,
+  index: MapIndex,
+): MapZone | null {
+  if (state.zoneEnforced && state.enforcedZoneKey)
+    return findZoneByKey(index, state.enforcedZoneKey);
+  const players = orderedPlayers(state);
+  const anchor =
+    players.find((player) => player.diedAtTick === null) ?? players[0];
+  return anchor ? nearestZone(index, [anchor.x, anchor.y]) : null;
+}
+
+/** Re-populates when the anchor zone changes, and tops up pedestrians and traffic on schedule. */
 export function applyPopulation(
   state: ArenaState,
   world: PopulationWorld,
   tick: number,
   random: () => number,
 ): ArenaState {
-  const [player] = playersOf(state);
-  const zone = nearestZone(world.index, [player.x, player.y]);
+  const zone = populationAnchorZone(state, world.index);
   if (!zone) return state;
   if (zone.key !== state.activeZoneKey)
     return populateZone(state, zone, world.index, world.graph, random);

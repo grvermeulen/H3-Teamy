@@ -4,8 +4,14 @@ import type { MapIndex, MapZone } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
 import { createArenaState } from "./arena";
 import { PEDS_PER_ZONE } from "./peds";
-import { applyPopulation, populateZone, topUpPeds } from "./populate";
+import {
+  applyPopulation,
+  populateZone,
+  populationAnchorZone,
+  topUpPeds,
+} from "./populate";
 import { createRng } from "./rng";
+import type { ArenaState } from "./types";
 
 const west: MapZone = {
   key: "wageningen",
@@ -70,6 +76,44 @@ describe("population", () => {
     for (const pickup of repopulated.pickups)
       expect(pickup.x).toBeGreaterThanOrEqual(3000);
     expect(repopulated.nextId).toBe(state.nextId + 3 + repopulated.peds.length);
+  });
+
+  it("anchors on the enforced zone rather than on a player who wandered off", () => {
+    const state = createArenaState(
+      { index, graph, seed: 5, zone: west },
+      createRng(5),
+    );
+    const wandered: ArenaState = {
+      ...state,
+      zoneEnforced: true,
+      enforcedZoneKey: "wageningen",
+      players: [{ ...localPlayer(state), x: 12000, y: 0 }],
+    };
+    expect(populationAnchorZone(wandered, index)?.key).toBe("wageningen");
+  });
+
+  it("follows the lowest-id living player while no zone is enforced", () => {
+    const state = createArenaState(
+      { index, graph, seed: 5, zone: west },
+      createRng(5),
+    );
+    const first = localPlayer(state);
+    const both: ArenaState = {
+      ...state,
+      players: [
+        { ...first, x: 0, y: 0 },
+        { ...first, id: first.id + 1, x: 12000, y: 0 },
+      ],
+    };
+    expect(populationAnchorZone(both, index)?.key).toBe("wageningen");
+    const firstDead: ArenaState = {
+      ...both,
+      players: [
+        { ...both.players[0], health: 0, diedAtTick: 1 },
+        both.players[1],
+      ],
+    };
+    expect(populationAnchorZone(firstDead, index)?.key).toBe("campus");
   });
 
   it("spawns pedestrians and tops them up in batches", () => {

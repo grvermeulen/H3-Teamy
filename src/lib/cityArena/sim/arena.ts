@@ -781,8 +781,10 @@ function applyRespawn(
     tick < player.diedAtTick + RESPAWN_DELAY_TICKS
   )
     return state;
+  // Respawn in the zone this player died in, not in the state's single `zoneKey`: that field
+  // follows one player, and with several it would drop the others across the map.
   const zone =
-    (state.zoneKey ? findZoneByKey(world.index, state.zoneKey) : null) ??
+    findZone(world.index, [player.x, player.y]) ??
     nearestZone(world.index, [player.x, player.y]);
   const intactVehicles: Point[] = state.vehicles
     .filter((vehicle) => !vehicle.wrecked)
