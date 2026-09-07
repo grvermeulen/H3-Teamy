@@ -1,4 +1,4 @@
-import { localPlayer } from "./players";
+import { playersOf } from "./players";
 import { MAX_BULLETS } from "./bullets";
 import { COP_BODY_TICKS, COP_MAX_HEALTH } from "./cops";
 import { PLAYER_MAX_HEALTH } from "./damage";
@@ -11,7 +11,7 @@ import {
   MAX_TRAFFIC,
   MAX_VEHICLES,
 } from "./limits";
-import type { ArenaState } from "./types";
+import type { ArenaPlayerState, ArenaState } from "./types";
 import { VEHICLE_MAX_HEALTH } from "./vehicle";
 import { PICKUP_RESPAWN_TICKS } from "./pickups";
 
@@ -29,9 +29,12 @@ function finite(...values: number[]): boolean {
   return values.every((value) => Number.isFinite(value));
 }
 
-/** Player health, ammo, position and car reference. */
-function checkPlayer(state: ArenaState, violations: string[]): void {
-  const player = localPlayer(state);
+/** One player's health, ammo, position and car reference. */
+function checkPlayer(
+  state: ArenaState,
+  player: ArenaPlayerState,
+  violations: string[],
+): void {
   check(
     violations,
     finite(player.x, player.y, player.facing, player.speed),
@@ -210,7 +213,9 @@ function checkPopulation(
     check(
       violations,
       !driven.has(driver.vehicleId) &&
-        driver.vehicleId !== localPlayer(state).vehicleId,
+        !playersOf(state).some(
+          (player) => player.vehicleId === driver.vehicleId,
+        ),
       `vehicle ${driver.vehicleId} has more than one driver`,
     );
     driven.add(driver.vehicleId);
@@ -243,7 +248,23 @@ export function checkInvariants(state: ArenaState): string[] {
     Number.isInteger(state.tick) && state.tick >= 0,
     "tick must be a non-negative integer",
   );
-  checkPlayer(state, violations);
+  for (const player of playersOf(state)) checkPlayer(state, player, violations);
+  check(
+    violations,
+    new Set(playersOf(state).map((player) => player.id)).size ===
+      playersOf(state).length,
+    "two players share an id",
+  );
+  check(
+    violations,
+    playersOf(state).every(
+      (player) =>
+        player.vehicleId === null ||
+        playersOf(state).filter((other) => other.vehicleId === player.vehicleId)
+          .length === 1,
+    ),
+    "two players are driving the same car",
+  );
   const ids = new Set<number>();
   checkVehicles(state, violations, ids);
   checkProjectiles(state, violations);
