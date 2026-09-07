@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createInputState } from "../input/inputState";
 import {
   ANALOG_REVERSE_ERROR_RAD,
   ANALOG_STEER_FULL_ERROR_RAD,
@@ -113,5 +114,25 @@ describe("driveStep with analog input", () => {
       -0.2,
       6,
     );
+  });
+});
+
+describe("driveStep after a real touch-stick release", () => {
+  it("ramps a mid-turn steer command to centre over several ticks instead of snapping in one", () => {
+    const state = createInputState();
+    state.setStick([0.3, -0.4]); // the player was dragging the stick mid-turn
+    state.setStick(null); // ...then lifted the finger — the normal touch-release gesture
+    const released = state.snapshot();
+    expect(released).toMatchObject({ move: [0, 0], moveIsAnalog: true });
+
+    // previousSteer starts at 0.9, mirroring the review's mid-turn example. At this 30 Hz step
+    // STEER_COMMAND_RATE_PER_S (6) limits each tick to 0.2, so reaching 0 takes five ticks.
+    let steer = 0.9;
+    for (const expected of [0.7, 0.5, 0.3, 0.1, 0]) {
+      const result = driveStep(released, 0, steer, step);
+      expect(result.controls.throttle).toBe(0);
+      steer = result.steer;
+      expect(steer).toBeCloseTo(expected, 6);
+    }
   });
 });

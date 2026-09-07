@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { driveStep } from "../sim/driveInput";
 import { createInputState } from "./inputState";
 import { attachKeyboard } from "./keyboard";
+
+const step = 1 / 30;
 
 function press(code: string, target: EventTarget = window): void {
   target.dispatchEvent(new KeyboardEvent("keydown", { code, bubbles: true }));
@@ -95,5 +98,21 @@ describe("attachKeyboard", () => {
     detach();
     input.remove();
     button.remove();
+  });
+
+  it("keeps tank steering instant even right after the touch stick was released", () => {
+    const state = createInputState();
+    state.setStick([0, 1]); // the player had been steering with the touch stick
+    state.setStick(null); // ...then lifted the finger
+    expect(state.snapshot().moveIsAnalog).toBe(true);
+    const detach = attachKeyboard(window, state);
+    press("KeyD");
+    const snapshot = state.snapshot();
+    expect(snapshot.moveIsAnalog).toBe(false);
+    // previousSteer is still 0.9 from the touch turn a moment ago; tank steering must snap to
+    // the digital command in one tick regardless, never ramping the way the analog path does.
+    expect(driveStep(snapshot, 0, 0.9, step).steer).toBe(1);
+    release("KeyD");
+    detach();
   });
 });

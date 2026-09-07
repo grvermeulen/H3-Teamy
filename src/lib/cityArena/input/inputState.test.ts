@@ -59,7 +59,7 @@ describe("input state", () => {
     expect(state.snapshot().fire).toBe(false);
   });
 
-  it("marks movement analog only while a finger owns the stick", () => {
+  it("marks movement analog by which source last moved the player, not by finger contact", () => {
     const state = createInputState();
     expect(state.snapshot().moveIsAnalog).toBe(false);
     state.setKeyboard([1, 0]);
@@ -71,10 +71,16 @@ describe("input state", () => {
     });
     state.setStick([0, 0]);
     expect(state.snapshot().moveIsAnalog).toBe(true);
+    // Lifting the finger — the real touch-release gesture — must not bounce control back to
+    // the keyboard's digital mapping: moveIsAnalog stays true so driveStep keeps ramping the
+    // steer command toward centre instead of snapping it in the tick the finger leaves the glass.
     state.setStick(null);
     expect(state.snapshot()).toMatchObject({
       move: [1, 0],
-      moveIsAnalog: false,
+      moveIsAnalog: true,
     });
+    // Only a fresh keyboard movement hands control back to the digital mapping.
+    state.setKeyboard([0, -1]);
+    expect(state.snapshot().moveIsAnalog).toBe(false);
   });
 });
