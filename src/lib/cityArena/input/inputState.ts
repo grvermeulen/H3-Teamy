@@ -51,6 +51,11 @@ export function createInputState(): InputState {
   };
   const held = (name: ButtonName): boolean =>
     buttons.keyboard[name] || buttons.pointer[name] || buttons.buttons[name];
+  /** The vector of whichever source currently owns movement, so it always agrees with `moveIsAnalog`. */
+  const movement = (): [number, number] => {
+    if (!stickIsSource) return keyboard;
+    return stick ?? [0, 0];
+  };
   return {
     setKeyboard(vector) {
       keyboard = vector;
@@ -59,6 +64,7 @@ export function createInputState(): InputState {
     setStick(vector) {
       stick = vector;
       if (vector !== null) stickIsSource = true;
+      else if (keyboard[0] !== 0 || keyboard[1] !== 0) stickIsSource = false;
     },
     setButton(source, name, pressed) {
       buttons[source] = { ...buttons[source], [name]: pressed };
@@ -72,7 +78,7 @@ export function createInputState(): InputState {
     },
     snapshot: () => ({
       ...EMPTY_INPUT,
-      move: clampToUnit(stick ?? keyboard),
+      move: clampToUnit(movement()),
       moveIsAnalog: stickIsSource,
       aim,
       fire: held("fire"),
