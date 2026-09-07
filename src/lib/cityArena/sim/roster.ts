@@ -19,11 +19,7 @@ import { chooseRespawnNode, nearestZone } from "./spawn";
 import type { ArenaPlayerState, ArenaState } from "./types";
 import { SPAWN_AMMO } from "./weapons";
 import { exitVehicle } from "./boarding";
-import {
-  FIRST_ENTITY_ID,
-  LOCAL_PLAYER_ID,
-  type ArenaWorld,
-} from "./arenaWorld";
+import { LOCAL_PLAYER_ID, type ArenaWorld } from "./arenaWorld";
 
 /** A player standing at `position` with the spawn loadout, ready to fire from `tick`. */
 export function createArenaPlayer(
@@ -52,7 +48,6 @@ export function createArenaPlayer(
   };
 }
 
-/** After 90 ticks: full health and the spawn loadout on a node of the current (else nearest) zone, shielded for 60 ticks. */
 /**
  * A spawn node of `zone` clear of parked cars and pickups, or `fallback` when there is no zone
  * to spawn into. Shared by respawn and by a player joining, so both land the same way.
@@ -120,6 +115,17 @@ export function removeArenaPlayer(state: ArenaState, id: number): ArenaState {
   return { ...state, players };
 }
 
+/**
+ * Brings a dead player back after the respawn delay: full health and the spawn loadout, on a node
+ * of the zone they died in (else the nearest one), shielded for the invulnerable window.
+ *
+ * @param state - The arena state holding the dead player.
+ * @param player - The player to respawn; returned unchanged until the delay has passed.
+ * @param world - The map and road graph the spawn node is chosen from.
+ * @param tick - The current tick, which decides whether the delay has elapsed.
+ * @param random - The injected source of randomness, so respawn stays deterministic.
+ * @returns The state with the player respawned, or the state unchanged.
+ */
 export function applyRespawn(
   state: ArenaState,
   player: ArenaPlayerState,

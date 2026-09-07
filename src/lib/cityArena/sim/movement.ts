@@ -35,7 +35,7 @@ import {
 import { occupiedVehicle } from "./boarding";
 import type { ArenaWorld } from "./arenaWorld";
 
-/** Steps every car (only the occupied one gets controls), then applies building and car–car impact damage. */
+/** True when a parked car has no driver and is not moving, so it can be skipped this tick. */
 function isAsleep(
   vehicle: VehicleState,
   controls: VehicleControls | undefined,
@@ -45,6 +45,7 @@ function isAsleep(
   );
 }
 
+/** Adds an impact event when the collision was hard enough to be worth hearing and feeling. */
 function withImpactEvent(
   events: ArenaEvent[],
   vehicleId: number,
@@ -60,8 +61,10 @@ function withImpactEvent(
   });
 }
 
+/** The cars after one step, plus the impact events that step produced. */
 type VehiclesStep = { vehicles: VehicleState[]; events: ArenaEvent[] };
 
+/** Steps every car (only the occupied one gets controls), then applies building and car–car impact damage. */
 function stepVehicles(
   state: ArenaState,
   dt: number,
