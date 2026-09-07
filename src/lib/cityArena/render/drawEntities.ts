@@ -55,6 +55,12 @@ export function playerLook(player: ArenaPlayerState, tick: number): PlayerLook {
  * turned a quarter-turn after the context has been rotated — the same convention the car uses.
  */
 const SPRITE_FACING_UP_TURN_RAD = Math.PI / 2;
+/**
+ * How far the character art overhangs the collision circle. A standing man's arms and shoulders
+ * reach past his 0.4 m hull anyway, and the hull alone lands on the 6 px floor at every zoom the
+ * arena offers — 12 px is too small to recognise anyone in.
+ */
+const PLAYER_SPRITE_SCALE = 1.6;
 
 /** Draws the character art over the player's collision circle, turned to face where they face. */
 function drawPlayerSprite(
@@ -65,10 +71,11 @@ function drawPlayerSprite(
   radius: number,
   facing: number,
 ): void {
+  const half = radius * PLAYER_SPRITE_SCALE;
   context.save();
   context.translate(x, y);
   context.rotate(facing + SPRITE_FACING_UP_TURN_RAD);
-  context.drawImage(sprite, -radius, -radius, radius * 2, radius * 2);
+  context.drawImage(sprite, -half, -half, half * 2, half * 2);
   context.restore();
 }
 

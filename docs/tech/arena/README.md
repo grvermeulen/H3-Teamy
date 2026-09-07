@@ -194,9 +194,11 @@ src/lib/cityArena`. The arena tests use fake map/audio/canvas inputs and do not 
 - The player is the man from the game's splash artwork — bald, red-lensed sunglasses, mint-green
   shorts — drawn from directly overhead. `packPersonSprite` trims and stretches him onto the box
   around his collision circle (2 × `PLAYER_RADIUS_M`, 64 px/m, so 51 px), and `drawPlayer` turns
-  the art a quarter-turn past the player's facing, the same convention the car uses. The
-  collision-coloured circle stays underneath so he is still findable at low zoom; a body waiting
-  to respawn keeps the flat dead marker, because the art is of someone standing up.
+  the art a quarter-turn past the player's facing, the same convention the car uses. On screen it
+  is drawn `PLAYER_SPRITE_SCALE` = 1.6 × the circle: the hull hits the 6 px floor at every zoom
+  the arena offers, and 12 px is too small to recognise a character in. The colour circle stays
+  underneath so he is findable when zoomed out; a body waiting to respawn keeps the flat dead
+  marker, because the art is of someone standing up.
 - Adding a surface is one line in `surfaceSources` plus the matching key in
   `SpriteManifestSchema.surfaces`; the loader and the painters read those names. A character is
   the same, in `personSources` and `SpriteManifestSchema.people`.

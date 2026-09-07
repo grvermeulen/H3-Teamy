@@ -39,9 +39,10 @@ describe("drawEntities", () => {
     expect(context.calls).toContain("translate(116,50)");
     // Facing 0 points along +x while the art faces up its own image, hence the quarter turn.
     expect(context.calls).toContain("rotate(1.57)");
+    // The 6 px circle radius, grown by PLAYER_SPRITE_SCALE so the man is recognisable.
     expect(
       context.calls.find((call) => call.startsWith("drawImage(")),
-    ).toContain(",-6,-6,12,12");
+    ).toContain(",-9.6,-9.6,19.2,19.2");
     // The sprite shows which way he is facing, so the vector tick is not drawn as well.
     expect(context.calls).not.toContain("lineTo(126,50)");
   });

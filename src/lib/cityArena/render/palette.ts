@@ -4,15 +4,18 @@ import type { GroundKind, LandmarkStyle, RoadClass } from "../world/mapTypes";
  * Ground fills; `urban` is also the chunk background where no polygon exists, so it covers most
  * of the screen. The whole map palette is keyed to the generated tarmac texture (a near-black
  * `#383836`) rather than to the light "paper map" look it replaced.
+ *
+ * Each value is the mean tone of that kind's texture, so the flat fill a chunk is painted with
+ * before the art loads does not visibly pop when the pattern replaces it.
  */
 export const GROUND_FILL: Record<GroundKind, string> = {
-  grass: "#3d5c33",
-  field: "#5c5438",
-  forest: "#27412a",
-  urban: "#1e2024",
+  grass: "#414927",
+  field: "#554a3a",
+  forest: "#262d1e",
+  urban: "#232529",
 };
-/** Water fill. */
-export const WATER_FILL = "#1d3a56";
+/** Water fill, and the fallback under the river texture; matches that texture's mean tone. */
+export const WATER_FILL = "#163036";
 /** Road surface, and the fallback under the tarmac texture; matches that texture's mean tone. */
 export const ROAD_FILL = "#383836";
 /** Dashed centre line on the bigger roads; the one warm accent on the asphalt. */
