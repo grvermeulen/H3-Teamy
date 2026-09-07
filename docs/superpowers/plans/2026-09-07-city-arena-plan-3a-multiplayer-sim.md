@@ -776,7 +776,9 @@ produced, and where it differed from the text below, is in the deviations sectio
 
 ## What Plan 3b will cover
 
-Written after this plan lands, against the same spec §6:
+**Written:** `docs/superpowers/plans/2026-09-08-city-arena-plan-3b-netcode.md`. Its acceptance is the bot match the owner chose on 2026-09-07, and it is executable start to finish on an in-memory transport — only the two steps that talk to Ably for real wait on an `ABLY_API_KEY` the owner must provision.
+
+Against the same spec §6:
 
 | Area      | Deliverable                                                                                              |
 | --------- | -------------------------------------------------------------------------------------------------------- |
