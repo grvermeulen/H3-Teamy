@@ -3,9 +3,15 @@ import type { ZoneKey } from "../world/mapTypes";
 /**
  * Device-agnostic input (spec §7): a movement vector with length ≤ 1 (x east, y south), an
  * aim angle in radians or `null` to fire along the facing, and three held buttons.
+ * `moveIsAnalog` is the device kind, not a control: it selects the heading-seeking car steering
+ * in `driveInput.ts` whenever a touch stick was the last source to move the player — including
+ * the tick a released stick reports a zero vector, so the steer command ramps back to centre
+ * instead of snapping. Keyboard and replayed/debug inputs leave it false and keep the original
+ * tank steering.
  */
 export type WorldInput = {
   move: [number, number];
+  moveIsAnalog: boolean;
   aim: number | null;
   fire: boolean;
   enter: boolean;
@@ -15,6 +21,7 @@ export type WorldInput = {
 /** An input with nothing pressed. */
 export const EMPTY_INPUT: WorldInput = {
   move: [0, 0],
+  moveIsAnalog: false,
   aim: null,
   fire: false,
   enter: false,
@@ -25,6 +32,7 @@ export const EMPTY_INPUT: WorldInput = {
 export function createInput(partial: Partial<WorldInput>): WorldInput {
   return {
     move: partial.move ?? [0, 0],
+    moveIsAnalog: partial.moveIsAnalog ?? false,
     aim: partial.aim ?? null,
     fire: partial.fire ?? false,
     enter: partial.enter ?? false,
@@ -113,6 +121,8 @@ export type ArenaPlayerState = PlayerState & {
   heat: number;
   heatTick: number;
   outsideSinceTick: number | null;
+  /** Rate-limited steering command (−1..1) of the car being driven; 0 while on foot. */
+  driveSteer: number;
 };
 
 /** Buttons whose previous held state the simulation remembers for edge detection. */

@@ -11,8 +11,19 @@ export const CHUNK_METRES = 128;
 export const RASTER_BUDGET_BYTES = 40 * 1024 * 1024;
 /** Bytes used per rasterised pixel (RGBA, one byte per channel). */
 const BYTES_PER_PIXEL_RGBA = 4;
-/** Headroom multiplier applied to the visible chunk working set when sizing a viewport's budget. */
-export const RASTER_WORKING_SET_HEADROOM = 1.5;
+/**
+ * Headroom multiplier applied to the visible chunk working set when sizing a viewport's budget.
+ * 2.5 rather than 1.5 because the speed-based camera zoom keeps two zoom levels' chunks live
+ * while driving, and a chunk's bytes grow with the square of the zoom (9 MiB at 12 px/m).
+ */
+export const RASTER_WORKING_SET_HEADROOM = 2.5;
+
+/**
+ * Ceiling on the adaptive budget, so a very wide viewport at a high zoom cannot ask for unbounded
+ * canvas memory. Never applied below one raw working set — capping there would make the cache
+ * evict a chunk it still needs on the very next frame.
+ */
+export const RASTER_BUDGET_MAX_BYTES = 96 * 1024 * 1024;
 
 /** A chunk address. */
 export type ChunkCoord = { zoom: ZoomLevel; chunkX: number; chunkY: number };
@@ -93,7 +104,9 @@ function chunksAcrossAxis(lengthPx: number, chunkPx: number): number {
 /**
  * Raster budget (bytes) that comfortably holds every chunk visible through a `viewport`-sized
  * canvas at `zoom`, so a wide desktop viewport is not squeezed by the fixed default budget while
- * a small one still gets that default. Never smaller than {@link RASTER_BUDGET_BYTES}.
+ * a small one still gets that default. Never smaller than {@link RASTER_BUDGET_BYTES} or than the
+ * raw working set, and never larger than {@link RASTER_BUDGET_MAX_BYTES} unless the working set
+ * itself is.
  */
 export function rasterBudgetForViewport(
   viewport: { width: number; height: number },
@@ -106,7 +119,11 @@ export function rasterBudgetForViewport(
     chunksWide * chunksTall * chunkPx * chunkPx * BYTES_PER_PIXEL_RGBA;
   return Math.max(
     RASTER_BUDGET_BYTES,
-    workingSetBytes * RASTER_WORKING_SET_HEADROOM,
+    workingSetBytes,
+    Math.min(
+      RASTER_BUDGET_MAX_BYTES,
+      workingSetBytes * RASTER_WORKING_SET_HEADROOM,
+    ),
   );
 }
 

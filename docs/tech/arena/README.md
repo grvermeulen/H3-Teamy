@@ -133,3 +133,42 @@ The asset is a derived database of OpenStreetMap data © OpenStreetMap contribut
 - Verification: `npx tsc --noEmit`, `npm run lint`, and `npx vitest run src/components/cityArena
 src/lib/cityArena`. The arena tests use fake map/audio/canvas inputs and do not require external
   services. The existing lint warnings in `EventList.tsx` and `src/types/ical.d.ts` are unrelated.
+
+## Runtime (PR 5 — bridges, steering and pace)
+
+- Bridges: the map asset never captured OSM `bridge`/`layer` tags, so a road over water was
+  blocked by the water beneath it (66 road edges on the shipped map, e.g. `Nudestraat` and
+  `Duivendaal` in Wageningen). `world/roadCorridor.ts` builds a whole-map index of road corridors
+  from the decoded road graph — one segment per edge, half-width `ROAD_WIDTH_M[class] / 2 + 2 m`
+  (the pavements), bucketed into the collision grid's 16 m cells — and `worldSession.ready()`
+  installs it on the grid. `resolveCircle` then skips a `kind: "water"` obstacle while the circle's
+  centre is on a road, per circle, so both car hull circles are handled independently. Buildings
+  are never exempt and water away from a road still blocks, so swimming stays impossible; beside a
+  quay road a walker can wade about 2 m before the water pushes them back.
+- Car steering: `input/touchStick.ts` adds a per-axis dead zone (`STICK_AXIS_DEAD_ZONE = 0.2`) so a
+  thumb held forward reports no sideways component, and `InputState.snapshot()` reports
+  `moveIsAnalog`. `sim/driveInput.ts` maps the movement input onto car controls: keyboards keep
+  tank steering, an analog stick is heading-seeking (the steer command is the signed heading error
+  over `ANALOG_STEER_FULL_ERROR_RAD = π/4`), pointing the stick more than 135° behind the car
+  brakes and reverses toward it, and the command may move only
+  `STEER_COMMAND_RATE_PER_S = 6` per second (0.2 per tick). The wheel position lives on
+  `ArenaPlayerState.driveSteer` and resets to 0 on entering and leaving a car. `sim/vehicle.ts`
+  adds a grip floor: `grip = 0.45 + 0.55 · min(1, v/6)` above 0.5 m/s and 0 below it, so a rolling
+  car answers immediately (turn rate at 3 m/s: 1.738 rad/s against 1.211 before) while a parked one
+  never pivots and fast cornering is unchanged.
+- Pace: `WALK_SPEED_MPS` is 5.5 (was the spec's 4), reached through a `WALK_RAMP_S = 0.15 s`
+  acceleration ramp; slowing down stays instant, and the previous speed is clamped to the walk
+  speed first so stepping out of a fast car cannot lurch. `COP_RUN_SPEED_MPS` rises to 6 so foot
+  cops keep their 0.5 m/s edge. Pedestrians already fled at `PED_FLEE_SPEED_MPS = 5.5`, so matching
+  the walk speed to it means a fleeing pedestrian no longer outruns a chasing player.
+- Camera: `ZOOM_LEVELS` is `[4, 6, 8, 10, 12]` px/m and phones target ≈ 45 m across (a 390 px phone
+  now picks 8 px/m and shows 48.75 m; a 1400 px desktop picks 12 and shows 116.7 m). While moving,
+  `speedZoomLevel` drops one step at 12 m/s and returns at 9 m/s — a hysteresis band walking never
+  reaches. `arenaRuntime.nextCamera` is the pure helper the frame loop calls.
+- Raster budget: chunk bytes are `(128 · zoom)² · 4`, so 9 MiB at 12 px/m. Two zoom levels are live
+  while driving, so `RASTER_WORKING_SET_HEADROOM` is 2.5 (was 1.5) with a
+  `RASTER_BUDGET_MAX_BYTES = 96 MiB` ceiling that is never applied below one raw working set. A
+  390 × 844 phone still lands on the 40 MiB floor and needs ≈ 30 MiB for both zoom sets.
+- Verification: `npm run lint`, `npx tsc --noEmit`, `npx vitest run`, `npm run build`. The arena
+  tests use fake map/audio/canvas inputs and need no external services. The two existing lint
+  warnings in `EventList.tsx` and `src/types/ical.d.ts` are unrelated.

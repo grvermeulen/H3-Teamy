@@ -26,8 +26,8 @@ import { WEAPONS } from "./weapons";
 export const COPS_PER_LEVEL: readonly number[] = [0, 2, 2, 4];
 /** Cop health. */
 export const COP_MAX_HEALTH = 100;
-/** Cop running speed. */
-export const COP_RUN_SPEED_MPS = 4.5;
+/** Foot pursuit speed. Kept 0.5 m/s above `WALK_SPEED_MPS` so a wanted player cannot simply outrun a cop. */
+export const COP_RUN_SPEED_MPS = 6;
 /** Minimum cop spawn distance. */
 export const COP_SPAWN_MIN_M = 60;
 /** Maximum cop spawn distance. */

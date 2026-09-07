@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { STICK_RADIUS_PX, createStick } from "./touchStick";
+import {
+  STICK_AXIS_DEAD_ZONE,
+  STICK_RADIUS_PX,
+  createStick,
+} from "./touchStick";
 
 describe("createStick", () => {
   it("anchors at the first touch and reports a scaled vector", () => {
@@ -48,5 +52,24 @@ describe("createStick", () => {
     expect(stick.state().vector).toEqual([0, -1]);
     stick.end(1);
     expect(stick.state().pointerId).toBeNull();
+  });
+
+  it("zeroes a component inside the per-axis dead zone so a held thumb drives straight", () => {
+    expect(STICK_AXIS_DEAD_ZONE).toBe(0.2);
+    const stick = createStick();
+    stick.begin(1, 0, 0);
+    stick.move(1, 8, -47);
+    // |x| would be 0.166 — a 9.6° thumb wobble — and snaps to zero, while y is
+    // left exactly as it was rather than renormalised back up to 1.
+    expect(stick.state().vector[0]).toBe(0);
+    expect(stick.state().vector[1]).toBeCloseTo(-0.978, 3);
+  });
+
+  it("keeps both components of a genuine diagonal", () => {
+    const stick = createStick();
+    stick.begin(1, 0, 0);
+    stick.move(1, 34, -34);
+    expect(stick.state().vector[0]).toBeCloseTo(Math.SQRT1_2, 4);
+    expect(stick.state().vector[1]).toBeCloseTo(-Math.SQRT1_2, 4);
   });
 });

@@ -219,7 +219,7 @@ describe("stepArena on foot", () => {
     const start = boot();
     const walked = run(start, createInput({ move: [1, 0], aim: Math.PI }), 30);
     expect(walked.tick).toBe(30);
-    expect(walked.player.x).toBeCloseTo(start.player.x + 4);
+    expect(walked.player.x).toBeCloseTo(start.player.x + 5.174074, 5);
     expect(walked.player.facing).toBeCloseTo(Math.PI);
     expect(walked.held).toEqual({ enter: false, weaponNext: false });
   });
@@ -290,6 +290,24 @@ describe("stepArena driving", () => {
     expect(driving.vehicles[0].x).toBeCloseTo(near.vehicles[0].x + 3.1);
     expect(driving.player.x).toBeCloseTo(driving.vehicles[0].x);
     expect(driving.player.speed).toBeCloseTo(6);
+  });
+
+  it("drives from an analog stick and re-centres the wheel on foot", () => {
+    const boarded = run(withCar(boot(), 3), createInput({ enter: true }), 1);
+    expect(boarded.player.driveSteer).toBe(0);
+    expect(boarded.player.boardingTicksLeft).toBe(BOARDING_TICKS - 1);
+    const ready = run(boarded, EMPTY_INPUT, BOARDING_TICKS - 1);
+    expect(ready.player.boardingTicksLeft).toBe(0);
+    // The car heads east; the stick points south, a 90° error asking for full
+    // lock that the limiter releases at 6 / 30 = 0.2 per tick.
+    const analog = createInput({ move: [0, 1], moveIsAnalog: true });
+    expect(run(ready, analog, 1).player.driveSteer).toBeCloseTo(0.2, 6);
+    const turning = run(ready, analog, 5);
+    expect(turning.player.driveSteer).toBeCloseTo(1, 6);
+    expect(turning.vehicles[0].heading).toBeGreaterThan(0);
+    const out = run(turning, createInput({ enter: true }), 1);
+    expect(out.player.vehicleId).toBeNull();
+    expect(out.player.driveSteer).toBe(0);
   });
 
   it("steps out beside a stopped car on the next rising edge", () => {

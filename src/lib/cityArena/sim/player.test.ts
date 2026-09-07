@@ -1,24 +1,54 @@
 import { describe, expect, it } from "vitest";
 import type { Point } from "../world/projection";
-import { PLAYER_RADIUS_M, WALK_SPEED_MPS, stepPlayer } from "./player";
+import {
+  PLAYER_RADIUS_M,
+  WALK_ACCEL_MPS2,
+  WALK_SPEED_MPS,
+  stepPlayer,
+} from "./player";
 import { createInput, type PlayerState } from "./types";
 
 const free = { resolveCircle: (centre: Point): Point => centre };
 const start: PlayerState = { x: 0, y: 0, facing: 0, speed: 0 };
 
 describe("stepPlayer", () => {
-  it("walks at 4 m/s scaled by the input magnitude and faces the movement direction", () => {
+  it("walks at 5.5 m/s scaled by the input magnitude and faces the movement direction", () => {
     const moved = stepPlayer(start, createInput({ move: [1, 0] }), 1, free);
     expect(moved.x).toBeCloseTo(WALK_SPEED_MPS);
-    expect(moved.speed).toBeCloseTo(4);
+    expect(moved.speed).toBeCloseTo(WALK_SPEED_MPS);
     const halfSpeed = stepPlayer(
       start,
       createInput({ move: [0, 0.5] }),
       1,
       free,
     );
-    expect(halfSpeed.y).toBeCloseTo(2);
+    expect(halfSpeed.y).toBeCloseTo(2.75);
     expect(halfSpeed.facing).toBeCloseTo(Math.PI / 2);
+  });
+
+  it("ramps up to the walking speed instead of teleporting", () => {
+    const step = 1 / 30;
+    const first = stepPlayer(start, createInput({ move: [1, 0] }), step, free);
+    expect(first.speed).toBeCloseTo(WALK_ACCEL_MPS2 * step, 6);
+    expect(first.x).toBeCloseTo(WALK_ACCEL_MPS2 * step * step, 6);
+    let walker = start;
+    for (let tick = 0; tick < 5; tick++)
+      walker = stepPlayer(walker, createInput({ move: [1, 0] }), step, free);
+    expect(walker.speed).toBeCloseTo(WALK_SPEED_MPS, 6);
+    expect(walker.x).toBeCloseTo(0.590741, 5);
+  });
+
+  it("never carries a car's speed into the first walking step", () => {
+    const step = 1 / 30;
+    const justOut = { x: 0, y: 0, facing: 0, speed: 20 };
+    const walking = stepPlayer(
+      justOut,
+      createInput({ move: [1, 0] }),
+      step,
+      free,
+    );
+    expect(walking.speed).toBeCloseTo(WALK_SPEED_MPS, 6);
+    expect(walking.x).toBeCloseTo(WALK_SPEED_MPS * step, 6);
   });
 
   it("clamps oversized debug input before applying displacement", () => {
@@ -52,7 +82,7 @@ describe("stepPlayer", () => {
       1,
       free,
     );
-    expect(aimed.x).toBeCloseTo(4);
+    expect(aimed.x).toBeCloseTo(WALK_SPEED_MPS);
     expect(aimed.facing).toBeCloseTo(Math.PI);
     const still = stepPlayer(start, createInput({ aim: -1 }), 1, free);
     expect(still.facing).toBe(-1);

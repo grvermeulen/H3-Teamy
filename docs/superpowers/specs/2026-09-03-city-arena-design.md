@@ -233,7 +233,9 @@ containing or nearby building render as labels only.
   _"Kaart kon niet volledig laden"_; missing tiles render as hatched ground and play
   continues.
 - **StaticRaster** (`render/staticRaster.ts`) — 128 m × 128 m chunk canvases rasterised on demand from tile vectors
-  at one of three quantised zoom levels (4, 6, 8 px/m); LRU ≤ 24 chunks (≤ 40 MB). Paint
+  at one of five quantised zoom levels (4, 6, 8, 10, 12 px/m — amended 2026-09-06 from
+  three); LRU ≤ 24 chunks (≥ 40 MB, grown to hold the viewport's working set at both the
+  base and the driving zoom, capped at 96 MB unless one working set is larger). Paint
   order: ground → water → roads (width by class: primary 9 m, secondary 8, tertiary 7,
   residential/unclassified 6, living_street 5, pedestrian/service 4; dashed centre line on
   ≥ tertiary) → pavements (2 m each side, zone roads ≥ residential) → buildings (footprint,
@@ -244,7 +246,10 @@ containing or nearby building render as labels only.
   label. At most one chunk is rasterised per frame; intermediate zooms scale bitmaps.
 - **CollisionGrid** — 16 m cells → building/water polygon ids. Circle-vs-polygon for
   people (r 0.4 m), four-corner test for cars, swept segment for bullets. Resolution pushes
-  out along the least-penetration normal.
+  out along the least-penetration normal. A whole-map road-corridor index (added
+  2026-09-06) lets a circle skip a `water` polygon while it sits on a road surface, so
+  roads crossing water are passable; buildings are never exempt from collision and open
+  water away from a road still blocks, so bridges are crossable but swimming is not.
 - **RoadGraph** — A\* with edge lengths; nearest-node lookup via the grid; used by AI
   traffic, cops, pedestrian pavement paths (road edge offset 3 m), car spawns.
 - **Zone** — disc test, out-of-bounds timer, spawn selection.
@@ -259,7 +264,10 @@ Coordinates in metres as floats at runtime; the asset's 0.25 m integers are scal
 in the state; all randomness flows through it. Rendering at display refresh with
 interpolation.
 
-**Players on foot.** Radius 0.4 m; speed = 4 m/s × stick magnitude; aim independent of
+**Players on foot.** Radius 0.4 m; speed = 5.5 m/s × stick magnitude, reached through a
+0.15 s acceleration ramp (amended 2026-09-06 from 4 m/s: the tighter phone view made
+4 m/s feel slow, and the new speed also matches the pedestrians' 5.5 m/s flee speed
+below, so a fleeing pedestrian no longer outruns the player); aim independent of
 movement; health 100, no regen. Death → respawn after 3 s at the spawn node maximising
 minimum distance to alive enemies (seeded tie-break), 2 s blinking invulnerability. The
 dying player sees the **death screen** (§7) for the whole respawn delay.
@@ -282,8 +290,10 @@ police (9, 30). Parked cars spawn along residential roads inside the zone at ≈
 offset to the kerb; 6–10 ambient traffic cars follow the road graph at 8–12 m/s and stop
 for obstacles. Enter within 1.5 m of a car (**Instappen**) → 0.6 s → driving; exit
 (**Uitstappen**) places you beside the car. Physics: throttle/brake along heading, brake
-14 m/s², reverse ≤ 8 m/s; angular velocity = steer × 2.6 rad/s × clamp(v/6, 0, 1) ×
-(1 − 0.5·v/vmax); lateral velocity decays 90 %/s. Collisions: restitution 0.3, damage
+14 m/s², reverse ≤ 8 m/s; angular velocity = steer × 2.6 rad/s × grip × (1 − 0.5·v/vmax)
+where grip = 0 below 0.5 m/s and 0.45 + 0.55·min(1, v/6) above it (amended 2026-09-06:
+the original clamp(v/6, 0, 1) left the wheel dead below walking pace); lateral velocity
+decays 90 %/s. Collisions: restitution 0.3, damage
 = max(0, impact speed − 4) × 3 to both cars; buildings take none. Health 100 → smoke
 < 40 → explosion at 0 (3 m radius, 80 damage, kills the occupant). Firing in a car is a
 drive-by toward the aim direction. Running over people at > 5 m/s: damage = 5 × speed.
@@ -450,16 +460,21 @@ mobile layout; either can be forced in settings.
 | Scorebord              | hold Tab                                                                  |
 | Menu                   | Esc (Geluid, Trillen, Besturing, Potje verlaten) — does not pause a match |
 
-**Mobile (twin-stick, default).** Left 45 % of the screen: floating joystick appears under
-the thumb (move; in a car y = throttle/brake, x = steer). Right 55 %: floating aim stick —
+**Mobile (twin-stick, default).** Left 45 % of the screen: floating joystick appears under the thumb (move; in a car the stick direction is the
+heading the car steers toward and its magnitude is the throttle, with a stick held more
+than 135° behind the car braking and reversing — amended 2026-09-06, the original
+y = throttle/brake, x = steer mapping is kept for keyboards). A per-axis dead zone of
+0.2 snaps a near-axis component to zero. Right 55 %: floating aim stick —
 drag to aim, auto-fire while held, release to stop. Two ≥ 58 px buttons above it:
 **Instappen/Uitstappen**, **Wapen**. Setting **"Enkele stick"**: a fire button replaces the
 aim stick and you shoot where you face. Pointer events keyed by `pointerId`,
 `touch-action: none` on the canvas, `touch-manipulation` on buttons, portrait and landscape
 supported (landscape widens the view). First-run tip like Space Invaders' `TOUCH_TIP_KEY`.
 
-**Input model.** `{ seq, move: [x, y], aim: angle | null, fire, enter, weaponNext }` — device
-agnostic; the host does not know the device.
+**Input model.** `{ seq, move: [x, y], moveIsAnalog, aim: angle | null, fire, enter, weaponNext }` — device
+agnostic; the host does not know the device. `moveIsAnalog` is the device kind, not a
+control: it is true only while a touch stick produced `move` and selects the
+heading-seeking car steering (added 2026-09-06).
 
 **Haptics (`haptics.ts`).** Patterns (ms): bullet hit 25 · car impact 40–90 by speed ·
 explosion `[90, 40, 120]` · own death `[120, 60, 220]` · kill confirmed `[15, 40, 15]` ·
@@ -498,7 +513,9 @@ accepted that trade-off (see §15).
 - **Viewport abstraction:** `renderScene(ctx, viewport: { rect, camera }, world, snapshotView)`.
   Slice 1 uses one viewport; slice 2 composes several (TV mode).
 - **Camera:** follows the local player with 0.4 s velocity look-ahead (≤ 15 m), eased;
-  zoom level chosen from viewport width so phones show ≈ 60 m across, desktops ≈ 120 m.
+  zoom level chosen from viewport width so phones show ≈ 45 m across, desktops ≈ 120 m,
+  and dropped one step while moving faster than 12 m/s (back at 9 m/s) — amended
+  2026-09-06 from ≈ 60 m.
 - **Frame:** blit visible chunks → pickups → cars (rounded body, windows, roof stripe,
   smoke when damaged) → peds/cops/players (head + shoulders, colour ring, name) → bullets
   and muzzle flashes → pooled particles (≤ 200). HUD is React DOM updated at 10 Hz from a
@@ -810,7 +827,7 @@ docs/tech/arena/README.md · docs/tech/arena/TESTING.md
 | Host on a phone backgrounds or dies         | Priority election prefers desktops; 3 s silence rule; full-state snapshots make takeover cheap             |
 | Ably free-plan limits                       | Section 6.4 budget; message counters in metrics; host-only inputs channel                                  |
 | Map data size on 4G                         | Tiles streamed by proximity, immutable caching, 1.2 MB total / 256 KB per-tile gzipped build ceilings      |
-| Real streets are irregular (not a GTA grid) | Zoom tuned to ≈ 60 m across on phones; radar; street labels                                                |
+| Real streets are irregular (not a GTA grid) | Zoom tuned to ≈ 45 m across on phones; radar; street labels                                                |
 | iOS haptics                                 | Opportunistic only; universal visual/audio feedback                                                        |
 | Cheating                                    | Accepted (teammates); host clamps inputs and fire rates                                                    |
 | ODbL / trademark                            | Attribution footer, derived asset in public repo; the "GTA H3" name and artwork are an accepted owner risk |

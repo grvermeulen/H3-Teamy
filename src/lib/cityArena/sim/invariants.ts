@@ -70,6 +70,13 @@ function checkPlayer(state: ArenaState, violations: string[]): void {
     player.diedAtTick === null || player.diedAtTick <= state.tick,
     "diedAtTick lies in the future",
   );
+  check(
+    violations,
+    Number.isFinite(player.driveSteer) &&
+      Math.abs(player.driveSteer) <= 1 &&
+      (player.vehicleId !== null || player.driveSteer === 0),
+    `player.driveSteer ${player.driveSteer} out of range or set on foot`,
+  );
 }
 
 /** Car positions, health and unique ids. */

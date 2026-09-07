@@ -13,11 +13,13 @@ import {
   LOOK_AHEAD_MAX_M,
   createCamera,
   screenToWorld,
+  speedZoomLevel,
   updateCamera,
   visibleRect,
   zoomLevelForViewport,
   type Camera,
   type Viewport,
+  type ZoomLevel,
 } from "@/lib/cityArena/render/camera";
 import {
   deathScreenPhase,
@@ -123,6 +125,8 @@ export type Runtime = {
   session: WorldSession;
   state: ArenaState;
   camera: Camera;
+  /** Zoom the viewport width asks for; the live camera may sit one step wider while driving. */
+  baseZoom: ZoomLevel;
   random: () => number;
   accumulator: number;
   lastTileSync: number;
@@ -286,13 +290,12 @@ export function createRuntime(
     { index, graph: session.graph(), seed, zone },
     random,
   );
+  const baseZoom = zoomLevelForViewport(viewportWidthPx);
   return {
     session,
     state,
-    camera: createCamera(
-      [state.player.x, state.player.y],
-      zoomLevelForViewport(viewportWidthPx),
-    ),
+    camera: createCamera([state.player.x, state.player.y], baseZoom),
+    baseZoom,
     random,
     accumulator: 0,
     lastTileSync: 0,
@@ -391,7 +394,34 @@ function trackDeath(runtime: Runtime, nowMs: number): boolean {
   return true;
 }
 
-/** Eases the camera after the player or their car, with the driving or walking look-ahead cap. */
+/**
+ * The camera for the next frame: eased toward `target` with the driving or walking look-ahead
+ * cap, then re-zoomed for the current speed. Pure so the zoom rule can be tested without booting
+ * a runtime.
+ */
+export function nextCamera(
+  camera: Camera,
+  baseZoom: ZoomLevel,
+  target: Point,
+  velocity: Point,
+  dt: number,
+  driving: boolean,
+): Camera {
+  const eased = updateCamera(
+    camera,
+    target,
+    velocity,
+    dt,
+    driving ? DRIVING_LOOK_AHEAD_MAX_M : LOOK_AHEAD_MAX_M,
+  );
+  const speedMps = Math.hypot(velocity[0], velocity[1]);
+  return {
+    ...eased,
+    zoom: speedZoomLevel(baseZoom, speedMps, camera.zoom),
+  };
+}
+
+/** Eases the camera after the player or their car and re-zooms it for the speed. */
 function followPlayer(runtime: Runtime, dt: number): void {
   const { player } = runtime.state;
   const car = occupiedVehicle(runtime.state);
@@ -401,12 +431,13 @@ function followPlayer(runtime: Runtime, dt: number): void {
         Math.cos(player.facing) * player.speed,
         Math.sin(player.facing) * player.speed,
       ];
-  runtime.camera = updateCamera(
+  runtime.camera = nextCamera(
     runtime.camera,
+    runtime.baseZoom,
     [player.x, player.y],
     velocity,
     dt,
-    car ? DRIVING_LOOK_AHEAD_MAX_M : LOOK_AHEAD_MAX_M,
+    car !== null,
   );
 }
 

@@ -7,6 +7,7 @@ import type { DecodedTile } from "./decode";
 import type { LoadProgress, MapLoader } from "./mapLoader";
 import type { MapIndex } from "./mapTypes";
 import type { Point } from "./projection";
+import { createRoadCorridors } from "./roadCorridor";
 import { decodeRoadGraph, type RoadGraph } from "./roadGraph";
 
 /** Injected dependencies of a world session: the tile loader and a raster-target factory. */
@@ -23,7 +24,9 @@ export type WorldReady = { index: MapIndex; graph: RoadGraph };
 /**
  * Owns one loaded map at runtime: keeps the collision grid and the raster cache consistent with
  * the tiles the loader currently holds resident, and exposes landmarks and loaded tile
- * rectangles for the renderer. Call {@link WorldSession.ready} before {@link WorldSession.update}.
+ * rectangles for the renderer. Call {@link WorldSession.ready} before {@link WorldSession.update}
+ * — `ready()` is also what installs the road corridors that let bridges cross water, so a grid
+ * queried before it resolves treats every water polygon as solid.
  */
 export type WorldSession = {
   ready(): Promise<WorldReady>;
@@ -106,6 +109,7 @@ function loadReady(state: WorldSessionState): Promise<WorldReady> {
   ])
     .then(([index, roads]) => {
       const graph = decodeRoadGraph(roads);
+      state.collision.setRoadCorridors(createRoadCorridors(graph));
       state.loadedIndex = index;
       state.loadedGraph = graph;
       for (const [key, info] of buildLandmarkLookup(index)) {

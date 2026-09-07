@@ -1,8 +1,11 @@
 import type { Rect } from "../mapBuild/geometry";
 import type { Point } from "../world/projection";
 
-/** Raster zoom levels in px per metre; intermediate zooms are not used. */
-export const ZOOM_LEVELS = [4, 6, 8] as const;
+/**
+ * Raster zoom levels in px per metre; intermediate zooms are not used. Extended past the spec's
+ * 4/6/8 on 2026-09-06 so phones can hold a ≈ 45 m view and wide desktops stop overshooting 120 m.
+ */
+export const ZOOM_LEVELS = [4, 6, 8, 10, 12] as const;
 /** One of {@link ZOOM_LEVELS}. */
 export type ZoomLevel = (typeof ZOOM_LEVELS)[number];
 /** Canvas size in CSS pixels. */
@@ -19,13 +22,18 @@ export const DRIVING_LOOK_AHEAD_MAX_M = 30;
 /** Exponential easing rate per second. */
 export const CAMERA_EASE_PER_S = 6;
 /** Target width of the view in metres on phones. */
-export const PHONE_VIEW_METRES = 60;
+export const PHONE_VIEW_METRES = 45;
 /** Target width of the view in metres on desktop-sized viewports. */
 export const DESKTOP_VIEW_METRES = 120;
 /** Viewports at least this wide count as desktop. */
 export const DESKTOP_MIN_WIDTH_PX = 768;
 
-/** Nearest zoom level so that the viewport shows ≈ 60 m (phone) or ≈ 120 m (desktop). */
+/** Speed (m/s) at or above which the camera drops one zoom step to show more road ahead. */
+export const ZOOM_OUT_SPEED_MPS = 12;
+/** Speed (m/s) at or below which it returns to the viewport zoom; the gap is the hysteresis band. */
+export const ZOOM_IN_SPEED_MPS = 9;
+
+/** Nearest zoom level so that the viewport shows ≈ 45 m (phone) or ≈ 120 m (desktop). */
 export function zoomLevelForViewport(widthPx: number): ZoomLevel {
   const targetMetres =
     widthPx < DESKTOP_MIN_WIDTH_PX ? PHONE_VIEW_METRES : DESKTOP_VIEW_METRES;
@@ -35,6 +43,28 @@ export function zoomLevelForViewport(widthPx: number): ZoomLevel {
     if (Math.abs(level - ideal) < Math.abs(best - ideal)) best = level;
   }
   return best;
+}
+
+/** One {@link ZOOM_LEVELS} step wider than `level`, or `level` itself when it is already the widest. */
+export function widerZoom(level: ZoomLevel): ZoomLevel {
+  return ZOOM_LEVELS[Math.max(0, ZOOM_LEVELS.indexOf(level) - 1)];
+}
+
+/**
+ * Zoom for the current speed: one step wider from {@link ZOOM_OUT_SPEED_MPS}, back to `base` at
+ * {@link ZOOM_IN_SPEED_MPS}, and inside the band whatever `current` already is — the hysteresis
+ * that stops the view flapping at a threshold. Walking never reaches the band, so the same rule
+ * serves the on-foot camera unchanged.
+ */
+export function speedZoomLevel(
+  base: ZoomLevel,
+  speedMps: number,
+  current: ZoomLevel,
+): ZoomLevel {
+  const wider = widerZoom(base);
+  if (speedMps >= ZOOM_OUT_SPEED_MPS) return wider;
+  if (speedMps <= ZOOM_IN_SPEED_MPS) return base;
+  return current === wider ? wider : base;
 }
 
 /** A camera centred on `centre`. */

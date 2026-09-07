@@ -108,23 +108,37 @@ describe("stepVehicle", () => {
     ).toBeCloseTo(9.9);
   });
 
-  it("turns faster with speed up to 6 m/s and slower again near the top speed", () => {
-    const moving = {
-      ...createVehicle(1, "compact", [0, 0], 0, 0),
-      velocityX: 6,
-    };
-    const turned = stepVehicle(
-      moving,
+  it("keeps full authority above 6 m/s, floors the grip while rolling and never pivots parked", () => {
+    const compact = createVehicle(1, "compact", [0, 0], 0, 0);
+    const fast = stepVehicle(
+      { ...compact, velocityX: 6 },
       { throttle: 1, steer: 1 },
       step,
       free,
     ).vehicle;
-    expect(turned.heading).toBeCloseTo(0.07445, 4);
-    const crawling = { ...moving, velocityX: 0 };
-    expect(
-      stepVehicle(crawling, { throttle: 0, steer: 1 }, step, free).vehicle
-        .heading,
-    ).toBe(0);
+    expect(fast.heading).toBeCloseTo(0.07445, 4);
+    // The grip floor is what this change buys: 0.03913 rad per tick before, 0.05795 after.
+    const rolling = stepVehicle(
+      { ...compact, velocityX: 3 },
+      { throttle: 0, steer: 1 },
+      step,
+      free,
+    ).vehicle;
+    expect(rolling.heading).toBeCloseTo(0.05795, 4);
+    const creeping = stepVehicle(
+      { ...compact, velocityX: 0.4 },
+      { throttle: 0, steer: 1 },
+      step,
+      free,
+    ).vehicle;
+    expect(creeping.heading).toBe(0);
+    const parked = stepVehicle(
+      compact,
+      { throttle: 0, steer: 1 },
+      step,
+      free,
+    ).vehicle;
+    expect(parked.heading).toBe(0);
   });
 
   it("bleeds lateral velocity at 90 % per second", () => {

@@ -21,6 +21,7 @@ describe("input state", () => {
     const state = createInputState();
     expect(state.snapshot()).toEqual({
       move: [0, 0],
+      moveIsAnalog: false,
       aim: null,
       fire: false,
       enter: false,
@@ -56,5 +57,49 @@ describe("input state", () => {
     expect(state.snapshot().fire).toBe(true);
     state.setButton("buttons", "fire", false);
     expect(state.snapshot().fire).toBe(false);
+  });
+
+  it("marks movement analog by which source last moved the player, not by finger contact", () => {
+    const state = createInputState();
+    expect(state.snapshot().moveIsAnalog).toBe(false);
+    state.setKeyboard([1, 0]);
+    expect(state.snapshot().moveIsAnalog).toBe(false);
+    state.setStick([0.3, -0.4]);
+    expect(state.snapshot()).toMatchObject({
+      move: [0.3, -0.4],
+      moveIsAnalog: true,
+    });
+    state.setStick([0, 0]);
+    expect(state.snapshot().moveIsAnalog).toBe(true);
+    // Lifting the finger — the real touch-release gesture — must not bounce control back to
+    // the keyboard's digital mapping: moveIsAnalog stays true so driveStep keeps ramping the
+    // steer command toward centre instead of snapping it in the tick the finger leaves the glass.
+    state.setKeyboard([0, 0]);
+    state.setStick([0.3, -0.4]);
+    state.setStick(null);
+    expect(state.snapshot()).toMatchObject({
+      move: [0, 0],
+      moveIsAnalog: true,
+    });
+    // Only a fresh keyboard movement hands control back to the digital mapping.
+    state.setKeyboard([0, -1]);
+    expect(state.snapshot().moveIsAnalog).toBe(false);
+  });
+
+  it("hands movement to the keyboard when a key is held as the stick is released", () => {
+    const state = createInputState();
+    state.setStick([0.5, 0]);
+    state.setKeyboard([0, -1]);
+    // The keyboard moved last, so it owns both the vector and the mapping — the stick's
+    // vector must not leak through the digital path.
+    expect(state.snapshot()).toMatchObject({
+      move: [0, -1],
+      moveIsAnalog: false,
+    });
+    state.setStick(null);
+    expect(state.snapshot()).toMatchObject({
+      move: [0, -1],
+      moveIsAnalog: false,
+    });
   });
 });
