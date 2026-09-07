@@ -192,9 +192,15 @@ src/lib/cityArena`. The arena tests use fake map/audio/canvas inputs and do not 
   (4.2 × 1.8 m at 32 px/m) with its alpha rebuilt, because the generator leaves the bodywork
   half-transparent.
 - The player is the man from the game's splash artwork — bald, red-lensed sunglasses, mint-green
-  shorts — drawn from directly overhead. `packPersonSprite` trims and stretches him onto the box
-  around his collision circle (2 × `PLAYER_RADIUS_M`, 64 px/m, so 51 px), and `drawPlayer` turns
-  the art a quarter-turn past the player's facing, the same convention the car uses. On screen it
+  shorts — drawn from directly overhead, as an eight-frame walk strip. `packPersonSprite` trims
+  him onto the box around his collision circle (2 × `PLAYER_RADIUS_M`, 64 px/m, so 51 px per cell)
+  and, from a single still, synthesises the cycle: the body rolls ±5° once per cycle and bobs 2 px
+  twice, one rise per step. Two attempts at generating a real cycle re-framed and cropped his legs
+  frame to frame, which reads as a wobble at the size he is drawn. `walkFrame` holds each cell for
+  4 ticks and rests on cell 0 below 0.2 m/s, so he never moon-walks on the spot. `drawPlayer`
+  turns the art _minus_ a quarter-turn past the player's facing — his art faces down its own
+  image, unlike the nose-up car, and the positive turn had him looking half a turn away from the
+  crosshair. On screen it
   is drawn `PLAYER_SPRITE_SCALE` = 1.6 × the circle: the hull hits the 6 px floor at every zoom
   the arena offers, and 12 px is too small to recognise a character in. The colour circle stays
   underneath so he is findable when zoomed out; a body waiting to respawn keeps the flat dead

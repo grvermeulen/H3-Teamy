@@ -50,7 +50,8 @@
     "player": {
       "file": "/arena/sprites/person-player.png",
       "radiusMetres": 0.4,
-      "pixelSize": 51
+      "pixelSize": 51,
+      "frames": 8
     }
   }
 }
