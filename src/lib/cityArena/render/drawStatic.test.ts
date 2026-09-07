@@ -267,6 +267,42 @@ describe("paintChunk", () => {
     ).toHaveLength(5);
   });
 
+  it("anchors the ground pattern on the world so neighbouring chunks line up", () => {
+    const texture = {
+      image: document.createElement("canvas"),
+      tileMetres: 8,
+      tilePixels: 128,
+    };
+    const sprites: ArenaSprites = {
+      ground: {
+        grass: texture,
+        field: texture,
+        forest: texture,
+        urban: texture,
+      },
+    };
+    const calls = (minX: number): string[] => {
+      const context = createFakeContext();
+      paintChunk(
+        context,
+        { minX, minY: 0, maxX: minX + 128, maxY: 128 },
+        6,
+        [tile],
+        landmarks,
+        sprites,
+      );
+      return context.calls;
+    };
+    // Each chunk rasters onto its own canvas, so the chunk's world offset has to reach the
+    // pattern somehow or the 8 m repeat would restart at every canvas origin. It reaches it
+    // through the canvas transform: the painter works in world metres and the pattern matrix
+    // stays pure scale, which makes the repeat a function of world position alone.
+    expect(calls(0)).toContain("setTransform(6,0,0,6,0,0)");
+    expect(calls(128)).toContain("setTransform(6,0,0,6,-768,0)");
+    expect(calls(128)).toContain("patternTransform(pattern(#0),0.0625)");
+    expect(calls(0)).toContain("patternTransform(pattern(#0),0.0625)");
+  });
+
   it("strokes road and pavement with a repeating texture, leaving every other layer flat", () => {
     const context = createFakeContext();
     const image = document.createElement("canvas");
