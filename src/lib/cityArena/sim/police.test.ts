@@ -1,3 +1,4 @@
+import { localPlayer } from "./players";
 import { describe, expect, it } from "vitest";
 import type { MapIndex } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
@@ -48,7 +49,7 @@ function playerWithHeat(heat: number): ArenaState {
     { index: emptyIndex, graph, seed: 3, zone: null },
     createRng(3),
   );
-  return { ...state, player: { ...state.player, heat, heatTick: 0 } };
+  return { ...state, players: [{ ...localPlayer(state), heat, heatTick: 0 }] };
 }
 
 function driverOf(vehicleId: number): DriverState {
@@ -151,7 +152,7 @@ describe("managePoliceCars", () => {
       2 + POLICE_REPATH_TICKS,
     );
     const threeStars = managePoliceCars(
-      { ...routed, player: { ...routed.player, heat: 120 } },
+      { ...routed, players: [{ ...localPlayer(routed), heat: 120 }] },
       { graph },
       3,
       createRng(2),
@@ -193,7 +194,7 @@ describe("managePoliceCars", () => {
     const stolen: ArenaState = {
       ...patrol,
       traffic: [],
-      player: { ...patrol.player, vehicleId: 900 },
+      players: [{ ...localPlayer(patrol), vehicleId: 900 }],
     };
     expect(managePoliceCars(stolen, { graph }, 1, createRng(2))).toBe(stolen);
   });
@@ -204,7 +205,9 @@ describe("managePoliceCars", () => {
       ...playerWithHeat(80),
       vehicles: [police.vehicle],
       traffic: [],
-      player: { ...playerWithHeat(80).player, vehicleId: police.vehicle.id },
+      players: [
+        { ...localPlayer(playerWithHeat(80)), vehicleId: police.vehicle.id },
+      ],
     };
     const managed = managePoliceCars(stolen, { graph }, 1, createRng(2));
     expect(managed.vehicles).toHaveLength(1);

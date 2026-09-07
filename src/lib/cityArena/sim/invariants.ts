@@ -1,3 +1,4 @@
+import { localPlayer } from "./players";
 import { MAX_BULLETS } from "./bullets";
 import { COP_BODY_TICKS, COP_MAX_HEALTH } from "./cops";
 import { PLAYER_MAX_HEALTH } from "./damage";
@@ -30,7 +31,7 @@ function finite(...values: number[]): boolean {
 
 /** Player health, ammo, position and car reference. */
 function checkPlayer(state: ArenaState, violations: string[]): void {
-  const { player } = state;
+  const player = localPlayer(state);
   check(
     violations,
     finite(player.x, player.y, player.facing, player.speed),
@@ -209,7 +210,7 @@ function checkPopulation(
     check(
       violations,
       !driven.has(driver.vehicleId) &&
-        driver.vehicleId !== state.player.vehicleId,
+        driver.vehicleId !== localPlayer(state).vehicleId,
       `vehicle ${driver.vehicleId} has more than one driver`,
     );
     driven.add(driver.vehicleId);

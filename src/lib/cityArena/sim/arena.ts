@@ -1,3 +1,4 @@
+import { localPlayer, replacePlayer } from "./players";
 import type { Rect } from "../mapBuild/geometry";
 import type { CollisionGrid } from "../world/collisionGrid";
 import type { MapIndex, MapZone } from "../world/mapTypes";
@@ -153,7 +154,7 @@ export function createArenaState(
     tick: 0,
     seed: setup.seed,
     nextId: FIRST_ENTITY_ID + vehicles.length,
-    player: createArenaPlayer(spawn, 0),
+    players: [createArenaPlayer(spawn, 0)],
     vehicles,
     bullets: [],
     effects: [],
@@ -187,14 +188,15 @@ function detectEdges(
 /** The car the player sits in, if any. */
 export function occupiedVehicle(state: ArenaState): VehicleState | null {
   return (
-    state.vehicles.find((vehicle) => vehicle.id === state.player.vehicleId) ??
-    null
+    state.vehicles.find(
+      (vehicle) => vehicle.id === localPlayer(state).vehicleId,
+    ) ?? null
   );
 }
 
 /** Instappen: board the nearest intact car whose body is within reach. */
 function enterVehicle(state: ArenaState): ArenaState {
-  const at: Point = [state.player.x, state.player.y];
+  const at: Point = [localPlayer(state).x, localPlayer(state).y];
   let best: VehicleState | null = null;
   let bestDistance = ENTER_RANGE_M;
   for (const vehicle of state.vehicles) {
@@ -210,16 +212,18 @@ function enterVehicle(state: ArenaState): ArenaState {
   return {
     ...state,
     traffic: state.traffic.filter((driver) => driver.vehicleId !== boarded),
-    player: {
-      ...state.player,
-      vehicleId: best.id,
-      boardingTicksLeft: BOARDING_TICKS,
-      x: best.x,
-      y: best.y,
-      facing: best.heading,
-      speed: 0,
-      driveSteer: 0,
-    },
+    players: [
+      {
+        ...localPlayer(state),
+        vehicleId: best.id,
+        boardingTicksLeft: BOARDING_TICKS,
+        x: best.x,
+        y: best.y,
+        facing: best.heading,
+        speed: 0,
+        driveSteer: 0,
+      },
+    ],
   };
 }
 
@@ -237,19 +241,21 @@ function exitVehicle(state: ArenaState, world: ArenaWorld): ArenaState {
   const vehicle = occupiedVehicle(state);
   const [x, y] = vehicle
     ? exitPosition(vehicle, world.collision)
-    : [state.player.x, state.player.y];
+    : [localPlayer(state).x, localPlayer(state).y];
   return {
     ...state,
-    player: {
-      ...state.player,
-      vehicleId: null,
-      boardingTicksLeft: 0,
-      x,
-      y,
-      facing: vehicle ? vehicle.heading : state.player.facing,
-      speed: 0,
-      driveSteer: 0,
-    },
+    players: [
+      {
+        ...localPlayer(state),
+        vehicleId: null,
+        boardingTicksLeft: 0,
+        x,
+        y,
+        facing: vehicle ? vehicle.heading : localPlayer(state).facing,
+        speed: 0,
+        driveSteer: 0,
+      },
+    ],
   };
 }
 
@@ -259,17 +265,17 @@ function applyEnterExit(
   pressed: boolean,
   world: ArenaWorld,
 ): ArenaState {
-  if (!pressed || isDead(state.player)) return state;
-  return state.player.vehicleId === null
+  if (!pressed || isDead(localPlayer(state))) return state;
+  return localPlayer(state).vehicleId === null
     ? enterVehicle(state)
     : exitVehicle(state, world);
 }
 
 /** Handles the Wapen edge. */
 function applyWeaponSwitch(state: ArenaState, pressed: boolean): ArenaState {
-  if (!pressed || isDead(state.player)) return state;
-  const weapon = nextWeapon(state.player.weapon, state.player.ammo);
-  return { ...state, player: { ...state.player, weapon } };
+  if (!pressed || isDead(localPlayer(state))) return state;
+  const weapon = nextWeapon(localPlayer(state).weapon, localPlayer(state).ammo);
+  return replacePlayer(state, { ...localPlayer(state), weapon });
 }
 
 /** Steps every car (only the occupied one gets controls), then applies building and car–car impact damage. */
@@ -309,7 +315,7 @@ function stepVehicles(
   let events = state.events;
   const stepped = state.vehicles.map((vehicle) => {
     const controls =
-      vehicle.id === state.player.vehicleId
+      vehicle.id === localPlayer(state).vehicleId
         ? playerControls
         : aiControls.get(vehicle.id);
     if (isAsleep(vehicle, controls)) return vehicle;
@@ -364,11 +370,11 @@ function walkPlayer(
   vehicles: VehicleState[],
   tick: number,
 ): ArenaPlayerState {
-  let player = isDead(state.player)
-    ? state.player
+  let player = isDead(localPlayer(state))
+    ? localPlayer(state)
     : {
-        ...state.player,
-        ...stepPlayer(state.player, input, dt, world.collision),
+        ...localPlayer(state),
+        ...stepPlayer(localPlayer(state), input, dt, world.collision),
       };
   for (const vehicle of vehicles) {
     const contact = resolveVehicleAgainstPlayer(vehicle, player);
@@ -388,10 +394,10 @@ function moveEntities(
 ): ArenaState {
   const driving = occupiedVehicle(state);
   const canDrive =
-    !isDead(state.player) && state.player.boardingTicksLeft === 0;
+    !isDead(localPlayer(state)) && localPlayer(state).boardingTicksLeft === 0;
   const drive: DriveStep =
     driving && canDrive
-      ? driveStep(input, driving.heading, state.player.driveSteer, dt)
+      ? driveStep(input, driving.heading, localPlayer(state).driveSteer, dt)
       : { controls: NO_CONTROLS, steer: 0 };
   const drivers = stepDrivers(state, world, random, policeChase(state));
   const moved = stepVehicles(
@@ -410,11 +416,14 @@ function moveEntities(
   if (driving) {
     const ridden =
       moved.vehicles.find((vehicle) => vehicle.id === driving.id) ?? driving;
-    return { ...next, player: ridePlayer(state.player, ridden, drive.steer) };
+    return replacePlayer(
+      next,
+      ridePlayer(localPlayer(state), ridden, drive.steer),
+    );
   }
   return {
     ...next,
-    player: walkPlayer(next, input, dt, world, moved.vehicles, tick),
+    players: [walkPlayer(next, input, dt, world, moved.vehicles, tick)],
   };
 }
 
@@ -431,7 +440,7 @@ function afterShot(player: ArenaPlayerState, tick: number): ArenaPlayerState {
 
 /** True when the trigger can fire this tick: alive, cooldown elapsed, ammo left and under the bullet cap. */
 function canFire(state: ArenaState, input: WorldInput, tick: number): boolean {
-  const { player } = state;
+  const player = localPlayer(state);
   return (
     input.fire &&
     !isDead(player) &&
@@ -455,7 +464,7 @@ function fireShots(
   tick: number,
   random: () => number,
 ): FireResult {
-  const { player } = state;
+  const player = localPlayer(state);
   // canFire only checks that firing is allowed at all; a multi-pellet weapon
   // (shotgun) can still overflow MAX_BULLETS close to the cap, so trim the
   // surplus pellets here rather than let applyFire exceed the invariant.
@@ -495,7 +504,7 @@ function applyFire(
   random: () => number,
 ): ArenaState {
   if (!canFire(state, input, tick)) return state;
-  const angle = input.aim ?? state.player.facing;
+  const angle = input.aim ?? localPlayer(state).facing;
   const { shots, effects, nextId } = fireShots(state, angle, tick, random);
   return {
     ...state,
@@ -504,12 +513,12 @@ function applyFire(
     effects,
     events: pushEvent(state.events, {
       kind: "shot",
-      weapon: state.player.weapon,
-      ownerId: state.player.id,
-      x: state.player.x,
-      y: state.player.y,
+      weapon: localPlayer(state).weapon,
+      ownerId: localPlayer(state).id,
+      x: localPlayer(state).x,
+      y: localPlayer(state).y,
     }),
-    player: afterShot(state.player, tick),
+    players: [afterShot(localPlayer(state), tick)],
   };
 }
 
@@ -543,9 +552,15 @@ function applyHit(state: ArenaState, hit: BulletHit, tick: number): ArenaState {
     );
     return withHitEvent({ ...state, vehicles }, "vehicle", hit.point);
   }
-  if (hit.target.kind === "player" && hit.target.playerId === state.player.id)
+  if (
+    hit.target.kind === "player" &&
+    hit.target.playerId === localPlayer(state).id
+  )
     return withHitEvent(
-      { ...state, player: damagePlayer(state.player, hit.bullet.damage, tick) },
+      replacePlayer(
+        state,
+        damagePlayer(localPlayer(state), hit.bullet.damage, tick),
+      ),
       "player",
       hit.point,
     );
@@ -554,7 +569,7 @@ function applyHit(state: ArenaState, hit: BulletHit, tick: number): ArenaState {
 
 /** Every circle a bullet can hit this tick: the player on foot and living pedestrians. */
 function bulletTargets(state: ArenaState): PlayerTarget[] {
-  const { player } = state;
+  const player = localPlayer(state);
   const targets: PlayerTarget[] =
     !isDead(player) && player.vehicleId === null
       ? [{ id: player.id, x: player.x, y: player.y }]
@@ -652,7 +667,7 @@ function explodeVehicle(
     peds: blast.peds,
     cops: copBlast.cops,
     nextId: state.nextId + 1,
-    player: blastPlayer(state.player, vehicle, tick),
+    players: [blastPlayer(localPlayer(state), vehicle, tick)],
     events,
     effects: addEffect(state.effects, {
       id: state.nextId,
@@ -675,14 +690,16 @@ function applyExplosions(
   for (const vehicle of state.vehicles) {
     if (vehicle.health > 0 || vehicle.wrecked) continue;
     next = explodeVehicle(next, vehicle, tick);
-    if (next.player.vehicleId === vehicle.id) next = exitVehicle(next, world);
+    if (localPlayer(next).vehicleId === vehicle.id)
+      next = exitVehicle(next, world);
   }
   return next;
 }
 
 /** Safety net: a player who died while seated is placed beside the car. */
 function ejectIfDead(state: ArenaState, world: ArenaWorld): ArenaState {
-  if (!isDead(state.player) || state.player.vehicleId === null) return state;
+  if (!isDead(localPlayer(state)) || localPlayer(state).vehicleId === null)
+    return state;
   return exitVehicle(state, world);
 }
 
@@ -693,7 +710,7 @@ function applyRespawn(
   tick: number,
   random: () => number,
 ): ArenaState {
-  const { player } = state;
+  const player = localPlayer(state);
   if (
     player.diedAtTick === null ||
     tick < player.diedAtTick + RESPAWN_DELAY_TICKS
@@ -714,10 +731,12 @@ function applyRespawn(
     : [player.x, player.y];
   return {
     ...state,
-    player: {
-      ...createArenaPlayer(spawn, tick),
-      invulnerableUntilTick: tick + INVULNERABLE_TICKS,
-    },
+    players: [
+      {
+        ...createArenaPlayer(spawn, tick),
+        invulnerableUntilTick: tick + INVULNERABLE_TICKS,
+      },
+    ],
   };
 }
 
@@ -730,11 +749,11 @@ export function stepArena(
   random: () => number,
 ): ArenaState {
   const tick = state.tick + 1;
-  const edges = detectEdges(state.player, input);
+  const edges = detectEdges(localPlayer(state), input);
   let next: ArenaState = {
     ...state,
     tick,
-    player: { ...state.player, held: edges.held },
+    players: [{ ...localPlayer(state), held: edges.held }],
     events: [],
   };
   next = applyPopulation(next, world, tick, random);
@@ -753,7 +772,10 @@ export function stepArena(
   next = manageCops(next, world, tick, random);
   next = managePoliceCars(next, world, tick, random);
   next = ejectIfDead(next, world);
-  const zone = findZone(world.index, [next.player.x, next.player.y]);
+  const zone = findZone(world.index, [
+    localPlayer(next).x,
+    localPlayer(next).y,
+  ]);
   return {
     ...next,
     effects: pruneEffects(next.effects, tick),
@@ -769,14 +791,16 @@ export function teleportArenaPlayer(
 ): ArenaState {
   return {
     ...state,
-    player: {
-      ...state.player,
-      x: position[0],
-      y: position[1],
-      speed: 0,
-      vehicleId: null,
-      boardingTicksLeft: 0,
-    },
+    players: [
+      {
+        ...localPlayer(state),
+        x: position[0],
+        y: position[1],
+        speed: 0,
+        vehicleId: null,
+        boardingTicksLeft: 0,
+      },
+    ],
     bullets: [],
     zoneKey: findZone(index, position)?.key ?? null,
   };

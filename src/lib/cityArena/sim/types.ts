@@ -236,7 +236,8 @@ export type ArenaState = {
   tick: number;
   seed: number;
   nextId: number;
-  player: ArenaPlayerState;
+  /** Every player the simulation steps, in join order; offline play has exactly one. */
+  players: ArenaPlayerState[];
   vehicles: VehicleState[];
   bullets: BulletState[];
   effects: EffectState[];

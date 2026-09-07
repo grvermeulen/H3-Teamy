@@ -10,7 +10,7 @@ import {
   spawnPeds,
 } from "./peds";
 import { placePickups } from "./pickups";
-import { playersOf } from "./players";
+import { localPlayer, playersOf } from "./players";
 import { nearestZone, type SpawnGraph } from "./spawn";
 import {
   TRAFFIC_MAX_PER_ZONE,
@@ -42,7 +42,7 @@ function clearPopulation(state: ArenaState): ArenaState {
   const driven = new Set(state.traffic.map((driver) => driver.vehicleId));
   const vehicles = state.vehicles.filter(
     (vehicle) =>
-      vehicle.id === state.player.vehicleId ||
+      vehicle.id === localPlayer(state).vehicleId ||
       (!driven.has(vehicle.id) && !vehicle.wrecked),
   );
   return { ...state, vehicles, peds: [], cops: [], pickups: [], traffic: [] };

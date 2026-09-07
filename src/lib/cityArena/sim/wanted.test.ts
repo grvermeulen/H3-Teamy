@@ -1,3 +1,4 @@
+import { localPlayer } from "./players";
 import { describe, expect, it } from "vitest";
 import type { MapIndex } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
@@ -69,7 +70,7 @@ describe("heat bookkeeping", () => {
     expect(wantedLevel(39)).toBe(0);
     expect(wantedLevel(40)).toBe(1);
     expect(wantedLevel(120)).toBe(3);
-    const { player } = lonePlayer();
+    const player = localPlayer(lonePlayer());
     const heated = addHeat(player, 30, 10);
     expect(heated).toMatchObject({ heat: 30, heatTick: 10 });
     expect(decayHeat(heated, 10 + HEAT_QUIET_TICKS - 1)).toBe(heated);
@@ -80,7 +81,7 @@ describe("heat bookkeeping", () => {
   });
 
   it("counts only this player's kills, nearby shots and police rams", () => {
-    const { player } = lonePlayer();
+    const player = localPlayer(lonePlayer());
     const driver = { ...player, vehicleId: 4 };
     const events: ArenaEvent[] = [
       { kind: "kill", victim: "ped", killerId: 0, x: 1, y: 1 },
@@ -104,7 +105,7 @@ describe("heat bookkeeping", () => {
       },
       5,
     );
-    expect(first.player.heat).toBe(30);
+    expect(localPlayer(first).heat).toBe(30);
     const second = applyWanted(
       {
         ...first,
@@ -112,7 +113,7 @@ describe("heat bookkeeping", () => {
       },
       6,
     );
-    expect(second.player.heat).toBe(60);
+    expect(localPlayer(second).heat).toBe(60);
     expect(second.events).toContainEqual({
       kind: "wanted",
       playerId: 0,
@@ -121,8 +122,8 @@ describe("heat bookkeeping", () => {
     expect(currentWantedLevel(second)).toBe(1);
     const dead: ArenaState = {
       ...second,
-      player: { ...second.player, health: 0, diedAtTick: 6 },
+      players: [{ ...localPlayer(second), health: 0, diedAtTick: 6 }],
     };
-    expect(applyWanted(dead, 6).player.heat).toBe(0);
+    expect(localPlayer(applyWanted(dead, 6)).heat).toBe(0);
   });
 });

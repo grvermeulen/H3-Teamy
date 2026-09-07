@@ -1,3 +1,4 @@
+import { localPlayer } from "./players";
 import { describe, expect, it } from "vitest";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
@@ -59,7 +60,10 @@ describe("population", () => {
     for (const pickup of state.pickups) expect(pickup.x).toBeLessThan(1000);
     const random = createRng(9);
     expect(applyPopulation(state, { index, graph }, 1, random)).toBe(state);
-    const moved = { ...state, player: { ...state.player, x: 3050, y: 0 } };
+    const moved = {
+      ...state,
+      players: [{ ...localPlayer(state), x: 3050, y: 0 }],
+    };
     const repopulated = applyPopulation(moved, { index, graph }, 1, random);
     expect(repopulated.activeZoneKey).toBe("campus");
     expect(repopulated.pickups).toHaveLength(3);
@@ -77,7 +81,7 @@ describe("population", () => {
     for (const ped of state.peds) {
       expect(Math.abs(ped.y)).toBeCloseTo(4);
       expect(
-        Math.hypot(ped.x - state.player.x, ped.y - state.player.y),
+        Math.hypot(ped.x - localPlayer(state).x, ped.y - localPlayer(state).y),
       ).toBeGreaterThanOrEqual(30);
     }
     const thinned = { ...state, peds: state.peds.slice(0, 10) };
@@ -99,7 +103,10 @@ describe("population", () => {
       createRng(5),
     );
     const car = state.vehicles[0];
-    const seated = { ...state, player: { ...state.player, vehicleId: car.id } };
+    const seated = {
+      ...state,
+      players: [{ ...localPlayer(state), vehicleId: car.id }],
+    };
     const repopulated = populateZone(seated, east, index, graph, createRng(2));
     expect(repopulated.vehicles.map((vehicle) => vehicle.id)).toContain(car.id);
     expect(repopulated.activeZoneKey).toBe("campus");

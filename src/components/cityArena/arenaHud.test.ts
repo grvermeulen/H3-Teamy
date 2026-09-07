@@ -1,3 +1,4 @@
+import { localPlayer } from "@/lib/cityArena/sim/players";
 import { describe, expect, it } from "vitest";
 import { createArenaState } from "@/lib/cityArena/sim/arena";
 import { createRng } from "@/lib/cityArena/sim/rng";
@@ -47,7 +48,7 @@ describe("arena HUD projections", () => {
       ...state(),
       tick: 100,
       zoneEnforced: true,
-      player: { ...state().player, heat: 120, outsideSinceTick: 0 },
+      players: [{ ...localPlayer(state()), heat: 120, outsideSinceTick: 0 }],
     };
     const hud = computeHud(
       { index: () => index, tiles: () => [] },
@@ -60,7 +61,7 @@ describe("arena HUD projections", () => {
       zoneWarning: true,
       soundEnabled: false,
     });
-    expect(current.player.outsideSinceTick).toBe(0);
+    expect(localPlayer(current).outsideSinceTick).toBe(0);
   });
 
   it("projects nearby pickups, police and zone geometry into the radar", () => {
