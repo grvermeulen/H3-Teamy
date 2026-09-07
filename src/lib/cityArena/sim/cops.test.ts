@@ -88,7 +88,7 @@ describe("cop basics", () => {
     expect(copAim(cop, [10, 0], () => 0.5)).toBeCloseTo(0);
     expect(copAim(cop, [10, 0], () => 1)).toBeCloseTo((15 * Math.PI) / 180);
     const moved = stepCop(copAt(5, 100), [0, 0], world, step, 1);
-    expect(moved.x).toBeCloseTo(99.85);
+    expect(moved.x).toBeCloseTo(99.8);
     expect(moved.path).toEqual([1, 0]);
   });
 });

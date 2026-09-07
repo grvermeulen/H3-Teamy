@@ -4,6 +4,7 @@ import type { LandmarkLookup } from "./drawStatic";
 import {
   CHUNK_METRES,
   RASTER_BUDGET_BYTES,
+  RASTER_BUDGET_MAX_BYTES,
   chunkKey,
   chunkRect,
   chunksCovering,
@@ -117,5 +118,24 @@ describe("rasterBudgetForViewport", () => {
 
     expect(budget).toBeGreaterThan(RASTER_BUDGET_BYTES);
     expect(budget).toBeGreaterThan(workingSetBytes);
+  });
+
+  it("caps the adaptive budget but never below one raw working set", () => {
+    const zoom = 12;
+    const chunkPx = CHUNK_METRES * zoom;
+    const ultraWideWorkingSet =
+      (Math.ceil(3840 / chunkPx) + 1) *
+      (Math.ceil(2160 / chunkPx) + 1) *
+      chunkPx *
+      chunkPx *
+      4;
+
+    expect(rasterBudgetForViewport({ width: 2560, height: 1440 }, zoom)).toBe(
+      RASTER_BUDGET_MAX_BYTES,
+    );
+    expect(ultraWideWorkingSet).toBeGreaterThan(RASTER_BUDGET_MAX_BYTES);
+    expect(rasterBudgetForViewport({ width: 3840, height: 2160 }, zoom)).toBe(
+      ultraWideWorkingSet,
+    );
   });
 });

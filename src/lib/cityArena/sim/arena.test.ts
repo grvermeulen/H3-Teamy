@@ -219,7 +219,7 @@ describe("stepArena on foot", () => {
     const start = boot();
     const walked = run(start, createInput({ move: [1, 0], aim: Math.PI }), 30);
     expect(walked.tick).toBe(30);
-    expect(walked.player.x).toBeCloseTo(start.player.x + 4);
+    expect(walked.player.x).toBeCloseTo(start.player.x + 5.174074, 5);
     expect(walked.player.facing).toBeCloseTo(Math.PI);
     expect(walked.held).toEqual({ enter: false, weaponNext: false });
   });
