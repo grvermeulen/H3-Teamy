@@ -80,6 +80,21 @@ describe("heat bookkeeping", () => {
     );
   });
 
+  it("chases the most wanted player, breaking equal heat on the lower id", () => {
+    const base = localPlayer(lonePlayer());
+    const hotter = { ...base, id: 5, heat: 90 };
+    const cooler = { ...base, id: 2, heat: 45 };
+    const tied = { ...base, id: 9, heat: 45 };
+    const state = { ...lonePlayer(), players: [cooler, hotter] };
+    expect(wantedTarget(state)?.id).toBe(5);
+    // Same heat: the lower id wins, whichever order they sit in the array.
+    expect(wantedTarget({ ...state, players: [tied, cooler] })?.id).toBe(2);
+    expect(wantedTarget({ ...state, players: [cooler, tied] })?.id).toBe(2);
+    // A dead player is not chased even while their heat is still high.
+    const dead = { ...hotter, health: 0, diedAtTick: 3 };
+    expect(wantedTarget({ ...state, players: [cooler, dead] })?.id).toBe(2);
+  });
+
   it("counts only this player's kills, nearby shots and police rams", () => {
     const player = localPlayer(lonePlayer());
     const driver = { ...player, vehicleId: 4 };

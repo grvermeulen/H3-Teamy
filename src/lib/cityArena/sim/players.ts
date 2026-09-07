@@ -1,4 +1,3 @@
-import type { Point } from "../world/projection";
 import type { ArenaPlayerState, ArenaState } from "./types";
 
 /** Returns the players in the state, in join order. */
@@ -50,26 +49,4 @@ export function localPlayer(state: ArenaState): ArenaPlayerState {
  */
 export function orderedPlayers(state: ArenaState): ArenaPlayerState[] {
   return [...state.players].sort((first, second) => first.id - second.id);
-}
-
-/**
- * The living player closest to `point`, ties broken by the lower id so the choice is
- * deterministic. Returns `null` when no player passes `filter`.
- */
-export function nearestPlayerTo(
-  state: ArenaState,
-  point: Point,
-  filter: (player: ArenaPlayerState) => boolean = () => true,
-): ArenaPlayerState | null {
-  let best: ArenaPlayerState | null = null;
-  let bestDistanceSq = Number.POSITIVE_INFINITY;
-  for (const player of state.players) {
-    if (!filter(player)) continue;
-    const distanceSq = (player.x - point[0]) ** 2 + (player.y - point[1]) ** 2;
-    if (distanceSq > bestDistanceSq) continue;
-    if (distanceSq === bestDistanceSq && best && best.id < player.id) continue;
-    best = player;
-    bestDistanceSq = distanceSq;
-  }
-  return best;
 }
