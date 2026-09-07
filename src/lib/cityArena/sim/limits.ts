@@ -10,3 +10,5 @@ export const MAX_PICKUPS = 10;
 export const MAX_EVENTS = 128;
 /** Maximum vehicles retained by the arena state. */
 export const MAX_VEHICLES = 140;
+/** Maximum players in one arena (spec §6.7: the host rejects the ninth). */
+export const MAX_ARENA_PLAYERS = 8;

@@ -1,4 +1,10 @@
-import { localPlayer, playerById } from "./players";
+import {
+  driverPlayer,
+  localPlayer,
+  playerById,
+  playersOf,
+  replacePlayer,
+} from "./players";
 import { describe, expect, it } from "vitest";
 import { createCollisionGrid } from "../world/collisionGrid";
 import type { MapIndex, MapZone } from "../world/mapTypes";
@@ -6,12 +12,15 @@ import { decodeRoadGraph } from "../world/roadGraph";
 import {
   BOARDING_TICKS,
   ENTER_RANGE_M,
+  addArenaPlayer,
   createArenaState,
+  removeArenaPlayer,
   stepArena,
   teleportArenaPlayer,
   type ArenaWorld,
 } from "./arena";
 import { MAX_BULLETS } from "./bullets";
+import { MAX_ARENA_PLAYERS } from "./limits";
 import { RESPAWN_DELAY_TICKS } from "./damage";
 import { checkInvariants } from "./invariants";
 import { POLICE_COLOUR, policeDrivers } from "./police";
@@ -247,6 +256,45 @@ function twoPlayers(state: ArenaState): ArenaState {
     players: [first, { ...first, id: first.id + 1, x: first.x + 20 }],
   };
 }
+
+describe("joining and leaving", () => {
+  it("spawns a joiner on a spawn node and refuses the ninth", () => {
+    let state = boot();
+    for (let index = 1; index < MAX_ARENA_PLAYERS; index += 1) {
+      const joined = addArenaPlayer(state, world, 0, createRng(index));
+      expect(joined.player).not.toBeNull();
+      expect(SPAWN_XS).toContain(joined.player?.x);
+      state = joined.state;
+    }
+    expect(playersOf(state)).toHaveLength(MAX_ARENA_PLAYERS);
+    const full = addArenaPlayer(state, world, 0, createRng(99));
+    expect(full.player).toBeNull();
+    expect(full.state).toBe(state);
+  });
+
+  it("gives every joiner an id no live entity is using", () => {
+    const first = addArenaPlayer(boot(), world, 0, createRng(2));
+    const second = addArenaPlayer(first.state, world, 0, createRng(3));
+    const ids = playersOf(second.state).map((player) => player.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    const entityIds = second.state.vehicles.map((vehicle) => vehicle.id);
+    expect(ids.some((id) => entityIds.includes(id))).toBe(false);
+  });
+
+  it("removes a player and leaves their car standing", () => {
+    const joined = addArenaPlayer(boot(), world, 0, createRng(4));
+    const id = joined.player?.id ?? -1;
+    const seated = replacePlayer(joined.state, {
+      ...(playerById(joined.state, id) as ArenaPlayerState),
+      vehicleId: joined.state.vehicles[0].id,
+    });
+    const left = removeArenaPlayer(seated, id);
+    expect(playerById(left, id)).toBeNull();
+    expect(driverPlayer(left, seated.vehicles[0].id)).toBeNull();
+    expect(left.vehicles).toHaveLength(seated.vehicles.length);
+    expect(removeArenaPlayer(left, 999)).toBe(left);
+  });
+});
 
 describe("stepArena with several players", () => {
   it("moves each player by their own input and nobody else's", () => {

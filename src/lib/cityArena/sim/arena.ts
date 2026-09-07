@@ -3,6 +3,7 @@ import {
   localPlayer,
   orderedPlayers,
   playerById,
+  playersOf,
   replacePlayer,
 } from "./players";
 import type { Rect } from "../mapBuild/geometry";
@@ -40,11 +41,16 @@ import {
 import { addEffect, pruneEffects } from "./effects";
 import { pushEvent } from "./events";
 import { applyEntityHit } from "./hits";
-import { applyPopulation, populateZone } from "./populate";
+import {
+  applyPopulation,
+  populateZone,
+  populationAnchorZone,
+} from "./populate";
 import { aliveCops, blastCops, manageCops, stepCops } from "./cops";
 import { alivePeds, blastPeds, stepPeds } from "./peds";
 import { stepPickups } from "./pickups";
 import { managePoliceCars, policeChase } from "./police";
+import { MAX_ARENA_PLAYERS } from "./limits";
 import { PLAYER_RADIUS_M, stepPlayer } from "./player";
 import {
   chooseRespawnNode,
@@ -769,6 +775,73 @@ function ejectIfDead(
 }
 
 /** After 90 ticks: full health and the spawn loadout on a node of the current (else nearest) zone, shielded for 60 ticks. */
+/**
+ * A spawn node of `zone` clear of parked cars and pickups, or `fallback` when there is no zone
+ * to spawn into. Shared by respawn and by a player joining, so both land the same way.
+ */
+function spawnPointIn(
+  state: ArenaState,
+  zone: MapZone | null,
+  fallback: Point,
+  random: () => number,
+): Point {
+  if (!zone) return fallback;
+  const intactVehicles: Point[] = state.vehicles
+    .filter((vehicle) => !vehicle.wrecked)
+    .map((vehicle) => [vehicle.x, vehicle.y]);
+  const pickupSpots: Point[] = state.pickups.map((pickup) => [
+    pickup.x,
+    pickup.y,
+  ]);
+  return chooseRespawnNode(zone, [...intactVehicles, ...pickupSpots], random);
+}
+
+/**
+ * Adds a player at a free spawn node of the population's anchor zone, taking the next free
+ * entity id so a client that rejoins never collides with a live entity. Returns the state
+ * unchanged and a `null` player when the arena already holds {@link MAX_ARENA_PLAYERS}.
+ */
+export function addArenaPlayer(
+  state: ArenaState,
+  world: ArenaWorld,
+  tick: number,
+  random: () => number,
+): { state: ArenaState; player: ArenaPlayerState | null } {
+  if (playersOf(state).length >= MAX_ARENA_PLAYERS)
+    return { state, player: null };
+  const anchor = playersOf(state)[0];
+  const zone = populationAnchorZone(state, world.index);
+  const spawn = spawnPointIn(
+    state,
+    zone,
+    anchor ? [anchor.x, anchor.y] : [0, 0],
+    random,
+  );
+  const player: ArenaPlayerState = {
+    ...createArenaPlayer(spawn, tick),
+    id: state.nextId,
+    invulnerableUntilTick: tick + INVULNERABLE_TICKS,
+  };
+  return {
+    state: {
+      ...state,
+      players: [...state.players, player],
+      nextId: state.nextId + 1,
+    },
+    player,
+  };
+}
+
+/**
+ * Removes a player. The car they were driving is simply left where it stands with nobody at the
+ * wheel — an ambient driver may pick it up again, exactly as when a player steps out.
+ */
+export function removeArenaPlayer(state: ArenaState, id: number): ArenaState {
+  const players = state.players.filter((player) => player.id !== id);
+  if (players.length === state.players.length) return state;
+  return { ...state, players };
+}
+
 function applyRespawn(
   state: ArenaState,
   player: ArenaPlayerState,
@@ -786,16 +859,7 @@ function applyRespawn(
   const zone =
     findZone(world.index, [player.x, player.y]) ??
     nearestZone(world.index, [player.x, player.y]);
-  const intactVehicles: Point[] = state.vehicles
-    .filter((vehicle) => !vehicle.wrecked)
-    .map((vehicle) => [vehicle.x, vehicle.y]);
-  const pickupSpots: Point[] = state.pickups.map((pickup) => [
-    pickup.x,
-    pickup.y,
-  ]);
-  const spawn: Point = zone
-    ? chooseRespawnNode(zone, [...intactVehicles, ...pickupSpots], random)
-    : [player.x, player.y];
+  const spawn = spawnPointIn(state, zone, [player.x, player.y], random);
   return replacePlayer(state, {
     ...createArenaPlayer(spawn, tick),
     id: player.id,
