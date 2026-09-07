@@ -35,6 +35,7 @@ The owner descoped spec §14's "one real 4-player session (two phones, two lapto
 ## File Structure
 
 **Modified:**
+
 - `src/lib/cityArena/sim/types.ts` — `ArenaState.players`, `ArenaPlayerState.held`, `ArenaInputs`.
 - `src/lib/cityArena/sim/players.ts` — the seam: widened to the array, plus `addPlayer` / `removePlayer` / `nearestPlayerTo`.
 - `src/lib/cityArena/sim/arena.ts` — `createArenaState`, `stepArena`, `occupiedVehicle`, `exitPosition`, `teleportArenaPlayer` fan out over players.
@@ -43,6 +44,7 @@ The owner descoped spec §14's "one real 4-player session (two phones, two lapto
 - `src/components/cityArena/arenaRuntime.ts`, `arenaHud.ts`, `useArenaGame.ts` — read "my player" by id.
 
 **Created:**
+
 - `src/lib/cityArena/sim/playerStep.ts` — the per-player stages lifted out of `arena.ts` (weapon switch, enter/exit, fire, respawn, eject-if-dead), so `arena.ts` drops back under 400 lines.
 - `src/lib/cityArena/sim/playerStep.test.ts`
 - `src/lib/cityArena/sim/multiplayer.test.ts` — the two-player determinism and invariant test.
@@ -56,11 +58,13 @@ The owner descoped spec §14's "one real 4-player session (two phones, two lapto
 `ArenaState.held` is one set of edge-triggered buttons for the whole world. With two players, one player's held Enter would swallow the other's press. Move it onto the player before anything else changes shape, so this task is provable on the current single-player state.
 
 **Files:**
+
 - Modify: `src/lib/cityArena/sim/types.ts` (`ArenaPlayerState`, `ArenaState`)
 - Modify: `src/lib/cityArena/sim/arena.ts` (`createArenaPlayer`, `createArenaState`, `detectEdges`, `stepArena`)
 - Test: `src/lib/cityArena/sim/arena.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `ArenaPlayerState.held: HeldButtons`; `detectEdges(player: ArenaPlayerState, input: WorldInput): { enterPressed: boolean; weaponPressed: boolean; held: HeldButtons }`. `ArenaState.held` is gone.
 
@@ -90,8 +94,8 @@ Expected: FAIL — `players` is undefined (the array arrives in Task 2; for this
 In `types.ts`, add to `ArenaPlayerState`:
 
 ```ts
-  /** Edge-triggered buttons this player held last tick, so a hold is not a fresh press. */
-  held: HeldButtons;
+/** Edge-triggered buttons this player held last tick, so a hold is not a fresh press. */
+held: HeldButtons;
 ```
 
 and delete `held: HeldButtons;` from `ArenaState`.
@@ -117,12 +121,12 @@ function detectEdges(
 In `stepArena`, replace `const edges = detectEdges(state.held, input);` with `const edges = detectEdges(state.player, input);` and write the result onto the player instead of the state: the line `let next: ArenaState = { ...state, tick, held: edges.held, events: [] };` becomes
 
 ```ts
-  let next: ArenaState = {
-    ...state,
-    tick,
-    player: { ...state.player, held: edges.held },
-    events: [],
-  };
+let next: ArenaState = {
+  ...state,
+  tick,
+  player: { ...state.player, held: edges.held },
+  events: [],
+};
 ```
 
 - [ ] **Step 5: Fix every other reader**
@@ -146,12 +150,14 @@ git commit -m "refactor(arena): move button edges onto the player"
 ### Task 2: The players array
 
 **Files:**
+
 - Modify: `src/lib/cityArena/sim/types.ts` (`ArenaState`)
 - Modify: `src/lib/cityArena/sim/players.ts` (all four helpers)
 - Modify: `src/lib/cityArena/sim/arena.ts` (32 `state.player` reads)
 - Test: `src/lib/cityArena/sim/players.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 1's `ArenaPlayerState.held`.
 - Produces:
   - `ArenaState.players: ArenaPlayerState[]` (join order; `players[0]` is the only player in single-player play). `ArenaState.player` no longer exists.
@@ -244,6 +250,7 @@ export function localPlayer(state: ArenaState): ArenaPlayerState {
 `createArenaState`: `player: createArenaPlayer(spawn, 0),` becomes `players: [createArenaPlayer(spawn, 0)],`.
 
 Then replace each remaining `state.player` / `next.player`. Two patterns cover all 32:
+
 - reading "the player" for a whole-world decision (zone lookup, camera anchor) → `localPlayer(state)`;
 - reading or writing one player inside a stage → the stage takes a `player` parameter and returns the updated one, and the caller uses `replacePlayer`.
 
@@ -266,12 +273,14 @@ git commit -m "refactor(arena): hold players in an array"
 ### Task 3: One input per player
 
 **Files:**
+
 - Modify: `src/lib/cityArena/sim/types.ts` (`ArenaInputs`)
 - Modify: `src/lib/cityArena/sim/arena.ts` (`stepArena`)
 - Create: `src/lib/cityArena/sim/playerStep.ts`
 - Test: `src/lib/cityArena/sim/playerStep.test.ts`
 
 **Interfaces:**
+
 - Consumes: Task 2's `players` array and seam.
 - Produces:
   - `type ArenaInputs = ReadonlyMap<number, WorldInput>`
@@ -398,11 +407,13 @@ git commit -m "feat(arena): step every player from their own input"
 With one player, `zoneKey` was "where the player is" and NPCs spawned around them. With N players spread over the map that rule spawns crowds around whoever happens to be `players[0]`. Spec §6.4: the host simulates NPCs inside the zone disc + 100 m.
 
 **Files:**
+
 - Modify: `src/lib/cityArena/sim/populate.ts`
 - Modify: `src/lib/cityArena/sim/arena.ts` (`stepArena`'s trailing `zoneKey`)
 - Test: `src/lib/cityArena/sim/populate.test.ts`
 
 **Interfaces:**
+
 - Produces: `populationAnchorZone(state: ArenaState, index: MapIndex): MapZone | null` — `activeZoneKey`'s zone when a match is running, else the zone containing the lowest-id living player, else `null`.
 
 - [ ] **Step 1: Write the failing test**
@@ -460,11 +471,13 @@ git commit -m "feat(arena): anchor population on the match zone"
 Spec §6.7: late joiners send `control:join`, the host spawns them; members who leave are removed on presence `leave`; capacity is 8.
 
 **Files:**
+
 - Modify: `src/lib/cityArena/sim/players.ts`
 - Modify: `src/lib/cityArena/sim/limits.ts` (capacity constant)
 - Test: `src/lib/cityArena/sim/players.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `MAX_ARENA_PLAYERS = 8` in `limits.ts`
   - `addArenaPlayer(state, world, tick, random): { state: ArenaState; player: ArenaPlayerState | null }` — `null` when full; spawns on a zone spawn node away from parked cars and pickups, exactly as respawn does.
@@ -518,17 +531,19 @@ git commit -m "feat(arena): add and remove players at runtime"
 The nine modules that already import the seam were written against a one-element array. Each needs checking for "assumes exactly one" — the common bug is `playersOf(state)[0]` where the rule is "the nearest player".
 
 **Files:**
+
 - Modify: whichever of `cops.ts`, `hits.ts`, `peds.ts`, `pickups.ts`, `police.ts`, `traffic.ts`, `wanted.ts`, `zoneRule.ts` the audit finds
 - Modify: `src/lib/cityArena/sim/players.ts` (`nearestPlayerTo`)
 - Test: the co-located test of every module changed
 
 **Interfaces:**
+
 - Produces: `nearestPlayerTo(state: ArenaState, point: Point, filter?: (player: ArenaPlayerState) => boolean): ArenaPlayerState | null` — ties broken by lowest id so the result is deterministic.
 
 - [ ] **Step 1: Audit**
 
 Run: `grep -rn "playersOf(" src/lib/cityArena --include="*.ts" | grep -v "\.test\."`
-For each hit, write down the rule it should follow: *nearest* (cops chasing, peds fleeing, police cars), *all* (zone rule, wanted decay, hit detection), or *the owner* (pickups).
+For each hit, write down the rule it should follow: _nearest_ (cops chasing, peds fleeing, police cars), _all_ (zone rule, wanted decay, hit detection), or _the owner_ (pickups).
 
 - [ ] **Step 2: Write the failing tests, one per module you are changing**
 
@@ -566,9 +581,11 @@ export function nearestPlayerTo(
   let bestDistanceSq = Number.POSITIVE_INFINITY;
   for (const player of playersOf(state)) {
     if (!filter(player)) continue;
-    const distanceSq =
-      (player.x - point[0]) ** 2 + (player.y - point[1]) ** 2;
-    if (distanceSq < bestDistanceSq || (distanceSq === bestDistanceSq && best && player.id < best.id)) {
+    const distanceSq = (player.x - point[0]) ** 2 + (player.y - point[1]) ** 2;
+    if (
+      distanceSq < bestDistanceSq ||
+      (distanceSq === bestDistanceSq && best && player.id < best.id)
+    ) {
       best = player;
       bestDistanceSq = distanceSq;
     }
@@ -591,11 +608,13 @@ git commit -m "feat(arena): point NPCs at the nearest player"
 ### Task 7: The client reads its own player by id
 
 **Files:**
+
 - Modify: `src/components/cityArena/arenaRuntime.ts`, `arenaHud.ts`, `useArenaGame.ts`
 - Modify: `src/lib/cityArena/render/renderScene.ts`, `src/lib/cityArena/render/radar.ts`
 - Test: the co-located tests of each
 
 **Interfaces:**
+
 - Consumes: `playerById`, `localPlayer`.
 - Produces: `Scene.players: ArenaPlayerState[]` and `Scene.localPlayerId: number` replace `Scene.player`; `renderScene` draws every player, the local one with `DEFAULT_PLAYER_STYLE` and the others with a new `OTHER_PLAYER_STYLE` (fill `PLAYER_OTHER_FILL`, ring `PLAYER_OTHER_RING`, both added to `render/palette.ts`).
 
@@ -611,7 +630,9 @@ it("draws every player and rings the local one differently", () => {
     players: [playerAt(0, [0, 0]), playerAt(1, [8, 0])],
     localPlayerId: 0,
   });
-  expect(context.calls.filter((call) => call.startsWith("arc("))).toHaveLength(2);
+  expect(context.calls.filter((call) => call.startsWith("arc("))).toHaveLength(
+    2,
+  );
   expect(context.calls).toContain(`fill(${PLAYER_FILL})`);
   expect(context.calls).toContain(`fill(${PLAYER_OTHER_FILL})`);
 });
@@ -640,6 +661,7 @@ git commit -m "feat(arena): render every player, highlight your own"
 ### Task 8: The two-player acceptance test
 
 **Files:**
+
 - Create: `src/lib/cityArena/sim/multiplayer.test.ts`
 
 - [ ] **Step 1: Write the test**
@@ -721,6 +743,13 @@ Body: what changed, why (Plan 3b needs it), the acceptance criteria above and th
 
 ---
 
+## Deviations recorded while executing
+
+- **`EMPTY_INPUT`, not `NEUTRAL_INPUT`.** `sim/types.ts` already exported exactly this constant; the plan invented a second name for it. Tasks 3 and 8 use the existing one.
+- **Tasks 2 and 7's mechanical half landed together.** The state shape and every reader have to move in one commit: the pre-commit hook runs lint, `tsc` and the full suite, so a red tree cannot be committed in between. Task 7 keeps its semantic work — drawing every player, and a style for remote ones.
+- **`playerStep.ts` is deferred to its own task (3b).** Task 3 fanned the stages out inside `arena.ts` instead. The file is 889 lines against the spec's 400-line target, but it was already 780 before this plan, and lifting the per-player half out means moving the shared helpers (`occupiedVehicle`, `exitPosition`, the boarding constants) too or accepting a cycle between the two modules. That is a self-contained move worth its own review, not a rider on a behaviour change.
+- **`stepArena` runs the per-player stages in three passes**, not one: buttons/respawn/weapon/boarding for every player, then one vehicle step for the world, then firing. Movement has to sit between them because cars step once for everyone.
+
 ## Self-review
 
 **Spec coverage.** §6.7 join/leave/capacity → Task 5. §6.4 host simulates NPCs around the zone → Task 4. §6.5's "own player simulated locally from local inputs with the same pure step functions" → Task 3 makes those functions per-player, which is exactly what prediction replays. §10.3's "input pipeline decoupled from rendering" → Task 7 splits "which player am I" from "what do I draw". Not covered here, by design: the transport, host election, snapshots, prediction, lobby and rooms API — all Plan 3b.
@@ -735,11 +764,11 @@ Body: what changed, why (Plan 3b needs it), the acceptance criteria above and th
 
 Written after this plan lands, against the same spec §6:
 
-| Area | Deliverable |
-| --- | --- |
-| Transport | `RealtimeTransport` interface, `memoryTransport` (Vitest), `ablyTransport` |
-| Auth | `GET /api/arena/realtime-token`, `ABLY_API_KEY`, `scripts/check-preview-env.ts` |
-| Loops | `hostLoop` (30 Hz accumulator, 10 Hz snapshots), `clientLoop` (prediction, replay, 120 ms interpolation) |
-| Election | Priority sort, 3 s silence rule, `hostChanged`, seeding from the last snapshot |
-| Rooms | 6-char codes, lobby presence, `GET /api/arena/rooms`, capacity and "Potje is vol" |
-| UI | Lobby, `ConnectionBanner`, Dutch copy from spec §16 |
+| Area      | Deliverable                                                                                              |
+| --------- | -------------------------------------------------------------------------------------------------------- |
+| Transport | `RealtimeTransport` interface, `memoryTransport` (Vitest), `ablyTransport`                               |
+| Auth      | `GET /api/arena/realtime-token`, `ABLY_API_KEY`, `scripts/check-preview-env.ts`                          |
+| Loops     | `hostLoop` (30 Hz accumulator, 10 Hz snapshots), `clientLoop` (prediction, replay, 120 ms interpolation) |
+| Election  | Priority sort, 3 s silence rule, `hostChanged`, seeding from the last snapshot                           |
+| Rooms     | 6-char codes, lobby presence, `GET /api/arena/rooms`, capacity and "Potje is vol"                        |
+| UI        | Lobby, `ConnectionBanner`, Dutch copy from spec §16                                                      |

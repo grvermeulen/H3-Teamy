@@ -477,9 +477,11 @@ function advanceSimulation(
       stepInput.weaponNext
     )
       runtime.sound.unlock();
+    // Offline this client is the only player, so the tick carries exactly one input. Plan 3b
+    // replaces this with the host's collected inputs from every member of the room.
     runtime.state = stepArena(
       runtime.state,
-      stepInput,
+      new Map([[localPlayer(runtime.state).id, stepInput]]),
       SIM_STEP_S,
       world,
       runtime.random,

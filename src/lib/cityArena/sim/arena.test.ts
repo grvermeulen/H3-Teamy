@@ -1,4 +1,4 @@
-import { localPlayer } from "./players";
+import { localPlayer, playerById } from "./players";
 import { describe, expect, it } from "vitest";
 import { createCollisionGrid } from "../world/collisionGrid";
 import type { MapIndex, MapZone } from "../world/mapTypes";
@@ -19,6 +19,7 @@ import { createRng } from "./rng";
 import {
   EMPTY_INPUT,
   createInput,
+  type ArenaInputs,
   type ArenaPlayerState,
   type ArenaState,
   type BulletState,
@@ -91,7 +92,13 @@ function run(
 ): ArenaState {
   let current = state;
   for (let index = 0; index < ticks; index++)
-    current = stepArena(current, input, step, world, random);
+    current = stepArena(
+      current,
+      new Map([[localPlayer(current).id, input]]),
+      step,
+      world,
+      random,
+    );
   return current;
 }
 
@@ -104,7 +111,13 @@ function runChase(
   const random = createRng(99);
   let current = state;
   for (let index = 0; index < ticks; index++)
-    current = stepArena(current, input, step, chaseWorld, random);
+    current = stepArena(
+      current,
+      new Map([[localPlayer(current).id, input]]),
+      step,
+      chaseWorld,
+      random,
+    );
   return current;
 }
 
@@ -118,7 +131,13 @@ function runCollecting(
   const events: ArenaState["events"] = [];
   let current = state;
   for (let index = 0; index < ticks; index++) {
-    current = stepArena(current, input, step, world, random);
+    current = stepArena(
+      current,
+      new Map([[localPlayer(current).id, input]]),
+      step,
+      world,
+      random,
+    );
     events.push(...current.events);
   }
   return { state: current, events };
@@ -217,6 +236,46 @@ describe("createArenaState", () => {
       1 + state.vehicles.length + state.pickups.length + state.peds.length,
     );
     expect(boot(4)).toEqual(boot(4));
+  });
+});
+
+/** The booted state plus a second player standing 20 m east of the first. */
+function twoPlayers(state: ArenaState): ArenaState {
+  const first = localPlayer(state);
+  return {
+    ...state,
+    players: [first, { ...first, id: first.id + 1, x: first.x + 20 }],
+  };
+}
+
+describe("stepArena with several players", () => {
+  it("moves each player by their own input and nobody else's", () => {
+    const start = twoPlayers(boot());
+    const inputs: ArenaInputs = new Map([
+      [0, createInput({ move: [1, 0] })],
+      [1, EMPTY_INPUT],
+    ]);
+    const next = stepArena(start, inputs, step, world, createRng(99));
+    expect(localPlayer(next).x).toBeGreaterThan(localPlayer(start).x);
+    expect(playerById(next, 1)?.x).toBe(playerById(start, 1)?.x);
+  });
+
+  it("leaves a player without an input standing still", () => {
+    const start = twoPlayers(boot());
+    const next = stepArena(start, new Map(), step, world, createRng(99));
+    expect(localPlayer(next).speed).toBe(0);
+    expect(playerById(next, 1)?.speed).toBe(0);
+  });
+
+  it("gives each player their own button edges", () => {
+    const start = twoPlayers(boot());
+    const inputs: ArenaInputs = new Map([
+      [0, createInput({ weaponNext: true })],
+      [1, EMPTY_INPUT],
+    ]);
+    const next = stepArena(start, inputs, step, world, createRng(99));
+    expect(localPlayer(next).held.weaponNext).toBe(true);
+    expect(playerById(next, 1)?.held.weaponNext).toBe(false);
   });
 });
 

@@ -28,6 +28,13 @@ export const EMPTY_INPUT: WorldInput = {
   weaponNext: false,
 };
 
+/**
+ * One input per player id for a single tick. A player with no entry is stepped with
+ * {@link EMPTY_INPUT}: offline that never happens, but a hosted match drops late packets and a
+ * silent client must not freeze the tick.
+ */
+export type ArenaInputs = ReadonlyMap<number, WorldInput>;
+
 /** Builds a full input from the fields a test or a debug dispatch cares about. */
 export function createInput(partial: Partial<WorldInput>): WorldInput {
   return {

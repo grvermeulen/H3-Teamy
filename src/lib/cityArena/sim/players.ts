@@ -45,6 +45,14 @@ export function localPlayer(state: ArenaState): ArenaPlayerState {
 }
 
 /**
+ * The players in ascending id order. Stages that run once per player iterate this rather than
+ * the raw array, so the result of a tick never depends on the order people joined in.
+ */
+export function orderedPlayers(state: ArenaState): ArenaPlayerState[] {
+  return [...state.players].sort((first, second) => first.id - second.id);
+}
+
+/**
  * The living player closest to `point`, ties broken by the lower id so the choice is
  * deterministic. Returns `null` when no player passes `filter`.
  */
