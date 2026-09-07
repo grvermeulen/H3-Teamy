@@ -4,6 +4,7 @@ import type { MapZone } from "../world/mapTypes";
 import { createCamera } from "./camera";
 import {
   DEAD_PLAYER_STYLE,
+  DEFAULT_PLAYER_STYLE,
   drawPlayer,
   drawZoneRing,
   playerLook,
@@ -23,6 +24,26 @@ describe("drawEntities", () => {
     expect(context.calls).toContain("arc(116,50,6,0,6.28,false)");
     expect(context.calls).toContain(`fill(${PLAYER_FILL})`);
     expect(context.calls).toContain("lineTo(126,50)");
+  });
+
+  it("draws the character sprite over the circle, turned to the player's facing", () => {
+    const context = createFakeContext();
+    drawPlayer(
+      context,
+      createCamera([10, 10], 8),
+      { width: 200, height: 100 },
+      { x: 12, y: 10, facing: 0, speed: 4 },
+      DEFAULT_PLAYER_STYLE,
+      document.createElement("canvas"),
+    );
+    expect(context.calls).toContain("translate(116,50)");
+    // Facing 0 points along +x while the art faces up its own image, hence the quarter turn.
+    expect(context.calls).toContain("rotate(1.57)");
+    expect(
+      context.calls.find((call) => call.startsWith("drawImage(")),
+    ).toContain(",-6,-6,12,12");
+    // The sprite shows which way he is facing, so the vector tick is not drawn as well.
+    expect(context.calls).not.toContain("lineTo(126,50)");
   });
 
   it("draws a dashed zone ring", () => {

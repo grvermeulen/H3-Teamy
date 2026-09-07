@@ -23,6 +23,13 @@ const VEHICLE_WIDTH_M = 1.8;
 // heading, so they get twice the ground texture's density as resampling headroom.
 const VEHICLE_PX_PER_METRE = 32;
 
+// Person size in metres, mirroring PLAYER_RADIUS_M in sim/player.ts. The art is stretched over
+// the collision circle's box, so what you see is what you bump into.
+const PERSON_RADIUS_M = 0.4;
+// A person is only 0.8 m across and the camera never passes 12 px/m, so 64 px/m is ample
+// headroom for rotation and still a few kB.
+const PERSON_PX_PER_METRE = 64;
+
 // The generator's cut-out leaves the whole car body around 55 % opaque and only its silhouette
 // fully transparent, so the alpha channel is rebuilt: at or below ALPHA_BACKGROUND_MAX is
 // background, at or above ALPHA_BODY_MIN is solid bodywork, and the narrow band between the two
@@ -52,6 +59,10 @@ const surfaceSources = {
 const vehicleSources = {
   sedan: "car-sedan.png",
 };
+// Character art, drawn facing up the image so the canvas can rotate it by the player's facing.
+const personSources = {
+  player: "person-player.png",
+};
 
 /**
  * Exits the process if any sprite source file is missing from assets/arena/sprites/.
@@ -60,6 +71,7 @@ function assertSourcesExist() {
   const files = [
     ...Object.values(surfaceSources),
     ...Object.values(vehicleSources),
+    ...Object.values(personSources),
   ];
   for (const file of files) {
     const full = path.join(sourceDir, file);
@@ -130,7 +142,7 @@ function alphaBounds(data, info) {
       if (y > maxY) maxY = y;
     }
   }
-  if (maxX < 0) throw new Error("Vehicle sprite is fully transparent");
+  if (maxX < 0) throw new Error("Sprite is fully transparent");
   return {
     left: minX,
     top: minY,
@@ -140,13 +152,12 @@ function alphaBounds(data, info) {
 }
 
 /**
- * Trims one vehicle sprite to its artwork and resizes it to the car's own metre box. The resize
- * uses `fit: "fill"`, so the sprite is stretched onto the exact hull the simulation collides with
- * rather than being letterboxed inside it — a car that draws wider than it drives reads as a bug.
+ * Hardens one cut-out's alpha, trims it to its artwork and writes it at the given pixel size.
+ * The resize uses `fit: "fill"`, so the sprite is stretched onto the exact hull the simulation
+ * collides with rather than being letterboxed inside it — art that draws wider than it moves
+ * reads as a bug.
  */
-async function packVehicleSprite(file) {
-  const pixelWidth = Math.round(VEHICLE_WIDTH_M * VEHICLE_PX_PER_METRE);
-  const pixelHeight = Math.round(VEHICLE_LENGTH_M * VEHICLE_PX_PER_METRE);
+async function packCutout(file, pixelWidth, pixelHeight) {
   const { data, info } = await sharp(path.join(sourceDir, file))
     .ensureAlpha()
     .raw()
@@ -159,12 +170,33 @@ async function packVehicleSprite(file) {
     .resize(pixelWidth, pixelHeight, { fit: "fill" })
     .png()
     .toFile(path.join(outputDir, file));
+}
+
+/** Trims one vehicle sprite to its artwork and resizes it to the car's own metre box. */
+async function packVehicleSprite(file) {
+  const pixelWidth = Math.round(VEHICLE_WIDTH_M * VEHICLE_PX_PER_METRE);
+  const pixelHeight = Math.round(VEHICLE_LENGTH_M * VEHICLE_PX_PER_METRE);
+  await packCutout(file, pixelWidth, pixelHeight);
   return {
     file: `${PUBLIC_BASE_PATH}/${file}`,
     lengthMetres: VEHICLE_LENGTH_M,
     widthMetres: VEHICLE_WIDTH_M,
     pixelWidth,
     pixelHeight,
+  };
+}
+
+/**
+ * Trims one character sprite to its artwork and resizes it onto the square box around the
+ * person's collision circle, so the renderer can draw it from the radius it already knows.
+ */
+async function packPersonSprite(file) {
+  const pixelSize = Math.round(2 * PERSON_RADIUS_M * PERSON_PX_PER_METRE);
+  await packCutout(file, pixelSize, pixelSize);
+  return {
+    file: `${PUBLIC_BASE_PATH}/${file}`,
+    radiusMetres: PERSON_RADIUS_M,
+    pixelSize,
   };
 }
 
@@ -178,7 +210,10 @@ async function packSprites() {
   const vehicles = {};
   for (const [name, file] of Object.entries(vehicleSources))
     vehicles[name] = await packVehicleSprite(file);
-  const manifest = { version: 1, surfaces, vehicles };
+  const people = {};
+  for (const [name, file] of Object.entries(personSources))
+    people[name] = await packPersonSprite(file);
+  const manifest = { version: 1, surfaces, vehicles, people };
   fs.writeFileSync(
     path.join(outputDir, "manifest.json"),
     `${JSON.stringify(manifest, null, 2)}\n`,
@@ -197,6 +232,10 @@ function reportDone(manifest) {
   for (const [name, vehicle] of Object.entries(manifest.vehicles))
     console.log(
       `${name}: ${vehicle.file} ${vehicle.pixelWidth}×${vehicle.pixelHeight}px for ${vehicle.widthMetres}×${vehicle.lengthMetres} m`,
+    );
+  for (const [name, person] of Object.entries(manifest.people))
+    console.log(
+      `${name}: ${person.file} ${person.pixelSize}px for a ${person.radiusMetres} m radius`,
     );
   console.log(`Arena sprites written to ${outputDir}`);
 }

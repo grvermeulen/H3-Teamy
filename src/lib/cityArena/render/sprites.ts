@@ -21,6 +21,13 @@ export const VehicleEntrySchema = z.object({
   pixelHeight: z.number().int().positive(),
 });
 
+/** One character sprite, drawn facing up so the canvas can rotate it by the person's facing. */
+export const PersonEntrySchema = z.object({
+  file: z.string(),
+  radiusMetres: z.number().positive(),
+  pixelSize: z.number().int().positive(),
+});
+
 /**
  * Zod schema for `manifest.json`; runtime validation happens once per session. `surfaces` lists
  * every seamless texture flat, keyed as the build script writes them: the two road surfaces,
@@ -38,6 +45,7 @@ export const SpriteManifestSchema = z.object({
     urban: SurfaceEntrySchema,
   }),
   vehicles: z.object({ sedan: VehicleEntrySchema }),
+  people: z.object({ player: PersonEntrySchema }),
 });
 
 /** Parsed sprite manifest, inferred from {@link SpriteManifestSchema} so the two cannot drift. */
@@ -75,6 +83,7 @@ export type ArenaSprites = {
   water?: SurfaceTexture;
   ground?: GroundTextures;
   car?: VehicleSprite;
+  player?: CanvasImageSource;
 };
 
 /** No sprites at all — every painter falls back to its flat fill. */

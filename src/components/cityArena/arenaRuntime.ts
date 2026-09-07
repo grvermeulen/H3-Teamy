@@ -197,6 +197,7 @@ function buildScene(
     aimScreen: runtime.diedAtMs === null ? aimScreen : null,
     pushIn: deathPhase(runtime, nowMs)?.pushIn ?? 1,
     carSprite: session.sprites().car,
+    playerSprite: session.sprites().player,
   };
 }
 

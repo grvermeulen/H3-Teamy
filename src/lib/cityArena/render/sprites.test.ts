@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { PLAYER_RADIUS_M } from "../sim/player";
 import { ROAD_FILL } from "./palette";
 import {
   NO_SPRITES,
@@ -49,6 +50,8 @@ describe("parseSpriteManifest", () => {
     }
     expect(manifest.vehicles.sedan.lengthMetres).toBe(4.2);
     expect(manifest.vehicles.sedan.widthMetres).toBe(1.8);
+    // The character art is packed onto the collision circle's box, so the two must not drift.
+    expect(manifest.people.player.radiusMetres).toBe(PLAYER_RADIUS_M);
   });
 
   it("rejects a manifest missing a surface", () => {
@@ -80,6 +83,19 @@ describe("generated sprite art", () => {
     const lastRow = (info.height - 1) * info.width * info.channels;
     expect(data[3]).toBe(0);
     expect(data[lastRow + 3]).toBe(0);
+  });
+
+  it("packs the player square at the size the manifest states", async () => {
+    const sharp = (await import("sharp")).default;
+    const manifest = parseSpriteManifest(generatedManifest());
+    const { info } = await sharp(
+      join(process.cwd(), "public", manifest.people.player.file),
+    )
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    expect(info.width).toBe(manifest.people.player.pixelSize);
+    expect(info.height).toBe(manifest.people.player.pixelSize);
   });
 });
 

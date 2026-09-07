@@ -191,8 +191,15 @@ src/lib/cityArena`. The arena tests use fake map/audio/canvas inputs and do not 
   `urban`). The car sprite is packed separately onto the hull the simulation collides with
   (4.2 × 1.8 m at 32 px/m) with its alpha rebuilt, because the generator leaves the bodywork
   half-transparent.
+- The player is the man from the game's splash artwork — bald, red-lensed sunglasses, mint-green
+  shorts — drawn from directly overhead. `packPersonSprite` trims and stretches him onto the box
+  around his collision circle (2 × `PLAYER_RADIUS_M`, 64 px/m, so 51 px), and `drawPlayer` turns
+  the art a quarter-turn past the player's facing, the same convention the car uses. The
+  collision-coloured circle stays underneath so he is still findable at low zoom; a body waiting
+  to respawn keeps the flat dead marker, because the art is of someone standing up.
 - Adding a surface is one line in `surfaceSources` plus the matching key in
-  `SpriteManifestSchema.surfaces`; the loader and the painters read those names.
+  `SpriteManifestSchema.surfaces`; the loader and the painters read those names. A character is
+  the same, in `personSources` and `SpriteManifestSchema.people`.
 - Rendering: `render/sprites.ts` `surfaceFill()` turns a texture into a `CanvasPattern` whose
   matrix scales pixels onto metres, so the repeat is anchored to the world origin and neighbouring
   chunks line up at their shared edge. `drawStatic.paintChunk` builds one fill per ground kind

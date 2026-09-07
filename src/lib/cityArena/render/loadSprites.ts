@@ -135,6 +135,19 @@ async function loadVehicle(
   }
 }
 
+/** Loads the player's character art, or `undefined` when the file is missing. */
+async function loadPerson(
+  loadImage: ImageLoader,
+  manifest: SpriteManifest,
+): Promise<CanvasImageSource | undefined> {
+  try {
+    return await loadImage(manifest.people.player.file);
+  } catch (error: unknown) {
+    reportSpriteFailure(error, "person");
+    return undefined;
+  }
+}
+
 /** Loads the four ground textures; a texture that fails leaves its kind on the flat fill. */
 async function loadGround(
   loadImage: ImageLoader,
@@ -154,21 +167,26 @@ async function loadAll(
   options: Required<SpriteStoreOptions>,
 ): Promise<ArenaSprites> {
   const manifest = await fetchManifest(options.fetchImpl, options.manifestPath);
-  const [road, pavement, water, ground, car] = await Promise.all([
+  const [road, pavement, water, ground, car, player] = await Promise.all([
     loadSurface(options.loadImage, manifest.surfaces.road),
     loadSurface(options.loadImage, manifest.surfaces.pavement),
     loadSurface(options.loadImage, manifest.surfaces.water),
     loadGround(options.loadImage, manifest.surfaces),
     loadVehicle(options.loadImage, options.canvasFactory, manifest),
+    loadPerson(options.loadImage, manifest),
   ]);
-  return { road, pavement, water, ground, car };
+  return { road, pavement, water, ground, car, player };
 }
 
 /** True when at least one sprite decoded, i.e. the renderer has something new to paint with. */
 function hasAnySprite(sprites: ArenaSprites): boolean {
   if (Object.values(sprites.ground ?? {}).some(Boolean)) return true;
   return Boolean(
-    sprites.road ?? sprites.pavement ?? sprites.water ?? sprites.car,
+    sprites.road ??
+    sprites.pavement ??
+    sprites.water ??
+    sprites.car ??
+    sprites.player,
   );
 }
 

@@ -50,6 +50,8 @@ export type Scene = {
   pushIn: number;
   /** Car sprite, absent until its art has loaded — cars fall back to the vector body. */
   carSprite?: VehicleSprite;
+  /** Player character art, absent until it has loaded — the player falls back to the circle. */
+  playerSprite?: CanvasImageSource;
 };
 
 /** Scales the viewport around its centre by `pushIn`. */
@@ -73,8 +75,11 @@ function drawPlayerLook(
 ): void {
   const look = playerLook(scene.player, scene.tick);
   if (look === "hidden" || look === "blink") return;
-  const style = look === "dead" ? DEAD_PLAYER_STYLE : DEFAULT_PLAYER_STYLE;
-  drawPlayer(context, camera, size, scene.player, style);
+  const dead = look === "dead";
+  const style = dead ? DEAD_PLAYER_STYLE : DEFAULT_PLAYER_STYLE;
+  // A body keeps the flat dead marker: the character art is of someone standing up.
+  const sprite = dead ? undefined : scene.playerSprite;
+  drawPlayer(context, camera, size, scene.player, style, sprite);
 }
 
 /**

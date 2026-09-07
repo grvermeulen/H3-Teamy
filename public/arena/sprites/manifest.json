@@ -45,5 +45,12 @@
       "pixelWidth": 58,
       "pixelHeight": 134
     }
+  },
+  "people": {
+    "player": {
+      "file": "/arena/sprites/person-player.png",
+      "radiusMetres": 0.4,
+      "pixelSize": 51
+    }
   }
 }

@@ -33,6 +33,13 @@ const manifest = {
       pixelHeight: 134,
     },
   },
+  people: {
+    player: {
+      file: "/arena/sprites/person.png",
+      radiusMetres: 0.4,
+      pixelSize: 51,
+    },
+  },
 };
 
 /** A `fetch` that answers the manifest request with `body`, or with `status` when not 200. */
@@ -82,6 +89,27 @@ describe("createSpriteStore", () => {
       "grass",
       "urban",
     ]);
+  });
+
+  it("keeps the player on the flat circle when the character art is missing", async () => {
+    const failing: ImageLoader = (src) =>
+      src.includes("person")
+        ? Promise.reject(new Error("missing"))
+        : Promise.resolve(document.createElement("canvas"));
+    const store = createSpriteStore({
+      canvasFactory,
+      loadImage: failing,
+      fetchImpl: fakeFetch(manifest),
+    });
+    await expect(store.load()).resolves.toBe(true);
+    expect(store.current().player).toBeUndefined();
+    expect(store.current().car).toBeDefined();
+    expect(Sentry.captureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: { area: "arena", kind: "sprite", step: "person" },
+      }),
+    );
   });
 
   it("drops only the ground texture whose image is missing", async () => {
