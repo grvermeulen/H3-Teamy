@@ -123,6 +123,11 @@ export type ArenaPlayerState = PlayerState & {
   outsideSinceTick: number | null;
   /** Rate-limited steering command (−1..1) of the car being driven; 0 while on foot. */
   driveSteer: number;
+  /**
+   * Edge-triggered buttons this player held last tick. It lives on the player rather than on
+   * the world so one player holding Enter cannot swallow another player's press.
+   */
+  held: HeldButtons;
 };
 
 /** Buttons whose previous held state the simulation remembers for edge detection. */
@@ -235,7 +240,6 @@ export type ArenaState = {
   vehicles: VehicleState[];
   bullets: BulletState[];
   effects: EffectState[];
-  held: HeldButtons;
   zoneKey: ZoneKey | null;
   peds: PedState[];
   cops: CopState[];

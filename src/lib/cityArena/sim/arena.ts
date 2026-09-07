@@ -129,6 +129,7 @@ export function createArenaPlayer(
     heatTick: tick,
     outsideSinceTick: null,
     driveSteer: 0,
+    held: { enter: false, weaponNext: false },
   };
 }
 
@@ -156,7 +157,6 @@ export function createArenaState(
     vehicles,
     bullets: [],
     effects: [],
-    held: { enter: false, weaponNext: false },
     zoneKey: findZone(setup.index, spawn)?.key ?? null,
     peds: [],
     cops: [],
@@ -172,14 +172,14 @@ export function createArenaState(
     : base;
 }
 
-/** Rising edges of the edge-triggered buttons plus the held state to remember. */
+/** Rising edges of `player`'s edge-triggered buttons plus the held state to remember. */
 function detectEdges(
-  held: HeldButtons,
+  player: ArenaPlayerState,
   input: WorldInput,
 ): { enterPressed: boolean; weaponPressed: boolean; held: HeldButtons } {
   return {
-    enterPressed: input.enter && !held.enter,
-    weaponPressed: input.weaponNext && !held.weaponNext,
+    enterPressed: input.enter && !player.held.enter,
+    weaponPressed: input.weaponNext && !player.held.weaponNext,
     held: { enter: input.enter, weaponNext: input.weaponNext },
   };
 }
@@ -730,8 +730,13 @@ export function stepArena(
   random: () => number,
 ): ArenaState {
   const tick = state.tick + 1;
-  const edges = detectEdges(state.held, input);
-  let next: ArenaState = { ...state, tick, held: edges.held, events: [] };
+  const edges = detectEdges(state.player, input);
+  let next: ArenaState = {
+    ...state,
+    tick,
+    player: { ...state.player, held: edges.held },
+    events: [],
+  };
   next = applyPopulation(next, world, tick, random);
   next = applyRespawn(next, world, tick, random);
   next = stepPickups(next, tick);

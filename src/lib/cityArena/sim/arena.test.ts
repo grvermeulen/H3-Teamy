@@ -221,7 +221,14 @@ describe("stepArena on foot", () => {
     expect(walked.tick).toBe(30);
     expect(walked.player.x).toBeCloseTo(start.player.x + 5.174074, 5);
     expect(walked.player.facing).toBeCloseTo(Math.PI);
-    expect(walked.held).toEqual({ enter: false, weaponNext: false });
+    expect(walked.player.held).toEqual({ enter: false, weaponNext: false });
+  });
+
+  it("remembers held buttons on the player, not on the world", () => {
+    const held = run(boot(), createInput({ enter: true }), 1);
+    expect(held.player.held).toEqual({ enter: true, weaponNext: false });
+    const released = run(held, createInput({}), 1);
+    expect(released.player.held).toEqual({ enter: false, weaponNext: false });
   });
 
   it("cycles the weapon on a rising edge only, skipping empty magazines", () => {
