@@ -4,6 +4,7 @@ import { createLru, type Lru } from "../world/lru";
 import type { ZoomLevel } from "./camera";
 import type { CanvasFactory, RasterTarget } from "./canvasTypes";
 import { paintChunk, type LandmarkLookup } from "./drawStatic";
+import { NO_SPRITES, type ArenaSprites } from "./sprites";
 
 /** Chunk edge length in metres. */
 export const CHUNK_METRES = 128;
@@ -52,6 +53,14 @@ export type StaticRaster = {
   invalidateRect(rect: Rect): void;
   stats(): { chunks: number; bytes: number };
   dispose(): void;
+};
+
+/** Rectangle covering every chunk, for dropping the whole cache through `invalidateRect`. */
+export const WHOLE_WORLD_RECT: Rect = {
+  minX: Number.NEGATIVE_INFINITY,
+  minY: Number.NEGATIVE_INFINITY,
+  maxX: Number.POSITIVE_INFINITY,
+  maxY: Number.POSITIVE_INFINITY,
 };
 
 /** Cache key of a chunk. */
@@ -144,12 +153,13 @@ function rasterizeChunk(
   coord: ChunkCoord,
   tiles: DecodedTile[],
   landmarks: LandmarkLookup,
+  sprites: ArenaSprites,
 ): Chunk | null {
   const sizePx = CHUNK_METRES * coord.zoom;
   const target = factory(sizePx, sizePx);
   if (!target) return null;
   const rect = chunkRect(coord);
-  paintChunk(target.ctx, rect, coord.zoom, tiles, landmarks);
+  paintChunk(target.ctx, rect, coord.zoom, tiles, landmarks, sprites);
   return {
     key: chunkKey(coord),
     coord,
@@ -166,10 +176,11 @@ function ensureCachedChunk(
   coord: ChunkCoord,
   tiles: DecodedTile[],
   landmarks: LandmarkLookup,
+  sprites: ArenaSprites,
 ): Chunk | null {
   const existing = store.get(chunkKey(coord));
   if (existing) return existing;
-  const chunk = rasterizeChunk(factory, coord, tiles, landmarks);
+  const chunk = rasterizeChunk(factory, coord, tiles, landmarks, sprites);
   if (chunk) store.set(chunk.key, chunk);
   return chunk;
 }
@@ -181,10 +192,14 @@ function rasterizeNextMissingChunk(
   needed: ChunkCoord[],
   tiles: DecodedTile[],
   landmarks: LandmarkLookup,
+  sprites: ArenaSprites,
 ): boolean {
   const missing = needed.find((coord) => !store.has(chunkKey(coord)));
   if (!missing) return false;
-  return ensureCachedChunk(store, factory, missing, tiles, landmarks) !== null;
+  return (
+    ensureCachedChunk(store, factory, missing, tiles, landmarks, sprites) !==
+    null
+  );
 }
 
 /** Drops every cached chunk whose rectangle intersects `rect`. */
@@ -195,18 +210,30 @@ function invalidateChunksTouching(store: ChunkStore, rect: Rect): void {
   }
 }
 
-/** Creates the cache; chunks are painted with {@link paintChunk} on demand. */
+/**
+ * Creates the cache; chunks are painted with {@link paintChunk} on demand. `readSprites` is read
+ * per rasterisation rather than captured, so chunks painted after the sprite art arrives pick it
+ * up; the caller drops the chunks painted before that with {@link StaticRaster.invalidateRect}.
+ */
 export function createStaticRaster(
   factory: CanvasFactory,
   budgetBytes = RASTER_BUDGET_BYTES,
+  readSprites: () => ArenaSprites = () => NO_SPRITES,
 ): StaticRaster {
   const store = createChunkStore(budgetBytes);
   return {
     getChunk: (coord) => store.get(chunkKey(coord)),
     ensureChunk: (coord, tiles, landmarks) =>
-      ensureCachedChunk(store, factory, coord, tiles, landmarks),
+      ensureCachedChunk(store, factory, coord, tiles, landmarks, readSprites()),
     rasterizeNext: (needed, tiles, landmarks) =>
-      rasterizeNextMissingChunk(store, factory, needed, tiles, landmarks),
+      rasterizeNextMissingChunk(
+        store,
+        factory,
+        needed,
+        tiles,
+        landmarks,
+        readSprites(),
+      ),
     invalidateRect: (rect) => invalidateChunksTouching(store, rect),
     stats: () => ({ chunks: store.size, bytes: store.cost }),
     dispose: () => {

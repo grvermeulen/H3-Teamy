@@ -4,10 +4,12 @@ import { paintChunk, type LandmarkLookup } from "./drawStatic";
 import {
   GROUND_FILL,
   LANDMARK_FILL,
+  PAVEMENT_FILL,
   ROAD_CENTRE_LINE,
   ROAD_FILL,
   WATER_FILL,
 } from "./palette";
+import type { ArenaSprites } from "./sprites";
 import { createFakeContext } from "./testing/fakeContext";
 
 const tile: DecodedTile = {
@@ -230,5 +232,124 @@ describe("paintChunk", () => {
     expect(Math.max(...roadFillStrokeIndices)).toBeLessThan(
       centreLineStrokeIndex,
     );
+  });
+  it("fills ground and water with their own textures once the art has loaded", () => {
+    const context = createFakeContext();
+    const texture = {
+      image: document.createElement("canvas"),
+      tileMetres: 8,
+      tilePixels: 128,
+    };
+    const sprites: ArenaSprites = {
+      ground: {
+        grass: texture,
+        field: texture,
+        forest: texture,
+        urban: texture,
+      },
+      water: texture,
+    };
+    paintChunk(
+      context,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [tile],
+      landmarks,
+      sprites,
+    );
+    // The four ground kinds are built in palette order, then water, so grass is #0 and water #4.
+    expect(context.calls).toContain("fill(pattern(#0))");
+    expect(context.calls).toContain("fill(pattern(#4))");
+    expect(context.calls).not.toContain(`fill(${GROUND_FILL.grass})`);
+    expect(context.calls).not.toContain(`fill(${WATER_FILL})`);
+    expect(
+      context.calls.filter((call) => call.startsWith("createPattern(")),
+    ).toHaveLength(5);
+  });
+
+  it("anchors the ground pattern on the world so neighbouring chunks line up", () => {
+    const texture = {
+      image: document.createElement("canvas"),
+      tileMetres: 8,
+      tilePixels: 128,
+    };
+    const sprites: ArenaSprites = {
+      ground: {
+        grass: texture,
+        field: texture,
+        forest: texture,
+        urban: texture,
+      },
+    };
+    const calls = (minX: number): string[] => {
+      const context = createFakeContext();
+      paintChunk(
+        context,
+        { minX, minY: 0, maxX: minX + 128, maxY: 128 },
+        6,
+        [tile],
+        landmarks,
+        sprites,
+      );
+      return context.calls;
+    };
+    // Each chunk rasters onto its own canvas, so the chunk's world offset has to reach the
+    // pattern somehow or the 8 m repeat would restart at every canvas origin. It reaches it
+    // through the canvas transform: the painter works in world metres and the pattern matrix
+    // stays pure scale, which makes the repeat a function of world position alone.
+    expect(calls(0)).toContain("setTransform(6,0,0,6,0,0)");
+    expect(calls(128)).toContain("setTransform(6,0,0,6,-768,0)");
+    expect(calls(128)).toContain("patternTransform(pattern(#0),0.0625)");
+    expect(calls(0)).toContain("patternTransform(pattern(#0),0.0625)");
+  });
+
+  it("strokes road and pavement with a repeating texture, leaving every other layer flat", () => {
+    const context = createFakeContext();
+    const image = document.createElement("canvas");
+    const sprites: ArenaSprites = {
+      pavement: { image, tileMetres: 8, tilePixels: 128 },
+      road: { image, tileMetres: 8, tilePixels: 128 },
+    };
+    paintChunk(
+      context,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [tile],
+      landmarks,
+      sprites,
+    );
+    // Pavement is filled first, so it takes the first pattern; the primary road is 9 m wide and
+    // its pavement adds 2 m on each side.
+    expect(context.calls).toContain("stroke(pattern(#0),13)");
+    expect(context.calls).toContain("stroke(pattern(#1),9)");
+    expect(context.calls).toContain("patternTransform(pattern(#1),0.0625)");
+    expect(context.calls).not.toContain(`stroke(${ROAD_FILL},9)`);
+    expect(context.calls).not.toContain(`stroke(${PAVEMENT_FILL},13)`);
+    expect(context.calls).toContain(`fill(${WATER_FILL})`);
+    expect(context.calls).toContain(`stroke(${ROAD_CENTRE_LINE},0.3)`);
+  });
+
+  it("keeps the flat road colour when only the pavement texture has loaded", () => {
+    const context = createFakeContext();
+    const sprites: ArenaSprites = {
+      pavement: {
+        image: document.createElement("canvas"),
+        tileMetres: 8,
+        tilePixels: 128,
+      },
+    };
+    paintChunk(
+      context,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [tile],
+      landmarks,
+      sprites,
+    );
+    expect(context.calls).toContain("stroke(pattern(#0),13)");
+    expect(context.calls).toContain(`stroke(${ROAD_FILL},9)`);
+    expect(
+      context.calls.filter((call) => call.startsWith("createPattern(")),
+    ).toHaveLength(1);
   });
 });

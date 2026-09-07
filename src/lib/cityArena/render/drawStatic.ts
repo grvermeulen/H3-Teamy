@@ -4,7 +4,7 @@ import {
   type Rect,
 } from "../mapBuild/geometry";
 import type { DecodedRoad, DecodedTile } from "../world/decode";
-import type { LandmarkStyle } from "../world/mapTypes";
+import type { GroundKind, LandmarkStyle } from "../world/mapTypes";
 import type { Point } from "../world/projection";
 import type { RasterContext } from "./canvasTypes";
 import {
@@ -25,6 +25,12 @@ import {
   WATER_FILL,
   buildingFill,
 } from "./palette";
+import {
+  NO_SPRITES,
+  surfaceFill,
+  type ArenaSprites,
+  type GroundTextures,
+} from "./sprites";
 import { planStreetLabels } from "./streetLabels";
 
 /** Display name and style of a landmark, keyed by landmark key (built from `index.landmarks`). */
@@ -61,18 +67,22 @@ function tracePath(
   if (close) context.closePath();
 }
 
-/** Fills a closed ring with a flat colour. */
-function fillRing(context: RasterContext, ring: Point[], fill: string): void {
+/** Fills a closed ring with a flat colour or a repeating texture. */
+function fillRing(
+  context: RasterContext,
+  ring: Point[],
+  fill: string | CanvasPattern,
+): void {
   tracePath(context, ring, true);
   context.fillStyle = fill;
   context.fill();
 }
 
-/** Strokes an open polyline, optionally dashed. */
+/** Strokes an open polyline with a colour or a repeating texture, optionally dashed. */
 function strokePolyline(
   context: RasterContext,
   points: Point[],
-  colour: string,
+  colour: string | CanvasPattern,
   widthMetres: number,
   dash: number[] = [],
 ): void {
@@ -86,16 +96,36 @@ function strokePolyline(
   context.setLineDash([]);
 }
 
+/** The fill each ground kind is painted with this frame: its texture pattern, else its colour. */
+type GroundFills = Record<GroundKind, string | CanvasPattern>;
+
+/**
+ * Builds one fill per ground kind. The patterns are made once per chunk rather than once per
+ * polygon, because `createPattern` costs the same whether one ring or two hundred use it.
+ */
+function groundFills(
+  context: RasterContext,
+  ground: GroundTextures,
+): GroundFills {
+  return {
+    grass: surfaceFill(context, ground.grass, GROUND_FILL.grass),
+    field: surfaceFill(context, ground.field, GROUND_FILL.field),
+    forest: surfaceFill(context, ground.forest, GROUND_FILL.forest),
+    urban: surfaceFill(context, ground.urban, GROUND_FILL.urban),
+  };
+}
+
 /** Paints ground polygons touching the chunk, across every touching tile. */
 function paintGround(
   context: RasterContext,
   tiles: DecodedTile[],
   chunkRect: Rect,
+  fills: GroundFills,
 ): void {
   for (const tile of tiles)
     for (const area of tile.ground)
       if (rectsIntersect(area.bounds, chunkRect))
-        fillRing(context, area.ring, GROUND_FILL[area.kind]);
+        fillRing(context, area.ring, fills[area.kind]);
 }
 
 /** Paints water polygons touching the chunk, across every touching tile. */
@@ -103,35 +133,67 @@ function paintWater(
   context: RasterContext,
   tiles: DecodedTile[],
   chunkRect: Rect,
+  fill: string | CanvasPattern,
 ): void {
   for (const tile of tiles)
     for (const area of tile.water)
       if (rectsIntersect(area.bounds, chunkRect))
-        fillRing(context, area.ring, WATER_FILL);
+        fillRing(context, area.ring, fill);
 }
 
-/** Paints the pavement under roads whose class gets one. */
-function paintPavements(context: RasterContext, roads: DecodedRoad[]): void {
+/**
+ * Paints everything under the roads: the chunk background first, so no gap in the map data shows
+ * through, then the ground polygons and the water on top of it. The ground patterns are built
+ * once here and reused for the background, which is `urban` wherever a chunk has no polygon.
+ */
+function paintSurfaces(
+  context: RasterContext,
+  chunkRect: Rect,
+  touching: DecodedTile[],
+  sprites: ArenaSprites,
+): void {
+  const fills = groundFills(context, sprites.ground ?? {});
+  context.fillStyle = fills.urban;
+  context.fillRect(
+    chunkRect.minX,
+    chunkRect.minY,
+    chunkRect.maxX - chunkRect.minX,
+    chunkRect.maxY - chunkRect.minY,
+  );
+  paintGround(context, touching, chunkRect, fills);
+  paintWater(
+    context,
+    touching,
+    chunkRect,
+    surfaceFill(context, sprites.water, WATER_FILL),
+  );
+}
+
+/** Paints the pavement under roads whose class gets one, textured when the sprite has loaded. */
+function paintPavements(
+  context: RasterContext,
+  roads: DecodedRoad[],
+  fill: string | CanvasPattern,
+): void {
   for (const road of roads) {
     if (PAVEMENT_CLASSES.includes(road.roadClass))
       strokePolyline(
         context,
         road.points,
-        PAVEMENT_FILL,
+        fill,
         ROAD_WIDTH_M[road.roadClass] + PAVEMENT_SIDES * PAVEMENT_WIDTH_M,
       );
   }
 }
 
-/** Paints every road's surface. */
-function paintRoadSurfaces(context: RasterContext, roads: DecodedRoad[]): void {
+/** Paints every road's surface, textured when the sprite has loaded. */
+function paintRoadSurfaces(
+  context: RasterContext,
+  roads: DecodedRoad[],
+  fill: string | CanvasPattern,
+): void {
   for (const road of roads)
-    strokePolyline(
-      context,
-      road.points,
-      ROAD_FILL,
-      ROAD_WIDTH_M[road.roadClass],
-    );
+    strokePolyline(context, road.points, fill, ROAD_WIDTH_M[road.roadClass]);
 }
 
 /** Paints the dashed centre line on roads whose class gets one. */
@@ -256,6 +318,10 @@ function tilesTouching(tiles: DecodedTile[], chunkRect: Rect): DecodedTile[] {
  * every layer of one tile before moving to the next — `tilesTouching` pulls in neighbouring
  * tiles' overlap geometry, and painting per tile let a later tile's ground or road fill
  * overwrite an earlier tile's water or centre line right at the shared border.
+ *
+ * Every surface layer — the chunk background, ground, water, pavement and road — takes a
+ * repeating texture from `sprites` when one has loaded, and falls back to its flat palette
+ * colour when that texture is missing. Buildings, centre lines and labels stay flat colour.
  */
 export function paintChunk(
   context: RasterContext,
@@ -263,6 +329,7 @@ export function paintChunk(
   zoom: number,
   tiles: DecodedTile[],
   landmarks: LandmarkLookup,
+  sprites: ArenaSprites = NO_SPRITES,
 ): void {
   context.setTransform(
     zoom,
@@ -272,21 +339,21 @@ export function paintChunk(
     -chunkRect.minX * zoom,
     -chunkRect.minY * zoom,
   );
-  context.fillStyle = GROUND_FILL.urban;
-  context.fillRect(
-    chunkRect.minX,
-    chunkRect.minY,
-    chunkRect.maxX - chunkRect.minX,
-    chunkRect.maxY - chunkRect.minY,
-  );
   const touching = tilesTouching(tiles, chunkRect);
-  paintGround(context, touching, chunkRect);
-  paintWater(context, touching, chunkRect);
+  paintSurfaces(context, chunkRect, touching, sprites);
   const roads = touching.flatMap((tile) =>
     tile.roads.filter((road) => rectsIntersect(road.bounds, chunkRect)),
   );
-  paintPavements(context, roads);
-  paintRoadSurfaces(context, roads);
+  paintPavements(
+    context,
+    roads,
+    surfaceFill(context, sprites.pavement, PAVEMENT_FILL),
+  );
+  paintRoadSurfaces(
+    context,
+    roads,
+    surfaceFill(context, sprites.road, ROAD_FILL),
+  );
   paintCentreLines(context, roads);
   for (const tile of touching)
     paintBuildings(context, tile, chunkRect, landmarks);

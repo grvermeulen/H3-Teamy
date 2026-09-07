@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCamera } from "@/lib/cityArena/render/camera";
 import { CROSSHAIR_STROKE } from "@/lib/cityArena/render/palette";
+import { NO_SPRITES } from "@/lib/cityArena/render/sprites";
 import { createStaticRaster } from "@/lib/cityArena/render/staticRaster";
 import {
   createFakeContext,
@@ -115,6 +116,7 @@ function createControllableSession(): {
       createFakeTarget(width, height),
     ),
     landmarks: () => new Map(),
+    sprites: () => NO_SPRITES,
     update: vi.fn(async () => ({ loaded: 0, total: 0 })),
     tiles: () => [],
     loadedTileRects: () => [],
@@ -318,6 +320,7 @@ describe("useArenaGame", () => {
         createFakeTarget(width, height),
       ),
       landmarks: () => new Map(),
+      sprites: () => NO_SPRITES,
       update: vi.fn(async () => ({ loaded: 0, total: 0 })),
       tiles: () => [],
       loadedTileRects: () => [],

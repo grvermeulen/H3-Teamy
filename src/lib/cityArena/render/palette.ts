@@ -1,20 +1,30 @@
 import type { GroundKind, LandmarkStyle, RoadClass } from "../world/mapTypes";
 
-/** Ground fills; `urban` is also the chunk background where no polygon exists. */
+/**
+ * Ground fills; `urban` is also the chunk background where no polygon exists, so it covers most
+ * of the screen. The whole map palette is keyed to the generated tarmac texture (a near-black
+ * `#383836`) rather than to the light "paper map" look it replaced.
+ *
+ * Each value is the mean tone of that kind's texture, so the flat fill a chunk is painted with
+ * before the art loads does not visibly pop when the pattern replaces it.
+ */
 export const GROUND_FILL: Record<GroundKind, string> = {
-  grass: "#6f9f5a",
-  field: "#b9ab6f",
-  forest: "#3f6f43",
-  urban: "#c8c2b4",
+  grass: "#414927",
+  field: "#554a3a",
+  forest: "#262d1e",
+  urban: "#232529",
 };
-/** Water fill. */
-export const WATER_FILL = "#5f9bd6";
-/** Road surface. */
-export const ROAD_FILL = "#f2eee6";
-/** Dashed centre line on the bigger roads. */
-export const ROAD_CENTRE_LINE = "#e0b64a";
-/** Pavement colour drawn under zone roads. */
-export const PAVEMENT_FILL = "#d8d2c6";
+/** Water fill, and the fallback under the river texture; matches that texture's mean tone. */
+export const WATER_FILL = "#163036";
+/** Road surface, and the fallback under the tarmac texture; matches that texture's mean tone. */
+export const ROAD_FILL = "#383836";
+/** Dashed centre line on the bigger roads; the one warm accent on the asphalt. */
+export const ROAD_CENTRE_LINE = "#c9a23f";
+/**
+ * Pavement colour drawn under zone roads, and the fallback under the slab texture. Kept light
+ * against the asphalt: the pale band on each side is what makes a road read as a road.
+ */
+export const PAVEMENT_FILL = "#a09d98";
 /** Pavement width on each side of the road, metres. */
 export const PAVEMENT_WIDTH_M = 2;
 /** Road widths in metres by class (spec §4). */
@@ -47,26 +57,26 @@ export const PAVEMENT_CLASSES: RoadClass[] = [
   "residential",
   "living_street",
 ];
-/** Roof shade by number of levels. */
+/** Roof shade by number of levels; taller blocks sit darker, all warmer than the urban ground. */
 export function buildingFill(levels: number): string {
-  if (levels <= 1) return "#a89886";
-  if (levels === 2) return "#9a8878";
-  if (levels <= 4) return "#8c7a6a";
-  return "#7c6a5c";
+  if (levels <= 1) return "#55504a";
+  if (levels === 2) return "#4a453f";
+  if (levels <= 4) return "#403c36";
+  return "#36332e";
 }
-/** Building outline. */
-export const BUILDING_STROKE = "#4a3f36";
-/** Landmark roof colours by style. */
+/** Building outline, lighter than the roofs so blocks keep their edge on the dark ground. */
+export const BUILDING_STROKE = "#5c554d";
+/** Landmark roof colours by style; the saturated exception that marks a building as a landmark. */
 export const LANDMARK_FILL: Record<LandmarkStyle, string> = {
-  church: "#b8473f",
-  pool: "#4aa3df",
-  campus: "#5aa66f",
-  cafe: "#d98b3a",
+  church: "#a03b34",
+  pool: "#2f7fb5",
+  campus: "#3f8552",
+  cafe: "#b8702c",
 };
-/** Label ink colour. */
-export const LABEL_FILL = "#1f1a16";
+/** Label ink colour, light now that it is read against dark asphalt and roofs. */
+export const LABEL_FILL = "#e8e4dc";
 /** Label halo colour drawn behind the ink for contrast. */
-export const LABEL_HALO = "rgba(255,255,255,0.85)";
+export const LABEL_HALO = "rgba(0,0,0,0.75)";
 /** Street label size in screen pixels. */
 export const STREET_LABEL_PX = 11;
 /** Landmark label size in screen pixels. */
@@ -75,8 +85,9 @@ export const LANDMARK_LABEL_PX = 13;
 export const HATCH_BACKGROUND = "#2a2f38";
 /** Hatch line colour for areas without a loaded tile. */
 export const HATCH_LINE = "#3b4250";
-/** Flat colour shown while a chunk is still being rasterised. */
-export const PLACEHOLDER_FILL = "#c8c2b4";
+/** Flat colour shown while a chunk is still being rasterised; matches the urban ground so a
+ *  chunk does not flash a different tone before its raster arrives. */
+export const PLACEHOLDER_FILL = "#1e2024";
 /** Player sprite body colour. */
 export const PLAYER_FILL = "#f5f5f5";
 /** Player sprite outline ring colour. */

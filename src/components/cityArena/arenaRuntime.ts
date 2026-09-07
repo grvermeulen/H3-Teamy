@@ -196,6 +196,8 @@ function buildScene(
     // off from the physical cursor (spec §7's push-in tops out at 1.08×).
     aimScreen: runtime.diedAtMs === null ? aimScreen : null,
     pushIn: deathPhase(runtime, nowMs)?.pushIn ?? 1,
+    carSprite: session.sprites().car,
+    playerSprite: session.sprites().player,
   };
 }
 

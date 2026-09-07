@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "surfaces": {
+    "road": {
+      "file": "/arena/sprites/road-tarmac.png",
+      "tileMetres": 8,
+      "tilePixels": 128
+    },
+    "pavement": {
+      "file": "/arena/sprites/pavement-slabs.png",
+      "tileMetres": 8,
+      "tilePixels": 128
+    },
+    "water": {
+      "file": "/arena/sprites/water-river.png",
+      "tileMetres": 8,
+      "tilePixels": 128
+    },
+    "grass": {
+      "file": "/arena/sprites/ground-grass.png",
+      "tileMetres": 8,
+      "tilePixels": 128
+    },
+    "field": {
+      "file": "/arena/sprites/ground-field.png",
+      "tileMetres": 8,
+      "tilePixels": 128
+    },
+    "forest": {
+      "file": "/arena/sprites/ground-forest.png",
+      "tileMetres": 8,
+      "tilePixels": 128
+    },
+    "urban": {
+      "file": "/arena/sprites/ground-urban.png",
+      "tileMetres": 8,
+      "tilePixels": 128
+    }
+  },
+  "vehicles": {
+    "sedan": {
+      "file": "/arena/sprites/car-sedan.png",
+      "lengthMetres": 4.2,
+      "widthMetres": 1.8,
+      "pixelWidth": 58,
+      "pixelHeight": 134
+    }
+  },
+  "people": {
+    "player": {
+      "file": "/arena/sprites/person-player.png",
+      "radiusMetres": 0.4,
+      "pixelSize": 51
+    }
+  }
+}

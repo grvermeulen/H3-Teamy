@@ -26,7 +26,7 @@
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "prisma:generate": "prisma generate",
-    "prebuild": "node scripts/generate-icons.js",
+    "prebuild": "node scripts/generate-icons.js && node scripts/generate-arena-sprites.js",
     "postinstall": "prisma generate",
     "prepare": "husky install",
     "docs:scan": "tsx scripts/docs/scan-routes.ts",
@@ -38,7 +38,8 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e:post-merge": "playwright test e2e/post-merge",
     "test:e2e:preview": "playwright test e2e/post-merge",
-    "eval": "braintrust eval evals"
+    "eval": "braintrust eval evals",
+    "arena:build-sprites": "node scripts/generate-arena-sprites.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.0",

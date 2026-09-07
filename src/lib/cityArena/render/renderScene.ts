@@ -26,6 +26,7 @@ import {
   type DrawStats,
   type WorldDrawSource,
 } from "./drawWorld";
+import type { VehicleSprite } from "./sprites";
 
 /** A rectangle of the canvas (CSS px) rendered through one camera — several of these make a split screen. */
 export type SceneViewport = {
@@ -47,6 +48,10 @@ export type Scene = {
   tick: number;
   aimScreen: [number, number] | null;
   pushIn: number;
+  /** Car sprite, absent until its art has loaded — cars fall back to the vector body. */
+  carSprite?: VehicleSprite;
+  /** Player character art, absent until it has loaded — the player falls back to the circle. */
+  playerSprite?: CanvasImageSource;
 };
 
 /** Scales the viewport around its centre by `pushIn`. */
@@ -70,8 +75,11 @@ function drawPlayerLook(
 ): void {
   const look = playerLook(scene.player, scene.tick);
   if (look === "hidden" || look === "blink") return;
-  const style = look === "dead" ? DEAD_PLAYER_STYLE : DEFAULT_PLAYER_STYLE;
-  drawPlayer(context, camera, size, scene.player, style);
+  const dead = look === "dead";
+  const style = dead ? DEAD_PLAYER_STYLE : DEFAULT_PLAYER_STYLE;
+  // A body keeps the flat dead marker: the character art is of someone standing up.
+  const sprite = dead ? undefined : scene.playerSprite;
+  drawPlayer(context, camera, size, scene.player, style, sprite);
 }
 
 /**
@@ -101,6 +109,7 @@ export function renderScene(
     scene.vehicles,
     scene.tick,
     scene.player.vehicleId,
+    scene.carSprite,
   );
   drawPeople(context, camera, size, scene.peds, scene.cops);
   drawBullets(context, camera, size, scene.bullets);

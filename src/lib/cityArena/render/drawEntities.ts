@@ -50,13 +50,47 @@ export function playerLook(player: ArenaPlayerState, tick: number): PlayerLook {
   return "normal";
 }
 
-/** Draws the local player: a filled circle, a coloured outline ring and a facing tick, in the given style. */
+/**
+ * The character art faces up its own image while `facing` 0 points along +x, so the sprite is
+ * turned a quarter-turn after the context has been rotated — the same convention the car uses.
+ */
+const SPRITE_FACING_UP_TURN_RAD = Math.PI / 2;
+/**
+ * How far the character art overhangs the collision circle. A standing man's arms and shoulders
+ * reach past his 0.4 m hull anyway, and the hull alone lands on the 6 px floor at every zoom the
+ * arena offers — 12 px is too small to recognise anyone in.
+ */
+const PLAYER_SPRITE_SCALE = 1.6;
+
+/** Draws the character art over the player's collision circle, turned to face where they face. */
+function drawPlayerSprite(
+  context: RasterContext,
+  sprite: CanvasImageSource,
+  x: number,
+  y: number,
+  radius: number,
+  facing: number,
+): void {
+  const half = radius * PLAYER_SPRITE_SCALE;
+  context.save();
+  context.translate(x, y);
+  context.rotate(facing + SPRITE_FACING_UP_TURN_RAD);
+  context.drawImage(sprite, -half, -half, half * 2, half * 2);
+  context.restore();
+}
+
+/**
+ * Draws the local player: a filled circle and a coloured outline ring in the given style, with
+ * the character sprite over it once the art has loaded. Without the sprite the circle carries a
+ * facing tick instead, which is what the player read before the art existed.
+ */
 export function drawPlayer(
   context: RasterContext,
   camera: Camera,
   viewport: Viewport,
   player: PlayerState,
   style: PlayerStyle = DEFAULT_PLAYER_STYLE,
+  sprite?: CanvasImageSource,
 ): void {
   const [x, y] = worldToScreen(camera, viewport, [player.x, player.y]);
   const radius = Math.max(MIN_PLAYER_RADIUS_PX, PLAYER_RADIUS_M * camera.zoom);
@@ -68,6 +102,10 @@ export function drawPlayer(
   context.lineWidth = PLAYER_RING_WIDTH_PX;
   context.setLineDash([]);
   context.stroke();
+  if (sprite) {
+    drawPlayerSprite(context, sprite, x, y, radius, player.facing);
+    return;
+  }
   context.beginPath();
   context.moveTo(x, y);
   context.lineTo(
