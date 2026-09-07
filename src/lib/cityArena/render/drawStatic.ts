@@ -141,6 +141,34 @@ function paintWater(
         fillRing(context, area.ring, fill);
 }
 
+/**
+ * Paints everything under the roads: the chunk background first, so no gap in the map data shows
+ * through, then the ground polygons and the water on top of it. The ground patterns are built
+ * once here and reused for the background, which is `urban` wherever a chunk has no polygon.
+ */
+function paintSurfaces(
+  context: RasterContext,
+  chunkRect: Rect,
+  touching: DecodedTile[],
+  sprites: ArenaSprites,
+): void {
+  const fills = groundFills(context, sprites.ground ?? {});
+  context.fillStyle = fills.urban;
+  context.fillRect(
+    chunkRect.minX,
+    chunkRect.minY,
+    chunkRect.maxX - chunkRect.minX,
+    chunkRect.maxY - chunkRect.minY,
+  );
+  paintGround(context, touching, chunkRect, fills);
+  paintWater(
+    context,
+    touching,
+    chunkRect,
+    surfaceFill(context, sprites.water, WATER_FILL),
+  );
+}
+
 /** Paints the pavement under roads whose class gets one, textured when the sprite has loaded. */
 function paintPavements(
   context: RasterContext,
@@ -311,22 +339,8 @@ export function paintChunk(
     -chunkRect.minX * zoom,
     -chunkRect.minY * zoom,
   );
-  const fills = groundFills(context, sprites.ground ?? {});
-  context.fillStyle = fills.urban;
-  context.fillRect(
-    chunkRect.minX,
-    chunkRect.minY,
-    chunkRect.maxX - chunkRect.minX,
-    chunkRect.maxY - chunkRect.minY,
-  );
   const touching = tilesTouching(tiles, chunkRect);
-  paintGround(context, touching, chunkRect, fills);
-  paintWater(
-    context,
-    touching,
-    chunkRect,
-    surfaceFill(context, sprites.water, WATER_FILL),
-  );
+  paintSurfaces(context, chunkRect, touching, sprites);
   const roads = touching.flatMap((tile) =>
     tile.roads.filter((road) => rectsIntersect(road.bounds, chunkRect)),
   );
