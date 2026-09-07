@@ -59,9 +59,10 @@ const surfaceSources = {
 const vehicleSources = {
   sedan: "car-sedan.png",
 };
-// Character art, drawn facing up the image so the canvas can rotate it by the player's facing.
+// Character art: a horizontal strip of square frames, drawn facing down its own image so the
+// canvas can rotate it by the player's facing. One frame means a still character.
 const personSources = {
-  player: "person-player.png",
+  player: { file: "person-player.png", frames: 8 },
 };
 
 /**
@@ -71,7 +72,7 @@ function assertSourcesExist() {
   const files = [
     ...Object.values(surfaceSources),
     ...Object.values(vehicleSources),
-    ...Object.values(personSources),
+    ...Object.values(personSources).map((person) => person.file),
   ];
   for (const file of files) {
     const full = path.join(sourceDir, file);
@@ -128,13 +129,13 @@ function hardenAlpha(data, channels) {
  * the corner colour, which leaves the generated art's alpha halo in place, so the bounds are
  * measured from the alpha channel instead.
  */
-function alphaBounds(data, info) {
+function alphaBounds(data, info, fromX = 0, toX = info.width) {
   let minX = info.width;
   let minY = info.height;
   let maxX = -1;
   let maxY = -1;
   for (let y = 0; y < info.height; y++) {
-    for (let x = 0; x < info.width; x++) {
+    for (let x = fromX; x < toX; x++) {
       if (data[(y * info.width + x) * info.channels + 3] === 0) continue;
       if (x < minX) minX = x;
       if (x > maxX) maxX = x;
@@ -187,16 +188,127 @@ async function packVehicleSprite(file) {
 }
 
 /**
- * Trims one character sprite to its artwork and resizes it onto the square box around the
- * person's collision circle, so the renderer can draw it from the radius it already knows.
+ * The box every frame of a strip is cut with: the union of what each frame occupies, measured
+ * in frame-local coordinates. Trimming each frame to its own artwork instead would re-centre
+ * every one of them and iron the walk's bob and sway flat.
  */
-async function packPersonSprite(file) {
+function stripBounds(data, info, frames) {
+  const frameWidth = Math.round(info.width / frames);
+  let left = frameWidth;
+  let top = info.height;
+  let right = -1;
+  let bottom = -1;
+  for (let frame = 0; frame < frames; frame++) {
+    const from = frame * frameWidth;
+    const bounds = alphaBounds(data, info, from, from + frameWidth);
+    left = Math.min(left, bounds.left - from);
+    top = Math.min(top, bounds.top);
+    right = Math.max(right, bounds.left - from + bounds.width);
+    bottom = Math.max(bottom, bounds.top + bounds.height);
+  }
+  return { left, top, width: right - left, height: bottom - top, frameWidth };
+}
+
+/**
+ * How far the body rolls at the extremes of the synthesised walk, in degrees, and how far it
+ * bobs, in cell pixels. Both are deliberately small: at the size a person is actually drawn the
+ * cycle has to read as a gait, not as a pratfall.
+ */
+const WALK_ROLL_DEG = 5;
+const WALK_BOB_PX = 2;
+
+/**
+ * Builds one frame of a walk cycle from a still figure. The body rolls once per cycle and bobs
+ * twice — one rise per step — which is what a two-beat gait does. Rotating first and fitting
+ * afterwards keeps the whole figure inside its cell at every angle.
+ */
+async function walkCycleFrame(figure, frame, frames, pixelSize) {
+  const phase = (frame / frames) * 2 * Math.PI;
+  const roll = Math.sin(phase) * WALK_ROLL_DEG;
+  const lift = Math.round(Math.abs(Math.sin(phase)) * WALK_BOB_PX);
+  const body = await sharp(figure)
+    .rotate(roll, { background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .resize(pixelSize, pixelSize - WALK_BOB_PX, {
+      fit: "contain",
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .png()
+    .toBuffer();
+  return sharp({
+    create: {
+      width: pixelSize,
+      height: pixelSize,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite([{ input: body, left: 0, top: WALK_BOB_PX - lift }])
+    .png()
+    .toBuffer();
+}
+
+/**
+ * Packs one character strip, each cell on the square box around the person's collision circle so
+ * the renderer can draw a cell straight from the radius it already knows.
+ *
+ * A source that is already `frames` cells wide is cut up as it is, with every frame sharing one
+ * union box so the artist's own bob survives. A single still is turned into a walk cycle here
+ * instead: two attempts at generating one produced frames that re-framed and cropped his legs,
+ * which reads as a wobble at 19 px, while a synthesised roll and bob reads as walking and costs
+ * nothing to regenerate.
+ */
+async function packPersonSprite(file, frames) {
   const pixelSize = Math.round(2 * PERSON_RADIUS_M * PERSON_PX_PER_METRE);
-  await packCutout(file, pixelSize, pixelSize);
+  const { data, info } = await sharp(path.join(sourceDir, file))
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  hardenAlpha(data, info.channels);
+  const raw = {
+    width: info.width,
+    height: info.height,
+    channels: info.channels,
+  };
+  const isStrip = frames > 1 && info.width >= info.height * frames;
+  const box = stripBounds(data, info, isStrip ? frames : 1);
+  const cells = [];
+  for (let frame = 0; frame < frames; frame++) {
+    const cut = await sharp(data, { raw })
+      .extract({
+        left: (isStrip ? frame * box.frameWidth : 0) + box.left,
+        top: box.top,
+        width: box.width,
+        height: box.height,
+      })
+      .png()
+      .toBuffer();
+    cells.push({
+      input: isStrip
+        ? await sharp(cut)
+            .resize(pixelSize, pixelSize, { fit: "fill" })
+            .png()
+            .toBuffer()
+        : await walkCycleFrame(cut, frame, frames, pixelSize),
+      left: frame * pixelSize,
+      top: 0,
+    });
+  }
+  await sharp({
+    create: {
+      width: pixelSize * frames,
+      height: pixelSize,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite(cells)
+    .png()
+    .toFile(path.join(outputDir, file));
   return {
     file: `${PUBLIC_BASE_PATH}/${file}`,
     radiusMetres: PERSON_RADIUS_M,
     pixelSize,
+    frames,
   };
 }
 
@@ -211,8 +323,8 @@ async function packSprites() {
   for (const [name, file] of Object.entries(vehicleSources))
     vehicles[name] = await packVehicleSprite(file);
   const people = {};
-  for (const [name, file] of Object.entries(personSources))
-    people[name] = await packPersonSprite(file);
+  for (const [name, person] of Object.entries(personSources))
+    people[name] = await packPersonSprite(person.file, person.frames);
   const manifest = { version: 1, surfaces, vehicles, people };
   fs.writeFileSync(
     path.join(outputDir, "manifest.json"),
@@ -235,7 +347,7 @@ function reportDone(manifest) {
     );
   for (const [name, person] of Object.entries(manifest.people))
     console.log(
-      `${name}: ${person.file} ${person.pixelSize}px for a ${person.radiusMetres} m radius`,
+      `${name}: ${person.file} ${person.frames} × ${person.pixelSize}px for a ${person.radiusMetres} m radius`,
     );
   console.log(`Arena sprites written to ${outputDir}`);
 }

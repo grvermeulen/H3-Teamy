@@ -7,6 +7,7 @@ import {
   parseSpriteManifest,
   type ArenaSprites,
   type GroundTextures,
+  type PersonSprite,
   type SpriteManifest,
   type SurfaceTexture,
   type VehicleSprite,
@@ -135,13 +136,14 @@ async function loadVehicle(
   }
 }
 
-/** Loads the player's character art, or `undefined` when the file is missing. */
+/** Loads the player's character strip, or `undefined` when the file is missing. */
 async function loadPerson(
   loadImage: ImageLoader,
   manifest: SpriteManifest,
-): Promise<CanvasImageSource | undefined> {
+): Promise<PersonSprite | undefined> {
+  const { file, pixelSize, frames } = manifest.people.player;
   try {
-    return await loadImage(manifest.people.player.file);
+    return { image: await loadImage(file), pixelSize, frames };
   } catch (error: unknown) {
     reportSpriteFailure(error, "person");
     return undefined;

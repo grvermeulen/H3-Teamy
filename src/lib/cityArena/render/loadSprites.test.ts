@@ -38,6 +38,7 @@ const manifest = {
       file: "/arena/sprites/person.png",
       radiusMetres: 0.4,
       pixelSize: 51,
+      frames: 8,
     },
   },
 };

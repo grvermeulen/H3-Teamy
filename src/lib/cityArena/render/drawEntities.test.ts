@@ -8,6 +8,7 @@ import {
   drawPlayer,
   drawZoneRing,
   playerLook,
+  walkFrame,
 } from "./drawEntities";
 import { PLAYER_DEAD_FILL, PLAYER_FILL, ZONE_RING } from "./palette";
 import { createFakeContext } from "./testing/fakeContext";
@@ -34,17 +35,48 @@ describe("drawEntities", () => {
       { width: 200, height: 100 },
       { x: 12, y: 10, facing: 0, speed: 4 },
       DEFAULT_PLAYER_STYLE,
-      document.createElement("canvas"),
+      { image: document.createElement("canvas"), pixelSize: 51, frames: 1 },
     );
     expect(context.calls).toContain("translate(116,50)");
-    // Facing 0 points along +x while the art faces up its own image, hence the quarter turn.
-    expect(context.calls).toContain("rotate(1.57)");
+    // Facing 0 points along +x and the art faces down its own image, so the turn is a negative
+    // quarter. The positive one drew him looking half a turn away from where he walks and aims.
+    expect(context.calls).toContain("rotate(-1.57)");
     // The 6 px circle radius, grown by PLAYER_SPRITE_SCALE so the man is recognisable.
     expect(
       context.calls.find((call) => call.startsWith("drawImage(")),
     ).toContain(",-9.6,-9.6,19.2,19.2");
     // The sprite shows which way he is facing, so the vector tick is not drawn as well.
     expect(context.calls).not.toContain("lineTo(126,50)");
+  });
+
+  it("walks through the strip while moving and rests on the first frame when still", () => {
+    const walking = { x: 0, y: 0, facing: 0, speed: 4 };
+    const standing = { x: 0, y: 0, facing: 0, speed: 0 };
+    // Four ticks a frame, so 8 frames make one cycle every 32 ticks.
+    expect(walkFrame(walking, 0, 8)).toBe(0);
+    expect(walkFrame(walking, 4, 8)).toBe(1);
+    expect(walkFrame(walking, 31, 8)).toBe(7);
+    expect(walkFrame(walking, 32, 8)).toBe(0);
+    // A standing player never moon-walks on the spot, and a still sprite has nowhere to go.
+    expect(walkFrame(standing, 12, 8)).toBe(0);
+    expect(walkFrame(walking, 12, 1)).toBe(0);
+  });
+
+  it("draws the strip cell for the current frame, not the whole sheet", () => {
+    const context = createFakeContext();
+    drawPlayer(
+      context,
+      createCamera([10, 10], 8),
+      { width: 200, height: 100 },
+      { x: 12, y: 10, facing: 0, speed: 4 },
+      DEFAULT_PLAYER_STYLE,
+      { image: document.createElement("canvas"), pixelSize: 51, frames: 8 },
+      4,
+    );
+    // Frame 1 of a 51 px strip starts at x = 51 and is 51 wide.
+    expect(
+      context.calls.find((call) => call.startsWith("drawImage(")),
+    ).toContain(",51,0,51,51,");
   });
 
   it("draws a dashed zone ring", () => {
