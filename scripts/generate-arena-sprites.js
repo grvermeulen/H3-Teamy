@@ -37,9 +37,17 @@ const outputDir = path.join(root, "public", "arena", "sprites");
 /** Where the generated files are served from, used verbatim by the renderer's sprite loader. */
 const PUBLIC_BASE_PATH = "/arena/sprites";
 
+// Every seamless texture, keyed the way the renderer asks for it: the two road surfaces, water,
+// and one per GroundKind in world/mapTypes.ts. Adding a key here is the only step needed to give
+// a surface art — the manifest, the loader and the painters all read these names.
 const surfaceSources = {
   road: "road-tarmac.png",
   pavement: "pavement-slabs.png",
+  water: "water-river.png",
+  grass: "ground-grass.png",
+  field: "ground-field.png",
+  forest: "ground-forest.png",
+  urban: "ground-urban.png",
 };
 const vehicleSources = {
   sedan: "car-sedan.png",

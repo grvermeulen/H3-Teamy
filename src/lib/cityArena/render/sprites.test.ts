@@ -35,6 +35,18 @@ describe("parseSpriteManifest", () => {
     expect(manifest.surfaces.road.tileMetres).toBe(8);
     expect(manifest.surfaces.road.tilePixels).toBe(128);
     expect(manifest.surfaces.pavement.tileMetres).toBe(8);
+    // Water and every ground kind are authored at the same metres-per-repeat as the road, so a
+    // texture swapped between them keeps the world's scale.
+    for (const name of [
+      "water",
+      "grass",
+      "field",
+      "forest",
+      "urban",
+    ] as const) {
+      expect(manifest.surfaces[name].tileMetres).toBe(8);
+      expect(manifest.surfaces[name].tilePixels).toBe(128);
+    }
     expect(manifest.vehicles.sedan.lengthMetres).toBe(4.2);
     expect(manifest.vehicles.sedan.widthMetres).toBe(1.8);
   });

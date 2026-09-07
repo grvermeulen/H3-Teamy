@@ -233,6 +233,40 @@ describe("paintChunk", () => {
       centreLineStrokeIndex,
     );
   });
+  it("fills ground and water with their own textures once the art has loaded", () => {
+    const context = createFakeContext();
+    const texture = {
+      image: document.createElement("canvas"),
+      tileMetres: 8,
+      tilePixels: 128,
+    };
+    const sprites: ArenaSprites = {
+      ground: {
+        grass: texture,
+        field: texture,
+        forest: texture,
+        urban: texture,
+      },
+      water: texture,
+    };
+    paintChunk(
+      context,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [tile],
+      landmarks,
+      sprites,
+    );
+    // The four ground kinds are built in palette order, then water, so grass is #0 and water #4.
+    expect(context.calls).toContain("fill(pattern(#0))");
+    expect(context.calls).toContain("fill(pattern(#4))");
+    expect(context.calls).not.toContain(`fill(${GROUND_FILL.grass})`);
+    expect(context.calls).not.toContain(`fill(${WATER_FILL})`);
+    expect(
+      context.calls.filter((call) => call.startsWith("createPattern(")),
+    ).toHaveLength(5);
+  });
+
   it("strokes road and pavement with a repeating texture, leaving every other layer flat", () => {
     const context = createFakeContext();
     const image = document.createElement("canvas");

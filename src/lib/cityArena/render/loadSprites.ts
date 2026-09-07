@@ -6,6 +6,7 @@ import {
   SPRITE_MANIFEST_PATH,
   parseSpriteManifest,
   type ArenaSprites,
+  type GroundTextures,
   type SpriteManifest,
   type SurfaceTexture,
   type VehicleSprite,
@@ -134,22 +135,41 @@ async function loadVehicle(
   }
 }
 
+/** Loads the four ground textures; a texture that fails leaves its kind on the flat fill. */
+async function loadGround(
+  loadImage: ImageLoader,
+  surfaces: SpriteManifest["surfaces"],
+): Promise<GroundTextures> {
+  const [grass, field, forest, urban] = await Promise.all([
+    loadSurface(loadImage, surfaces.grass),
+    loadSurface(loadImage, surfaces.field),
+    loadSurface(loadImage, surfaces.forest),
+    loadSurface(loadImage, surfaces.urban),
+  ]);
+  return { grass, field, forest, urban };
+}
+
 /** Loads every sprite the manifest lists; each one falls back on its own. */
 async function loadAll(
   options: Required<SpriteStoreOptions>,
 ): Promise<ArenaSprites> {
   const manifest = await fetchManifest(options.fetchImpl, options.manifestPath);
-  const [road, pavement, car] = await Promise.all([
+  const [road, pavement, water, ground, car] = await Promise.all([
     loadSurface(options.loadImage, manifest.surfaces.road),
     loadSurface(options.loadImage, manifest.surfaces.pavement),
+    loadSurface(options.loadImage, manifest.surfaces.water),
+    loadGround(options.loadImage, manifest.surfaces),
     loadVehicle(options.loadImage, options.canvasFactory, manifest),
   ]);
-  return { road, pavement, car };
+  return { road, pavement, water, ground, car };
 }
 
 /** True when at least one sprite decoded, i.e. the renderer has something new to paint with. */
 function hasAnySprite(sprites: ArenaSprites): boolean {
-  return Boolean(sprites.road ?? sprites.pavement ?? sprites.car);
+  if (Object.values(sprites.ground ?? {}).some(Boolean)) return true;
+  return Boolean(
+    sprites.road ?? sprites.pavement ?? sprites.water ?? sprites.car,
+  );
 }
 
 /**

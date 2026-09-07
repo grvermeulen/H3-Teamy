@@ -8,15 +8,21 @@ import { createFakeTarget } from "./testing/fakeContext";
 
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
+/** One manifest surface entry; every texture ships at the same authored size. */
+function surface(name: string) {
+  return { file: `/arena/sprites/${name}.png`, tileMetres: 8, tilePixels: 128 };
+}
+
 const manifest = {
   version: 1,
   surfaces: {
-    road: { file: "/arena/sprites/road.png", tileMetres: 8, tilePixels: 128 },
-    pavement: {
-      file: "/arena/sprites/pavement.png",
-      tileMetres: 8,
-      tilePixels: 128,
-    },
+    road: surface("road"),
+    pavement: surface("pavement"),
+    water: surface("water"),
+    grass: surface("grass"),
+    field: surface("field"),
+    forest: surface("forest"),
+    urban: surface("urban"),
   },
   vehicles: {
     sedan: {
@@ -60,6 +66,37 @@ describe("createSpriteStore", () => {
     await store.load();
     expect(store.current().road?.tileMetres).toBe(8);
     expect(store.current().pavement?.tilePixels).toBe(128);
+  });
+
+  it("loads a texture for water and for every ground kind", async () => {
+    const store = createSpriteStore({
+      canvasFactory,
+      loadImage,
+      fetchImpl: fakeFetch(manifest),
+    });
+    await store.load();
+    expect(store.current().water?.tileMetres).toBe(8);
+    expect(Object.keys(store.current().ground ?? {}).sort()).toEqual([
+      "field",
+      "forest",
+      "grass",
+      "urban",
+    ]);
+  });
+
+  it("drops only the ground texture whose image is missing", async () => {
+    const failing: ImageLoader = (src) =>
+      src.includes("grass")
+        ? Promise.reject(new Error("missing"))
+        : Promise.resolve(document.createElement("canvas"));
+    const store = createSpriteStore({
+      canvasFactory,
+      loadImage: failing,
+      fetchImpl: fakeFetch(manifest),
+    });
+    await expect(store.load()).resolves.toBe(true);
+    expect(store.current().ground?.grass).toBeUndefined();
+    expect(store.current().ground?.forest).toBeDefined();
   });
 
   it("builds one tinted car sprite per body colour", async () => {

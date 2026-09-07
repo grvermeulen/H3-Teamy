@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { GroundKind } from "../world/mapTypes";
 import type { RasterContext } from "./canvasTypes";
 
 /** Manifest written by `scripts/generate-arena-sprites.js`, fetched once per session. */
@@ -20,12 +21,21 @@ export const VehicleEntrySchema = z.object({
   pixelHeight: z.number().int().positive(),
 });
 
-/** Zod schema for `manifest.json`; runtime validation happens once per session. */
+/**
+ * Zod schema for `manifest.json`; runtime validation happens once per session. `surfaces` lists
+ * every seamless texture flat, keyed as the build script writes them: the two road surfaces,
+ * water, and one per {@link GroundKind}.
+ */
 export const SpriteManifestSchema = z.object({
   version: z.literal(1),
   surfaces: z.object({
     road: SurfaceEntrySchema,
     pavement: SurfaceEntrySchema,
+    water: SurfaceEntrySchema,
+    grass: SurfaceEntrySchema,
+    field: SurfaceEntrySchema,
+    forest: SurfaceEntrySchema,
+    urban: SurfaceEntrySchema,
   }),
   vehicles: z.object({ sedan: VehicleEntrySchema }),
 });
@@ -51,6 +61,9 @@ export type VehicleSprite = {
   tinted: CanvasImageSource[];
 };
 
+/** The ground textures, one per {@link GroundKind}; each stays absent until its file decodes. */
+export type GroundTextures = Partial<Record<GroundKind, SurfaceTexture>>;
+
 /**
  * Sprites the painters may use. Every field is optional: a missing texture is the normal state
  * before the images have loaded and after a failed load, and each painter falls back to the flat
@@ -59,6 +72,8 @@ export type VehicleSprite = {
 export type ArenaSprites = {
   road?: SurfaceTexture;
   pavement?: SurfaceTexture;
+  water?: SurfaceTexture;
+  ground?: GroundTextures;
   car?: VehicleSprite;
 };
 

@@ -4,7 +4,7 @@ import {
   type Rect,
 } from "../mapBuild/geometry";
 import type { DecodedRoad, DecodedTile } from "../world/decode";
-import type { LandmarkStyle } from "../world/mapTypes";
+import type { GroundKind, LandmarkStyle } from "../world/mapTypes";
 import type { Point } from "../world/projection";
 import type { RasterContext } from "./canvasTypes";
 import {
@@ -25,7 +25,12 @@ import {
   WATER_FILL,
   buildingFill,
 } from "./palette";
-import { NO_SPRITES, surfaceFill, type ArenaSprites } from "./sprites";
+import {
+  NO_SPRITES,
+  surfaceFill,
+  type ArenaSprites,
+  type GroundTextures,
+} from "./sprites";
 import { planStreetLabels } from "./streetLabels";
 
 /** Display name and style of a landmark, keyed by landmark key (built from `index.landmarks`). */
@@ -62,8 +67,12 @@ function tracePath(
   if (close) context.closePath();
 }
 
-/** Fills a closed ring with a flat colour. */
-function fillRing(context: RasterContext, ring: Point[], fill: string): void {
+/** Fills a closed ring with a flat colour or a repeating texture. */
+function fillRing(
+  context: RasterContext,
+  ring: Point[],
+  fill: string | CanvasPattern,
+): void {
   tracePath(context, ring, true);
   context.fillStyle = fill;
   context.fill();
@@ -87,16 +96,36 @@ function strokePolyline(
   context.setLineDash([]);
 }
 
+/** The fill each ground kind is painted with this frame: its texture pattern, else its colour. */
+type GroundFills = Record<GroundKind, string | CanvasPattern>;
+
+/**
+ * Builds one fill per ground kind. The patterns are made once per chunk rather than once per
+ * polygon, because `createPattern` costs the same whether one ring or two hundred use it.
+ */
+function groundFills(
+  context: RasterContext,
+  ground: GroundTextures,
+): GroundFills {
+  return {
+    grass: surfaceFill(context, ground.grass, GROUND_FILL.grass),
+    field: surfaceFill(context, ground.field, GROUND_FILL.field),
+    forest: surfaceFill(context, ground.forest, GROUND_FILL.forest),
+    urban: surfaceFill(context, ground.urban, GROUND_FILL.urban),
+  };
+}
+
 /** Paints ground polygons touching the chunk, across every touching tile. */
 function paintGround(
   context: RasterContext,
   tiles: DecodedTile[],
   chunkRect: Rect,
+  fills: GroundFills,
 ): void {
   for (const tile of tiles)
     for (const area of tile.ground)
       if (rectsIntersect(area.bounds, chunkRect))
-        fillRing(context, area.ring, GROUND_FILL[area.kind]);
+        fillRing(context, area.ring, fills[area.kind]);
 }
 
 /** Paints water polygons touching the chunk, across every touching tile. */
@@ -104,11 +133,12 @@ function paintWater(
   context: RasterContext,
   tiles: DecodedTile[],
   chunkRect: Rect,
+  fill: string | CanvasPattern,
 ): void {
   for (const tile of tiles)
     for (const area of tile.water)
       if (rectsIntersect(area.bounds, chunkRect))
-        fillRing(context, area.ring, WATER_FILL);
+        fillRing(context, area.ring, fill);
 }
 
 /** Paints the pavement under roads whose class gets one, textured when the sprite has loaded. */
@@ -261,8 +291,9 @@ function tilesTouching(tiles: DecodedTile[], chunkRect: Rect): DecodedTile[] {
  * tiles' overlap geometry, and painting per tile let a later tile's ground or road fill
  * overwrite an earlier tile's water or centre line right at the shared border.
  *
- * Road and pavement take a repeating texture from `sprites` when one has loaded; every other
- * layer keeps its flat palette colour, and so do those two whenever a texture is missing.
+ * Every surface layer — the chunk background, ground, water, pavement and road — takes a
+ * repeating texture from `sprites` when one has loaded, and falls back to its flat palette
+ * colour when that texture is missing. Buildings, centre lines and labels stay flat colour.
  */
 export function paintChunk(
   context: RasterContext,
@@ -280,7 +311,8 @@ export function paintChunk(
     -chunkRect.minX * zoom,
     -chunkRect.minY * zoom,
   );
-  context.fillStyle = GROUND_FILL.urban;
+  const fills = groundFills(context, sprites.ground ?? {});
+  context.fillStyle = fills.urban;
   context.fillRect(
     chunkRect.minX,
     chunkRect.minY,
@@ -288,8 +320,13 @@ export function paintChunk(
     chunkRect.maxY - chunkRect.minY,
   );
   const touching = tilesTouching(tiles, chunkRect);
-  paintGround(context, touching, chunkRect);
-  paintWater(context, touching, chunkRect);
+  paintGround(context, touching, chunkRect, fills);
+  paintWater(
+    context,
+    touching,
+    chunkRect,
+    surfaceFill(context, sprites.water, WATER_FILL),
+  );
   const roads = touching.flatMap((tile) =>
     tile.roads.filter((road) => rectsIntersect(road.bounds, chunkRect)),
   );

@@ -34,14 +34,17 @@ documented as their PRs land. Design: `docs/superpowers/specs/2026-09-03-city-ar
    `src/lib/cityArena/mapBuild/landmarks.config.ts`, then rebuild. Zero candidates means the OSM
    name or tags differ from the config: search the cached landmark response for the name.
 3. Budget errors — two independent caps, both in `scripts/arena/buildMap.ts`: total gzipped
-   size ≤ 1.2 MB (`GZIP_BUDGET_BYTES`, "Asset exceeds gzip budget") and no single tile above
-   256 KB gzipped (`TILE_GZIP_BUDGET_BYTES`, "Tile(s) exceed the ... per-tile gzip cap" — the
-   build lists the offending tiles by name and size). Either one fails the build. Levers, all in
-   `src/lib/cityArena/mapBuild/assemble.ts`: raise `MIN_BUILDING_AREA_M2` (drops small buildings)
-   or lower `BUILDING_KEEP_RADIUS_M` (drops buildings far from a zone centre) — buildings are the
-   larger contributor to tile size in the shipped build (measured per-layer gzip split, spec
-   §3.4), not ground, so these two levers matter most; raising `TERRAIN_SIMPLIFY_TOLERANCE_M`
-   (coarser ground/water polygons) helps less. Record the change in the spec.
+   size ≤ 4 MB (`GZIP_BUDGET_BYTES`, "Asset exceeds gzip budget") and no single tile above
+   512 KB gzipped (`TILE_GZIP_BUDGET_BYTES`, "Tile(s) exceed the ... per-tile gzip cap" — the
+   build lists the offending tiles by name and size). Either one fails the build. Owner decision
+   2026-09-07: these are runaway-build guardrails, not a design constraint — the map may grow to
+   whatever the world needs, so raise the ceiling before thinning the map. If the map must be
+   thinned anyway, the levers are all in `src/lib/cityArena/mapBuild/assemble.ts`: raise
+   `MIN_BUILDING_AREA_M2` (drops small buildings) or lower `BUILDING_KEEP_RADIUS_M` (drops
+   buildings far from a zone centre) — buildings are the larger contributor to tile size in the
+   shipped build (measured per-layer gzip split, spec §3.4), not ground, so these two levers
+   matter most; raising `TERRAIN_SIMPLIFY_TOLERANCE_M` (coarser ground/water polygons) helps
+   less. Record the change in the spec.
 4. Regenerating a shipped map — bump `MAP_VERSION` in `src/lib/cityArena/constants.ts`, build into the
    new folder, delete the old folder in the same PR.
 5. `npm run arena:build-map:check` — validates and reports sizes without writing (used by the nightly
@@ -172,3 +175,33 @@ src/lib/cityArena`. The arena tests use fake map/audio/canvas inputs and do not 
 - Verification: `npm run lint`, `npx tsc --noEmit`, `npx vitest run`, `npm run build`. The arena
   tests use fake map/audio/canvas inputs and need no external services. The two existing lint
   warnings in `EventList.tsx` and `src/types/ical.d.ts` are unrelated.
+
+## Sprite art (PR 6 — ground and water textures)
+
+- Palette: the map reads as a game, not a paper map. Owner decision 2026-09-06, after judging the
+  first generated tarmac in the running game: the whole palette is keyed to dark asphalt
+  (`ROAD_FILL` `#383836`, urban ground `#1e2024`) rather than the light off-white it shipped with.
+- Source art lives in `assets/arena/sprites/` at 1024 px; `scripts/generate-arena-sprites.js`
+  (`npm run arena:build-sprites`, also part of `prebuild`) packs it into `public/arena/sprites/`
+  with `manifest.json`. Nothing in the renderer hard-codes a pixel size — the manifest states each
+  asset in metres.
+- Textures are authored per real-world size: one repeat covers `TEXTURE_TILE_METRES` = 8 m and
+  ships at `TEXTURE_TILE_PX` = 128 px, i.e. 16 px/m, twice the highest camera zoom. Seven seamless
+  surfaces ship: `road`, `pavement`, `water`, and one per `GroundKind` (`grass`, `field`, `forest`,
+  `urban`). The car sprite is packed separately onto the hull the simulation collides with
+  (4.2 × 1.8 m at 32 px/m) with its alpha rebuilt, because the generator leaves the bodywork
+  half-transparent.
+- Adding a surface is one line in `surfaceSources` plus the matching key in
+  `SpriteManifestSchema.surfaces`; the loader and the painters read those names.
+- Rendering: `render/sprites.ts` `surfaceFill()` turns a texture into a `CanvasPattern` whose
+  matrix scales pixels onto metres, so the repeat is anchored to the world origin and neighbouring
+  chunks line up at their shared edge. `drawStatic.paintChunk` builds one fill per ground kind
+  once per chunk (`groundFills`), then paints the chunk background, ground polygons, water,
+  pavements and road surfaces with them. Buildings, centre lines and labels stay flat colour.
+- Every texture falls back on its own: `loadSprites.ts` reports a failed image to Sentry
+  (`kind: "sprite"`) and leaves that one surface on its flat palette colour, so losing the art
+  never takes the game down.
+- Generation: SpriteCook (`mode: "texture"`, `gpt-image-2`, 1024 px, `bg_mode: "include"`,
+  `smart_crop: false`). Prompts state the 8 × 8 m footprint, demand flat orthographic lighting with
+  no shadows or gradient, forbid objects and text, and require the edges to continue into each
+  other — the seam is what makes the pattern usable.
