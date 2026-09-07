@@ -27,16 +27,24 @@ import { tileFileName } from "../../src/lib/cityArena/mapBuild/tiles";
 import type { MapIndex } from "../../src/lib/cityArena/world/mapTypes";
 import { fetchOverpass } from "./overpass";
 
-/** Hard ceiling for the gzipped size of all asset files together (a repo/CDN figure). */
-export const GZIP_BUDGET_BYTES = 1200 * 1024;
+/**
+ * Hard ceiling for the gzipped size of all asset files together (a repo/CDN figure).
+ * Owner decision 2026-09-07: the map may grow to whatever the world needs, so this is a
+ * runaway-build guardrail rather than a design constraint — the shipped build sat at 1,151 KB
+ * against the old 1.2 MB ceiling, which left no room to add detail. Raise it again rather than
+ * thinning the map to fit.
+ */
+export const GZIP_BUDGET_BYTES = 4096 * 1024;
 
 /**
  * Hard ceiling for any single tile's gzipped size. A player only downloads the ≤ 9 tiles
  * around them, so this — not the total — is what bounds their actual download time.
- * Owner decision 2026-09-04: 256 KB comfortably covers a complete town core within the
- * 1.2 km building-keep radius (the Wageningen–campus tile, the largest, is ≈ 203 KB).
+ * Owner decision 2026-09-04: 256 KB comfortably covered a complete town core within the
+ * 1.2 km building-keep radius (the Wageningen–campus tile, the largest, was ≈ 203 KB);
+ * raised to 512 KB on 2026-09-07 with the total, so a denser rebuild is not blocked here
+ * instead.
  */
-export const TILE_GZIP_BUDGET_BYTES = 256 * 1024;
+export const TILE_GZIP_BUDGET_BYTES = 512 * 1024;
 
 /** Options for {@link runBuild}. */
 export type RunBuildOptions = {
