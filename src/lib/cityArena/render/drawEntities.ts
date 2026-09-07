@@ -10,6 +10,8 @@ import {
   PLAYER_DEAD_FILL,
   PLAYER_DEAD_RING,
   PLAYER_FILL,
+  PLAYER_OTHER_FILL,
+  PLAYER_OTHER_RING,
   PLAYER_RING,
   ZONE_RING,
 } from "./palette";
@@ -31,6 +33,11 @@ export type PlayerStyle = { fill: string; ring: string };
 export const DEFAULT_PLAYER_STYLE: PlayerStyle = {
   fill: PLAYER_FILL,
   ring: PLAYER_RING,
+};
+/** Somebody else in the same match. */
+export const OTHER_PLAYER_STYLE: PlayerStyle = {
+  fill: PLAYER_OTHER_FILL,
+  ring: PLAYER_OTHER_RING,
 };
 /** A body waiting to respawn. */
 export const DEAD_PLAYER_STYLE: PlayerStyle = {

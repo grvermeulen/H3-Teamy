@@ -1,3 +1,4 @@
+import { localPlayer } from "./players";
 import { describe, expect, it } from "vitest";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
@@ -28,7 +29,11 @@ const graph = decodeRoadGraph({ nodes: [], edges: [], classes: [], names: [] });
 
 function enforcedAt(x: number): ArenaState {
   const state = createArenaState({ index, graph, seed: 1, zone }, createRng(1));
-  return { ...state, zoneEnforced: true, player: { ...state.player, x } };
+  return {
+    ...state,
+    zoneEnforced: true,
+    players: [{ ...localPlayer(state), x }],
+  };
 }
 
 describe("zone rule", () => {
@@ -41,7 +46,7 @@ describe("zone rule", () => {
 
   it("warns, then applies ten damage per second, and clears on return", () => {
     const left = applyZoneRule(enforcedAt(600), index, 10);
-    expect(left.player.outsideSinceTick).toBe(10);
+    expect(localPlayer(left).outsideSinceTick).toBe(10);
     expect(left.events).toEqual([
       { kind: "zone", playerId: 0, phase: "warning" },
     ]);
@@ -51,12 +56,14 @@ describe("zone rule", () => {
       index,
       10 + ZONE_WARNING_TICKS,
     );
-    expect(hurt.player.health).toBe(90);
+    expect(localPlayer(hurt).health).toBe(90);
     expect(hurt.events).toEqual([
       { kind: "zone", playerId: 0, phase: "damage" },
     ]);
-    const back = { ...hurt, player: { ...hurt.player, x: 499 } };
-    expect(applyZoneRule(back, index, 200).player.outsideSinceTick).toBeNull();
+    const back = { ...hurt, players: [{ ...localPlayer(hurt), x: 499 }] };
+    expect(
+      localPlayer(applyZoneRule(back, index, 200)).outsideSinceTick,
+    ).toBeNull();
   });
 
   it("does nothing when unenforced, dead or shielded", () => {
@@ -64,24 +71,35 @@ describe("zone rule", () => {
     expect(applyZoneRule(off, index, 5)).toBe(off);
     const dead = {
       ...enforcedAt(600),
-      player: {
-        ...enforcedAt(600).player,
-        health: 0,
-        diedAtTick: 1,
-        outsideSinceTick: 2,
-      },
-    };
-    expect(applyZoneRule(dead, index, 200).player.outsideSinceTick).toBeNull();
-    const shielded = {
-      ...enforcedAt(600),
-      player: { ...enforcedAt(600).player, invulnerableUntilTick: 1000 },
+      players: [
+        {
+          ...localPlayer(enforcedAt(600)),
+          health: 0,
+          diedAtTick: 1,
+          outsideSinceTick: 2,
+        },
+      ],
     };
     expect(
-      applyZoneRule(
-        { ...shielded, player: { ...shielded.player, outsideSinceTick: 10 } },
-        index,
-        160,
-      ).player.health,
+      localPlayer(applyZoneRule(dead, index, 200)).outsideSinceTick,
+    ).toBeNull();
+    const shielded = {
+      ...enforcedAt(600),
+      players: [
+        { ...localPlayer(enforcedAt(600)), invulnerableUntilTick: 1000 },
+      ],
+    };
+    expect(
+      localPlayer(
+        applyZoneRule(
+          {
+            ...shielded,
+            players: [{ ...localPlayer(shielded), outsideSinceTick: 10 }],
+          },
+          index,
+          160,
+        ),
+      ).health,
     ).toBe(100);
   });
 
@@ -101,6 +119,6 @@ describe("zone rule", () => {
       enforcedZoneKey: "campus" as const,
     };
     const checked = applyZoneRule(state, selected, 10);
-    expect(checked.player.outsideSinceTick).toBeNull();
+    expect(localPlayer(checked).outsideSinceTick).toBeNull();
   });
 });

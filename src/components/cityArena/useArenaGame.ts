@@ -1,5 +1,6 @@
 "use client";
 
+import { localPlayer, replacePlayer } from "@/lib/cityArena/sim/players";
 import {
   useCallback,
   useEffect,
@@ -186,7 +187,10 @@ async function bootSession(
     initialSoundRef.current,
   );
   runtimeRef.current = runtime;
-  return { index, spawn: [runtime.state.player.x, runtime.state.player.y] };
+  return {
+    index,
+    spawn: [localPlayer(runtime.state).x, localPlayer(runtime.state).y],
+  };
 }
 
 /** Options for {@link useArenaBoot}. */
@@ -408,11 +412,11 @@ function createTestHooks(
       const runtime = runtimeRef.current;
       if (!runtime) return;
       const player = damagePlayer(
-        runtime.state.player,
+        localPlayer(runtime.state),
         amount,
         runtime.state.tick,
       );
-      runtime.state = { ...runtime.state, player };
+      runtime.state = replacePlayer(runtime.state, player);
     },
     setZoneEnforced(enabled) {
       const runtime = runtimeRef.current;
@@ -426,8 +430,12 @@ function createTestHooks(
     addHeat(amount) {
       const runtime = runtimeRef.current;
       if (!runtime) return;
-      const player = addHeat(runtime.state.player, amount, runtime.state.tick);
-      runtime.state = { ...runtime.state, player };
+      const player = addHeat(
+        localPlayer(runtime.state),
+        amount,
+        runtime.state.tick,
+      );
+      runtime.state = replacePlayer(runtime.state, player);
     },
     getViolations: () => runtimeRef.current?.violations ?? 0,
   };

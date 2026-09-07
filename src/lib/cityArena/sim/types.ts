@@ -28,6 +28,13 @@ export const EMPTY_INPUT: WorldInput = {
   weaponNext: false,
 };
 
+/**
+ * One input per player id for a single tick. A player with no entry is stepped with
+ * {@link EMPTY_INPUT}: offline that never happens, but a hosted match drops late packets and a
+ * silent client must not freeze the tick.
+ */
+export type ArenaInputs = ReadonlyMap<number, WorldInput>;
+
 /** Builds a full input from the fields a test or a debug dispatch cares about. */
 export function createInput(partial: Partial<WorldInput>): WorldInput {
   return {
@@ -123,6 +130,11 @@ export type ArenaPlayerState = PlayerState & {
   outsideSinceTick: number | null;
   /** Rate-limited steering command (−1..1) of the car being driven; 0 while on foot. */
   driveSteer: number;
+  /**
+   * Edge-triggered buttons this player held last tick. It lives on the player rather than on
+   * the world so one player holding Enter cannot swallow another player's press.
+   */
+  held: HeldButtons;
 };
 
 /** Buttons whose previous held state the simulation remembers for edge detection. */
@@ -231,11 +243,11 @@ export type ArenaState = {
   tick: number;
   seed: number;
   nextId: number;
-  player: ArenaPlayerState;
+  /** Every player the simulation steps, in join order; offline play has exactly one. */
+  players: ArenaPlayerState[];
   vehicles: VehicleState[];
   bullets: BulletState[];
   effects: EffectState[];
-  held: HeldButtons;
   zoneKey: ZoneKey | null;
   peds: PedState[];
   cops: CopState[];

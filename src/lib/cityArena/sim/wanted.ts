@@ -109,12 +109,22 @@ export function heatFromEvents(
   return heat;
 }
 
-/** Returns the living player with the highest nonzero wanted level. */
+/**
+ * Returns the living player with the highest nonzero wanted level. Equal heat breaks on the
+ * lower id rather than on array order, so who the police chase never depends on the order
+ * people joined in — the host and a client replaying the same inputs must pick the same target.
+ */
 export function wantedTarget(state: ArenaState): ArenaPlayerState | null {
   let target: ArenaPlayerState | null = null;
   for (const player of playersOf(state)) {
     if (isDead(player) || wantedLevel(player.heat) === 0) continue;
-    if (!target || player.heat > target.heat) target = player;
+    if (!target) {
+      target = player;
+      continue;
+    }
+    if (player.heat > target.heat) target = player;
+    else if (player.heat === target.heat && player.id < target.id)
+      target = player;
   }
   return target;
 }

@@ -1,3 +1,4 @@
+import { localPlayer } from "./players";
 import { describe, expect, it } from "vitest";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import type { Point } from "../world/projection";
@@ -164,7 +165,7 @@ describe("pedestrian contacts", () => {
     ]);
     expect(
       stepPeds(
-        { ...state, player: { ...state.player, vehicleId: 40 } },
+        { ...state, players: [{ ...localPlayer(state), vehicleId: 40 }] },
         world,
         step,
         5,

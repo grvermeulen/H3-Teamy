@@ -1,3 +1,4 @@
+import { localPlayer } from "./players";
 import { describe, expect, it } from "vitest";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
@@ -127,7 +128,7 @@ describe("placePickups", () => {
 
 describe("taking pickups", () => {
   it("only takes pickups that help and rearms magazine weapons", () => {
-    const { player } = lonePlayer();
+    const player = localPlayer(lonePlayer());
     expect(canTakePickup(player, pickupAt("uzi", 0))).toBe(true);
     expect(canTakePickup(player, pickupAt("health", 0))).toBe(false);
     expect(
@@ -161,7 +162,7 @@ describe("taking pickups", () => {
       pickups: [pickupAt("uzi", 0.5)],
     };
     const taken = stepPickups(state, 5);
-    expect(taken.player).toMatchObject({
+    expect(localPlayer(taken)).toMatchObject({
       weapon: "uzi",
       ammo: { uzi: 60, shotgun: 0 },
     });
@@ -169,7 +170,7 @@ describe("taking pickups", () => {
     expect(taken.events).toEqual([
       { kind: "pickup", pickupKind: "uzi", playerId: 0, x: 0.5, y: 0 },
     ]);
-    const away = { ...taken, player: { ...taken.player, x: 50 } };
+    const away = { ...taken, players: [{ ...localPlayer(taken), x: 50 }] };
     expect(stepPickups(away, 604).pickups[0].takenAtTick).toBe(5);
     expect(stepPickups(away, 605).pickups[0].takenAtTick).toBeNull();
   });
@@ -177,21 +178,21 @@ describe("taking pickups", () => {
   it("ignores out-of-reach, seated, dead and full pickups", () => {
     const base = lonePlayer();
     expect(
-      stepPickups({ ...base, pickups: [pickupAt("uzi", 1.3)] }, 1).player.ammo
-        .uzi,
+      localPlayer(stepPickups({ ...base, pickups: [pickupAt("uzi", 1.3)] }, 1))
+        .ammo.uzi,
     ).toBe(0);
     const seated: ArenaState = {
       ...base,
       pickups: [pickupAt("uzi", 0.5)],
-      player: { ...base.player, vehicleId: 4 },
+      players: [{ ...localPlayer(base), vehicleId: 4 }],
     };
     expect(stepPickups(seated, 1).pickups[0].takenAtTick).toBeNull();
     const dead: ArenaState = {
       ...base,
       pickups: [pickupAt("health", 0.5)],
-      player: { ...base.player, health: 0, diedAtTick: 0 },
+      players: [{ ...localPlayer(base), health: 0, diedAtTick: 0 }],
     };
-    expect(stepPickups(dead, 1).player.health).toBe(0);
+    expect(localPlayer(stepPickups(dead, 1)).health).toBe(0);
     const full: ArenaState = { ...base, pickups: [pickupAt("health", 0.5)] };
     expect(stepPickups(full, 1).pickups[0].takenAtTick).toBeNull();
     expect(stepPickups(full, 1).events).toEqual([]);

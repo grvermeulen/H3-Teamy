@@ -1,10 +1,17 @@
+import { localPlayer } from "./players";
 import { describe, expect, it } from "vitest";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
 import { createArenaState } from "./arena";
 import { PEDS_PER_ZONE } from "./peds";
-import { applyPopulation, populateZone, topUpPeds } from "./populate";
+import {
+  applyPopulation,
+  populateZone,
+  populationAnchorZone,
+  topUpPeds,
+} from "./populate";
 import { createRng } from "./rng";
+import type { ArenaState } from "./types";
 
 const west: MapZone = {
   key: "wageningen",
@@ -59,13 +66,54 @@ describe("population", () => {
     for (const pickup of state.pickups) expect(pickup.x).toBeLessThan(1000);
     const random = createRng(9);
     expect(applyPopulation(state, { index, graph }, 1, random)).toBe(state);
-    const moved = { ...state, player: { ...state.player, x: 3050, y: 0 } };
+    const moved = {
+      ...state,
+      players: [{ ...localPlayer(state), x: 3050, y: 0 }],
+    };
     const repopulated = applyPopulation(moved, { index, graph }, 1, random);
     expect(repopulated.activeZoneKey).toBe("campus");
     expect(repopulated.pickups).toHaveLength(3);
     for (const pickup of repopulated.pickups)
       expect(pickup.x).toBeGreaterThanOrEqual(3000);
     expect(repopulated.nextId).toBe(state.nextId + 3 + repopulated.peds.length);
+  });
+
+  it("anchors on the enforced zone rather than on a player who wandered off", () => {
+    const state = createArenaState(
+      { index, graph, seed: 5, zone: west },
+      createRng(5),
+    );
+    const wandered: ArenaState = {
+      ...state,
+      zoneEnforced: true,
+      enforcedZoneKey: "wageningen",
+      players: [{ ...localPlayer(state), x: 12000, y: 0 }],
+    };
+    expect(populationAnchorZone(wandered, index)?.key).toBe("wageningen");
+  });
+
+  it("follows the lowest-id living player while no zone is enforced", () => {
+    const state = createArenaState(
+      { index, graph, seed: 5, zone: west },
+      createRng(5),
+    );
+    const first = localPlayer(state);
+    const both: ArenaState = {
+      ...state,
+      players: [
+        { ...first, x: 0, y: 0 },
+        { ...first, id: first.id + 1, x: 12000, y: 0 },
+      ],
+    };
+    expect(populationAnchorZone(both, index)?.key).toBe("wageningen");
+    const firstDead: ArenaState = {
+      ...both,
+      players: [
+        { ...both.players[0], health: 0, diedAtTick: 1 },
+        both.players[1],
+      ],
+    };
+    expect(populationAnchorZone(firstDead, index)?.key).toBe("campus");
   });
 
   it("spawns pedestrians and tops them up in batches", () => {
@@ -77,7 +125,7 @@ describe("population", () => {
     for (const ped of state.peds) {
       expect(Math.abs(ped.y)).toBeCloseTo(4);
       expect(
-        Math.hypot(ped.x - state.player.x, ped.y - state.player.y),
+        Math.hypot(ped.x - localPlayer(state).x, ped.y - localPlayer(state).y),
       ).toBeGreaterThanOrEqual(30);
     }
     const thinned = { ...state, peds: state.peds.slice(0, 10) };
@@ -99,7 +147,10 @@ describe("population", () => {
       createRng(5),
     );
     const car = state.vehicles[0];
-    const seated = { ...state, player: { ...state.player, vehicleId: car.id } };
+    const seated = {
+      ...state,
+      players: [{ ...localPlayer(state), vehicleId: car.id }],
+    };
     const repopulated = populateZone(seated, east, index, graph, createRng(2));
     expect(repopulated.vehicles.map((vehicle) => vehicle.id)).toContain(car.id);
     expect(repopulated.activeZoneKey).toBe("campus");

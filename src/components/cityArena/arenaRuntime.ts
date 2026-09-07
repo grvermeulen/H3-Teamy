@@ -1,5 +1,6 @@
 "use client";
 
+import { localPlayer } from "@/lib/cityArena/sim/players";
 import * as Sentry from "@sentry/nextjs";
 import type { RefObject } from "react";
 import type {
@@ -184,7 +185,8 @@ function buildScene(
       loadedTileRects: session.loadedTileRects(),
     },
     zone,
-    player: state.player,
+    players: state.players,
+    localPlayerId: localPlayer(state).id,
     peds: state.peds,
     cops: state.cops,
     pickups: state.pickups,
@@ -248,7 +250,10 @@ export function nearestLandmarkTo(
 function routeToNearestLandmark(runtime: Runtime): number | null {
   const index = runtime.session.index();
   const graph = runtime.session.graph();
-  const playerPoint: Point = [runtime.state.player.x, runtime.state.player.y];
+  const playerPoint: Point = [
+    localPlayer(runtime.state).x,
+    localPlayer(runtime.state).y,
+  ];
   const from = graph.nearestNode(playerPoint);
   if (from === null || index.landmarks.length === 0) return null;
   const nearestLandmark = nearestLandmarkTo(index.landmarks, playerPoint);
@@ -296,7 +301,10 @@ export function createRuntime(
   return {
     session,
     state,
-    camera: createCamera([state.player.x, state.player.y], baseZoom),
+    camera: createCamera(
+      [localPlayer(state).x, localPlayer(state).y],
+      baseZoom,
+    ),
     baseZoom,
     random,
     accumulator: 0,
@@ -342,7 +350,7 @@ function buildDebugSnapshot(
     chunks: runtime.session.raster.stats(),
     tiles: runtime.session.tiles().length,
     camera: runtime.camera,
-    player: runtime.state.player,
+    player: localPlayer(runtime.state),
     routeMetres: routeToNearestLandmark(runtime),
     entities: {
       vehicles: runtime.state.vehicles.length,
@@ -354,7 +362,7 @@ function buildDebugSnapshot(
       pickups: runtime.state.pickups.length,
       wantedLevel: currentWantedLevel(runtime.state),
       zoneSecondsLeft: zoneSecondsLeft(
-        runtime.state.player,
+        localPlayer(runtime.state),
         runtime.state.tick,
       ),
       eventCount: runtime.state.events.length,
@@ -390,7 +398,7 @@ function recordViolations(runtime: Runtime): void {
 
 /** Stamps a death with the frame clock and clears it on respawn; true when it changed. */
 function trackDeath(runtime: Runtime, nowMs: number): boolean {
-  const dead = runtime.state.player.diedAtTick !== null;
+  const dead = localPlayer(runtime.state).diedAtTick !== null;
   if (dead === (runtime.diedAtMs !== null)) return false;
   runtime.diedAtMs = dead ? nowMs : null;
   return true;
@@ -425,7 +433,7 @@ export function nextCamera(
 
 /** Eases the camera after the player or their car and re-zooms it for the speed. */
 function followPlayer(runtime: Runtime, dt: number): void {
-  const { player } = runtime.state;
+  const player = localPlayer(runtime.state);
   const car = occupiedVehicle(runtime.state);
   const velocity: Point = car
     ? [car.velocityX, car.velocityY]
@@ -470,9 +478,11 @@ function advanceSimulation(
       stepInput.weaponNext
     )
       runtime.sound.unlock();
+    // Offline this client is the only player, so the tick carries exactly one input. Plan 3b
+    // replaces this with the host's collected inputs from every member of the room.
     runtime.state = stepArena(
       runtime.state,
-      stepInput,
+      new Map([[localPlayer(runtime.state).id, stepInput]]),
       SIM_STEP_S,
       world,
       runtime.random,
@@ -483,7 +493,7 @@ function advanceSimulation(
       car ? Math.abs(forwardSpeed(car)) : 0,
       car !== null &&
         !car.wrecked &&
-        runtime.state.player.boardingTicksLeft === 0,
+        localPlayer(runtime.state).boardingTicksLeft === 0,
     );
     runtime.accumulator -= SIM_STEP_S;
     steps += 1;
@@ -526,7 +536,7 @@ export type FrameLoopOptions = {
 function startTileSync(runtime: Runtime, options: FrameLoopOptions): void {
   if (!canApplyRuntimeUpdate(runtime)) return;
   runtime.tileSyncPending = true;
-  const { player } = runtime.state;
+  const player = localPlayer(runtime.state);
   runtime.session
     .update([player.x, player.y])
     .then(
@@ -570,7 +580,7 @@ function refreshThrottled(
         zone,
         nearbyRadarRoads(
           runtime.radarRoadIndex,
-          [runtime.state.player.x, runtime.state.player.y],
+          [localPlayer(runtime.state).x, localPlayer(runtime.state).y],
           RADAR_RANGE_M,
         ),
       ),
@@ -596,7 +606,7 @@ function runFrame(
   const rect = canvas.getBoundingClientRect();
   const size: Viewport = { width: rect.width, height: rect.height };
   const pointer = options.pointerRef.current?.position() ?? null;
-  const { player } = runtime.state;
+  const player = localPlayer(runtime.state);
   options.inputRef.current.setAim(
     aimAngle(runtime.camera, size, [player.x, player.y], pointer),
   );

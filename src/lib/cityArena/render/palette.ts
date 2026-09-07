@@ -124,6 +124,11 @@ export const EXPLOSION_RING = "#ff5722";
 /** Mouse crosshair. */
 export const CROSSHAIR_STROKE = "rgba(255,255,255,0.9)";
 /** Body of a player waiting to respawn. */
+/** Another player's body fill: paler than your own, still legible on the dark ground. */
+export const PLAYER_OTHER_FILL = "#dbeafe";
+/** Another player's ring. Sky against your crimson, so you can always find yourself. */
+export const PLAYER_OTHER_RING = "#38bdf8";
+/** Dead player fill. */
 export const PLAYER_DEAD_FILL = "#6b6b6b";
 /** Outline of a dead body. */
 export const PLAYER_DEAD_RING = "#3a3a3a";

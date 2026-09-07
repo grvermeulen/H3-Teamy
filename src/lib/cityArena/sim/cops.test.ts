@@ -1,3 +1,4 @@
+import { localPlayer } from "./players";
 import { describe, expect, it } from "vitest";
 import type { MapIndex } from "../world/mapTypes";
 import type { Point } from "../world/projection";
@@ -53,7 +54,7 @@ function stateWithHeat(heat: number): ArenaState {
     { index: emptyIndex, graph, seed: 3, zone: null },
     createRng(3),
   );
-  return { ...state, player: { ...state.player, heat, heatTick: 0 } };
+  return { ...state, players: [{ ...localPlayer(state), heat, heatTick: 0 }] };
 }
 
 function copAt(id: number, x: number, y = 0): CopState {

@@ -1,3 +1,4 @@
+import { localPlayer } from "@/lib/cityArena/sim/players";
 import * as Sentry from "@sentry/nextjs";
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { useRef } from "react";
@@ -256,6 +257,12 @@ function driveFramesUntil(
   }
 }
 
+/** The local player behind the test hook, or undefined when the hook is not installed. */
+function hookedPlayer() {
+  const state = window.__arena?.getState();
+  return state ? localPlayer(state) : undefined;
+}
+
 describe("useArenaGame", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -459,7 +466,7 @@ describe("computeHud and aimAngle", () => {
     const driving = {
       ...state,
       vehicles: [car],
-      player: { ...state.player, vehicleId: 9 },
+      players: [{ ...localPlayer(state), vehicleId: 9 }],
     };
     expect(computeHud(session, driving)).toMatchObject({
       speedMps: 10,
@@ -535,16 +542,14 @@ describe("debug hooks", () => {
     window.__arena?.dispatch({ weaponNext: true }, 3);
     act(() => tick(0));
     act(() => tick(FRAME_STEP_MS));
-    expect(window.__arena?.getState()?.player.weapon).toBe(
-      nextWeapon("pistol", SPAWN_AMMO),
-    );
+    expect(hookedPlayer()?.weapon).toBe(nextWeapon("pistol", SPAWN_AMMO));
     expect(hasCrosshairStroke(fakeContext)).toBe(true);
     fakeContext.calls.length = 0;
 
     // (b) damage() stamps the death on the very next frame, at that frame's clock, and hides
     // the crosshair; (c) it clears once the tick passes the respawn delay (damage.ts).
     window.__arena?.damage(PLAYER_MAX_HEALTH);
-    const diedAtTick = window.__arena?.getState()?.player.diedAtTick ?? 0;
+    const diedAtTick = hookedPlayer()?.diedAtTick ?? 0;
     act(() => tick(2 * FRAME_STEP_MS));
     expect(result.current.death).toEqual({ diedAtMs: 2 * FRAME_STEP_MS });
     expect(hasCrosshairStroke(fakeContext)).toBe(false);
@@ -578,7 +583,7 @@ describe("debug hooks", () => {
     expect(window.__arena?.getViolations()).toBeGreaterThan(0);
     expect(vi.mocked(Sentry.captureMessage)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(Sentry.captureMessage)).toHaveBeenCalledWith(
-      "Arena invariant: player position is not finite",
+      "Arena invariant: player 0 position is not finite",
       { level: "warning", tags: { area: "arena", kind: "invariant" } },
     );
   });

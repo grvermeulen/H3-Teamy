@@ -1,3 +1,4 @@
+import { localPlayer } from "./players";
 import { describe, expect, it } from "vitest";
 import { createArenaPlayer } from "./arena";
 import { createShots } from "./bullets";
@@ -13,11 +14,10 @@ const healthy: ArenaState = {
   tick: 10,
   seed: 1,
   nextId: 3,
-  player: createArenaPlayer([5, 5], 0),
+  players: [createArenaPlayer([5, 5], 0)],
   vehicles: [createVehicle(1, "sedan", [20, 0], 0, 0)],
   bullets: [],
   effects: [],
-  held: { enter: false, weaponNext: false },
   zoneKey: null,
   peds: [],
   cops: [],
@@ -52,27 +52,29 @@ describe("checkInvariants", () => {
     expect(
       checkInvariants({
         ...healthy,
-        player: { ...healthy.player, health: 150 },
+        players: [{ ...localPlayer(healthy), health: 150 }],
       }),
-    ).toContain("player.health 150 out of range");
+    ).toContain("player 0 health 150 out of range");
     expect(
       checkInvariants({
         ...healthy,
-        player: { ...healthy.player, x: Number.NaN },
+        players: [{ ...localPlayer(healthy), x: Number.NaN }],
       }),
-    ).toContain("player position is not finite");
+    ).toContain("player 0 position is not finite");
     expect(
       checkInvariants({
         ...healthy,
-        player: { ...healthy.player, vehicleId: 999 },
+        players: [{ ...localPlayer(healthy), vehicleId: 999 }],
       }),
-    ).toContain("player.vehicleId points to a missing or wrecked car");
+    ).toContain("player 0 vehicleId points to a missing or wrecked car");
     expect(
       checkInvariants({
         ...healthy,
-        player: { ...healthy.player, health: 0, diedAtTick: 4, vehicleId: 1 },
+        players: [
+          { ...localPlayer(healthy), health: 0, diedAtTick: 4, vehicleId: 1 },
+        ],
       }),
-    ).toContain("dead player must be on foot with zero health");
+    ).toContain("dead player 0 must be on foot with zero health");
     const [stale] = createShots(
       WEAPONS.pistol,
       "pistol",
@@ -106,15 +108,15 @@ describe("checkInvariants", () => {
     expect(
       checkInvariants({
         ...healthy,
-        player: { ...healthy.player, driveSteer: 0.5 },
+        players: [{ ...localPlayer(healthy), driveSteer: 0.5 }],
       }),
-    ).toEqual(["player.driveSteer 0.5 out of range or set on foot"]);
+    ).toEqual(["player 0 driveSteer 0.5 out of range or set on foot"]);
     expect(
       checkInvariants({
         ...healthy,
-        player: { ...healthy.player, vehicleId: 1, driveSteer: 1.5 },
+        players: [{ ...localPlayer(healthy), vehicleId: 1, driveSteer: 1.5 }],
       }),
-    ).toEqual(["player.driveSteer 1.5 out of range or set on foot"]);
+    ).toEqual(["player 0 driveSteer 1.5 out of range or set on foot"]);
   });
 
   it("reports population caps, duplicate ids and invalid driver references", () => {
