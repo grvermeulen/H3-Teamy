@@ -13,6 +13,7 @@ import type { RasterContext } from "./canvasTypes";
 import {
   DEAD_PLAYER_STYLE,
   DEFAULT_PLAYER_STYLE,
+  OTHER_PLAYER_STYLE,
   drawPlayer,
   drawZoneRing,
   playerLook,
@@ -38,7 +39,10 @@ export type SceneViewport = {
 export type Scene = {
   world: WorldDrawSource;
   zone: MapZone | null;
-  player: ArenaPlayerState;
+  /** Every player in the match; the one whose id is `localPlayerId` is this client's own. */
+  players: ArenaPlayerState[];
+  /** Which of `players` this client drives, and therefore draws in its own colours. */
+  localPlayerId: number;
   peds: PedState[];
   cops: CopState[];
   pickups: PickupState[];
@@ -66,20 +70,47 @@ function applyPushIn(
   context.translate(-size.width / 2, -size.height / 2);
 }
 
-/** Draws the player unless hidden in a car or in the off half of the shield blink. */
+/** The car this client sits in, so the vehicle painter can mark it. */
+function localVehicleId(scene: Scene): number | null {
+  return (
+    scene.players.find((player) => player.id === scene.localPlayerId)
+      ?.vehicleId ?? null
+  );
+}
+
+/** Draws every player, skipping the ones hidden in a car or in the off half of a shield blink. */
 function drawPlayerLook(
   context: RasterContext,
   camera: Camera,
   size: Viewport,
   scene: Scene,
 ): void {
-  const look = playerLook(scene.player, scene.tick);
-  if (look === "hidden" || look === "blink") return;
-  const dead = look === "dead";
-  const style = dead ? DEAD_PLAYER_STYLE : DEFAULT_PLAYER_STYLE;
-  // A body keeps the flat dead marker: the character art is of someone standing up.
-  const sprite = dead ? undefined : scene.playerSprite;
-  drawPlayer(context, camera, size, scene.player, style, sprite, scene.tick);
+  // Everyone else first, so your own player is never hidden under somebody standing on you.
+  const order = [...scene.players].sort(
+    (first, second) =>
+      Number(first.id === scene.localPlayerId) -
+      Number(second.id === scene.localPlayerId),
+  );
+  for (const player of order) {
+    const look = playerLook(player, scene.tick);
+    if (look === "hidden" || look === "blink") continue;
+    const dead = look === "dead";
+    const style = dead
+      ? DEAD_PLAYER_STYLE
+      : player.id === scene.localPlayerId
+        ? DEFAULT_PLAYER_STYLE
+        : OTHER_PLAYER_STYLE;
+    // A body keeps the flat dead marker: the character art is of someone standing up.
+    drawPlayer(
+      context,
+      camera,
+      size,
+      player,
+      style,
+      dead ? undefined : scene.playerSprite,
+      scene.tick,
+    );
+  }
 }
 
 /**
@@ -108,7 +139,7 @@ export function renderScene(
     size,
     scene.vehicles,
     scene.tick,
-    scene.player.vehicleId,
+    localVehicleId(scene),
     scene.carSprite,
   );
   drawPeople(context, camera, size, scene.peds, scene.cops);

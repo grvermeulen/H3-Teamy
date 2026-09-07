@@ -11,6 +11,7 @@ import {
   PED_FILL,
   PICKUP_UZI,
   PLAYER_FILL,
+  PLAYER_OTHER_FILL,
 } from "./palette";
 import { renderScene, type Scene } from "./renderScene";
 import { createStaticRaster } from "./staticRaster";
@@ -40,7 +41,8 @@ function sceneWith(partial: Partial<Scene>): Scene {
       loadedTileRects: [],
     },
     zone: null,
-    player: createArenaPlayer([0, 0], 0),
+    players: [createArenaPlayer([0, 0], 0)],
+    localPlayerId: 0,
     peds: [],
     cops: [],
     pickups: [],
@@ -83,13 +85,31 @@ describe("renderScene", () => {
     expect(stats.missing).toBeGreaterThan(0);
   });
 
+  it("draws every player, your own last and in your own colours", () => {
+    const context = createFakeContext();
+    const mine = createArenaPlayer([0, 0], 0);
+    const theirs = { ...createArenaPlayer([8, 0], 0), id: 4 };
+    renderScene(
+      context,
+      viewport,
+      sceneWith({ players: [theirs, mine], localPlayerId: mine.id }),
+    );
+    const fills = context.calls.filter((call) => call.startsWith("fill("));
+    expect(fills).toContain(`fill(${PLAYER_OTHER_FILL})`);
+    expect(fills).toContain(`fill(${PLAYER_FILL})`);
+    // Yours is painted after theirs, so nobody can stand on top of you.
+    expect(fills.lastIndexOf(`fill(${PLAYER_FILL})`)).toBeGreaterThan(
+      fills.lastIndexOf(`fill(${PLAYER_OTHER_FILL})`),
+    );
+  });
+
   it("hides the player inside a car and skips the push-in at 1", () => {
     const context = createFakeContext();
     const player = { ...createArenaPlayer([5, 0], 0), vehicleId: 1 };
     renderScene(
       context,
       viewport,
-      sceneWith({ player, pushIn: 1, aimScreen: null }),
+      sceneWith({ players: [player], pushIn: 1, aimScreen: null }),
     );
     expect(context.calls).not.toContain(`fill(${PLAYER_FILL})`);
     expect(context.calls.some((call) => call.startsWith("scale("))).toBe(false);
