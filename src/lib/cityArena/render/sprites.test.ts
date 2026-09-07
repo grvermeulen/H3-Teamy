@@ -85,7 +85,7 @@ describe("generated sprite art", () => {
     expect(data[lastRow + 3]).toBe(0);
   });
 
-  it("packs the player square at the size the manifest states", async () => {
+  it("packs the player as one square cell per animation frame", async () => {
     const sharp = (await import("sharp")).default;
     const manifest = parseSpriteManifest(generatedManifest());
     const { info } = await sharp(
@@ -94,8 +94,9 @@ describe("generated sprite art", () => {
       .ensureAlpha()
       .raw()
       .toBuffer({ resolveWithObject: true });
-    expect(info.width).toBe(manifest.people.player.pixelSize);
-    expect(info.height).toBe(manifest.people.player.pixelSize);
+    const { pixelSize, frames } = manifest.people.player;
+    expect(info.width).toBe(pixelSize * frames);
+    expect(info.height).toBe(pixelSize);
   });
 });
 

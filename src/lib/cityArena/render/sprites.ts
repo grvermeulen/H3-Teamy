@@ -21,11 +21,15 @@ export const VehicleEntrySchema = z.object({
   pixelHeight: z.number().int().positive(),
 });
 
-/** One character sprite, drawn facing up so the canvas can rotate it by the person's facing. */
+/**
+ * One character sprite: a horizontal strip of `frames` square cells, each `pixelSize` across,
+ * drawn for a person of `radiusMetres`. A single-frame strip is a still character.
+ */
 export const PersonEntrySchema = z.object({
   file: z.string(),
   radiusMetres: z.number().positive(),
   pixelSize: z.number().int().positive(),
+  frames: z.number().int().positive(),
 });
 
 /**
@@ -83,7 +87,14 @@ export type ArenaSprites = {
   water?: SurfaceTexture;
   ground?: GroundTextures;
   car?: VehicleSprite;
-  player?: CanvasImageSource;
+  player?: PersonSprite;
+};
+
+/** A decoded character strip: the art plus the cell size and how many cells it holds. */
+export type PersonSprite = {
+  image: CanvasImageSource;
+  pixelSize: number;
+  frames: number;
 };
 
 /** No sprites at all — every painter falls back to its flat fill. */
