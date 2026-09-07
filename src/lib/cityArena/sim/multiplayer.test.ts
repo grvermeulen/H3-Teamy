@@ -2,11 +2,19 @@ import { describe, expect, it } from "vitest";
 import { createCollisionGrid } from "../world/collisionGrid";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
-import { createArenaState, stepArena, type ArenaWorld } from "./arena";
+import {
+  createArenaState,
+  removeArenaPlayer,
+  stepArena,
+  teleportArenaPlayer,
+  type ArenaWorld,
+} from "./arena";
+import { PLAYER_MAX_HEALTH } from "./damage";
 import { checkInvariants } from "./invariants";
-import { localPlayer, orderedPlayers, playersOf } from "./players";
+import { localPlayer, orderedPlayers, playerById, playersOf } from "./players";
 import { createRng } from "./rng";
 import { createInput, type ArenaInputs, type ArenaState } from "./types";
+import { createVehicle } from "./vehicle";
 
 /**
  * The acceptance test for Plan 3a. The owner descoped spec §14's four-player session on
@@ -110,5 +118,69 @@ describe("two-player simulation", () => {
     const final = runScripted(7);
     const [first, second] = orderedPlayers(final);
     expect(first.x).not.toBe(second.x);
+  });
+});
+
+/**
+ * An empty world holding two players on foot along y = 0, `gapM` apart. Nothing else populates
+ * it, so a bullet fired east from the first can only meet the second.
+ */
+function facingPair(seed: number, gapM: number): ArenaState {
+  const state = createArenaState({ index, graph, seed, zone }, createRng(seed));
+  const first = { ...localPlayer(state), x: 0, y: 0, facing: 0 };
+  return {
+    ...state,
+    players: [first, { ...first, id: first.id + 1, x: gapM }],
+    peds: [],
+    cops: [],
+    traffic: [],
+    vehicles: [],
+    pickups: [],
+  };
+}
+
+/**
+ * The paths that read a single player out of shared state. Each of these silently dropped or
+ * ignored every player but the local one until CodeRabbit caught them on PR #658; the
+ * 600-tick script above never blew up a car, never crossed two players' fire and never
+ * teleports, so it could not have found them.
+ */
+describe("state shared by several players", () => {
+  it("lets a bullet hit a remote player, not only the local one", () => {
+    let state = facingPair(11, 8);
+    const random = createRng(5);
+    const inputs: ArenaInputs = new Map([
+      [0, createInput({ fire: true, aim: 0 })],
+    ]);
+    for (let tick = 1; tick <= 10; tick += 1)
+      state = stepArena(state, inputs, STEP_S, world, random);
+    expect(playerById(state, 1)?.health).toBeLessThan(PLAYER_MAX_HEALTH);
+  });
+
+  it("blasts every player in range when a car explodes and keeps them all", () => {
+    const paired = facingPair(12, 4);
+    const state: ArenaState = {
+      ...paired,
+      vehicles: [{ ...createVehicle(90, "sedan", [2, 0], 0, 0), health: 0 }],
+    };
+    const next = stepArena(state, new Map(), STEP_S, world, createRng(6));
+    expect(playersOf(next)).toHaveLength(2);
+    for (const player of orderedPlayers(next))
+      expect(player.health).toBeLessThan(PLAYER_MAX_HEALTH);
+  });
+
+  it("keeps the other players where they stand when one teleports", () => {
+    const moved = teleportArenaPlayer(facingPair(13, 6), [150, 0], index);
+    expect(orderedPlayers(moved).map((player) => player.id)).toEqual([0, 1]);
+    expect(playerById(moved, 0)?.x).toBe(150);
+    expect(playerById(moved, 1)?.x).toBe(6);
+  });
+
+  it("steps a state whose last player has left instead of throwing", () => {
+    const paired = facingPair(14, 6);
+    const empty = removeArenaPlayer(removeArenaPlayer(paired, 0), 1);
+    expect(playersOf(empty)).toHaveLength(0);
+    const next = stepArena(empty, new Map(), STEP_S, world, createRng(7));
+    expect(checkInvariants(next)).toEqual([]);
   });
 });

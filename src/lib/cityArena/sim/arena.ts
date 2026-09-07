@@ -620,28 +620,24 @@ function applyHit(state: ArenaState, hit: BulletHit, tick: number): ArenaState {
     );
     return withHitEvent({ ...state, vehicles }, "vehicle", hit.point);
   }
-  if (
-    hit.target.kind === "player" &&
-    hit.target.playerId === localPlayer(state).id
-  )
+  if (hit.target.kind === "player") {
+    const struck = playerById(state, hit.target.playerId);
+    if (!struck) return state;
     return withHitEvent(
-      replacePlayer(
-        state,
-        damagePlayer(localPlayer(state), hit.bullet.damage, tick),
-      ),
+      replacePlayer(state, damagePlayer(struck, hit.bullet.damage, tick)),
       "player",
       hit.point,
     );
+  }
   return state;
 }
 
-/** Every circle a bullet can hit this tick: the player on foot and living pedestrians. */
+/** Every circle a bullet can hit this tick: the players on foot and living pedestrians. */
 function bulletTargets(state: ArenaState): PlayerTarget[] {
-  const player = localPlayer(state);
-  const targets: PlayerTarget[] =
-    !isDead(player) && player.vehicleId === null
-      ? [{ id: player.id, x: player.x, y: player.y }]
-      : [];
+  const targets: PlayerTarget[] = [];
+  for (const player of orderedPlayers(state))
+    if (!isDead(player) && player.vehicleId === null)
+      targets.push({ id: player.id, x: player.x, y: player.y });
   for (const ped of alivePeds(state.peds))
     targets.push({ id: ped.id, x: ped.x, y: ped.y });
   for (const cop of aliveCops(state.cops))
@@ -735,7 +731,7 @@ function explodeVehicle(
     peds: blast.peds,
     cops: copBlast.cops,
     nextId: state.nextId + 1,
-    players: [blastPlayer(localPlayer(state), vehicle, tick)],
+    players: state.players.map((player) => blastPlayer(player, vehicle, tick)),
     events,
     effects: addEffect(state.effects, {
       id: state.nextId,
@@ -934,14 +930,14 @@ export function stepArena(
   next = managePoliceCars(next, world, tick, random);
   for (const player of orderedPlayers(next))
     next = ejectIfDead(next, player, world);
-  const zone = findZone(world.index, [
-    localPlayer(next).x,
-    localPlayer(next).y,
-  ]);
+  // zoneKey labels the HUD for whoever holds this state, so it follows the lowest-id player. An
+  // empty roster is legal between a leave and the next join, and simply leaves the label alone.
+  const anchor = orderedPlayers(next)[0];
+  const zone = anchor ? findZone(world.index, [anchor.x, anchor.y]) : null;
   return {
     ...next,
     effects: pruneEffects(next.effects, tick),
-    zoneKey: zone?.key ?? null,
+    zoneKey: anchor ? (zone?.key ?? null) : next.zoneKey,
   };
 }
 
@@ -952,17 +948,14 @@ export function teleportArenaPlayer(
   index: MapIndex,
 ): ArenaState {
   return {
-    ...state,
-    players: [
-      {
-        ...localPlayer(state),
-        x: position[0],
-        y: position[1],
-        speed: 0,
-        vehicleId: null,
-        boardingTicksLeft: 0,
-      },
-    ],
+    ...replacePlayer(state, {
+      ...localPlayer(state),
+      x: position[0],
+      y: position[1],
+      speed: 0,
+      vehicleId: null,
+      boardingTicksLeft: 0,
+    }),
     bullets: [],
     zoneKey: findZone(index, position)?.key ?? null,
   };

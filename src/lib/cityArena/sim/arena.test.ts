@@ -283,13 +283,14 @@ describe("joining and leaving", () => {
 
   it("removes a player and leaves their car standing", () => {
     const joined = addArenaPlayer(boot(), world, 0, createRng(4));
-    const id = joined.player?.id ?? -1;
+    const joiner = joined.player;
+    if (!joiner) throw new Error("the arena refused the joiner");
     const seated = replacePlayer(joined.state, {
-      ...(playerById(joined.state, id) as ArenaPlayerState),
+      ...joiner,
       vehicleId: joined.state.vehicles[0].id,
     });
-    const left = removeArenaPlayer(seated, id);
-    expect(playerById(left, id)).toBeNull();
+    const left = removeArenaPlayer(seated, joiner.id);
+    expect(playerById(left, joiner.id)).toBeNull();
     expect(driverPlayer(left, seated.vehicles[0].id)).toBeNull();
     expect(left.vehicles).toHaveLength(seated.vehicles.length);
     expect(removeArenaPlayer(left, 999)).toBe(left);

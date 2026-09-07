@@ -583,7 +583,7 @@ describe("debug hooks", () => {
     expect(window.__arena?.getViolations()).toBeGreaterThan(0);
     expect(vi.mocked(Sentry.captureMessage)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(Sentry.captureMessage)).toHaveBeenCalledWith(
-      "Arena invariant: player position is not finite",
+      "Arena invariant: player 0 position is not finite",
       { level: "warning", tags: { area: "arena", kind: "invariant" } },
     );
   });
