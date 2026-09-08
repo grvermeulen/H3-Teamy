@@ -6,7 +6,7 @@ import {
   type Tally,
 } from "@/lib/cityArena/net/scoreboard";
 import { LOCAL_PLAYER_ID, addArenaPlayer } from "@/lib/cityArena/sim/arena";
-import type { HostLoop } from "@/lib/cityArena/net/hostLoop";
+import { HOST_TICK_HZ, type HostLoop } from "@/lib/cityArena/net/hostLoop";
 import type { ClientLoop } from "@/lib/cityArena/net/clientLoop";
 import { localPlayer, playerById } from "@/lib/cityArena/sim/players";
 import * as Sentry from "@sentry/nextjs";
@@ -112,6 +112,12 @@ const MAX_SIM_STEPS_PER_FRAME = 8;
 const LANDMARK_SNAP_DISTANCE_M = 200;
 /** Milliseconds per second, for converting between frame timestamps and simulation seconds. */
 const MS_PER_SECOND = 1000;
+/**
+ * How often a hidden tab steps the world. `requestAnimationFrame` stops entirely in a hidden
+ * tab, which would freeze the match for everyone this tab hosts; an interval keeps it stepping,
+ * throttled by the browser but not stopped, and migration covers the rest (spec §6.6).
+ */
+const HIDDEN_TICK_MS = MS_PER_SECOND / HOST_TICK_HZ;
 
 /** Data for the debug panel. */
 export type DebugSnapshot = {
@@ -649,7 +655,12 @@ function computeFrameDt(
   lastTimestamp: number | null,
 ): number {
   if (lastTimestamp === null) return SIM_STEP_S;
-  return Math.min(MAX_FRAME_S, (timestamp - lastTimestamp) / MS_PER_SECOND);
+  // Clamped below at zero as well: the interval that steps a hidden tab and the frame clock share
+  // a timeline, but a clock that steps back must never run the world backwards.
+  return Math.min(
+    MAX_FRAME_S,
+    Math.max(0, (timestamp - lastTimestamp) / MS_PER_SECOND),
+  );
 }
 
 /** Options threaded through the frame loop's per-frame and throttled-refresh helpers. */
@@ -795,17 +806,37 @@ function runFrame(
 /** Starts the requestAnimationFrame loop for one boot cycle; returns the cleanup that cancels it. */
 export function startFrameLoop(options: FrameLoopOptions): () => void {
   let handle = 0;
+  let interval: ReturnType<typeof setInterval> | null = null;
   let lastTimestamp: number | null = null;
-  const tick = (timestamp: number): void => {
+  const frame = (timestamp: number): void => {
     const runtime = options.runtimeRef.current;
     const canvas = options.canvasRef.current;
-    if (runtime && canvas) {
-      const dt = computeFrameDt(timestamp, lastTimestamp);
-      lastTimestamp = timestamp;
-      runFrame(timestamp, dt, runtime, canvas, options);
+    if (!runtime || !canvas) return;
+    const dt = computeFrameDt(timestamp, lastTimestamp);
+    lastTimestamp = timestamp;
+    runFrame(timestamp, dt, runtime, canvas, options);
+  };
+  const tick = (timestamp: number): void => {
+    frame(timestamp);
+    if (!document.hidden) handle = window.requestAnimationFrame(tick);
+  };
+  // Frames while the tab shows; the interval while it is hidden. Both clock the world by the
+  // same timeline, so the hand-over between them costs at most one clamped frame.
+  const onVisibility = (): void => {
+    if (document.hidden) {
+      window.cancelAnimationFrame(handle);
+      interval ??= setInterval(() => frame(performance.now()), HIDDEN_TICK_MS);
+      return;
     }
+    if (interval !== null) clearInterval(interval);
+    interval = null;
     handle = window.requestAnimationFrame(tick);
   };
-  handle = window.requestAnimationFrame(tick);
-  return () => window.cancelAnimationFrame(handle);
+  document.addEventListener("visibilitychange", onVisibility);
+  onVisibility();
+  return () => {
+    document.removeEventListener("visibilitychange", onVisibility);
+    window.cancelAnimationFrame(handle);
+    if (interval !== null) clearInterval(interval);
+  };
 }

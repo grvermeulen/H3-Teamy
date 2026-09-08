@@ -48,6 +48,12 @@ export type ClientLoopOptions = {
   random: () => number;
   /** This client's estimate of host time. */
   serverTimeMs: () => number;
+  /**
+   * Only snapshots published by this client are applied; anyone else publishing on the channel is
+   * ignored, so a member cannot fork the match by playing host (spec §6.6). Omitted, every
+   * snapshot is trusted — the bots, and the loop's own tests.
+   */
+  hostClientId?: string;
   /** The step to run; injectable for tests. Defaults to `stepArena`. */
   step?: typeof stepArena;
   /** Called after every predicted tick, so sound can react to what this client just did. */
@@ -112,6 +118,11 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
 
   const unsubscribe = room.subscribe("state", (message) => {
     if (!running) return;
+    if (
+      options.hostClientId !== undefined &&
+      message.clientId !== options.hostClientId
+    )
+      return;
     try {
       onSnapshot(message.data as Snapshot);
     } catch (error: unknown) {

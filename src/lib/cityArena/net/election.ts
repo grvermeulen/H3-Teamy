@@ -94,3 +94,22 @@ export function createHostWatch(options: HostWatchOptions = {}): HostWatch {
     },
   };
 }
+
+/**
+ * The member who should host, skipping anyone the caller has given up on.
+ *
+ * Presence alone cannot tell a host whose tab the browser throttled from one that is fine, so
+ * the silence rule (spec §6.6) feeds in the ids it has stopped hearing from. They still count when
+ * nobody else is left: a room hosted by the quiet beats a room with no host at all.
+ *
+ * @param members - Everyone present, in any order.
+ * @param lost - Client ids the silence rule has given up on.
+ * @returns The host's client id, or `null` when nobody is present.
+ */
+export function electPresentHost(
+  members: PresenceMember[],
+  lost: ReadonlySet<string>,
+): string | null {
+  const heard = members.filter((member) => !lost.has(member.clientId));
+  return electHost(heard) ?? electHost(members);
+}

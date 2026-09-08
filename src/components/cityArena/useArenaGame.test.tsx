@@ -13,7 +13,7 @@ import {
   type FakeContext,
 } from "@/lib/cityArena/render/testing/fakeContext";
 import { createArenaState } from "@/lib/cityArena/sim/arena";
-import { createHostLoop } from "@/lib/cityArena/net/hostLoop";
+import { HOST_TICK_HZ, createHostLoop } from "@/lib/cityArena/net/hostLoop";
 import {
   createMemoryHub,
   createMemoryTransport,
@@ -615,11 +615,14 @@ function netplayFor(
   return {
     transport: () => transport,
     ready: true,
+    connected: true,
     roomCode: ROOM,
     clientId: "me",
     clockOffsetMs: 0,
+    hostClientId: overrides.isHost ? "me" : "host",
     isHost: false,
     memberIds: ["me"],
+    onHostLost: vi.fn(),
     ...overrides,
   };
 }
@@ -754,5 +757,59 @@ describe("netplay", () => {
     expect(result.current.peek()?.youId).toBe(again);
     expect(result.current.peek()?.seats.get("me")).toBe(again);
     host.stop();
+  });
+});
+
+describe("hidden tab", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("requestAnimationFrame", vi.fn());
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  });
+
+  afterEach(() => {
+    cleanup();
+    Reflect.deleteProperty(document, "hidden");
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  /** Makes `document.hidden` report `hidden` and tells the page so. */
+  function setHidden(hidden: boolean): void {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => hidden,
+    });
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+  }
+
+  it("keeps stepping the world on an interval while hidden, and returns to frames when shown", async () => {
+    const { result } = await bootArenaWithCanvas({ debug: true });
+    const tick = getTick();
+    act(() => tick(0));
+    const framesRequested = vi.mocked(window.requestAnimationFrame).mock.calls
+      .length;
+    const tickBefore = window.__arena?.getState()?.tick ?? 0;
+
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    // The interval clocks the world by performance.now(), the frame clock's own timeline.
+    vi.spyOn(performance, "now").mockImplementation(() => Date.now());
+    setHidden(true);
+    act(() => {
+      vi.advanceTimersByTime((1000 / HOST_TICK_HZ) * 6);
+    });
+    expect(window.__arena?.getState()?.tick ?? 0).toBeGreaterThan(tickBefore);
+    expect(vi.mocked(window.requestAnimationFrame).mock.calls).toHaveLength(
+      framesRequested,
+    );
+
+    setHidden(false);
+    expect(vi.mocked(window.requestAnimationFrame).mock.calls).toHaveLength(
+      framesRequested + 1,
+    );
+    expect(result.current.phase).toBe("playing");
   });
 });
