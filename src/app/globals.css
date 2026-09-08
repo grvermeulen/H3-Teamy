@@ -1464,3 +1464,89 @@ select.ui-select[aria-invalid="true"] {
   z-index: 1099;
   transition: all 200ms ease;
 }
+
+/* GTA H3 — mission-control palette.
+ *
+ * Scoped to .arena on purpose. These are deliberately harsher than the app's own tokens
+ * (near-black asphalt, amber action, teal online) and must not leak into the rest of Teamy,
+ * so nothing here touches :root. */
+.arena {
+  --arena-void: #07090b;
+  --arena-asphalt: #0d1013;
+  --arena-panel: #12171b;
+  --arena-panel-raised: #171d22;
+  --arena-line: rgba(255, 255, 255, 0.08);
+  --arena-line-strong: rgba(255, 255, 255, 0.16);
+  --arena-text: #e6ecf0;
+  --arena-dim: #8b9aa5;
+  --arena-amber: #f5a524;
+  --arena-amber-dim: rgba(245, 165, 36, 0.14);
+  --arena-online: #2dd4a7;
+  --arena-online-dim: rgba(45, 212, 167, 0.14);
+  --arena-alert: #ff6b6b;
+  --arena-crew-1: #f5a524;
+  --arena-crew-2: #a78bfa;
+  --arena-crew-3: #4ade80;
+  --arena-crew-4: #60a5fa;
+}
+
+/* Display type for headings: condensed, heavy, wide-tracked — a briefing screen,
+   not a dashboard. Falls back through common condensed faces before sans-serif. */
+.arena-display {
+  font-family:
+    "Archivo Narrow", "Oswald", "Roboto Condensed", ui-sans-serif, system-ui,
+    sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Small uppercase status label: the "ACTIEF POTJE · 01" register. */
+.arena-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* The map-grid motif behind radar previews and the lobby backdrop. Two crossing
+   gradients rather than an image, so it costs nothing to load and scales freely. */
+.arena-grid {
+  background-image:
+    linear-gradient(rgba(45, 212, 167, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(45, 212, 167, 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* Sharp mission card with a coloured left rule. */
+.arena-card {
+  background: var(--arena-panel);
+  border: 1px solid var(--arena-line);
+  border-left: 3px solid var(--arena-line-strong);
+}
+.arena-card-active {
+  border-left-color: var(--arena-amber);
+  background: linear-gradient(
+    90deg,
+    var(--arena-amber-dim) 0%,
+    var(--arena-panel) 42%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arena-pulse {
+    animation: none;
+  }
+}
+.arena-pulse {
+  animation: arena-pulse 2.4s ease-in-out infinite;
+}
+@keyframes arena-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}

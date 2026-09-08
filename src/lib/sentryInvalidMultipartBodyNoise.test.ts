@@ -10,9 +10,9 @@ describe("shouldDropInvalidMultipartBodyNoiseForSentry", () => {
       originalException: new TypeError("Failed to parse body as FormData."),
     } as EventHint;
 
-    expect(
-      shouldDropInvalidMultipartBodyNoiseForSentry(baseEvent, hint),
-    ).toBe(true);
+    expect(shouldDropInvalidMultipartBodyNoiseForSentry(baseEvent, hint)).toBe(
+      true,
+    );
   });
 
   it("keeps unrelated server errors", () => {
@@ -20,8 +20,8 @@ describe("shouldDropInvalidMultipartBodyNoiseForSentry", () => {
       originalException: new Error("database unavailable"),
     } as EventHint;
 
-    expect(
-      shouldDropInvalidMultipartBodyNoiseForSentry(baseEvent, hint),
-    ).toBe(false);
+    expect(shouldDropInvalidMultipartBodyNoiseForSentry(baseEvent, hint)).toBe(
+      false,
+    );
   });
 });

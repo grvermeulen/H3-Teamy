@@ -161,7 +161,14 @@ describe("pedestrian contacts", () => {
     expect(hit.peds[0]).toMatchObject({ mode: "dead", health: 0 });
     expect(hit.peds[0].x).toBeCloseTo(2.5);
     expect(hit.events).toEqual([
-      { kind: "kill", victim: "ped", killerId: null, x: 1.5, y: 0 },
+      {
+        kind: "kill",
+        victim: "ped",
+        victimId: 70,
+        killerId: null,
+        x: 1.5,
+        y: 0,
+      },
     ]);
     expect(
       stepPeds(

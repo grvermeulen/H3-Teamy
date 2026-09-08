@@ -107,7 +107,8 @@ describe("GET /api/rsvp/list", () => {
   });
 
   it("returns 503 without Sentry when the database is temporarily unavailable", async () => {
-    const { DbUnavailableError } = await import("../../../../lib/dbUnavailableError");
+    const { DbUnavailableError } =
+      await import("../../../../lib/dbUnavailableError");
     vi.mocked(listEventRsvps).mockRejectedValue(new DbUnavailableError());
 
     const response = await GET(

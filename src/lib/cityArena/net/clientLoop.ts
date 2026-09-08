@@ -1,0 +1,228 @@
+/**
+ * The client half of a match (spec §6.5): predict your own player, adopt the host for everything
+ * else.
+ *
+ * Prediction is what makes the game feel local over a network — your own moves apply on the frame
+ * you make them rather than a round trip later. The price is that the host may disagree, so every
+ * snapshot is reconciled: adopt the host's version of you, replay the inputs the host had not seen
+ * yet, and blend away whatever error is left. Health, ammo, kills and pickups are never predicted;
+ * spec §6.5 makes them host-only, and predicting them produces flicker when the host disagrees.
+ */
+
+import * as Sentry from "@sentry/nextjs";
+import { stepArena, type ArenaWorld } from "../sim/arena";
+import { playerById } from "../sim/players";
+import { EMPTY_INPUT, type ArenaState, type WorldInput } from "../sim/types";
+import { applySnapshot } from "./snapshotApply";
+import { decodeSnapshot, type Snapshot } from "./snapshotWire";
+import {
+  INTERPOLATION_DELAY_MS,
+  interpolatePlayers,
+  type SnapshotFrame,
+} from "./interpolate";
+import { encodeInput } from "./wire";
+import type { RealtimeTransport } from "./transport";
+
+/** The client predicts at the host's rate, so a replayed tick matches a hosted one exactly. */
+export const CLIENT_TICK_HZ = 30;
+/** Residual prediction error is blended out over this long. */
+export const RECONCILE_BLEND_MS = 100;
+/** Above this the error is too large to hide; snap instead. */
+export const SNAP_DISTANCE_M = 3;
+/** Snapshots kept for interpolation; two is the minimum, a few gives slack when one is late. */
+const FRAME_BUFFER = 6;
+/** The most inputs kept for replay: two seconds, far longer than any sane round trip. */
+const MAX_BUFFERED_INPUTS = CLIENT_TICK_HZ * 2;
+
+/** How a client loop is created. */
+export type ClientLoopOptions = {
+  transport: RealtimeTransport;
+  roomCode: string;
+  world: ArenaWorld;
+  /** Which player in the state this client drives. */
+  playerId: number;
+  /** The world to predict from until the first snapshot lands. */
+  state: ArenaState;
+  random: () => number;
+  /** This client's estimate of host time. */
+  serverTimeMs: () => number;
+  /** The step to run; injectable for tests. Defaults to `stepArena`. */
+  step?: typeof stepArena;
+};
+
+/** A running client. */
+export type ClientLoop = {
+  /** Predicts forward for the elapsed time, publishing this client's input as it goes. */
+  advance(elapsedMs: number): void;
+  /** Sets the input this client is holding; it applies from the next predicted tick. */
+  setInput(input: WorldInput): void;
+  /** Folds in a snapshot from the host and replays anything it had not seen. */
+  onSnapshot(snapshot: Snapshot): void;
+  /** The predicted world, unblended — what the simulation believes. */
+  state(): ArenaState;
+  /** The world to draw: predicted for you, interpolated and blended for everyone else. */
+  view(): ArenaState;
+  /** Stops the loop and releases its subscriptions. */
+  stop(): void;
+};
+
+/** One input kept for replay. */
+type BufferedInput = { seq: number; input: WorldInput };
+
+/** How far the drawn position still lags the predicted one, and how long is left to close it. */
+type Reconciliation = { x: number; y: number; leftMs: number };
+
+/**
+ * Starts playing as a client.
+ *
+ * @param options - The transport, room, world and which player this client drives.
+ * @returns The loop, which the caller drives with {@link ClientLoop.advance}.
+ */
+export function createClientLoop(options: ClientLoopOptions): ClientLoop {
+  const step = options.step ?? stepArena;
+  const stepSeconds = 1 / CLIENT_TICK_HZ;
+  const inputs = options.transport.channel(
+    `arena:room:${options.roomCode}:inputs`,
+  );
+  const room = options.transport.channel(`arena:room:${options.roomCode}`);
+
+  const buffered: BufferedInput[] = [];
+  const frames: SnapshotFrame[] = [];
+
+  let predicted = options.state;
+  let held: WorldInput = EMPTY_INPUT;
+  let seq = 0;
+  let elapsedTotalMs = 0;
+  let ticksRun = 0;
+  let offset: Reconciliation = { x: 0, y: 0, leftMs: 0 };
+  let running = true;
+
+  const unsubscribe = room.subscribe("state", (message) => {
+    if (!running) return;
+    try {
+      onSnapshot(message.data as Snapshot);
+    } catch (error: unknown) {
+      Sentry.captureException(error, {
+        tags: { area: "arena", kind: "client-snapshot" },
+      });
+    }
+  });
+
+  /** Runs one predicted tick from the input this client is holding. */
+  function predictTick(): void {
+    seq += 1;
+    buffered.push({ seq, input: held });
+    if (buffered.length > MAX_BUFFERED_INPUTS) buffered.shift();
+    // This runs every predicted tick, so a transport that keeps refusing would otherwise be an
+    // unhandled rejection thirty times a second and nothing in Sentry.
+    void inputs
+      .publish("input", encodeInput(seq, held))
+      .catch((error: unknown) => {
+        Sentry.captureException(error, {
+          tags: { area: "arena", kind: "client-input" },
+        });
+      });
+    predicted = step(
+      predicted,
+      new Map([[options.playerId, held]]),
+      stepSeconds,
+      options.world,
+      options.random,
+    );
+  }
+
+  /** Re-applies every buffered input the host had not yet seen. */
+  function replayFrom(state: ArenaState, acknowledged: number): ArenaState {
+    let replayed = state;
+    for (const entry of buffered) {
+      if (entry.seq <= acknowledged) continue;
+      replayed = step(
+        replayed,
+        new Map([[options.playerId, entry.input]]),
+        stepSeconds,
+        options.world,
+        options.random,
+      );
+    }
+    return replayed;
+  }
+
+  /** Folds in a snapshot, replays unacknowledged inputs and records the error left over. */
+  function onSnapshot(snapshot: Snapshot): void {
+    const view = decodeSnapshot(snapshot);
+    frames.push({ serverTimeMs: view.serverTimeMs, players: view.players });
+    while (frames.length > FRAME_BUFFER) frames.shift();
+
+    const before = playerById(predicted, options.playerId);
+    const acknowledged = view.lastInputSeqs[options.playerId] ?? 0;
+    const replayed = replayFrom(applySnapshot(predicted, view), acknowledged);
+    const after = playerById(replayed, options.playerId);
+    predicted = replayed;
+    while (buffered.length > 0 && (buffered[0]?.seq ?? 0) <= acknowledged)
+      buffered.shift();
+
+    if (!before || !after) {
+      offset = { x: 0, y: 0, leftMs: 0 };
+      return;
+    }
+    const errorX = before.x - after.x;
+    const errorY = before.y - after.y;
+    // A small disagreement is hidden by walking it off over 100 ms; a large one means the client
+    // was wrong about something structural, and pretending otherwise just slides the player.
+    offset =
+      Math.hypot(errorX, errorY) > SNAP_DISTANCE_M
+        ? { x: 0, y: 0, leftMs: 0 }
+        : { x: errorX, y: errorY, leftMs: RECONCILE_BLEND_MS };
+  }
+
+  /** Decays the reconciliation offset towards zero. */
+  function decayOffset(elapsedMs: number): void {
+    if (offset.leftMs <= 0) return;
+    const left = Math.max(0, offset.leftMs - elapsedMs);
+    const scale = left / RECONCILE_BLEND_MS;
+    offset = { x: offset.x * scale, y: offset.y * scale, leftMs: left };
+  }
+
+  return {
+    advance(elapsedMs: number): void {
+      if (!running) return;
+      elapsedTotalMs += elapsedMs;
+      decayOffset(elapsedMs);
+      const wanted = Math.floor((elapsedTotalMs * CLIENT_TICK_HZ) / 1000);
+      const ticks = wanted - ticksRun;
+      if (ticks <= 0) return;
+      ticksRun = wanted;
+      for (let index = 0; index < ticks; index += 1) predictTick();
+    },
+    setInput(input: WorldInput): void {
+      held = input;
+    },
+    onSnapshot,
+    state(): ArenaState {
+      return predicted;
+    },
+    view(): ArenaState {
+      const poses = interpolatePlayers(
+        frames,
+        options.serverTimeMs() - INTERPOLATION_DELAY_MS,
+      );
+      return {
+        ...predicted,
+        players: predicted.players.map((player) => {
+          if (player.id === options.playerId)
+            return {
+              ...player,
+              x: player.x + offset.x,
+              y: player.y + offset.y,
+            };
+          const pose = poses.get(player.id);
+          return pose ? { ...player, ...pose } : player;
+        }),
+      };
+    },
+    stop(): void {
+      running = false;
+      unsubscribe();
+    },
+  };
+}

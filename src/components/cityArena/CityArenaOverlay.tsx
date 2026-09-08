@@ -9,6 +9,11 @@ import {
   type RefObject,
 } from "react";
 import { createPortal, preload } from "react-dom";
+import { ZONE_OPTIONS } from "@/lib/cityArena/constants";
+import { ArenaPhaseScreens } from "./ArenaPhaseScreens";
+import { ConnectionBanner } from "./ConnectionBanner";
+import { useArenaRoom } from "./useArenaRoom";
+import type { ArenaEntry } from "./arenaEntry";
 import { isDebugEnabled } from "@/lib/cityArena/debugFlag";
 import {
   createStick,
@@ -37,7 +42,15 @@ const TOUCH_MEDIA_QUERY = "(max-width: 768px), (pointer: coarse)";
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 /** Props for {@link CityArenaOverlay}. */
-type CityArenaOverlayProps = { zone: ZoneKey; onClose: () => void };
+type CityArenaOverlayProps = { entry: ArenaEntry; onClose: () => void };
+
+/**
+ * The overlay draws whichever phase the match clock is in.
+ *
+ * That phase is deliberately separate from `ArenaPhase`, which is the *canvas* lifecycle
+ * (loading, playing, error). Conflating "the map is still loading" with "we are in the lobby"
+ * is how those two end up unable to express a lobby whose city is still loading behind it.
+ */
 
 /** True while the viewport matches the touch-control media query; updates on resize/rotate. */
 function useShowTouchControls(): boolean {
@@ -294,9 +307,12 @@ function useDebugFlag(): boolean {
 
 /** Full-screen arena session: loading screen, canvas, HUD strip, touch controls, death screen, attribution. */
 export default function CityArenaOverlay({
-  zone,
+  entry,
   onClose,
 }: CityArenaOverlayProps): ReactPortal | null {
+  const fallbackZone = ZONE_OPTIONS[0]!.key;
+  const room = useArenaRoom({ entry, fallbackZone });
+  const zone = room.zone;
   const dialogRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stick = useMemo(() => createStick(), []);
@@ -315,9 +331,10 @@ export default function CityArenaOverlay({
       aria-modal="true"
       aria-label="GTA H3"
       tabIndex={-1}
-      className="fixed inset-0 z-[3200] flex min-h-dvh flex-col touch-none select-none bg-[#0B1220] pt-safe pb-safe-bottom-bar pl-safe pr-safe [-webkit-user-select:none] [-webkit-touch-callout:none]"
+      className="arena arena-grid fixed inset-0 z-[3200] flex min-h-dvh flex-col touch-none select-none bg-[var(--arena-void)] pt-safe pb-safe-bottom-bar pl-safe pr-safe [-webkit-user-select:none] [-webkit-touch-callout:none]"
       onContextMenu={(event) => event.preventDefault()}
     >
+      <ConnectionBanner state={room.connection} />
       <ArenaHudBar
         hud={game.hud}
         zones={game.zones}
@@ -336,6 +353,7 @@ export default function CityArenaOverlay({
         stick={stick}
       />
       <ArenaFooter showTouch={showTouch} />
+      <ArenaPhaseScreens game={game} room={room} onClose={onClose} />
     </div>
   );
 

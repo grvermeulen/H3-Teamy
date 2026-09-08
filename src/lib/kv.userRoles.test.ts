@@ -45,13 +45,17 @@ function mockKvRestStore() {
   vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
     if (url.includes("/set/")) {
-      const key = decodeURIComponent(url.split("/set/")[1]?.split("?")[0] ?? "");
+      const key = decodeURIComponent(
+        url.split("/set/")[1]?.split("?")[0] ?? "",
+      );
       const body = typeof init?.body === "string" ? init.body : "";
       store.set(key, body);
       return new Response(JSON.stringify({ result: "OK" }), { status: 200 });
     }
     if (url.includes("/get/")) {
-      const key = decodeURIComponent(url.split("/get/")[1]?.split("?")[0] ?? "");
+      const key = decodeURIComponent(
+        url.split("/get/")[1]?.split("?")[0] ?? "",
+      );
       const val = store.get(key) ?? null;
       return new Response(JSON.stringify({ result: val }), { status: 200 });
     }

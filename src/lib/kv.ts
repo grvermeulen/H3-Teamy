@@ -5,7 +5,10 @@ import "./envBootstrap";
 import * as Sentry from "@sentry/nextjs";
 import type { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { withPgConnectRetry, shouldFallbackFromPrismaToKv } from "./prismaConnectRetry";
+import {
+  withPgConnectRetry,
+  shouldFallbackFromPrismaToKv,
+} from "./prismaConnectRetry";
 import { isPrismaSchemaDriftError } from "./prismaSchemaDrift";
 import {
   PASSWORD_RESET_TTL_SEC,

@@ -30,6 +30,7 @@ import { applyEntityHit } from "./hits";
 import { aliveCops, blastCops } from "./cops";
 import { alivePeds, blastPeds } from "./peds";
 import type {
+  ArenaEvent,
   ArenaPlayerState,
   ArenaState,
   BulletState,
@@ -181,11 +182,27 @@ function applyHit(state: ArenaState, hit: BulletHit, tick: number): ArenaState {
   if (hit.target.kind === "player") {
     const struck = playerById(state, hit.target.playerId);
     if (!struck) return state;
-    return withHitEvent(
-      replacePlayer(state, damagePlayer(struck, hit.bullet.damage, tick)),
+    const damaged = damagePlayer(struck, hit.bullet.damage, tick);
+    const hurt = withHitEvent(
+      replacePlayer(state, damaged),
       "player",
       hit.point,
     );
+    // The shot that finishes a player is the only place the killer is known, so the scoreboard
+    // is built from this event rather than from watching health drop to zero.
+    if (damaged.diedAtTick !== null && struck.diedAtTick === null)
+      return {
+        ...hurt,
+        events: pushEvent(hurt.events, {
+          kind: "kill",
+          victim: "player",
+          victimId: damaged.id,
+          killerId: hit.bullet.ownerId,
+          x: damaged.x,
+          y: damaged.y,
+        }),
+      };
+    return hurt;
   }
   return state;
 }
@@ -247,6 +264,45 @@ function blastPlayer(
   return player;
 }
 
+/** Something with an id and a position that an explosion can kill. */
+type BlastVictim = { id: number; x: number; y: number };
+
+/**
+ * Records one kill per victim of a blast. A wrecked car has no owner, so these carry no killer
+ * rather than being attributed to whoever last shot the car — which the simulation does not track.
+ */
+function blastKillEvents(
+  events: ArenaEvent[],
+  victim: "ped" | "cop" | "player",
+  killed: BlastVictim[],
+): ArenaEvent[] {
+  let next = events;
+  for (const dead of killed)
+    next = pushEvent(next, {
+      kind: "kill",
+      victim,
+      victimId: dead.id,
+      killerId: null,
+      x: dead.x,
+      y: dead.y,
+    });
+  return next;
+}
+
+/** Blasts every player in range, and lists the ones this blast killed. */
+function blastPlayers(
+  players: ArenaPlayerState[],
+  vehicle: VehicleState,
+  tick: number,
+): { players: ArenaPlayerState[]; killed: ArenaPlayerState[] } {
+  const blasted = players.map((player) => blastPlayer(player, vehicle, tick));
+  const killed = blasted.filter(
+    (player, position) =>
+      player.diedAtTick !== null && players[position]?.diedAtTick === null,
+  );
+  return { players: blasted, killed };
+}
+
 /** Wrecks one car that reached 0 health and applies its explosion blast. */
 function explodeVehicle(
   state: ArenaState,
@@ -262,34 +318,23 @@ function explodeVehicle(
   });
   const blast = blastPeds(state.peds, vehicle, tick);
   const copBlast = blastCops(state.cops, vehicle, tick);
+  const playerBlast = blastPlayers(state.players, vehicle, tick);
   let events = pushEvent(state.events, {
     kind: "explosion",
     x: vehicle.x,
     y: vehicle.y,
   });
-  for (const ped of blast.killed)
-    events = pushEvent(events, {
-      kind: "kill",
-      victim: "ped",
-      killerId: null,
-      x: ped.x,
-      y: ped.y,
-    });
-  for (const cop of copBlast.killed)
-    events = pushEvent(events, {
-      kind: "kill",
-      victim: "cop",
-      killerId: null,
-      x: cop.x,
-      y: cop.y,
-    });
+  events = blastKillEvents(events, "ped", blast.killed);
+  events = blastKillEvents(events, "cop", copBlast.killed);
+  events = blastKillEvents(events, "player", playerBlast.killed);
+
   return {
     ...state,
     vehicles,
     peds: blast.peds,
     cops: copBlast.cops,
     nextId: state.nextId + 1,
-    players: state.players.map((player) => blastPlayer(player, vehicle, tick)),
+    players: playerBlast.players,
     events,
     effects: addEffect(state.effects, {
       id: state.nextId,

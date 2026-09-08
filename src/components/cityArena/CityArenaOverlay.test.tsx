@@ -14,6 +14,17 @@ import {
   createFakeTarget,
 } from "@/lib/cityArena/render/testing/fakeContext";
 
+/** Opens the overlay and steps past the lobby into the match, which is what these tests cover. */
+function renderOverlay(onClose: () => void): void {
+  render(
+    <CityArenaOverlay
+      entry={{ kind: "new", zone: "wageningen" }}
+      onClose={onClose}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: /oefenen|start potje/i }));
+}
+
 /** Frame cap for the mocked `requestAnimationFrame` loop (see `beforeEach`), matching the pattern
  *  in `src/components/spaceInvaders/SpaceInvadersGame.test.tsx`: enough frames for the HUD/tile
  *  throttles to fire at least once, without ever looping forever inside a test. */
@@ -95,6 +106,22 @@ vi.mock("@/lib/cityArena/render/canvasTypes", async (importOriginal) => {
 });
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
+/** These tests are about the playfield, not the netcode, so the room is a connected stub. */
+/** One object for the life of the file, so the memos keyed on `room.crew` keep their identity. */
+vi.mock("./useArenaRoom", () => {
+  const room = {
+    status: "ready",
+    connection: "connected",
+    roomCode: "7K4M2Q",
+    zone: "wageningen",
+    crew: [{ clientId: "me", seat: 0, name: "Jij", isHost: true, isYou: true }],
+    isHost: true,
+    failure: null,
+    leave: vi.fn(),
+  };
+  return { useArenaRoom: () => room };
+});
+
 import { HEALTH_LABEL } from "./ArenaVitals";
 import CityArenaOverlay from "./CityArenaOverlay";
 
@@ -148,7 +175,7 @@ describe("CityArenaOverlay", () => {
 
   it("loads the world, shows the HUD with the zone and street, teleports and closes", async () => {
     const onClose = vi.fn();
-    render(<CityArenaOverlay zone="wageningen" onClose={onClose} />);
+    renderOverlay(onClose);
     expect(screen.getByRole("status")).toHaveTextContent("Kaart laden…");
     await waitFor(
       () =>
@@ -180,7 +207,7 @@ describe("CityArenaOverlay", () => {
   });
 
   it("preloads the death-screen artwork once the overlay mounts", async () => {
-    render(<CityArenaOverlay zone="wageningen" onClose={vi.fn()} />);
+    renderOverlay(vi.fn());
     await waitFor(() =>
       expect(screen.getByTestId("arena-hud")).toHaveTextContent(
         "Wageningen centrum",
@@ -193,7 +220,7 @@ describe("CityArenaOverlay", () => {
   });
 
   it("disables the zone picker until the world finishes booting, then lets it teleport", async () => {
-    render(<CityArenaOverlay zone="wageningen" onClose={vi.fn()} />);
+    renderOverlay(vi.fn());
     expect(screen.getByLabelText("Ga naar")).toBeDisabled();
 
     await waitFor(() =>
@@ -216,7 +243,7 @@ describe("CityArenaOverlay", () => {
       "fetch",
       vi.fn<typeof fetch>(async () => new Response(null, { status: 404 })),
     );
-    render(<CityArenaOverlay zone="wageningen" onClose={vi.fn()} />);
+    renderOverlay(vi.fn());
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent(
         "Kon geen verbinding maken, probeer het later opnieuw",
@@ -256,7 +283,7 @@ describe("CityArenaOverlay", () => {
         );
       }),
     );
-    render(<CityArenaOverlay zone="wageningen" onClose={vi.fn()} />);
+    renderOverlay(vi.fn());
     await waitFor(
       () =>
         expect(screen.getByTestId("arena-hud")).toHaveTextContent(
@@ -267,7 +294,7 @@ describe("CityArenaOverlay", () => {
   });
 
   it("shows the vitals once playing and no death overlay or touch buttons on desktop", async () => {
-    render(<CityArenaOverlay zone="wageningen" onClose={vi.fn()} />);
+    renderOverlay(vi.fn());
     await waitFor(() =>
       expect(screen.getByTestId("arena-hud")).toHaveTextContent(
         "Wageningen centrum",
@@ -297,7 +324,7 @@ describe("CityArenaOverlay", () => {
       removeEventListener: vi.fn(),
       dispatchEvent: vi.fn(),
     }));
-    render(<CityArenaOverlay zone="wageningen" onClose={vi.fn()} />);
+    renderOverlay(vi.fn());
     await waitFor(() =>
       expect(screen.getByTestId("arena-hud")).toHaveTextContent(
         "Wageningen centrum",

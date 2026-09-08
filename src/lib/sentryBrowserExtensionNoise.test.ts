@@ -18,17 +18,17 @@ describe("isBrowserExtensionRuntimeSendMessageNoise", () => {
   });
 
   it("returns false for real application errors", () => {
-    expect(isBrowserExtensionRuntimeSendMessageNoise("Network request failed")).toBe(
-      false,
-    );
+    expect(
+      isBrowserExtensionRuntimeSendMessageNoise("Network request failed"),
+    ).toBe(false);
   });
 });
 
 describe("BROWSER_EXTENSION_RUNTIME_SEND_MESSAGE_IGNORE_RE", () => {
   it("matches the production Sentry error message", () => {
-    expect(BROWSER_EXTENSION_RUNTIME_SEND_MESSAGE_IGNORE_RE.test(extensionMessage)).toBe(
-      true,
-    );
+    expect(
+      BROWSER_EXTENSION_RUNTIME_SEND_MESSAGE_IGNORE_RE.test(extensionMessage),
+    ).toBe(true);
   });
 });
 

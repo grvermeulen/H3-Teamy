@@ -232,6 +232,7 @@ function runOverCops(state: ArenaState, tick: number): ArenaState {
         events = pushEvent(events, {
           kind: "kill",
           victim: "cop",
+          victimId: cop.id,
           killerId,
           x: cop.x,
           y: cop.y,

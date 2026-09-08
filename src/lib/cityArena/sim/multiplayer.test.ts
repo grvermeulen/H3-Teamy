@@ -176,6 +176,48 @@ describe("state shared by several players", () => {
     expect(playerById(moved, 1)?.x).toBe(6);
   });
 
+  it("records a kill naming the shooter when a bullet finishes a player", () => {
+    let state = facingPair(21, 6);
+    // Wound the target to one hit from death, so a single burst finishes them.
+    state = {
+      ...state,
+      players: state.players.map((player) =>
+        player.id === 1 ? { ...player, health: 1 } : player,
+      ),
+    };
+    const random = createRng(5);
+    const inputs: ArenaInputs = new Map([
+      [0, createInput({ fire: true, aim: 0 })],
+    ]);
+    const kills: { victimId: number | null; killerId: number | null }[] = [];
+    for (let tick = 1; tick <= 20; tick += 1) {
+      state = stepArena(state, inputs, STEP_S, world, random);
+      for (const event of state.events)
+        if (event.kind === "kill" && event.victim === "player")
+          kills.push({ victimId: event.victimId, killerId: event.killerId });
+    }
+    expect(kills).toContainEqual({ victimId: 1, killerId: 0 });
+  });
+
+  it("gives no heat for killing another player, which is the point of the potje", () => {
+    // Without the explicit skip in heatFromEvents a "player" victim falls through to the
+    // pedestrian branch and every duel quietly raises the police on the winner.
+    let state = facingPair(22, 6);
+    state = {
+      ...state,
+      players: state.players.map((player) =>
+        player.id === 1 ? { ...player, health: 1 } : player,
+      ),
+    };
+    const random = createRng(5);
+    const inputs: ArenaInputs = new Map([
+      [0, createInput({ fire: true, aim: 0 })],
+    ]);
+    for (let tick = 1; tick <= 20; tick += 1)
+      state = stepArena(state, inputs, STEP_S, world, random);
+    expect(playerById(state, 0)?.heat).toBe(0);
+  });
+
   it("steps a state whose last player has left instead of throwing", () => {
     const paired = facingPair(14, 6);
     const empty = removeArenaPlayer(removeArenaPlayer(paired, 0), 1);

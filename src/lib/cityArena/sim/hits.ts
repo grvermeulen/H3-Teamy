@@ -24,6 +24,7 @@ function hitPed(
     events = pushEvent(events, {
       kind: "kill",
       victim: "ped",
+      victimId: ped.id,
       killerId: hit.bullet.ownerId,
       x: ped.x,
       y: ped.y,
@@ -56,6 +57,7 @@ function hitCop(
     events = pushEvent(events, {
       kind: "kill",
       victim: "cop",
+      victimId: cop.id,
       killerId: hit.bullet.ownerId,
       x: cop.x,
       y: cop.y,

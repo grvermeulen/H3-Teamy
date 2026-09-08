@@ -293,6 +293,7 @@ function runOverPeds(state: ArenaState, tick: number): ArenaState {
         events = pushEvent(events, {
           kind: "kill",
           victim: "ped",
+          victimId: ped.id,
           killerId,
           x: ped.x,
           y: ped.y,

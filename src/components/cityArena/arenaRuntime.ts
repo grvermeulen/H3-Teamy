@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  emptyTally,
+  tallyEvents,
+  type Tally,
+} from "@/lib/cityArena/net/scoreboard";
 import { localPlayer } from "@/lib/cityArena/sim/players";
 import * as Sentry from "@sentry/nextjs";
 import type { RefObject } from "react";
@@ -130,6 +135,13 @@ export type Runtime = {
   baseZoom: ZoomLevel;
   random: () => number;
   accumulator: number;
+  /**
+   * Kills and deaths so far this potje.
+   *
+   * Accumulated here rather than in React because `state.events` is emptied every tick: a UI
+   * polling at 10 Hz would silently miss two thirds of the kills.
+   */
+  tally: Tally;
   lastTileSync: number;
   /** True while a `session.update` tile sync is awaiting the network. */
   tileSyncPending: boolean;
@@ -308,6 +320,7 @@ export function createRuntime(
     baseZoom,
     random,
     accumulator: 0,
+    tally: emptyTally(),
     lastTileSync: 0,
     tileSyncPending: false,
     tileSyncRequested: false,
@@ -488,6 +501,7 @@ function advanceSimulation(
       runtime.random,
     );
     runtime.sound.handleEvents(runtime.state.events);
+    runtime.tally = tallyEvents(runtime.tally, runtime.state.events);
     const car = occupiedVehicle(runtime.state);
     runtime.sound.updateEngine(
       car ? Math.abs(forwardSpeed(car)) : 0,
