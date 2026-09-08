@@ -46,6 +46,11 @@ export type HostLoopOptions = {
   world: ArenaWorld;
   /** The state to start from: a fresh match, or the last snapshot after a migration. */
   state: ArenaState;
+  /**
+   * The tally to continue from: empty for a fresh match, the last snapshot's after a migration,
+   * so kills scored under the old host survive it. Defaults to empty.
+   */
+  tally?: Tally;
   random: () => number;
   /** The host's server time, which clients interpolate against. */
   serverTimeMs: () => number;
@@ -133,7 +138,7 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
   const lastInputSeqs: Record<number, number> = {};
   /** Inputs from players this process drives itself, applied ahead of anything from the wire. */
   const local = new Map<number, WorldInput>();
-  let tally: Tally = emptyTally();
+  let tally: Tally = options.tally ?? emptyTally();
   // A literal rather than `lobbyMatch()`: matchPhase.ts imports HOST_TICK_HZ from this file, and
   // a value import back would evaluate it before that constant exists.
   let match: MatchState = { phase: "lobby", since: 0 };

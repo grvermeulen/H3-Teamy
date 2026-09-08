@@ -5,7 +5,7 @@ import {
   tallyEvents,
   type Tally,
 } from "@/lib/cityArena/net/scoreboard";
-import { LOCAL_PLAYER_ID } from "@/lib/cityArena/sim/arena";
+import { LOCAL_PLAYER_ID, addArenaPlayer } from "@/lib/cityArena/sim/arena";
 import type { HostLoop } from "@/lib/cityArena/net/hostLoop";
 import type { ClientLoop } from "@/lib/cityArena/net/clientLoop";
 import { localPlayer, playerById } from "@/lib/cityArena/sim/players";
@@ -528,6 +528,40 @@ function isActive(input: WorldInput): boolean {
 }
 
 /**
+ * The host stopped carrying this runtime's player — it unseated us, or its snapshot lost us — so
+ * the loop hands back a world we are not in, and the next frame would throw and stop the loop.
+ * Report it, drop the loop, and spawn a player of our own to keep roaming alone; the seat listener
+ * is still up, so the next snapshot that names us seats us again.
+ */
+function recoverSeat(
+  runtime: Runtime,
+  net: Exclude<Netplay, { kind: "offline" }>,
+): void {
+  reportArenaError(
+    new Error(`Arena state has no player ${net.playerId}`),
+    "netplay-unseated",
+  );
+  net.loop.stop();
+  const world: ArenaWorld = {
+    collision: runtime.session.collision,
+    index: runtime.session.index(),
+    graph: runtime.session.graph(),
+  };
+  const joined = addArenaPlayer(
+    runtime.state,
+    world,
+    runtime.state.tick,
+    runtime.random,
+  );
+  const playerId =
+    joined.player?.id ?? playerById(runtime.state, LOCAL_PLAYER_ID)?.id;
+  if (playerId === undefined)
+    throw new Error("Arena state has no room for a player");
+  runtime.state = joined.state;
+  runtime.netplay = { kind: "offline", playerId };
+}
+
+/**
  * Steps the world through the room's loop instead of locally.
  *
  * The host hands its own input to the host loop — it cannot hear itself over the inputs channel —
@@ -554,6 +588,10 @@ function advanceNetworked(
     net.loop.setInput(stepInput);
     net.loop.advance(dt * MS_PER_SECOND);
     runtime.state = net.loop.view();
+  }
+  if (!playerById(runtime.state, net.playerId)) {
+    recoverSeat(runtime, net);
+    return;
   }
   // The only real tally is the host's; a client's predicted kills are not.
   runtime.tally = net.loop.tally();

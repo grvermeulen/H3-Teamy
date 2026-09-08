@@ -1,5 +1,6 @@
 import { cleanup, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as Sentry from "@sentry/nextjs";
 import { createCollisionGrid } from "@/lib/cityArena/world/collisionGrid";
 import type { MapIndex, MapZone } from "@/lib/cityArena/world/mapTypes";
 import { decodeRoadGraph } from "@/lib/cityArena/world/roadGraph";
@@ -12,6 +13,8 @@ import {
   type MemoryHub,
 } from "@/lib/cityArena/net/memoryTransport";
 import { HOST_TICK_HZ } from "@/lib/cityArena/net/hostLoop";
+import { emptyTally } from "@/lib/cityArena/net/scoreboard";
+import { encodeSnapshot } from "@/lib/cityArena/net/snapshotWire";
 import type { Runtime } from "./arenaRuntime";
 import { useNetplay, type ArenaNetplayOptions } from "./useNetplay";
 
@@ -66,6 +69,7 @@ function fakeRuntime(seed: number): Runtime {
     random: createRng(seed + 1),
     sound: { handleEvents: vi.fn() },
     netplay: { kind: "offline", playerId: 0 },
+    tally: emptyTally(),
     disposed: false,
   } as unknown as Runtime;
 }
@@ -135,6 +139,10 @@ function seatedPair() {
 }
 
 describe("useNetplay", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   afterEach(() => {
     cleanup();
   });
@@ -239,5 +247,63 @@ describe("useNetplay", () => {
     expect(host.netplay).toEqual({ kind: "offline", playerId: 0 });
     // A client that lost its room keeps its seat: player 0 was the host, who is gone.
     expect(joiner.netplay).toEqual({ kind: "offline", playerId: seat });
+  });
+
+  it("carries the score and the phase over to a client that becomes host", () => {
+    const { joiner, hostHook, joinerHook, joinerOptions, hub } = seatedPair();
+    if (joiner.netplay.kind !== "client") throw new Error("not a client");
+    const seat = joiner.netplay.playerId;
+    // The old host's last word before it vanished: mid-match, with kills on the board.
+    const tally = new Map([
+      [0, { playerId: 0, kills: 2, deaths: 1 }],
+      [seat, { playerId: seat, kills: 1, deaths: 2 }],
+    ]);
+    const match = { phase: "playing" as const, since: 5 };
+    void createMemoryTransport(hub, "old-host")
+      .channel(`arena:room:${ROOM}`)
+      .publish(
+        "state",
+        encodeSnapshot(
+          joiner.state,
+          0,
+          {},
+          {
+            seats: new Map([
+              ["host", 0],
+              ["joiner", seat],
+            ]),
+            tally,
+            match,
+          },
+        ),
+      );
+    hub.flush();
+    hostHook.unmount();
+    joinerHook.rerender({
+      options: { ...joinerOptions, isHost: true, memberIds: ["joiner"] },
+      booted: true,
+    });
+    if (joiner.netplay.kind !== "host") throw new Error("not hosting");
+    expect(joiner.netplay.loop.tally()).toEqual(tally);
+    expect(joiner.netplay.loop.match()).toEqual(match);
+  });
+
+  it("reports a snapshot it cannot read and keeps roaming alone", () => {
+    const hub = createMemoryHub();
+    const stranger = fakeRuntime(2);
+    renderNetplay(
+      stranger,
+      member(hub, "stranger", { memberIds: ["host", "stranger"] }),
+    );
+    void createMemoryTransport(hub, "host")
+      .channel(`arena:room:${ROOM}`)
+      .publish("state", {});
+    hub.flush();
+    expect(stranger.netplay.kind).toBe("offline");
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      { tags: { area: "arena", kind: "client-seat" } },
+    );
   });
 });

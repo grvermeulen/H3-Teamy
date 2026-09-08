@@ -13,6 +13,7 @@ import * as Sentry from "@sentry/nextjs";
 import { createClientLoop } from "@/lib/cityArena/net/clientLoop";
 import { createHostLoop, type HostLoop } from "@/lib/cityArena/net/hostLoop";
 import type { MatchState } from "@/lib/cityArena/net/matchPhase";
+import type { Tally } from "@/lib/cityArena/net/scoreboard";
 import { roomChannelName } from "@/lib/cityArena/net/room";
 import {
   decodeSnapshot,
@@ -66,6 +67,8 @@ type Handover = {
   seats: ReadonlyMap<string, number>;
   /** Where the potje was, or null when nothing has been heard yet. */
   match: MatchState | null;
+  /** Kills and deaths so far, so a migration does not wipe the scorebord. */
+  tally: Tally;
 };
 
 /** The world the loops step: the session's collision, index and graph, without a viewport. */
@@ -92,6 +95,7 @@ function stopNetplay(runtime: Runtime, roomCode: string): Handover {
     playerId: net.playerId,
     seats: net.kind === "offline" ? new Map() : net.loop.seats(),
     match: net.kind === "offline" ? null : net.loop.match(),
+    tally: net.kind === "offline" ? runtime.tally : net.loop.tally(),
   };
   if (net.kind !== "offline") net.loop.stop();
   runtime.netplay = { kind: "offline", playerId: net.playerId };
@@ -138,6 +142,7 @@ function startHosting(
     random: runtime.random,
     serverTimeMs: () => Date.now() + setup.clockOffsetMs,
     onTick: (state) => runtime.sound.handleEvents(state.events),
+    tally: previous.tally,
   });
   for (const [memberId, seat] of previous.seats) loop.claim(memberId, seat);
   loop.claim(setup.clientId, previous.playerId);

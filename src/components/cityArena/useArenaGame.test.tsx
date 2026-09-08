@@ -624,6 +624,27 @@ function netplayFor(
   };
 }
 
+/** A host loop on `hub`, driven by the test rather than a runtime, with itself seated as player 0. */
+function createTestHost(hub: ReturnType<typeof createMemoryHub>) {
+  const host = createHostLoop({
+    transport: createMemoryTransport(hub, "host"),
+    roomCode: ROOM,
+    world: {
+      collision: createCollisionGrid(),
+      index: testIndex,
+      graph: testGraph,
+    },
+    state: createArenaState(
+      { index: testIndex, graph: testGraph, seed: 1, zone: null },
+      createRng(1),
+    ),
+    random: createRng(2),
+    serverTimeMs: () => 0,
+  });
+  host.claim("host", 0);
+  return host;
+}
+
 describe("netplay", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -670,22 +691,7 @@ describe("netplay", () => {
 
   it("joins as a client: the seat the host names becomes the player this runtime drives", async () => {
     const hub = createMemoryHub();
-    const host = createHostLoop({
-      transport: createMemoryTransport(hub, "host"),
-      roomCode: ROOM,
-      world: {
-        collision: createCollisionGrid(),
-        index: testIndex,
-        graph: testGraph,
-      },
-      state: createArenaState(
-        { index: testIndex, graph: testGraph, seed: 1, zone: null },
-        createRng(1),
-      ),
-      random: createRng(2),
-      serverTimeMs: () => 0,
-    });
-    host.claim("host", 0);
+    const host = createTestHost(hub);
     const seat = host.addMember("me");
     const { result } = await bootArenaWithCanvas({
       debug: true,
@@ -704,6 +710,49 @@ describe("netplay", () => {
     expect(
       window.__arena?.getState()?.players.map((player) => player.id),
     ).toEqual([0, seat]);
+    host.stop();
+  });
+
+  it("survives being unseated: reports it, roams alone, and takes the next seat it is given", async () => {
+    const hub = createMemoryHub();
+    const host = createTestHost(hub);
+    const seat = host.addMember("me");
+    const { result } = await bootArenaWithCanvas({
+      debug: true,
+      netplay: netplayFor(createMemoryTransport(hub, "me"), {
+        memberIds: ["host", "me"],
+      }),
+    });
+    const tick = getTick();
+    act(() => tick(0));
+    host.advance(FRAME_STEP_MS);
+    hub.flush();
+    act(() => tick(FRAME_STEP_MS));
+    expect(result.current.peek()?.youId).toBe(seat);
+
+    // The host drops this client; its next snapshot no longer carries the player. Without the
+    // recovery the frame would throw looking for it and the loop would never run again.
+    host.removeMember("me");
+    host.advance(FRAME_STEP_MS);
+    hub.flush();
+    act(() => tick(2 * FRAME_STEP_MS));
+    const alone = result.current.peek();
+    expect(alone?.seats.size).toBe(0);
+    expect(
+      window.__arena?.getState()?.players.map((player) => player.id),
+    ).toContain(alone?.youId);
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      { tags: { area: "arena", kind: "netplay-unseated" } },
+    );
+
+    // The host changes its mind: the next snapshot naming this client seats it again.
+    const again = host.addMember("me");
+    host.advance(FRAME_STEP_MS);
+    hub.flush();
+    act(() => tick(3 * FRAME_STEP_MS));
+    expect(result.current.peek()?.youId).toBe(again);
+    expect(result.current.peek()?.seats.get("me")).toBe(again);
     host.stop();
   });
 });
