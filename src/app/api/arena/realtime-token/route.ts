@@ -15,8 +15,12 @@ export const runtime = "nodejs";
 const TOKEN_TTL_MS = 60 * 60 * 1000;
 
 /**
- * What a member may do: everything inside a room, read-only in the lobby (spec §6.2).
- * Scoping publish to `arena:room:*` is what stops a member from forging lobby presence.
+ * What a member may do: everything inside a room; subscribe and presence in the lobby (spec §6.2).
+ *
+ * Withholding `publish` on the lobby is not what stops a forged advertisement — hosts advertise
+ * through presence, so every member can enter presence there with a made-up `room`. What stops
+ * it is `GET /api/arena/rooms`, which checks each advertised room against the room channel's own
+ * presence set and drops any whose advertiser is not that room's elected host.
  */
 const ARENA_CAPABILITY: Record<string, Ably.capabilityOp[]> = {
   "arena:room:*": ["publish", "subscribe", "presence"],
@@ -69,7 +73,7 @@ export async function GET(req: NextRequest): Promise<Response> {
       );
     }
 
-    let tokenRequest;
+    let tokenRequest: Ably.TokenRequest;
     try {
       tokenRequest = await new Ably.Rest({ key }).auth.createTokenRequest({
         clientId: userId,

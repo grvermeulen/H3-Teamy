@@ -18,6 +18,8 @@
  */
 
 import * as Ably from "ably";
+import * as Sentry from "@sentry/nextjs";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { electHost } from "../cityArena/net/election";
 import { roomChannelName } from "../cityArena/net/room";
@@ -118,25 +120,47 @@ export async function recordMatch(
   });
   if (existing) return { ok: false, reason: "already-recorded" };
 
-  const match = await prisma.arenaMatch.create({
-    data: {
-      roomCode: input.roomCode,
-      zone: input.zone,
-      startedAt: input.startedAt,
-      endedAt: input.endedAt,
-      hostUserId: posterUserId,
-      results: {
-        create: eligible.map((result) => ({
-          userId: result.userId,
-          kills: bounded(result.kills),
-          deaths: bounded(result.deaths),
-          won: result.won,
-        })),
+  try {
+    const match = await prisma.arenaMatch.create({
+      data: {
+        roomCode: input.roomCode,
+        zone: input.zone,
+        startedAt: input.startedAt,
+        endedAt: input.endedAt,
+        hostUserId: posterUserId,
+        results: {
+          create: eligible.map((result) => ({
+            userId: result.userId,
+            kills: bounded(result.kills),
+            deaths: bounded(result.deaths),
+            won: result.won,
+          })),
+        },
       },
-    },
-    select: { id: true },
-  });
-  return { ok: true, matchId: match.id, recorded: eligible.length };
+      select: { id: true },
+    });
+    return { ok: true, matchId: match.id, recorded: eligible.length };
+  } catch (error: unknown) {
+    // The findUnique above is a check-then-act; two hosts posting the same potje at once can
+    // both pass it and race on the unique index. Only *that* collision is "already recorded" —
+    // a duplicate userId inside the results would trip the same error code on a different index
+    // and must not be mistaken for it.
+    if (isMatchAlreadyRecorded(error))
+      return { ok: false, reason: "already-recorded" };
+    Sentry.captureException(error, {
+      tags: { area: "arena", kind: "match-record" },
+    });
+    throw error;
+  }
+}
+
+/** True for a unique-constraint violation on the potje itself, `(roomCode, startedAt)`. */
+function isMatchAlreadyRecorded(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  if (error.code !== "P2002") return false;
+  const target = (error.meta as { target?: unknown } | undefined)?.target;
+  const fields = Array.isArray(target) ? target.map(String) : [String(target)];
+  return fields.includes("roomCode") && fields.includes("startedAt");
 }
 
 /** One line of the ranglijst. */
@@ -160,36 +184,32 @@ export const LEADERBOARD_SIZE = 10;
 export async function leaderboard(
   limit = LEADERBOARD_SIZE,
 ): Promise<LeaderboardRow[]> {
-  const grouped = await prisma.arenaMatchResult.groupBy({
-    by: ["userId"],
-    _sum: { kills: true, deaths: true },
-    _count: { _all: true },
-  });
-  const wins = await prisma.arenaMatchResult.groupBy({
-    by: ["userId"],
-    where: { won: true },
-    _count: { _all: true },
-  });
-  const winsBy = new Map(wins.map((row) => [row.userId, row._count._all]));
+  // Ranked and cut in the database: the ranking uses wins first and kills second, which
+  // Prisma's groupBy cannot order by, and pulling every player's totals into memory to sort
+  // them here would grow with every potje ever played. The final tie on user id keeps the list
+  // stable between requests.
+  const rows = await prisma.$queryRaw<
+    { userId: string; wins: bigint; kills: bigint; deaths: bigint }[]
+  >`
+    SELECT "userId",
+           SUM(CASE WHEN "won" THEN 1 ELSE 0 END) AS "wins",
+           SUM("kills") AS "kills",
+           SUM("deaths") AS "deaths"
+    FROM "ArenaMatchResult"
+    GROUP BY "userId"
+    ORDER BY "wins" DESC, "kills" DESC, "userId" ASC
+    LIMIT ${limit}`;
   const users = await prisma.user.findMany({
-    where: { id: { in: grouped.map((row) => row.userId) } },
+    where: { id: { in: rows.map((row) => row.userId) } },
     select: { id: true, firstName: true },
+    take: limit,
   });
   const nameBy = new Map(users.map((user) => [user.id, user.firstName]));
-
-  return grouped
-    .map((row) => ({
-      userId: row.userId,
-      firstName: nameBy.get(row.userId)?.trim() || "Speler",
-      wins: winsBy.get(row.userId) ?? 0,
-      kills: row._sum.kills ?? 0,
-      deaths: row._sum.deaths ?? 0,
-    }))
-    .sort((first, second) => {
-      if (first.wins !== second.wins) return second.wins - first.wins;
-      if (first.kills !== second.kills) return second.kills - first.kills;
-      // A total tie breaks on user id, so the list is stable between requests.
-      return first.userId < second.userId ? -1 : 1;
-    })
-    .slice(0, limit);
+  return rows.map((row) => ({
+    userId: row.userId,
+    firstName: nameBy.get(row.userId)?.trim() || "Speler",
+    wins: Number(row.wins),
+    kills: Number(row.kills),
+    deaths: Number(row.deaths),
+  }));
 }

@@ -107,18 +107,20 @@ vi.mock("@/lib/cityArena/render/canvasTypes", async (importOriginal) => {
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
 /** These tests are about the playfield, not the netcode, so the room is a connected stub. */
-vi.mock("./useArenaRoom", () => ({
-  useArenaRoom: () => ({
+/** One object for the life of the file, so the memos keyed on `room.crew` keep their identity. */
+vi.mock("./useArenaRoom", () => {
+  const room = {
     status: "ready",
     connection: "connected",
     roomCode: "7K4M2Q",
     zone: "wageningen",
-    crew: [{ clientId: "me", name: "Jij", isHost: true, isYou: true }],
+    crew: [{ clientId: "me", seat: 0, name: "Jij", isHost: true, isYou: true }],
     isHost: true,
     failure: null,
     leave: vi.fn(),
-  }),
-}));
+  };
+  return { useArenaRoom: () => room };
+});
 
 import { HEALTH_LABEL } from "./ArenaVitals";
 import CityArenaOverlay from "./CityArenaOverlay";

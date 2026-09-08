@@ -35,10 +35,10 @@ export function ArenaPhaseScreens({
   onClose,
 }: ArenaPhaseScreensProps): React.JSX.Element | null {
   const { zone } = room;
-  // Seats map to player ids in the order the crew is listed, which is the order the host seated
-  // them. That is what lets a scoreboard row name the account that earned it.
+  // Keyed by the seat each member holds — join order, fixed by the presence timestamp — not by
+  // where they happen to sit in the array, which presence does not promise to keep stable.
   const crewNames = useMemo(
-    () => new Map(room.crew.map((member, seat) => [seat, member.name])),
+    () => new Map(room.crew.map((member) => [member.seat, member.name])),
     [room.crew],
   );
   const recording = useMemo(
@@ -47,7 +47,7 @@ export function ArenaPhaseScreens({
       zone,
       isHost: room.isHost,
       userIdByPlayer: new Map(
-        room.crew.map((member, seat) => [seat, member.clientId]),
+        room.crew.map((member) => [member.seat, member.clientId]),
       ),
     }),
     [room.roomCode, room.isHost, room.crew, zone],

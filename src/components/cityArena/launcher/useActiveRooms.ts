@@ -64,6 +64,12 @@ export function useActiveRooms(enabled: boolean): RoomsState {
     };
 
     const schedule = (): void => {
+      // A fetch that was in flight when the tab hid or the card unmounted resolves later and
+      // would otherwise start a second chain — one that outlives the card, or doubles the
+      // request rate on every hide/show. Always clear, and only reschedule while wanted.
+      if (timer) clearTimeout(timer);
+      timer = undefined;
+      if (!alive.current || document.visibilityState !== "visible") return;
       timer = setTimeout(() => {
         void load().then(schedule);
       }, ROOMS_POLL_MS);
@@ -72,6 +78,7 @@ export function useActiveRooms(enabled: boolean): RoomsState {
     const onVisibility = (): void => {
       if (document.visibilityState !== "visible") {
         if (timer) clearTimeout(timer);
+        timer = undefined;
         return;
       }
       void load().then(schedule);

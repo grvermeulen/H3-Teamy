@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as Sentry from "@sentry/nextjs";
+
+vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 import { createCollisionGrid } from "../world/collisionGrid";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
@@ -314,5 +317,79 @@ describe("clientLoop view", () => {
     }
     expect(sent).toHaveLength(0);
     expect(loop.state().tick).toBe(0);
+  });
+});
+
+describe("clientLoop error paths", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("reports an unreadable snapshot to Sentry and keeps running", () => {
+    const hub = createMemoryHub();
+    const transport = createMemoryTransport(hub, "me");
+    const host = createMemoryTransport(hub, "host");
+    const loop = createClientLoop({
+      transport,
+      roomCode: ROOM,
+      world,
+      playerId: 0,
+      state: boot(20),
+      random: createRng(20),
+      serverTimeMs: () => 0,
+    });
+    void host.channel(`arena:room:${ROOM}`).publish("state", "kapot");
+    hub.flush();
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: { area: "arena", kind: "client-snapshot" },
+      }),
+    );
+    // Still alive: a predicted tick advances it as before.
+    loop.advance(STEP_MS);
+    expect(loop.state().tick).toBe(1);
+    loop.stop();
+  });
+
+  it("reports an input the transport refused, rather than leaving it an unhandled rejection", async () => {
+    // This publish runs every predicted tick; a transport that keeps refusing would otherwise
+    // be an unhandled rejection thirty times a second and nothing in Sentry.
+    const hub = createMemoryHub();
+    const real = createMemoryTransport(hub, "me");
+    const refusing: typeof real = {
+      ...real,
+      channel(name) {
+        const channel = real.channel(name);
+        if (!name.endsWith(":inputs")) return channel;
+        return {
+          ...channel,
+          publish: async () => {
+            throw new Error("refused");
+          },
+        };
+      },
+    };
+    const loop = createClientLoop({
+      transport: refusing,
+      roomCode: ROOM,
+      world,
+      playerId: 0,
+      state: boot(22),
+      random: createRng(22),
+      serverTimeMs: () => 0,
+    });
+    loop.advance(STEP_MS);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: { area: "arena", kind: "client-input" },
+      }),
+    );
+    expect(loop.state().tick).toBe(1);
+    loop.stop();
   });
 });

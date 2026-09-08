@@ -144,6 +144,8 @@ export function useMatchClock(
   }, [game]);
 
   const start = useCallback(() => {
+    // A fresh potje scores from zero; without this a rematch would inherit the last one's kills.
+    game.resetTally();
     const peek = game.peek();
     setMatch(beginCountdown(peek?.tick ?? 0));
   }, [game]);

@@ -187,7 +187,13 @@ describe("bot match under packet loss", () => {
   });
 });
 
-describe("bot match host migration", () => {
+/**
+ * What happens when the host stops. This does *not* exercise election among the bots — a bot
+ * does not yet promote itself to host — so it proves the roster and the bots' own prediction
+ * survive the loss, not that the match resumes. Migration at match scale is asserted once the
+ * real client runs the election, which is where a new host actually comes from.
+ */
+describe("bot match when the host stops", () => {
   it("keeps every player when the host stops mid-match", () => {
     const hub = createMemoryHub();
     const { match, violations } = runMatch(17, TICKS, hub, (tick, running) => {

@@ -109,3 +109,35 @@ describe("createHostWatch", () => {
     expect(watch.isSilent()).toBe(true);
   });
 });
+
+describe("electHost with broken presence data", () => {
+  it("does not throw when a member arrives with no data at all", () => {
+    // Ably can deliver such a member, and election doubles as the authorisation check in
+    // recordMatch — a TypeError here would turn a bad presence entry into a 500.
+    const nobody = {
+      clientId: "ghost",
+      data: null,
+      timestamp: 1,
+    } as unknown as PresenceMember;
+    expect(() => electHost([nobody, desktop("a", 2)])).not.toThrow();
+  });
+
+  it("ranks a member with no data last, behind every real role", () => {
+    const nobody = {
+      clientId: "ghost",
+      data: undefined,
+      timestamp: 1,
+    } as unknown as PresenceMember;
+    expect(electHost([nobody, controller("c", 5)])).toBe("c");
+    expect(electHost([nobody, mobile("m", 5)])).toBe("m");
+  });
+
+  it("treats a player with no device as mobile rather than crashing", () => {
+    const half = {
+      clientId: "half",
+      data: { name: "Half", colour: "#fff", role: "player" },
+      timestamp: 1,
+    } as unknown as PresenceMember;
+    expect(electHost([half, desktop("d", 9)])).toBe("d");
+  });
+});

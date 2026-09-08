@@ -1,7 +1,7 @@
 "use client";
 
 import { localPlayer, replacePlayer } from "@/lib/cityArena/sim/players";
-import type { Tally } from "@/lib/cityArena/net/scoreboard";
+import { emptyTally, type Tally } from "@/lib/cityArena/net/scoreboard";
 import type { ArenaPlayerState } from "@/lib/cityArena/sim/types";
 import {
   useCallback,
@@ -119,6 +119,11 @@ export type ArenaGame = {
   setButton(name: ButtonName, pressed: boolean): void;
   teleportToZone(key: ZoneKey): void;
   debugSnapshot: DebugSnapshot | null;
+  /**
+   * Clears the kill tally, so a rematch starts from zero rather than carrying the last potje's
+   * kills and deaths into the next scorebord.
+   */
+  resetTally(): void;
   /**
    * Reads the live simulation without subscribing to it.
    *
@@ -626,6 +631,11 @@ export function useArenaGame({
     [hud, initialSoundRef, runtimeRef, setHud],
   );
 
+  const resetTally = useCallback((): void => {
+    const runtime = runtimeRef.current;
+    if (runtime) runtime.tally = emptyTally();
+  }, [runtimeRef]);
+
   const peek = useCallback((): MatchPeek | null => {
     const runtime = runtimeRef.current;
     if (!runtime) return null;
@@ -650,6 +660,7 @@ export function useArenaGame({
     setButton,
     teleportToZone,
     debugSnapshot,
+    resetTally,
     peek,
   };
 }

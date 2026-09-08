@@ -166,3 +166,42 @@ describe("snapshot wire format", () => {
     expect(flat).not.toMatch(/\d\.\d/);
   });
 });
+
+describe("input wire format against a hostile peer", () => {
+  it("turns NaN and Infinity into safe defaults rather than letting them into the world", () => {
+    const { input } = decodeInput([
+      Number.NaN,
+      Number.NaN,
+      Infinity,
+      Number.NaN,
+      0,
+    ]);
+    expect(input.move).toEqual([0, 0]);
+    expect(input.aim).toBeNull();
+    expect(
+      Number.isFinite(input.move[0]) && Number.isFinite(input.move[1]),
+    ).toBe(true);
+  });
+
+  it("clamps out-of-range moves and angles instead of trusting them", () => {
+    const { input } = decodeInput([1, 5000, -5000, 9999, 0]);
+    expect(input.move).toEqual([1, -1]);
+    expect(input.aim).not.toBeNull();
+    expect(input.aim!).toBeGreaterThanOrEqual(0);
+    expect(input.aim!).toBeLessThan(Math.PI * 2 + 0.01);
+  });
+
+  it("never lets a sequence number go negative or non-integer", () => {
+    expect(decodeInput([-7, 0, 0, -1, 0]).seq).toBe(0);
+    expect(decodeInput([3.9, 0, 0, -1, 0]).seq).toBe(3);
+  });
+
+  it("keeps decoding a well-formed frame exactly as before", () => {
+    const original = createInput({ move: [0.5, -0.25], aim: 1, fire: true });
+    const { input } = decodeInput(encodeInput(9, original));
+    expect(input.move[0]).toBeCloseTo(0.5, 2);
+    expect(input.move[1]).toBeCloseTo(-0.25, 2);
+    expect(input.aim).toBeCloseTo(1, 1);
+    expect(input.fire).toBe(true);
+  });
+});

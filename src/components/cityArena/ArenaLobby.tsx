@@ -9,6 +9,8 @@ import { zoneName, zoneSector } from "./launcher/MissionCard";
 /** One member of the crew, as the lobby draws them. */
 export type CrewMember = {
   clientId: string;
+  /** Position in join order, which is also the player id the host seats them as. */
+  seat: number;
   name: string;
   isHost: boolean;
   /** True for the player looking at this screen; they are labelled "JIJ". */
@@ -111,8 +113,8 @@ function HostAction({
   crewSize: number;
   onStart: () => void;
 }): React.JSX.Element {
-  // Alone in the lobby the button reads "Oefenen". Nothing is stored either way yet — match
-  // results are the persistence plan — so today this is a label, not a different code path.
+  // Alone in the lobby the button reads "Oefenen": a solo potje is never recorded (the host
+  // only posts a result with two or more players), so the label says what will happen.
   const alone = crewSize <= 1;
   if (!isHost)
     return (
@@ -194,8 +196,12 @@ export function ArenaLobby({
             Crew manifest
           </span>
           <ul className="flex flex-wrap gap-2">
-            {crew.map((member, index) => (
-              <CrewTile key={member.clientId} member={member} index={index} />
+            {crew.map((member) => (
+              <CrewTile
+                key={member.clientId}
+                member={member}
+                index={member.seat}
+              />
             ))}
           </ul>
           <p className="border border-[var(--arena-line)] bg-[var(--arena-panel)] px-3 py-2.5 text-[12px] text-[var(--arena-dim)]">

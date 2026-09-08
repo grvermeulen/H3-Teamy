@@ -202,3 +202,55 @@ describe("ablyTransport", () => {
     expect(close).toHaveBeenCalled();
   });
 });
+
+describe("ablyTransport token errors", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("reports a refused token request to Sentry and hands the SDK the error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("", { status: 500 })),
+    );
+    createAblyTransport();
+    const authCallback = Reflect.get(realtimeOptions, "authCallback") as (
+      params: unknown,
+      cb: (error: unknown, token: unknown) => void,
+    ) => Promise<void>;
+    const report = vi.fn();
+    await authCallback({}, report);
+    expect(captureException).toHaveBeenCalledTimes(1);
+    expect(captureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: expect.objectContaining({ area: "arena" }),
+      }),
+    );
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report.mock.calls[0]?.[1]).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it("reports a network failure the same way", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    );
+    createAblyTransport();
+    const authCallback = Reflect.get(realtimeOptions, "authCallback") as (
+      params: unknown,
+      cb: (error: unknown, token: unknown) => void,
+    ) => Promise<void>;
+    const report = vi.fn();
+    await authCallback({}, report);
+    expect(captureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.anything(),
+    );
+    expect(report.mock.calls[0]?.[1]).toBeNull();
+    vi.unstubAllGlobals();
+  });
+});

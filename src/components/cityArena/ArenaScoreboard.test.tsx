@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ScoreLine } from "@/lib/cityArena/net/scoreboard";
 import { ArenaCountdown } from "./ArenaCountdown";
 import { ArenaScoreboard } from "./ArenaScoreboard";
@@ -60,6 +60,9 @@ describe("ArenaScoreboard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+  afterEach(() => {
+    cleanup();
+  });
 
   it("titles the potje as finished and counts down to the lobby", () => {
     renderBoard();
@@ -107,9 +110,9 @@ describe("ArenaScoreboard", () => {
   it("returns to the lobby and leaves through its handlers", () => {
     const handlers = renderBoard();
     fireEvent.click(screen.getByRole("button", { name: "Terug naar lobby" }));
-    expect(handlers.onRematch).toHaveBeenCalled();
+    expect(handlers.onRematch).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Potje verlaten" }));
-    expect(handlers.onLeave).toHaveBeenCalled();
+    expect(handlers.onLeave).toHaveBeenCalledTimes(1);
   });
 
   it("credits OpenStreetMap", () => {

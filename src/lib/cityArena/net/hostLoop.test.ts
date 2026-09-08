@@ -9,6 +9,7 @@ import { createRng } from "../sim/rng";
 import { createInput } from "../sim/types";
 import { createMemoryHub, createMemoryTransport } from "./memoryTransport";
 import {
+  INPUT_HOLD_TICKS,
   HOST_TICK_HZ,
   MAX_CATCHUP_TICKS,
   SNAPSHOT_HZ,
@@ -137,7 +138,7 @@ describe("hostLoop stepping", () => {
   it("caps catch-up so a backgrounded tab does not run thousands of ticks", () => {
     const { loop } = hostOnHub();
     loop.advance(60_000);
-    expect(loop.state().tick).toBeLessThanOrEqual(5);
+    expect(loop.state().tick).toBeLessThanOrEqual(MAX_CATCHUP_TICKS);
   });
 
   it("holds the invariants over a hundred ticks", () => {
@@ -296,5 +297,90 @@ describe("hostLoop failure handling", () => {
     }
     expect(published).toHaveLength(0);
     expect(loop.state().tick).toBe(0);
+  });
+});
+
+describe("hostLoop review findings", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("seats the same client once, however many times they join", () => {
+    // A presence recovery or a repeated join message used to seat a second player and leave
+    // the first in the state with nobody driving it, quietly using up one of the eight seats.
+    const { loop } = hostOnHub(3);
+    const first = loop.addMember("bram");
+    const again = loop.addMember("bram");
+    expect(again).toBe(first);
+    expect(playersOf(loop.state())).toHaveLength(2);
+  });
+
+  it("stops applying a player's last input once they have gone quiet", () => {
+    // Spec §6.3 has clients heartbeat at 2 Hz. A client that stopped publishing — hidden tab,
+    // dropped connection — used to keep its last frame applied every tick, so a player who
+    // dropped mid-stride walked on forever in the authoritative world.
+    const { hub, loop } = hostOnHub(4);
+    const playerId = loop.addMember("walker");
+    expect(playerId).not.toBeNull();
+    const walker = createMemoryTransport(hub, "walker");
+    void walker
+      .channel(`arena:room:${ROOM}:inputs`)
+      .publish("input", encodeInput(1, createInput({ move: [1, 0] })));
+    hub.flush();
+
+    const at = () => playersOf(loop.state()).find((p) => p.id === playerId)!.x;
+    // One tick per advance throughout: a single long advance is capped at MAX_CATCHUP_TICKS,
+    // which would leave the frame younger than the hold window and the test proving nothing.
+    const tick = () => loop.advance(1000 / HOST_TICK_HZ);
+    const before = at();
+    tick();
+    expect(at()).not.toBe(before);
+
+    // Silence for longer than the hold window, then time for any deceleration to run out.
+    for (let index = 0; index < INPUT_HOLD_TICKS + 10; index += 1) tick();
+    const settled = at();
+    for (let index = 0; index < 5; index += 1) tick();
+    expect(at()).toBe(settled);
+  });
+
+  it("reports a snapshot the transport refused to publish, instead of dropping it silently", async () => {
+    // A host whose snapshots stop reaching the room looks, to everyone else, like a frozen
+    // match; the failure has to reach Sentry rather than vanish as an unhandled rejection.
+    const hub = createMemoryHub();
+    const real = createMemoryTransport(hub, "host");
+    let refusals = 0;
+    const refusing: typeof real = {
+      ...real,
+      channel(name) {
+        const channel = real.channel(name);
+        if (name !== `arena:room:${ROOM}`) return channel;
+        return {
+          ...channel,
+          publish: async () => {
+            refusals += 1;
+            throw new Error("message too large");
+          },
+        };
+      },
+    };
+    const loop = createHostLoop({
+      transport: refusing,
+      roomCode: ROOM,
+      world,
+      state: createArenaState({ index, graph, seed: 5, zone }, createRng(5)),
+      random: createRng(6),
+      serverTimeMs: () => 1000,
+    });
+    loop.advance(1000);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(refusals).toBeGreaterThan(0);
+    expect(captureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: { area: "arena", kind: "host-snapshot" },
+      }),
+    );
+    loop.stop();
   });
 });

@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CrewMember } from "./ArenaLobby";
 import { ArenaLobby } from "./ArenaLobby";
 
@@ -7,6 +7,7 @@ import { ArenaLobby } from "./ArenaLobby";
 function member(overrides: Partial<CrewMember> = {}): CrewMember {
   return {
     clientId: "a",
+    seat: 0,
     name: "Noor",
     isHost: false,
     isYou: false,
@@ -41,6 +42,9 @@ describe("ArenaLobby", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+  afterEach(() => {
+    cleanup();
+  });
 
   it("names the room and the zone", () => {
     renderLobby();
@@ -52,7 +56,7 @@ describe("ArenaLobby", () => {
     renderLobby({
       crew: [
         member({ clientId: "me", isYou: true, isHost: true }),
-        member({ clientId: "b", name: "Sam" }),
+        member({ clientId: "b", seat: 1, name: "Sam" }),
       ],
     });
     expect(screen.getByText("2 / 8")).toBeInTheDocument();
@@ -62,7 +66,7 @@ describe("ArenaLobby", () => {
     renderLobby({
       crew: [
         member({ clientId: "me", name: "Guido", isYou: true, isHost: true }),
-        member({ clientId: "b", name: "Sam" }),
+        member({ clientId: "b", seat: 1, name: "Sam" }),
       ],
     });
     expect(screen.getByText("Jij")).toBeInTheDocument();
@@ -74,7 +78,7 @@ describe("ArenaLobby", () => {
     renderLobby({
       crew: [
         member({ clientId: "me", isYou: true, isHost: true }),
-        member({ clientId: "b", name: "Sam" }),
+        member({ clientId: "b", seat: 1, name: "Sam" }),
       ],
     });
     expect(screen.getByText("Host")).toBeInTheDocument();
@@ -97,7 +101,7 @@ describe("ArenaLobby", () => {
     renderLobby({
       crew: [
         member({ clientId: "me", isYou: true, isHost: true }),
-        member({ clientId: "b", name: "Sam" }),
+        member({ clientId: "b", seat: 1, name: "Sam" }),
       ],
     });
     expect(
@@ -118,11 +122,11 @@ describe("ArenaLobby", () => {
   it("starts, leaves and opens code entry through its handlers", () => {
     const handlers = renderLobby();
     fireEvent.click(screen.getByRole("button", { name: "Oefenen" }));
-    expect(handlers.onStart).toHaveBeenCalled();
+    expect(handlers.onStart).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Potje verlaten" }));
-    expect(handlers.onLeave).toHaveBeenCalled();
+    expect(handlers.onLeave).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Code invoeren" }));
-    expect(handlers.onEnterCode).toHaveBeenCalled();
+    expect(handlers.onEnterCode).toHaveBeenCalledTimes(1);
   });
 
   it("shows the connection state", () => {

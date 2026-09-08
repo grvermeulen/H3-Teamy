@@ -113,7 +113,15 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
     seq += 1;
     buffered.push({ seq, input: held });
     if (buffered.length > MAX_BUFFERED_INPUTS) buffered.shift();
-    void inputs.publish("input", encodeInput(seq, held));
+    // This runs every predicted tick, so a transport that keeps refusing would otherwise be an
+    // unhandled rejection thirty times a second and nothing in Sentry.
+    void inputs
+      .publish("input", encodeInput(seq, held))
+      .catch((error: unknown) => {
+        Sentry.captureException(error, {
+          tags: { area: "arena", kind: "client-input" },
+        });
+      });
     predicted = step(
       predicted,
       new Map([[options.playerId, held]]),

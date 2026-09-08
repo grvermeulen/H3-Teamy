@@ -97,27 +97,44 @@ async function enterRoom(
   return { ok: true, code };
 }
 
-/** Leaves the room and the lobby, ignoring failures: the connection is closing anyway. */
+/**
+ * Leaves the room and the lobby without throwing, because the connection is closing either way.
+ *
+ * Failures still go to Sentry: a leave that did not land is how the launcher ends up showing a
+ * ghost room that nobody can join.
+ */
 function leaveQuietly(transport: RealtimeTransport, code: string | null): void {
   if (!code) return;
-  void leaveRoom(transport, code).catch(() => undefined);
-  void leaveLobby(transport).catch(() => undefined);
+  const report = (error: unknown): void => {
+    Sentry.captureException(error, {
+      tags: { area: "arena", kind: "room-leave" },
+    });
+  };
+  void leaveRoom(transport, code).catch(report);
+  void leaveLobby(transport).catch(report);
 }
 
-/** Turns a presence set into the crew the lobby draws, with the host first. */
+/**
+ * Turns a presence set into the crew, seated in join order.
+ *
+ * `presence.get()` promises no order, so the seat is derived from the server-side presence
+ * timestamp rather than the array index: it is the order the host seats players too, which is
+ * what lets a scoreboard row name the account that earned it even when the list reshuffles.
+ */
 function crewFrom(
   members: PresenceMember[],
   myClientId: string,
   hostClientId: string | null,
 ): CrewMember[] {
-  return members
-    .map((member) => ({
+  return [...members]
+    .sort((first, second) => first.timestamp - second.timestamp)
+    .map((member, seat) => ({
       clientId: member.clientId,
+      seat,
       name: (member.data as PresenceData | undefined)?.name ?? "Speler",
       isHost: member.clientId === hostClientId,
       isYou: member.clientId === myClientId,
-    }))
-    .sort((first, second) => Number(second.isHost) - Number(first.isHost));
+    }));
 }
 
 /** What the connection sequence reports back into React state as it progresses. */
@@ -323,6 +340,9 @@ export function useArenaRoom(options: UseArenaRoomOptions): ArenaRoom & {
     if (!transport) return;
     leaveQuietly(transport, link.codeRef.current);
     transport.close();
+    // The unmount cleanup runs next; with the refs cleared it has nothing to close twice.
+    link.transportRef.current = null;
+    link.codeRef.current = null;
   }, [link.transportRef, link.codeRef]);
 
   return {

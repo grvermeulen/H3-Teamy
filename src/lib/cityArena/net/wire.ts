@@ -140,17 +140,38 @@ export function encodeInput(seq: number, input: WorldInput): InputFrame {
  * @param frame - A frame produced by {@link encodeInput}.
  * @returns The sequence number and the input it carried.
  */
+/**
+ * A frame element as an integer inside `[min, max]`, or `fallback` when it is not a finite number.
+ *
+ * Frames come from other clients. One that sends `NaN` for a move component would otherwise put
+ * `NaN` into the shared world's positions, and every collision test after that is undefined.
+ */
+function safeInt(
+  value: unknown,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, Math.trunc(value)));
+}
+
 export function decodeInput(frame: InputFrame): {
   seq: number;
   input: WorldInput;
 } {
   const [seq = 0, moveX = 0, moveY = 0, aim = NO_AIM, flags = 0] = frame;
+  const packedAim =
+    aim === NO_AIM ? NO_AIM : safeInt(aim, 0, ANGLE_STEPS - 1, NO_AIM);
   return {
-    seq,
+    seq: safeInt(seq, 0, Number.MAX_SAFE_INTEGER, 0),
     input: {
-      move: [moveX / MOVE_SCALE, moveY / MOVE_SCALE],
+      move: [
+        safeInt(moveX, -MOVE_SCALE, MOVE_SCALE, 0) / MOVE_SCALE,
+        safeInt(moveY, -MOVE_SCALE, MOVE_SCALE, 0) / MOVE_SCALE,
+      ],
       moveIsAnalog: (flags & FLAG_MOVE_ANALOG) !== 0,
-      aim: aim === NO_AIM ? null : unpackAngle(aim),
+      aim: packedAim === NO_AIM ? null : unpackAngle(packedAim),
       fire: (flags & FLAG_FIRE) !== 0,
       enter: (flags & FLAG_ENTER) !== 0,
       weaponNext: (flags & FLAG_WEAPON_NEXT) !== 0,

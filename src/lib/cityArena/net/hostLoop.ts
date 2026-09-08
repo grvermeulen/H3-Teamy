@@ -62,8 +62,17 @@ export type HostLoop = {
   stop(): void;
 };
 
-/** The latest input each player sent, and the sequence number it arrived with. */
-type PendingInput = { seq: number; frame: InputFrame };
+/**
+ * How long the last frame from a player keeps applying once they go quiet (spec §6.3 has clients
+ * heartbeat at 2 Hz, so half a second of silence means the client is gone, not idle).
+ *
+ * Without this a player whose tab was hidden mid-stride would keep walking in the authoritative
+ * world forever, because their last frame stayed in `pending` and was re-applied every tick.
+ */
+export const INPUT_HOLD_TICKS = HOST_TICK_HZ / 2;
+
+/** The latest input each player sent, its sequence number, and the tick it arrived on. */
+type PendingInput = { seq: number; frame: InputFrame; tick: number };
 
 /**
  * Starts hosting a match.
@@ -104,15 +113,18 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
     const seq = frame[0] ?? 0;
     const current = pending.get(playerId);
     if (current && current.seq >= seq) return;
-    pending.set(playerId, { seq, frame });
+    pending.set(playerId, { seq, frame, tick: state.tick });
   });
 
-  /** The inputs for this tick: the newest frame per player, `EMPTY_INPUT` for the silent. */
+  /**
+   * The inputs for this tick: the newest frame per player, `EMPTY_INPUT` for anyone silent —
+   * including anyone whose last frame has gone stale.
+   */
   function collectInputs(): ArenaInputs {
     const map = new Map<number, ReturnType<typeof decodeInput>["input"]>();
     for (const player of state.players) {
       const next = pending.get(player.id);
-      if (!next) {
+      if (!next || state.tick - next.tick > INPUT_HOLD_TICKS) {
         map.set(player.id, EMPTY_INPUT);
         continue;
       }
@@ -149,10 +161,18 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
     if (sinceSnapshot < ticksPerSnapshot) return;
     sinceSnapshot = 0;
     if (!publishing) return;
-    void room.publish(
-      "state",
-      encodeSnapshot(state, options.serverTimeMs(), lastInputSeqs),
-    );
+    // A host whose snapshots stop reaching the room must show up in Sentry, not vanish: to the
+    // other players it just looks like a frozen match.
+    void room
+      .publish(
+        "state",
+        encodeSnapshot(state, options.serverTimeMs(), lastInputSeqs),
+      )
+      .catch((error: unknown) => {
+        Sentry.captureException(error, {
+          tags: { area: "arena", kind: "host-snapshot" },
+        });
+      });
   }
 
   return {
@@ -173,6 +193,10 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
       }
     },
     addMember(clientId: string): number | null {
+      // A presence recovery or a repeated join must not seat the same person twice: the first
+      // player would be left in the state with nobody driving it, filling one of the eight seats.
+      const seated = playerByClient.get(clientId);
+      if (seated !== undefined) return seated;
       const joined = addArenaPlayer(
         state,
         options.world,

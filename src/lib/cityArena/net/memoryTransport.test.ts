@@ -193,3 +193,42 @@ describe("memoryTransport connection", () => {
     expect(seen).toEqual([]);
   });
 });
+
+describe("memoryTransport latency", () => {
+  it("delivers a delayed message after exactly that many flushes, not never", async () => {
+    // Two bugs used to combine here: the flush kept the wrong half of the queue, and dueAfter
+    // was absolute rather than relative — so with latency a message was silently lost.
+    const hub = createMemoryHub({ latencyFlushes: 2 });
+    const sender = createMemoryTransport(hub, "a");
+    const receiver = createMemoryTransport(hub, "b");
+    await sender.connect();
+    await receiver.connect();
+    const seen: unknown[] = [];
+    receiver.channel("room").subscribe("input", (message) => {
+      seen.push(message.data);
+    });
+    await sender.channel("room").publish("input", [1]);
+    hub.flush();
+    expect(seen).toEqual([]);
+    hub.flush();
+    expect(seen).toEqual([[1]]);
+  });
+
+  it("measures the delay from when a message is published, not from the first flush", async () => {
+    const hub = createMemoryHub({ latencyFlushes: 2 });
+    const sender = createMemoryTransport(hub, "a");
+    const receiver = createMemoryTransport(hub, "b");
+    await sender.connect();
+    await receiver.connect();
+    const seen: unknown[] = [];
+    receiver.channel("room").subscribe("input", (message) => {
+      seen.push(message.data);
+    });
+    for (let index = 0; index < 10; index += 1) hub.flush();
+    await sender.channel("room").publish("input", [2]);
+    hub.flush();
+    expect(seen).toEqual([]);
+    hub.flush();
+    expect(seen).toEqual([[2]]);
+  });
+});

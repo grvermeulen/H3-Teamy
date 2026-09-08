@@ -63,9 +63,8 @@ function ScoreRowView({
 /**
  * The scorebord shown for ten seconds after a potje (spec §2).
  *
- * Results are not stored anywhere: match persistence is a separate plan, so this reports the
- * potje that just happened and nothing beyond it. Saying that here keeps the screen from
- * implying a ranglijst that does not exist yet.
+ * The host posts these lines to `POST /api/arena/matches` the moment play ends, which is what
+ * the launcher's ranglijst is built from; this panel only draws them.
  *
  * @param props - The ranked lines, names, remaining time and the two actions.
  * @returns The scorebord panel.

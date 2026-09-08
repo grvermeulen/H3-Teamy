@@ -74,6 +74,8 @@ type HubInternals = {
   closed: Set<string>;
   shouldDrop(): boolean;
   latencyFlushes: number;
+  /** How many flushes have happened, so publish can schedule delivery relative to now. */
+  flushCount(): number;
 };
 
 /**
@@ -120,14 +122,18 @@ export function createMemoryHub(options: MemoryHubOptions = {}): MemoryHub {
       return dropRate > 0 && random() < dropRate;
     },
     latencyFlushes: options.latencyFlushes ?? 0,
+    flushCount: () => flushes,
   };
 
   return {
     flush(): void {
       flushes += 1;
+      // Keep the not-yet-due messages, deliver the due ones. Filtering `due` for what is still
+      // pending is empty by construction, and that bug silently dropped every delayed message.
       const due = queue.filter((message) => message.dueAfter <= flushes);
+      const later = queue.filter((message) => message.dueAfter > flushes);
       queue.length = 0;
-      queue.push(...due.filter((message) => message.dueAfter > flushes));
+      queue.push(...later);
       for (const message of due) {
         const channel = channels.get(message.channel);
         if (!channel) continue;
@@ -186,7 +192,9 @@ function memoryChannel(
         from: clientId,
         data,
         timestamp: internals.nextTimestamp(),
-        dueAfter: internals.latencyFlushes,
+        // Relative to now, not absolute: a message published after the tenth flush with two
+        // flushes of latency is due at twelve, not at two.
+        dueAfter: internals.flushCount() + internals.latencyFlushes,
       });
     },
     subscribe(

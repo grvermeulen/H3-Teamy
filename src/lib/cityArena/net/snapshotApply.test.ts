@@ -97,11 +97,11 @@ describe("applySnapshot", () => {
     const client = run(boot(4), 30);
     const host = run(boot(4), 60);
     const before = client.peds[0];
+    expect(before).toBeDefined();
     const folded = fold(host, client);
-    if (before) {
-      const after = folded.peds.find((ped) => ped.id === before.id);
-      if (after) expect(after.rail).toEqual(before.rail);
-    }
+    const after = folded.peds.find((ped) => ped.id === before!.id);
+    expect(after).toBeDefined();
+    expect(after!.rail).toEqual(before!.rail);
     expect(folded.players[0]!.held).toEqual(client.players[0]!.held);
   });
 

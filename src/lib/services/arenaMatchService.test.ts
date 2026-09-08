@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Prisma } from "@prisma/client";
 
 const presenceGet = vi.fn();
 const channelsGet = vi.fn();
 const matchFindUnique = vi.fn();
 const matchCreate = vi.fn();
-const resultGroupBy = vi.fn();
+const queryRaw = vi.fn();
 const userFindMany = vi.fn();
 
 vi.mock("ably", () => ({
@@ -18,7 +19,7 @@ vi.mock("../db", () => ({
       findUnique: (...a: unknown[]) => matchFindUnique(...a),
       create: (...a: unknown[]) => matchCreate(...a),
     },
-    arenaMatchResult: { groupBy: (...a: unknown[]) => resultGroupBy(...a) },
+    $queryRaw: (...a: unknown[]) => queryRaw(...a),
     user: { findMany: (...a: unknown[]) => userFindMany(...a) },
   },
 }));
@@ -186,56 +187,108 @@ describe("leaderboard", () => {
     vi.clearAllMocks();
   });
 
-  it("ranks on wins, then kills", async () => {
-    resultGroupBy
-      .mockResolvedValueOnce([
-        { userId: "a", _sum: { kills: 10, deaths: 2 }, _count: { _all: 3 } },
-        { userId: "b", _sum: { kills: 30, deaths: 1 }, _count: { _all: 3 } },
-        { userId: "c", _sum: { kills: 20, deaths: 9 }, _count: { _all: 3 } },
-      ])
-      .mockResolvedValueOnce([
-        { userId: "a", _count: { _all: 3 } },
-        { userId: "c", _count: { _all: 3 } },
-      ]);
+  it("returns the database's ranking with bigint totals turned into numbers", async () => {
+    // The ORDER BY lives in SQL now, so the rows arrive ranked; the service's job is to name
+    // them and to turn Postgres's bigint sums into plain numbers the JSON response can carry.
+    queryRaw.mockResolvedValue([
+      { userId: "c", wins: 3n, kills: 20n, deaths: 9n },
+      { userId: "a", wins: 3n, kills: 10n, deaths: 2n },
+      { userId: "b", wins: 0n, kills: 30n, deaths: 1n },
+    ]);
     userFindMany.mockResolvedValue([
       { id: "a", firstName: "Ann" },
       { id: "b", firstName: "Bo" },
       { id: "c", firstName: "Cas" },
     ]);
     const rows = await leaderboard();
-    // a and c both have 3 wins; c has more kills. b has none.
     expect(rows.map((row) => row.userId)).toEqual(["c", "a", "b"]);
-    expect(rows[0]).toMatchObject({ firstName: "Cas", wins: 3, kills: 20 });
-    expect(rows[2]).toMatchObject({ wins: 0, kills: 30 });
+    expect(rows[0]).toEqual({
+      userId: "c",
+      firstName: "Cas",
+      wins: 3,
+      kills: 20,
+      deaths: 9,
+    });
+    expect(typeof rows[2]?.kills).toBe("number");
+  });
+
+  it("asks the database for at most the size wanted, and only those users", async () => {
+    queryRaw.mockResolvedValue([
+      { userId: "a", wins: 1n, kills: 1n, deaths: 0n },
+    ]);
+    userFindMany.mockResolvedValue([{ id: "a", firstName: "Ann" }]);
+    await leaderboard(7);
+    // The tagged template's interpolated values are the last argument group; the limit must
+    // reach the query rather than being applied in memory afterwards.
+    const call = queryRaw.mock.calls[0] ?? [];
+    expect(call.slice(1)).toContain(7);
+    expect(userFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: ["a"] } }, take: 7 }),
+    );
   });
 
   it("names a player with no first name rather than leaving a gap", async () => {
-    resultGroupBy
-      .mockResolvedValueOnce([
-        { userId: "a", _sum: { kills: 1, deaths: 0 }, _count: { _all: 1 } },
-      ])
-      .mockResolvedValueOnce([]);
+    queryRaw.mockResolvedValue([
+      { userId: "a", wins: 1n, kills: 1n, deaths: 0n },
+    ]);
     userFindMany.mockResolvedValue([{ id: "a", firstName: "  " }]);
     expect((await leaderboard())[0]?.firstName).toBe("Speler");
   });
 
   it("is empty when nobody has played", async () => {
-    resultGroupBy.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    queryRaw.mockResolvedValue([]);
     userFindMany.mockResolvedValue([]);
     expect(await leaderboard()).toEqual([]);
   });
+});
 
-  it("returns at most the size asked for", async () => {
-    resultGroupBy
-      .mockResolvedValueOnce(
-        Array.from({ length: 20 }, (_, index) => ({
-          userId: `u${index}`,
-          _sum: { kills: index, deaths: 0 },
-          _count: { _all: 1 },
-        })),
-      )
-      .mockResolvedValueOnce([]);
-    userFindMany.mockResolvedValue([]);
-    expect(await leaderboard(10)).toHaveLength(10);
+describe("recordMatch when two hosts race", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    channelsGet.mockReturnValue({ presence: { get: presenceGet } });
+    presenceGet.mockResolvedValue({
+      items: [member("host", 1), member("guest", 2)],
+    });
+    matchFindUnique.mockResolvedValue(null);
+  });
+
+  /** What Prisma throws when an insert hits a unique index. */
+  function uniqueViolation(
+    target: string[],
+  ): Prisma.PrismaClientKnownRequestError {
+    return new Prisma.PrismaClientKnownRequestError(
+      "Unique constraint failed",
+      {
+        code: "P2002",
+        clientVersion: "7.10.0",
+        meta: { target },
+      },
+    );
+  }
+
+  it("treats a collision on the potje's own index as already recorded", async () => {
+    // findUnique then create is a check-then-act: a second host posting the same potje in the
+    // same instant passes the check and loses the insert. That is the benign case.
+    matchCreate.mockRejectedValue(uniqueViolation(["roomCode", "startedAt"]));
+    expect(await recordMatch(KEY, "host", potje())).toEqual({
+      ok: false,
+      reason: "already-recorded",
+    });
+  });
+
+  it("does not mistake a different unique violation for that", async () => {
+    // The same error code on the results' (matchId, userId) index means the payload had a
+    // duplicate player, which is a real error and must surface rather than read as a retry.
+    matchCreate.mockRejectedValue(uniqueViolation(["matchId", "userId"]));
+    await expect(recordMatch(KEY, "host", potje())).rejects.toBeInstanceOf(
+      Prisma.PrismaClientKnownRequestError,
+    );
+  });
+
+  it("rethrows anything else after reporting it", async () => {
+    matchCreate.mockRejectedValue(new Error("connection reset"));
+    await expect(recordMatch(KEY, "host", potje())).rejects.toThrow(
+      "connection reset",
+    );
   });
 });

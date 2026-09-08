@@ -7,7 +7,7 @@
  * hosting, which shows up as a match that forks rather than as an error.
  */
 
-import type { PresenceMember } from "./transport";
+import type { PresenceData, PresenceMember } from "./transport";
 
 /** Silence after which the host is presumed gone and a re-election runs (spec §6.6). */
 export const HOST_SILENCE_MS = 3000;
@@ -25,9 +25,15 @@ const ROLE_PRIORITY: Record<string, number> = {
 
 /** The priority of one member, lower being the better host. */
 function priorityOf(member: PresenceMember): number {
-  const { role, device } = member.data;
-  if (role === "player") return ROLE_PRIORITY[`player:${device}`] ?? 2;
-  return ROLE_PRIORITY[role] ?? 3;
+  // Ably can deliver a member with no data at all. Election doubles as the authorisation check
+  // in recordMatch, so a TypeError here would turn a bad presence entry into a 500.
+  const data = member.data as Partial<PresenceData> | null | undefined;
+  const role = data?.role;
+  if (role === "player")
+    return ROLE_PRIORITY[`player:${data?.device ?? "mobile"}`] ?? 2;
+  // A member we know nothing about ranks strictly last: it must never out-rank anyone
+  // identifiable, not even a controller, and never win a tie on having joined earlier.
+  return role ? (ROLE_PRIORITY[role] ?? 3) : 4;
 }
 
 /**
