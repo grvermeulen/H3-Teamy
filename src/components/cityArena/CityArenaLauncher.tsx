@@ -2,16 +2,19 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { ZONE_OPTIONS } from "@/lib/cityArena/constants";
 import { loadArenaSettings, saveArenaSettings } from "@/lib/cityArena/storage";
+import type { LobbyRoom } from "@/lib/cityArena/net/lobbyPresence";
 import type { ZoneKey } from "@/lib/cityArena/world/mapTypes";
 import { useSession } from "../SessionContext";
 import { ATTRIBUTION_TEXT } from "./ArenaLoadingScreen";
 import { CityArenaLaunchIcon } from "./CityArenaLaunchIcon";
+import { RoomList } from "./launcher/RoomList";
+import { useActiveRooms } from "./launcher/useActiveRooms";
+import type { ArenaEntry } from "./arenaEntry";
 
-/** Same full-screen layer as the overlay itself, so the chunk load never flashes inline in the page. */
+/** Same full-screen layer as the overlay itself, so the chunk load never flashes inline. */
 function ChunkLoadingOverlay(): React.JSX.Element | null {
   if (typeof document === "undefined") return null;
   return createPortal(
@@ -19,9 +22,9 @@ function ChunkLoadingOverlay(): React.JSX.Element | null {
       role="status"
       aria-live="polite"
       aria-busy="true"
-      className="fixed inset-0 z-[3200] flex items-center justify-center touch-none bg-[#0B1220] pt-safe pb-safe-bottom-bar pl-safe pr-safe"
+      className="arena fixed inset-0 z-[3200] flex items-center justify-center touch-none bg-[var(--arena-void)] pt-safe pb-safe-bottom-bar pl-safe pr-safe"
     >
-      <p className="muted p-4 text-center text-base">Spel laden…</p>
+      <p className="arena-label text-[var(--arena-dim)]">Spel laden…</p>
     </div>,
     document.body,
   );
@@ -32,66 +35,70 @@ const CityArenaOverlay = dynamic(
   { ssr: false, loading: () => <ChunkLoadingOverlay /> },
 );
 
-/** Icon, title and blurb shown at the top of the launcher card. */
-function LauncherHeader(): React.JSX.Element {
+/** Props for {@link LauncherHeader}. */
+type LauncherHeaderProps = { statusLine: string };
+
+/** Title, pitch and the live status strip. */
+function LauncherHeader({
+  statusLine,
+}: LauncherHeaderProps): React.JSX.Element {
   return (
-    <div className="flex flex-wrap items-start gap-3">
-      <CityArenaLaunchIcon size={52} decorative className="shrink-0" />
+    <div className="flex items-start gap-3">
+      <CityArenaLaunchIcon size={44} decorative className="shrink-0" />
       <div className="min-w-0 flex-1">
-        <div className="font-semibold">GTA H3</div>
-        <div className="muted mt-1 text-[13px]">
-          Loop of rij door Rhenen, Wageningen, de WUR-campus en Bennekom op de
-          echte kaart — straten, gebouwen en herkenningspunten uit
-          OpenStreetMap. Stap in een auto, kies je wapen en overleef;
-          tegenstanders en multiplayer volgen.
-        </div>
+        <span className="arena-label block text-[var(--arena-online)]">
+          <span className="arena-pulse mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[var(--arena-online)] align-middle" />
+          {statusLine}
+        </span>
+        <h2 className="arena-display mt-1 text-2xl leading-none text-[var(--arena-text)]">
+          GTA H3
+        </h2>
+        <p className="mt-1.5 text-[13px] text-[var(--arena-dim)]">
+          Verken de stad samen en start een potje.
+        </p>
       </div>
     </div>
   );
 }
 
-/** Props for {@link ZoneSelect}. */
-type ZoneSelectProps = { zone: ZoneKey; onChange: (zone: ZoneKey) => void };
+/** Props for {@link LauncherActions}. */
+type LauncherActionsProps = {
+  onNewRoom: () => void;
+  onEnterCode: () => void;
+};
 
-/** "Startpunt" dropdown: choose which zone to spawn into. */
-function ZoneSelect({ zone, onChange }: ZoneSelectProps): React.JSX.Element {
+/** Nieuw potje / Code invoeren / Ranglijst. */
+function LauncherActions({
+  onNewRoom,
+  onEnterCode,
+}: LauncherActionsProps): React.JSX.Element {
   return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="muted text-xs">Startpunt</span>
-      <select
-        aria-label="Startpunt"
-        className="rounded border border-[#30363d] bg-[#0d1117] px-2 py-1.5 text-sm text-[#c9d1d9]"
-        value={zone}
-        onChange={(event) => {
-          const chosen = ZONE_OPTIONS.find(
-            (option) => option.key === event.target.value,
-          );
-          if (chosen) onChange(chosen.key);
-        }}
+    <div className="mt-3 flex flex-wrap items-stretch gap-1.5">
+      <button
+        type="button"
+        onClick={onNewRoom}
+        className="arena-label flex-1 basis-[46%] border border-[var(--arena-line-strong)] bg-[var(--arena-panel-raised)] px-3 py-3 text-[var(--arena-text)] transition hover:border-[var(--arena-amber)] hover:text-[var(--arena-amber)] active:scale-[0.99]"
       >
-        {ZONE_OPTIONS.map((option) => (
-          <option key={option.key} value={option.key}>
-            {option.name}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-/** Props for {@link PlayButton}. */
-type PlayButtonProps = { onClick: () => void };
-
-/** Opens the free-roam overlay at the chosen zone. */
-function PlayButton({ onClick }: PlayButtonProps): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center rounded-xl border border-cyan-500/50 bg-gradient-to-br from-cyan-900/95 via-[#0c1528] to-violet-900/95 px-4 py-2.5 text-sm font-semibold text-[#a5f3fc] shadow-[0_0_20px_-2px_rgba(34,211,238,0.55)] transition hover:border-cyan-400/70 active:scale-[0.98]"
-    >
-      Spelen
-    </button>
+        Nieuw potje
+      </button>
+      <button
+        type="button"
+        onClick={onEnterCode}
+        className="arena-label flex-1 basis-[46%] border border-[var(--arena-line-strong)] bg-[var(--arena-panel-raised)] px-3 py-3 text-[var(--arena-text)] transition hover:border-[var(--arena-amber)] hover:text-[var(--arena-amber)] active:scale-[0.99]"
+      >
+        Code invoeren
+      </button>
+      {/* The leaderboard needs the ArenaMatch tables from the persistence plan, so there is no
+          page to link to yet. A disabled control says that honestly; a link to a 404 would not. */}
+      <button
+        type="button"
+        disabled
+        title="Ranglijst komt met de scorebord-update"
+        className="arena-label flex cursor-not-allowed items-center justify-center border border-transparent px-2 py-3 text-[var(--arena-line-strong)]"
+      >
+        Ranglijst · binnenkort
+      </button>
+    </div>
   );
 }
 
@@ -100,41 +107,66 @@ function LoginHint(): React.JSX.Element {
   return (
     <Link
       href={{ pathname: "/login", query: { callbackUrl: "/" } }}
-      className="inline-flex items-center rounded-xl border border-white/15 bg-[#111926] px-3 py-2.5 text-sm font-medium text-[#c9d7ee]"
+      className="arena-label mt-3 flex items-center justify-center border border-[var(--arena-line-strong)] bg-[var(--arena-panel-raised)] px-3 py-3 text-[var(--arena-text)]"
     >
       Log in om mee te doen
     </Link>
   );
 }
 
-/** Card under Space Invaders: pick a start zone and open the free-roam overlay. */
+/** The live strip: how many potjes are running right now. */
+function statusLineFor(count: number | null): string {
+  if (count === null) return "Teamy online · potjes laden";
+  if (count === 0) return "Teamy online · geen potjes";
+  return `Teamy online · ${String(count).padStart(2, "0")} potjes actief`;
+}
+
+/** Card under Space Invaders: the active potjes, and the ways into one. */
 export default function CityArenaLauncher(): React.JSX.Element {
   const session = useSession();
-  const [open, setOpen] = useState(false);
-  const [zone, setZone] = useState<ZoneKey>(() => loadArenaSettings().lastZone);
+  const loggedIn = !session.loading && session.loggedIn;
+  const rooms = useActiveRooms(loggedIn);
+  const [entry, setEntry] = useState<ArenaEntry | null>(null);
+  const [zone] = useState<ZoneKey>(() => loadArenaSettings().lastZone);
 
-  const openOverlay = useCallback(() => {
+  const statusLine = useMemo(
+    () => statusLineFor(rooms.status === "ready" ? rooms.rooms.length : null),
+    [rooms],
+  );
+
+  const openNewRoom = useCallback(() => {
     saveArenaSettings({ lastZone: zone });
-    setOpen(true);
+    setEntry({ kind: "new", zone });
   }, [zone]);
-  const closeOverlay = useCallback(() => setOpen(false), []);
+  const openCodeEntry = useCallback(() => setEntry({ kind: "code" }), []);
+  const openRoom = useCallback((room: LobbyRoom) => {
+    setEntry({ kind: "join", roomCode: room.roomCode, zone: room.zone });
+  }, []);
+  const close = useCallback(() => setEntry(null), []);
 
   return (
     <>
-      <div className="card mt-4">
-        <LauncherHeader />
-        <div className="mt-3 flex flex-wrap items-end gap-3">
-          <ZoneSelect zone={zone} onChange={setZone} />
-          {session.loading ? null : session.loggedIn ? (
-            <PlayButton onClick={openOverlay} />
+      <div className="arena card mt-4 border-[var(--arena-line)] bg-[var(--arena-asphalt)] p-3">
+        <LauncherHeader statusLine={statusLine} />
+        <div className="mt-3">
+          {loggedIn ? (
+            <RoomList state={rooms} onJoin={openRoom} />
           ) : (
             <LoginHint />
           )}
         </div>
-        <p className="muted mt-3 text-xs">{ATTRIBUTION_TEXT}</p>
+        {loggedIn ? (
+          <LauncherActions
+            onNewRoom={openNewRoom}
+            onEnterCode={openCodeEntry}
+          />
+        ) : null}
+        <p className="mt-3 text-[10px] text-[var(--arena-dim)]">
+          {ATTRIBUTION_TEXT}
+        </p>
       </div>
-      {open && session.loggedIn ? (
-        <CityArenaOverlay zone={zone} onClose={closeOverlay} />
+      {entry && loggedIn ? (
+        <CityArenaOverlay entry={entry} onClose={close} />
       ) : null}
     </>
   );

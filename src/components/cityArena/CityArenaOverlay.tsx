@@ -9,6 +9,11 @@ import {
   type RefObject,
 } from "react";
 import { createPortal, preload } from "react-dom";
+import { ZONE_OPTIONS } from "@/lib/cityArena/constants";
+import { ArenaLobby } from "./ArenaLobby";
+import { ConnectionBanner } from "./ConnectionBanner";
+import { useArenaRoom } from "./useArenaRoom";
+import type { ArenaEntry } from "./arenaEntry";
 import { isDebugEnabled } from "@/lib/cityArena/debugFlag";
 import {
   createStick,
@@ -37,7 +42,16 @@ const TOUCH_MEDIA_QUERY = "(max-width: 768px), (pointer: coarse)";
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 /** Props for {@link CityArenaOverlay}. */
-type CityArenaOverlayProps = { zone: ZoneKey; onClose: () => void };
+type CityArenaOverlayProps = { entry: ArenaEntry; onClose: () => void };
+
+/**
+ * Which screen the overlay is showing.
+ *
+ * Deliberately separate from `ArenaPhase`, which is the *canvas* lifecycle (loading, playing,
+ * error). Conflating "the map is still loading" with "we are in the lobby" is how those two end
+ * up unable to express a lobby whose city is still loading behind it.
+ */
+type ArenaScreen = "lobby" | "match";
 
 /** True while the viewport matches the touch-control media query; updates on resize/rotate. */
 function useShowTouchControls(): boolean {
@@ -294,9 +308,16 @@ function useDebugFlag(): boolean {
 
 /** Full-screen arena session: loading screen, canvas, HUD strip, touch controls, death screen, attribution. */
 export default function CityArenaOverlay({
-  zone,
+  entry,
   onClose,
 }: CityArenaOverlayProps): ReactPortal | null {
+  const fallbackZone = ZONE_OPTIONS[0]!.key;
+  const [screen, setScreen] = useState<ArenaScreen>("lobby");
+  // TODO: SessionState carries no display name and the token route returns the user id as
+  // `displayName`, so the crew manifest shows a placeholder. Real names need one of those two to
+  // supply it; that is a follow-up, not something to fake here.
+  const room = useArenaRoom({ entry, playerName: "Speler", fallbackZone });
+  const zone = room.zone;
   const dialogRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stick = useMemo(() => createStick(), []);
@@ -315,9 +336,10 @@ export default function CityArenaOverlay({
       aria-modal="true"
       aria-label="GTA H3"
       tabIndex={-1}
-      className="fixed inset-0 z-[3200] flex min-h-dvh flex-col touch-none select-none bg-[#0B1220] pt-safe pb-safe-bottom-bar pl-safe pr-safe [-webkit-user-select:none] [-webkit-touch-callout:none]"
+      className="arena arena-grid fixed inset-0 z-[3200] flex min-h-dvh flex-col touch-none select-none bg-[var(--arena-void)] pt-safe pb-safe-bottom-bar pl-safe pr-safe [-webkit-user-select:none] [-webkit-touch-callout:none]"
       onContextMenu={(event) => event.preventDefault()}
     >
+      <ConnectionBanner state={room.connection} />
       <ArenaHudBar
         hud={game.hud}
         zones={game.zones}
@@ -336,6 +358,26 @@ export default function CityArenaOverlay({
         stick={stick}
       />
       <ArenaFooter showTouch={showTouch} />
+      {/* The lobby sits *over* the running city rather than beside it: spec §2 has members
+          free-roaming the whole map while they wait, so the canvas keeps drawing behind this
+          panel instead of being unmounted and reloaded when the potje starts. */}
+      {screen === "lobby" ? (
+        <div className="absolute inset-0 z-10 overflow-y-auto bg-[rgba(7,9,11,0.92)] pt-safe pb-safe-bottom-bar pl-safe pr-safe">
+          <ArenaLobby
+            roomCode={room.roomCode ?? "……"}
+            zone={zone}
+            crew={room.crew}
+            connection={room.connection}
+            isHost={room.isHost}
+            onStart={() => setScreen("match")}
+            onEnterCode={onClose}
+            onLeave={() => {
+              room.leave();
+              onClose();
+            }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 
