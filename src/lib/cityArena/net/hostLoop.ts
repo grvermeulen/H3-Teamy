@@ -14,7 +14,13 @@ import {
   stepArena,
   type ArenaWorld,
 } from "../sim/arena";
-import { EMPTY_INPUT, type ArenaInputs, type ArenaState } from "../sim/types";
+import {
+  EMPTY_INPUT,
+  type ArenaInputs,
+  type ArenaState,
+  type WorldInput,
+} from "../sim/types";
+import { emptyTally, tallyEvents, type Tally } from "./scoreboard";
 import type { RealtimeTransport } from "./transport";
 import { decodeInput, type InputFrame } from "./wire";
 import { encodeSnapshot } from "./snapshotWire";
@@ -44,12 +50,30 @@ export type HostLoopOptions = {
   serverTimeMs: () => number;
   /** The step to run; injectable so a test can drive a failing tick. Defaults to `stepArena`. */
   step?: typeof stepArena;
+  /**
+   * Called after every tick with the state it produced.
+   *
+   * Sound and anything else that reads `state.events` must see *every* tick: a catch-up burst runs
+   * several per `advance`, and reading only the last would miss the rest.
+   */
+  onTick?: (state: ArenaState) => void;
 };
 
 /** A running host. */
 export type HostLoop = {
   /** Runs whole ticks for the elapsed time, publishing snapshots on schedule. */
   advance(elapsedMs: number): void;
+  /**
+   * Sets the input for a player this process drives directly — the host's own.
+   *
+   * The host cannot hear itself over the `:inputs` channel: neither Ably nor the in-memory
+   * transport echoes a message back to its publisher.
+   */
+  setInput(playerId: number, input: WorldInput): void;
+  /** The host's tally of kills and deaths, which is the only real one. */
+  tally(): Tally;
+  /** Who drives which player. */
+  seats(): ReadonlyMap<string, number>;
   /** Seats a member and returns the player id they were given, or `null` when the match is full. */
   addMember(clientId: string): number | null;
   /** Removes a member and their player. */
@@ -95,6 +119,11 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
   const pending = new Map<number, PendingInput>();
   /** The last sequence number applied per player, which clients reconcile against. */
   const lastInputSeqs: Record<number, number> = {};
+  /** Inputs from players this process drives itself, applied ahead of anything from the wire. */
+  const local = new Map<number, WorldInput>();
+  let tally: Tally = emptyTally();
+  /** Sequence numbers for local inputs, so `lastInputSeqs` stays meaningful for them too. */
+  let localSeq = 0;
 
   let state = options.state;
   /** Elapsed time the loop has been handed, which ticks are derived from rather than subtracted. */
@@ -123,6 +152,11 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
   function collectInputs(): ArenaInputs {
     const map = new Map<number, ReturnType<typeof decodeInput>["input"]>();
     for (const player of state.players) {
+      const own = local.get(player.id);
+      if (own) {
+        map.set(player.id, own);
+        continue;
+      }
       const next = pending.get(player.id);
       if (!next || state.tick - next.tick > INPUT_HOLD_TICKS) {
         map.set(player.id, EMPTY_INPUT);
@@ -145,6 +179,8 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
         options.world,
         options.random,
       );
+      tally = tallyEvents(tally, state.events);
+      options.onTick?.(state);
       consecutiveFailures = 0;
     } catch (error: unknown) {
       consecutiveFailures += 1;
@@ -166,7 +202,10 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
     void room
       .publish(
         "state",
-        encodeSnapshot(state, options.serverTimeMs(), lastInputSeqs),
+        encodeSnapshot(state, options.serverTimeMs(), lastInputSeqs, {
+          seats: playerByClient,
+          tally,
+        }),
       )
       .catch((error: unknown) => {
         Sentry.captureException(error, {
@@ -215,6 +254,17 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
       pending.delete(playerId);
       delete lastInputSeqs[playerId];
       state = removeArenaPlayer(state, playerId);
+    },
+    setInput(playerId: number, input: WorldInput): void {
+      local.set(playerId, input);
+      localSeq += 1;
+      lastInputSeqs[playerId] = localSeq;
+    },
+    tally(): Tally {
+      return tally;
+    },
+    seats(): ReadonlyMap<string, number> {
+      return playerByClient;
     },
     state(): ArenaState {
       return state;

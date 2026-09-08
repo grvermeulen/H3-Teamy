@@ -7,6 +7,7 @@
  * bandwidth ten times a second for state nobody renders.
  */
 
+import type { ScoreRow, Tally } from "./scoreboard";
 import type {
   AmmoState,
   ArenaState,
@@ -66,6 +67,14 @@ export type Snapshot = {
   b: number[][];
   k: number[][];
   q: number[][];
+  /**
+   * Who drives which player: `[clientId, playerId]`. Player ids are entity ids handed out by the
+   * host as people join, not seat numbers, so a client can only learn its own id — and everyone
+   * else's, for the scorebord — from the host.
+   */
+  m?: [string, number][];
+  /** The host's tally: `[playerId, kills, deaths]`. A client's predicted kills are not real. */
+  y?: number[][];
 };
 
 /** A player as the snapshot carries them: render state plus what the step needs to continue. */
@@ -127,6 +136,16 @@ export type SnapshotView = {
   bullets: SnapshotBullet[];
   pickups: SnapshotPickup[];
   lastInputSeqs: Record<number, number>;
+  /** Client id to player id, as the host seated them. */
+  seats: ReadonlyMap<string, number>;
+  /** The host's kills and deaths per player. */
+  tally: Tally;
+};
+
+/** What a host adds to a snapshot beyond the world itself. */
+export type SnapshotExtras = {
+  seats: ReadonlyMap<string, number>;
+  tally: Tally;
 };
 
 /** The player rows of a snapshot. */
@@ -179,8 +198,17 @@ export function encodeSnapshot(
   state: ArenaState,
   serverTimeMs: number,
   lastInputSeqs: Record<number, number>,
+  extras?: SnapshotExtras,
 ): Snapshot {
   return {
+    m: extras ? [...extras.seats.entries()] : undefined,
+    y: extras
+      ? [...extras.tally.values()].map((row) => [
+          row.playerId,
+          row.kills,
+          row.deaths,
+        ])
+      : undefined,
     t: state.tick,
     s: Math.round(serverTimeMs),
     p: encodePlayers(state),
@@ -266,7 +294,12 @@ function decodeVehicles(rows: number[][]): SnapshotVehicle[] {
 export function decodeSnapshot(snapshot: Snapshot): SnapshotView {
   const lastInputSeqs: Record<number, number> = {};
   for (const [id = 0, seq = 0] of snapshot.q) lastInputSeqs[id] = seq;
+  const tally = new Map<number, ScoreRow>();
+  for (const [playerId = 0, kills = 0, deaths = 0] of snapshot.y ?? [])
+    tally.set(playerId, { playerId, kills, deaths });
   return {
+    seats: new Map(snapshot.m ?? []),
+    tally,
     tick: snapshot.t,
     serverTimeMs: snapshot.s,
     players: decodePlayers(snapshot.p),
