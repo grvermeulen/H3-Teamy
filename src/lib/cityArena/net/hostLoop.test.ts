@@ -384,3 +384,20 @@ describe("hostLoop review findings", () => {
     loop.stop();
   });
 });
+
+describe("hostLoop match phase", () => {
+  it("carries where the potje is on every snapshot, so clients follow the host's clock", () => {
+    const { hub, loop, published } = hostOnHub(5);
+    loop.setMatch({ phase: "countdown", since: 7 });
+    for (let index = 0; index < HOST_TICK_HZ / SNAPSHOT_HZ; index += 1) {
+      loop.advance(1000 / HOST_TICK_HZ);
+      hub.flush();
+    }
+    expect(published).toHaveLength(1);
+    expect(decodeSnapshot(published[0]!.data as Snapshot).match).toEqual({
+      phase: "countdown",
+      since: 7,
+    });
+    expect(loop.match()).toEqual({ phase: "countdown", since: 7 });
+  });
+});

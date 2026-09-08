@@ -16,6 +16,7 @@ import {
   SNAP_DISTANCE_M,
   createClientLoop,
 } from "./clientLoop";
+import { emptyTally } from "./scoreboard";
 import { encodeSnapshot } from "./snapshotWire";
 import { decodeInput, type InputFrame } from "./wire";
 
@@ -390,6 +391,27 @@ describe("clientLoop error paths", () => {
       }),
     );
     expect(loop.state().tick).toBe(1);
+    loop.stop();
+  });
+});
+
+describe("clientLoop match phase", () => {
+  it("knows nothing about the potje until a snapshot says, then follows it", () => {
+    const { loop } = clientOnHub(31);
+    expect(loop.match()).toBeNull();
+    loop.onSnapshot(
+      encodeSnapshot(
+        boot(31),
+        0,
+        {},
+        {
+          seats: new Map([["me", 0]]),
+          tally: emptyTally(),
+          match: { phase: "playing", since: 90 },
+        },
+      ),
+    );
+    expect(loop.match()).toEqual({ phase: "playing", since: 90 });
     loop.stop();
   });
 });

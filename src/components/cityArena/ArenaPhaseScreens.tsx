@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { ArenaCountdown } from "./ArenaCountdown";
-import { ArenaLobby } from "./ArenaLobby";
+import { ArenaLobby, type CrewMember } from "./ArenaLobby";
 import { ArenaScoreboard } from "./ArenaScoreboard";
 import type { ArenaGame } from "./useArenaGame";
 import type { ArenaRoom } from "./useArenaRoom";
@@ -20,6 +20,30 @@ const VEIL_CLASS =
   "absolute inset-0 z-10 overflow-y-auto bg-[rgba(7,9,11,0.92)] pt-safe pb-safe-bottom-bar pl-safe pr-safe";
 
 /**
+ * Names for the scorebord, by player id.
+ *
+ * A row belongs to a player id the host handed out; the host's seats say which account that is,
+ * and the crew says what that account is called. A player nobody can name is left out, and the
+ * scorebord falls back to their number.
+ */
+function useScoreboardNames(
+  crew: CrewMember[],
+  accounts: ReadonlyMap<number, string>,
+): ReadonlyMap<number, string> {
+  return useMemo(() => {
+    const nameByClient = new Map(
+      crew.map((member) => [member.clientId, member.name]),
+    );
+    const names = new Map<number, string>();
+    for (const [playerId, clientId] of accounts) {
+      const name = nameByClient.get(clientId);
+      if (name) names.set(playerId, name);
+    }
+    return names;
+  }, [crew, accounts]);
+}
+
+/**
  * Whichever of the lobby, the countdown or the scorebord the match clock says is showing.
  *
  * These sit *over* the running city rather than beside it: spec §2 has members free-roaming the
@@ -35,24 +59,12 @@ export function ArenaPhaseScreens({
   onClose,
 }: ArenaPhaseScreensProps): React.JSX.Element | null {
   const { zone } = room;
-  // Keyed by the seat each member holds — join order, fixed by the presence timestamp — not by
-  // where they happen to sit in the array, which presence does not promise to keep stable.
-  const crewNames = useMemo(
-    () => new Map(room.crew.map((member) => [member.seat, member.name])),
-    [room.crew],
-  );
   const recording = useMemo(
-    () => ({
-      roomCode: room.roomCode,
-      zone,
-      isHost: room.isHost,
-      userIdByPlayer: new Map(
-        room.crew.map((member) => [member.seat, member.clientId]),
-      ),
-    }),
-    [room.roomCode, room.isHost, room.crew, zone],
+    () => ({ roomCode: room.roomCode, zone, isHost: room.isHost }),
+    [room.roomCode, room.isHost, zone],
   );
   const clock = useMatchClock(game, recording);
+  const crewNames = useScoreboardNames(room.crew, clock.accounts);
   const leave = (): void => {
     room.leave();
     onClose();
@@ -82,7 +94,7 @@ export function ArenaPhaseScreens({
           lines={clock.scoreboard}
           names={crewNames}
           secondsLeft={clock.secondsLeft ?? 0}
-          onRematch={clock.backToLobby}
+          onRematch={room.isHost ? clock.backToLobby : undefined}
           onLeave={leave}
         />
       </div>

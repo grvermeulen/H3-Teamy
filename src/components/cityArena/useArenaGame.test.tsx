@@ -13,6 +13,16 @@ import {
   type FakeContext,
 } from "@/lib/cityArena/render/testing/fakeContext";
 import { createArenaState } from "@/lib/cityArena/sim/arena";
+import { createHostLoop } from "@/lib/cityArena/net/hostLoop";
+import {
+  createMemoryHub,
+  createMemoryTransport,
+} from "@/lib/cityArena/net/memoryTransport";
+import {
+  decodeSnapshot,
+  type Snapshot,
+} from "@/lib/cityArena/net/snapshotWire";
+import type { RealtimeTransport } from "@/lib/cityArena/net/transport";
 import {
   PLAYER_MAX_HEALTH,
   RESPAWN_DELAY_TICKS,
@@ -47,6 +57,7 @@ import {
   computeHud,
   nearestLandmarkTo,
   useArenaGame,
+  type ArenaNetplayOptions,
 } from "./useArenaGame";
 
 /** Wall-clock step (ms) between manually driven frames; matches `MAX_FRAME_S` so each is a full 0.1 s step. */
@@ -183,7 +194,10 @@ function renderArenaGame() {
 }
 
 /** Options for {@link renderArenaGameWithCanvas}; omitted fields keep the pre-existing defaults. */
-type RenderWithCanvasOptions = { debug?: boolean };
+type RenderWithCanvasOptions = {
+  debug?: boolean;
+  netplay?: ArenaNetplayOptions;
+};
 
 /**
  * Renders the hook with a real (if unattached-to-the-DOM) canvas, and fakes its 2D context —
@@ -209,6 +223,7 @@ function renderArenaGameWithCanvas(options: RenderWithCanvasOptions = {}) {
       zoneKey: "wageningen",
       canvasRef,
       debug: options.debug ?? false,
+      netplay: options.netplay,
     }),
   );
   return { ...hook, canvas, fakeContext };
@@ -455,7 +470,7 @@ describe("computeHud and aimAngle", () => {
       createRng(1),
     );
     const session = { index: () => testIndex, tiles: () => [] };
-    expect(computeHud(session, state)).toMatchObject({
+    expect(computeHud(session, state, localPlayer(state))).toMatchObject({
       zoneName: null,
       health: 100,
       weapon: "pistol",
@@ -468,7 +483,7 @@ describe("computeHud and aimAngle", () => {
       vehicles: [car],
       players: [{ ...localPlayer(state), vehicleId: 9 }],
     };
-    expect(computeHud(session, driving)).toMatchObject({
+    expect(computeHud(session, driving, localPlayer(driving))).toMatchObject({
       speedMps: 10,
       inVehicle: true,
     });
@@ -586,5 +601,109 @@ describe("debug hooks", () => {
       "Arena invariant: player 0 position is not finite",
       { level: "warning", tags: { area: "arena", kind: "invariant" } },
     );
+  });
+});
+
+/** The room the netplay tests play in. */
+const ROOM = "7K4M2Q";
+
+/** Netplay options for "me" over `transport`, connected and ready unless overridden. */
+function netplayFor(
+  transport: RealtimeTransport,
+  overrides: Partial<ArenaNetplayOptions> = {},
+): ArenaNetplayOptions {
+  return {
+    transport: () => transport,
+    ready: true,
+    roomCode: ROOM,
+    clientId: "me",
+    clockOffsetMs: 0,
+    isHost: false,
+    memberIds: ["me"],
+    ...overrides,
+  };
+}
+
+describe("netplay", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("requestAnimationFrame", vi.fn());
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("hosts the room once booted: frames step the host loop and publish the world", async () => {
+    const hub = createMemoryHub();
+    const published: Snapshot[] = [];
+    createMemoryTransport(hub, "watcher")
+      .channel(`arena:room:${ROOM}`)
+      .subscribe("state", (message) => {
+        published.push(message.data as Snapshot);
+      });
+    const { result } = await bootArenaWithCanvas({
+      debug: true,
+      netplay: netplayFor(createMemoryTransport(hub, "me"), {
+        isHost: true,
+        memberIds: ["me", "other"],
+      }),
+    });
+    expect(result.current.phase).toBe("playing");
+    const tick = getTick();
+    act(() => tick(0));
+    for (let frame = 1; frame <= 3; frame += 1) {
+      act(() => tick(frame * FRAME_STEP_MS));
+      hub.flush();
+    }
+    expect(published.length).toBeGreaterThan(0);
+    const seats = decodeSnapshot(published[0]!).seats;
+    expect(seats.get("me")).toBe(0);
+    expect(seats.has("other")).toBe(true);
+    expect(result.current.peek()?.youId).toBe(0);
+    expect(window.__arena?.getState()?.players).toHaveLength(2);
+    expect(window.__arena?.getViolations()).toBe(0);
+  });
+
+  it("joins as a client: the seat the host names becomes the player this runtime drives", async () => {
+    const hub = createMemoryHub();
+    const host = createHostLoop({
+      transport: createMemoryTransport(hub, "host"),
+      roomCode: ROOM,
+      world: {
+        collision: createCollisionGrid(),
+        index: testIndex,
+        graph: testGraph,
+      },
+      state: createArenaState(
+        { index: testIndex, graph: testGraph, seed: 1, zone: null },
+        createRng(1),
+      ),
+      random: createRng(2),
+      serverTimeMs: () => 0,
+    });
+    host.claim("host", 0);
+    const seat = host.addMember("me");
+    const { result } = await bootArenaWithCanvas({
+      debug: true,
+      netplay: netplayFor(createMemoryTransport(hub, "me"), {
+        memberIds: ["host", "me"],
+      }),
+    });
+    const tick = getTick();
+    act(() => tick(0));
+    // Alone until the host's first snapshot names this client's seat.
+    expect(result.current.peek()?.youId).toBe(0);
+    host.advance(FRAME_STEP_MS);
+    hub.flush();
+    act(() => tick(FRAME_STEP_MS));
+    expect(result.current.peek()?.youId).toBe(seat);
+    expect(
+      window.__arena?.getState()?.players.map((player) => player.id),
+    ).toEqual([0, seat]);
+    host.stop();
   });
 });

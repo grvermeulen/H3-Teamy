@@ -38,6 +38,18 @@ function renderBoard(
   return handlers;
 }
 
+describe("ArenaScoreboard for a player who is not hosting", () => {
+  it("offers no way back to the lobby: the host's clock returns everyone", () => {
+    renderBoard({ onRematch: undefined });
+    expect(
+      screen.queryByRole("button", { name: "Terug naar lobby" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Potje verlaten" }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("ArenaCountdown", () => {
   it("shows the number and the zone", () => {
     render(<ArenaCountdown count={3} zone="wageningen" />);

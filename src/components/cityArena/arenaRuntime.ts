@@ -5,7 +5,10 @@ import {
   tallyEvents,
   type Tally,
 } from "@/lib/cityArena/net/scoreboard";
-import { localPlayer } from "@/lib/cityArena/sim/players";
+import { LOCAL_PLAYER_ID } from "@/lib/cityArena/sim/arena";
+import type { HostLoop } from "@/lib/cityArena/net/hostLoop";
+import type { ClientLoop } from "@/lib/cityArena/net/clientLoop";
+import { localPlayer, playerById } from "@/lib/cityArena/sim/players";
 import * as Sentry from "@sentry/nextjs";
 import type { RefObject } from "react";
 import type {
@@ -126,10 +129,33 @@ export type DeathInfo = { diedAtMs: number };
 /** A debug input that replaces the live one for a number of steps. */
 type InjectedInput = { input: WorldInput; ticksLeft: number };
 
+/**
+ * How this runtime steps the world: alone, as the host of a room, or as one of its clients.
+ *
+ * Offline the runtime steps `stepArena` itself with one input. Hosting, the host loop steps it
+ * from everyone's inputs and this runtime reads the authoritative state back. As a client, the
+ * client loop predicts this player and reconciles against the host's snapshots, and the runtime
+ * draws its `view()`.
+ *
+ * Every mode names the player this runtime drives: alone from the start that is player 0, but a
+ * client whose room went away keeps the seat the host gave it, because player 0 may have left
+ * the world it is still standing in.
+ */
+export type Netplay =
+  | { kind: "offline"; playerId: number }
+  | { kind: "host"; loop: HostLoop; playerId: number }
+  | { kind: "client"; loop: ClientLoop; playerId: number };
+
 /** Mutable per-frame state shared by the boot, input and frame-loop hooks. */
+
 export type Runtime = {
   session: WorldSession;
   state: ArenaState;
+  /**
+   * Alone, hosting, or a client. Whoever switches this must assign `state` from the loop in the
+   * same breath, or `myPlayer` will look for a player the local state does not hold.
+   */
+  netplay: Netplay;
   camera: Camera;
   /** Zoom the viewport width asks for; the live camera may sit one step wider while driving. */
   baseZoom: ZoomLevel;
@@ -159,6 +185,26 @@ export type Runtime = {
   radarRoadIndex: RadarRoadIndex;
   disposed: boolean;
 };
+
+/**
+ * The id of the player this runtime drives: player 0 alone, or the seat the host gave us.
+ *
+ * `players[0]` is not "me" in a room — it is whoever the host seated first — which is why
+ * nothing in the runtime, the HUD or the camera may reach for `localPlayer` any more.
+ */
+export function myPlayerId(runtime: Pick<Runtime, "netplay">): number {
+  return runtime.netplay.playerId;
+}
+
+/** The player this runtime drives. Missing from the state is an invariant break, so it throws. */
+export function myPlayer(
+  runtime: Pick<Runtime, "netplay" | "state">,
+): ArenaPlayerState {
+  const id = myPlayerId(runtime);
+  const player = playerById(runtime.state, id);
+  if (!player) throw new Error(`Arena state has no player ${id}`);
+  return player;
+}
 
 /** True while async frame-loop callbacks may still publish state. */
 export function canApplyRuntimeUpdate(
@@ -198,7 +244,7 @@ function buildScene(
     },
     zone,
     players: state.players,
-    localPlayerId: localPlayer(state).id,
+    localPlayerId: myPlayerId(runtime),
     peds: state.peds,
     cops: state.cops,
     pickups: state.pickups,
@@ -262,10 +308,8 @@ export function nearestLandmarkTo(
 function routeToNearestLandmark(runtime: Runtime): number | null {
   const index = runtime.session.index();
   const graph = runtime.session.graph();
-  const playerPoint: Point = [
-    localPlayer(runtime.state).x,
-    localPlayer(runtime.state).y,
-  ];
+  const me = myPlayer(runtime);
+  const playerPoint: Point = [me.x, me.y];
   const from = graph.nearestNode(playerPoint);
   if (from === null || index.landmarks.length === 0) return null;
   const nearestLandmark = nearestLandmarkTo(index.landmarks, playerPoint);
@@ -319,6 +363,7 @@ export function createRuntime(
     ),
     baseZoom,
     random,
+    netplay: { kind: "offline", playerId: LOCAL_PLAYER_ID },
     accumulator: 0,
     tally: emptyTally(),
     lastTileSync: 0,
@@ -363,7 +408,7 @@ function buildDebugSnapshot(
     chunks: runtime.session.raster.stats(),
     tiles: runtime.session.tiles().length,
     camera: runtime.camera,
-    player: localPlayer(runtime.state),
+    player: myPlayer(runtime),
     routeMetres: routeToNearestLandmark(runtime),
     entities: {
       vehicles: runtime.state.vehicles.length,
@@ -374,10 +419,7 @@ function buildDebugSnapshot(
       traffic: runtime.state.traffic.length,
       pickups: runtime.state.pickups.length,
       wantedLevel: currentWantedLevel(runtime.state),
-      zoneSecondsLeft: zoneSecondsLeft(
-        localPlayer(runtime.state),
-        runtime.state.tick,
-      ),
+      zoneSecondsLeft: zoneSecondsLeft(myPlayer(runtime), runtime.state.tick),
       eventCount: runtime.state.events.length,
       violations: runtime.violations,
     },
@@ -411,7 +453,7 @@ function recordViolations(runtime: Runtime): void {
 
 /** Stamps a death with the frame clock and clears it on respawn; true when it changed. */
 function trackDeath(runtime: Runtime, nowMs: number): boolean {
-  const dead = localPlayer(runtime.state).diedAtTick !== null;
+  const dead = myPlayer(runtime).diedAtTick !== null;
   if (dead === (runtime.diedAtMs !== null)) return false;
   runtime.diedAtMs = dead ? nowMs : null;
   return true;
@@ -446,8 +488,8 @@ export function nextCamera(
 
 /** Eases the camera after the player or their car and re-zooms it for the speed. */
 function followPlayer(runtime: Runtime, dt: number): void {
-  const player = localPlayer(runtime.state);
-  const car = occupiedVehicle(runtime.state);
+  const player = myPlayer(runtime);
+  const car = occupiedVehicle(runtime.state, player);
   const velocity: Point = car
     ? [car.velocityX, car.velocityY]
     : [
@@ -464,6 +506,61 @@ function followPlayer(runtime: Runtime, dt: number): void {
   );
 }
 
+/** Drives the engine loop from the car this player sits in, if any. */
+function updateEngineSound(runtime: Runtime): void {
+  const player = myPlayer(runtime);
+  const car = occupiedVehicle(runtime.state, player);
+  runtime.sound.updateEngine(
+    car ? Math.abs(forwardSpeed(car)) : 0,
+    car !== null && !car.wrecked && player.boardingTicksLeft === 0,
+  );
+}
+
+/** True when the input is doing anything, which is what unlocks audio on the first gesture. */
+function isActive(input: WorldInput): boolean {
+  return (
+    input.move[0] !== 0 ||
+    input.move[1] !== 0 ||
+    input.fire ||
+    input.enter ||
+    input.weaponNext
+  );
+}
+
+/**
+ * Steps the world through the room's loop instead of locally.
+ *
+ * The host hands its own input to the host loop — it cannot hear itself over the inputs channel —
+ * and reads the authoritative state back. A client hands its input to the client loop and draws
+ * the loop's view: predicted for this player, interpolated for everyone else. Each loop owns its
+ * accumulator, so `dt` is handed over whole, and the death screen's slow motion does not apply:
+ * a world shared with other people cannot slow down for one of them.
+ */
+function advanceNetworked(
+  runtime: Runtime,
+  dt: number,
+  input: WorldInput,
+  debug: boolean,
+): void {
+  const net = runtime.netplay;
+  if (net.kind === "offline") return;
+  const stepInput = nextInput(runtime, input);
+  if (isActive(stepInput)) runtime.sound.unlock();
+  if (net.kind === "host") {
+    net.loop.setInput(net.playerId, stepInput);
+    net.loop.advance(dt * MS_PER_SECOND);
+    runtime.state = net.loop.state();
+  } else {
+    net.loop.setInput(stepInput);
+    net.loop.advance(dt * MS_PER_SECOND);
+    runtime.state = net.loop.view();
+  }
+  // The only real tally is the host's; a client's predicted kills are not.
+  runtime.tally = net.loop.tally();
+  updateEngineSound(runtime);
+  if (debug) recordViolations(runtime);
+}
+
 /** Absorbs `dt` (slowed by the death screen's time scale) in fixed steps, then follows the player. */
 function advanceSimulation(
   runtime: Runtime,
@@ -473,6 +570,11 @@ function advanceSimulation(
   debug: boolean,
   viewport: Viewport,
 ): void {
+  if (runtime.netplay.kind !== "offline") {
+    advanceNetworked(runtime, dt, input, debug);
+    followPlayer(runtime, dt);
+    return;
+  }
   runtime.accumulator += dt * (deathPhase(runtime, nowMs)?.timeScale ?? 1);
   const world: ArenaWorld = {
     collision: runtime.session.collision,
@@ -483,32 +585,19 @@ function advanceSimulation(
   let steps = 0;
   while (runtime.accumulator >= SIM_STEP_S && steps < MAX_SIM_STEPS_PER_FRAME) {
     const stepInput = nextInput(runtime, input);
-    if (
-      stepInput.move[0] !== 0 ||
-      stepInput.move[1] !== 0 ||
-      stepInput.fire ||
-      stepInput.enter ||
-      stepInput.weaponNext
-    )
-      runtime.sound.unlock();
-    // Offline this client is the only player, so the tick carries exactly one input. Plan 3b
-    // replaces this with the host's collected inputs from every member of the room.
+    if (isActive(stepInput)) runtime.sound.unlock();
+    // Alone this client is the only player, so the tick carries exactly one input; in a room
+    // the loops step instead, see advanceNetworked.
     runtime.state = stepArena(
       runtime.state,
-      new Map([[localPlayer(runtime.state).id, stepInput]]),
+      new Map([[myPlayerId(runtime), stepInput]]),
       SIM_STEP_S,
       world,
       runtime.random,
     );
     runtime.sound.handleEvents(runtime.state.events);
     runtime.tally = tallyEvents(runtime.tally, runtime.state.events);
-    const car = occupiedVehicle(runtime.state);
-    runtime.sound.updateEngine(
-      car ? Math.abs(forwardSpeed(car)) : 0,
-      car !== null &&
-        !car.wrecked &&
-        localPlayer(runtime.state).boardingTicksLeft === 0,
-    );
+    updateEngineSound(runtime);
     runtime.accumulator -= SIM_STEP_S;
     steps += 1;
     if (debug) recordViolations(runtime);
@@ -550,7 +639,7 @@ export type FrameLoopOptions = {
 function startTileSync(runtime: Runtime, options: FrameLoopOptions): void {
   if (!canApplyRuntimeUpdate(runtime)) return;
   runtime.tileSyncPending = true;
-  const player = localPlayer(runtime.state);
+  const player = myPlayer(runtime);
   runtime.session
     .update([player.x, player.y])
     .then(
@@ -585,16 +674,26 @@ function refreshThrottled(
   if (timestamp - runtime.lastHud >= HUD_REFRESH_MS) {
     runtime.lastHud = timestamp;
     options.setHud(
-      computeHud(runtime.session, runtime.state, runtime.soundEnabled),
+      computeHud(
+        runtime.session,
+        runtime.state,
+        myPlayer(runtime),
+        runtime.soundEnabled,
+      ),
     );
-    const zone = radarZone(runtime.session.index(), runtime.state);
+    const zone = radarZone(
+      runtime.session.index(),
+      runtime.state,
+      myPlayer(runtime),
+    );
     options.setRadar(
       buildRadarSnapshot(
         runtime.state,
+        myPlayer(runtime),
         zone,
         nearbyRadarRoads(
           runtime.radarRoadIndex,
-          [localPlayer(runtime.state).x, localPlayer(runtime.state).y],
+          [myPlayer(runtime).x, myPlayer(runtime).y],
           RADAR_RANGE_M,
         ),
       ),
@@ -620,7 +719,7 @@ function runFrame(
   const rect = canvas.getBoundingClientRect();
   const size: Viewport = { width: rect.width, height: rect.height };
   const pointer = options.pointerRef.current?.position() ?? null;
-  const player = localPlayer(runtime.state);
+  const player = myPlayer(runtime);
   options.inputRef.current.setAim(
     aimAngle(runtime.camera, size, [player.x, player.y], pointer),
   );

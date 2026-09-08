@@ -20,6 +20,7 @@ import {
   type ArenaState,
   type WorldInput,
 } from "../sim/types";
+import type { MatchState } from "./matchPhase";
 import { emptyTally, tallyEvents, type Tally } from "./scoreboard";
 import type { RealtimeTransport } from "./transport";
 import { decodeInput, type InputFrame } from "./wire";
@@ -74,8 +75,19 @@ export type HostLoop = {
   tally(): Tally;
   /** Who drives which player. */
   seats(): ReadonlyMap<string, number>;
+  /** Clears the tally, so a rematch scores from zero. */
+  resetTally(): void;
+  /** Where the potje is; carried on every snapshot so clients follow the host's clock. */
+  match(): MatchState;
+  /** Moves the potje on. Only the host's clock calls this (spec §2). */
+  setMatch(match: MatchState): void;
   /** Seats a member and returns the player id they were given, or `null` when the match is full. */
   addMember(clientId: string): number | null;
+  /**
+   * Records that `clientId` drives a player that already exists — the host's own, created with
+   * the state before the loop was — rather than spawning a second one for them.
+   */
+  claim(clientId: string, playerId: number): void;
   /** Removes a member and their player. */
   removeMember(clientId: string): void;
   /** The current authoritative state. */
@@ -122,6 +134,9 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
   /** Inputs from players this process drives itself, applied ahead of anything from the wire. */
   const local = new Map<number, WorldInput>();
   let tally: Tally = emptyTally();
+  // A literal rather than `lobbyMatch()`: matchPhase.ts imports HOST_TICK_HZ from this file, and
+  // a value import back would evaluate it before that constant exists.
+  let match: MatchState = { phase: "lobby", since: 0 };
   /** Sequence numbers for local inputs, so `lastInputSeqs` stays meaningful for them too. */
   let localSeq = 0;
 
@@ -205,6 +220,7 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
         encodeSnapshot(state, options.serverTimeMs(), lastInputSeqs, {
           seats: playerByClient,
           tally,
+          match,
         }),
       )
       .catch((error: unknown) => {
@@ -247,6 +263,9 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
       playerByClient.set(clientId, joined.player.id);
       return joined.player.id;
     },
+    claim(clientId: string, playerId: number): void {
+      playerByClient.set(clientId, playerId);
+    },
     removeMember(clientId: string): void {
       const playerId = playerByClient.get(clientId);
       if (playerId === undefined) return;
@@ -265,6 +284,15 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
     },
     seats(): ReadonlyMap<string, number> {
       return playerByClient;
+    },
+    resetTally(): void {
+      tally = emptyTally();
+    },
+    match(): MatchState {
+      return match;
+    },
+    setMatch(next: MatchState): void {
+      match = next;
     },
     state(): ArenaState {
       return state;

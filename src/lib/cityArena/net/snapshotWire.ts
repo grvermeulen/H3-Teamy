@@ -7,6 +7,7 @@
  * bandwidth ten times a second for state nobody renders.
  */
 
+import type { MatchPhase, MatchState } from "./matchPhase";
 import type { ScoreRow, Tally } from "./scoreboard";
 import type {
   AmmoState,
@@ -55,6 +56,13 @@ const VEHICLE_KINDS: readonly VehicleKind[] = [
 const PICKUP_KINDS: readonly PickupKind[] = ["uzi", "shotgun", "health"];
 /** Pedestrian modes in wire order. */
 const PED_MODES: readonly PedMode[] = ["walk", "flee", "dead"];
+/** Match phases in wire order. */
+const MATCH_PHASES: readonly MatchPhase[] = [
+  "lobby",
+  "countdown",
+  "playing",
+  "scoreboard",
+];
 
 /** One full snapshot as it travels; single-letter keys keep the JSON small. */
 export type Snapshot = {
@@ -75,6 +83,11 @@ export type Snapshot = {
   m?: [string, number][];
   /** The host's tally: `[playerId, kills, deaths]`. A client's predicted kills are not real. */
   y?: number[][];
+  /**
+   * Where the potje is: `[phase, sinceTick]`. Only the host advances the match (spec §2), so a
+   * client reads its countdown and scorebord from here rather than keeping a clock of its own.
+   */
+  f?: [number, number];
 };
 
 /** A player as the snapshot carries them: render state plus what the step needs to continue. */
@@ -140,12 +153,15 @@ export type SnapshotView = {
   seats: ReadonlyMap<string, number>;
   /** The host's kills and deaths per player. */
   tally: Tally;
+  /** Where the host says the potje is; `null` from a host that predates the field. */
+  match: MatchState | null;
 };
 
 /** What a host adds to a snapshot beyond the world itself. */
 export type SnapshotExtras = {
   seats: ReadonlyMap<string, number>;
   tally: Tally;
+  match: MatchState;
 };
 
 /** The player rows of a snapshot. */
@@ -186,6 +202,19 @@ function encodeVehicles(state: ArenaState): number[][] {
   ]);
 }
 
+/** The host's additions to a snapshot: who sits where, the tally, and where the potje is. */
+function encodeExtras(extras: SnapshotExtras): Pick<Snapshot, "m" | "y" | "f"> {
+  return {
+    m: [...extras.seats.entries()],
+    y: [...extras.tally.values()].map((row) => [
+      row.playerId,
+      row.kills,
+      row.deaths,
+    ]),
+    f: [indexIn(MATCH_PHASES, extras.match.phase), extras.match.since],
+  };
+}
+
 /**
  * Encodes the whole world for one tick.
  *
@@ -201,14 +230,7 @@ export function encodeSnapshot(
   extras?: SnapshotExtras,
 ): Snapshot {
   return {
-    m: extras ? [...extras.seats.entries()] : undefined,
-    y: extras
-      ? [...extras.tally.values()].map((row) => [
-          row.playerId,
-          row.kills,
-          row.deaths,
-        ])
-      : undefined,
+    ...(extras ? encodeExtras(extras) : {}),
     t: state.tick,
     s: Math.round(serverTimeMs),
     p: encodePlayers(state),
@@ -300,6 +322,9 @@ export function decodeSnapshot(snapshot: Snapshot): SnapshotView {
   return {
     seats: new Map(snapshot.m ?? []),
     tally,
+    match: snapshot.f
+      ? { phase: entryAt(MATCH_PHASES, snapshot.f[0]), since: snapshot.f[1] }
+      : null,
     tick: snapshot.t,
     serverTimeMs: snapshot.s,
     players: decodePlayers(snapshot.p),

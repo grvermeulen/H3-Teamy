@@ -14,6 +14,7 @@ import { stepArena, type ArenaWorld } from "../sim/arena";
 import { playerById } from "../sim/players";
 import { EMPTY_INPUT, type ArenaState, type WorldInput } from "../sim/types";
 import { applySnapshot } from "./snapshotApply";
+import type { MatchState } from "./matchPhase";
 import { emptyTally, type Tally } from "./scoreboard";
 import { decodeSnapshot, type Snapshot } from "./snapshotWire";
 import {
@@ -69,6 +70,8 @@ export type ClientLoop = {
   seats(): ReadonlyMap<string, number>;
   /** The host's tally as of the last snapshot — the only real one; predicted kills are not. */
   tally(): Tally;
+  /** Where the host says the potje is; `null` before the first snapshot. */
+  match(): MatchState | null;
   /** Stops the loop and releases its subscriptions. */
   stop(): void;
 };
@@ -105,6 +108,7 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
   let running = true;
   let seats: ReadonlyMap<string, number> = new Map();
   let tally: Tally = emptyTally();
+  let match: MatchState | null = null;
 
   const unsubscribe = room.subscribe("state", (message) => {
     if (!running) return;
@@ -162,6 +166,7 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
     const view = decodeSnapshot(snapshot);
     seats = view.seats;
     tally = view.tally;
+    match = view.match;
     frames.push({ serverTimeMs: view.serverTimeMs, players: view.players });
     while (frames.length > FRAME_BUFFER) frames.shift();
 
@@ -214,6 +219,9 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
     },
     tally(): Tally {
       return tally;
+    },
+    match(): MatchState | null {
+      return match;
     },
     onSnapshot,
     state(): ArenaState {

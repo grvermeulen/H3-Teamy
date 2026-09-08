@@ -53,6 +53,7 @@ describe("arena HUD projections", () => {
     const hud = computeHud(
       { index: () => index, tiles: () => [] },
       current,
+      localPlayer(current),
       false,
     );
     expect(hud).toMatchObject({
@@ -73,7 +74,7 @@ describe("arena HUD projections", () => {
       cops: [],
       vehicles: [createVehicle(2, "police", [12, 0], 0, 5)],
     };
-    const snapshot = buildRadarSnapshot(current, zone);
+    const snapshot = buildRadarSnapshot(current, localPlayer(current), zone);
     expect(snapshot.pickups).toEqual([{ point: [10, 0], kind: "uzi" }]);
     expect(snapshot.police).toEqual([[12, 0]]);
     expect(snapshot.zoneCentre).toEqual([0, 0]);
@@ -94,7 +95,9 @@ describe("arena HUD projections", () => {
       zoneEnforced: true,
     };
     const selectedIndex = { ...index, zones: [zone, other] };
-    expect(radarZone(selectedIndex, current)?.key).toBe(zone.key);
+    expect(radarZone(selectedIndex, current, localPlayer(current))?.key).toBe(
+      zone.key,
+    );
   });
 
   it("formats the countdown only while active", () => {
