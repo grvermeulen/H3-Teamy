@@ -10,10 +10,7 @@ import {
 } from "react";
 import { createPortal, preload } from "react-dom";
 import { ZONE_OPTIONS } from "@/lib/cityArena/constants";
-import { ArenaCountdown } from "./ArenaCountdown";
-import { ArenaLobby } from "./ArenaLobby";
-import { ArenaScoreboard } from "./ArenaScoreboard";
-import { useMatchClock } from "./useMatchClock";
+import { ArenaPhaseScreens } from "./ArenaPhaseScreens";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { useArenaRoom } from "./useArenaRoom";
 import type { ArenaEntry } from "./arenaEntry";
@@ -323,24 +320,6 @@ export default function CityArenaOverlay({
   const showTouch = useShowTouchControls();
   const reducedMotion = useReducedMotion();
   const game = useArenaGame({ zoneKey: zone, canvasRef, debug, reducedMotion });
-  // Seats map to player ids in the order the crew is listed, which is the order the host seated
-  // them. That is what lets a scoreboard row name the account that earned it.
-  const crewNames = useMemo(
-    () => new Map(room.crew.map((member, seat) => [seat, member.name])),
-    [room.crew],
-  );
-  const recording = useMemo(
-    () => ({
-      roomCode: room.roomCode,
-      zone,
-      isHost: room.isHost,
-      userIdByPlayer: new Map(
-        room.crew.map((member, seat) => [seat, member.clientId]),
-      ),
-    }),
-    [room.roomCode, room.isHost, room.crew, zone],
-  );
-  const clock = useMatchClock(game, recording);
   useDialogFocusTrap(dialogRef, onClose);
   useLockBodyScroll();
   useWarmDeathArtwork();
@@ -374,43 +353,7 @@ export default function CityArenaOverlay({
         stick={stick}
       />
       <ArenaFooter showTouch={showTouch} />
-      {/* The lobby sits *over* the running city rather than beside it: spec §2 has members
-          free-roaming the whole map while they wait, so the canvas keeps drawing behind this
-          panel instead of being unmounted and reloaded when the potje starts. */}
-      {clock.phase === "lobby" ? (
-        <div className="absolute inset-0 z-10 overflow-y-auto bg-[rgba(7,9,11,0.92)] pt-safe pb-safe-bottom-bar pl-safe pr-safe">
-          <ArenaLobby
-            roomCode={room.roomCode ?? "……"}
-            zone={zone}
-            crew={room.crew}
-            connection={room.connection}
-            isHost={room.isHost}
-            onStart={clock.start}
-            onEnterCode={onClose}
-            onLeave={() => {
-              room.leave();
-              onClose();
-            }}
-          />
-        </div>
-      ) : null}
-      {clock.phase === "countdown" && clock.countdown !== null ? (
-        <ArenaCountdown count={clock.countdown} zone={zone} />
-      ) : null}
-      {clock.phase === "scoreboard" ? (
-        <div className="absolute inset-0 z-10 overflow-y-auto bg-[rgba(7,9,11,0.92)] pt-safe pb-safe-bottom-bar pl-safe pr-safe">
-          <ArenaScoreboard
-            lines={clock.scoreboard}
-            names={crewNames}
-            secondsLeft={clock.secondsLeft ?? 0}
-            onRematch={clock.backToLobby}
-            onLeave={() => {
-              room.leave();
-              onClose();
-            }}
-          />
-        </div>
-      ) : null}
+      <ArenaPhaseScreens game={game} room={room} onClose={onClose} />
     </div>
   );
 
