@@ -121,12 +121,42 @@ describe("CityArenaLauncher", () => {
     expect(screen.queryByTestId("overlay-stub")).toBeNull();
   });
 
-  it("says the ranglijst is still coming rather than linking nowhere", async () => {
+  it("opens and closes the ranglijst", async () => {
     render(<CityArenaLauncher />);
-    const ranglijst = await screen.findByRole("button", {
-      name: /ranglijst/i,
-    });
-    expect(ranglijst).toBeDisabled();
+    fireEvent.click(await screen.findByRole("button", { name: /ranglijst/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/nog geen potjes gespeeld/i)).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /ranglijst/i }));
+    expect(screen.queryByText(/nog geen potjes gespeeld/i)).toBeNull();
+  });
+
+  it("lists the top players once potjes have been played", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        url.includes("leaderboard")
+          ? new Response(
+              JSON.stringify({
+                rows: [
+                  {
+                    userId: "a",
+                    firstName: "Noor",
+                    wins: 3,
+                    kills: 12,
+                    deaths: 4,
+                  },
+                ],
+              }),
+              { status: 200 },
+            )
+          : new Response(JSON.stringify({ rooms: [] }), { status: 200 }),
+      ),
+    );
+    render(<CityArenaLauncher />);
+    fireEvent.click(await screen.findByRole("button", { name: /ranglijst/i }));
+    expect(await screen.findByText("Noor")).toBeInTheDocument();
+    expect(screen.getByText(/ranglijst · top 1/i)).toBeInTheDocument();
   });
 
   it("shows the empty state when nobody is hosting", async () => {

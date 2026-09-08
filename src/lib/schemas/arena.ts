@@ -28,3 +28,28 @@ export const RealtimeTokenResponseSchema = z.object({
 
 /** A signed token request plus who it belongs to. */
 export type RealtimeTokenResponse = z.infer<typeof RealtimeTokenResponseSchema>;
+
+/** One player's line as the host posts it. */
+const MatchResultSchema = z.object({
+  userId: z.string().min(1).max(64),
+  kills: z.number().int().min(0),
+  deaths: z.number().int().min(0),
+  won: z.boolean(),
+});
+
+/**
+ * A finished potje as the host posts it.
+ *
+ * The room code and the start time together identify the potje, which is what makes recording it
+ * idempotent — see `arenaMatchService`.
+ */
+export const PostMatchSchema = z.object({
+  roomCode: z.string().length(6),
+  zone: z.enum(["rhenen", "wageningen", "campus", "bennekom"]),
+  startedAt: z.iso.datetime(),
+  endedAt: z.iso.datetime(),
+  results: z.array(MatchResultSchema).min(2).max(8),
+});
+
+/** A posted potje. */
+export type PostMatchBody = z.infer<typeof PostMatchSchema>;

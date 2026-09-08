@@ -38,7 +38,8 @@ export function shouldDropBrowserExtensionNoiseEvent(
     typeof event.message === "string" ? event.message : null,
   ];
   return candidates.some(
-    (message) => message !== null && isBrowserExtensionRuntimeSendMessageNoise(message),
+    (message) =>
+      message !== null && isBrowserExtensionRuntimeSendMessageNoise(message),
   );
 }
 

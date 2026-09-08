@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import * as Sentry from "@sentry/nextjs";
 import {
   beginCountdown,
   countdownNumber,
@@ -22,6 +23,18 @@ import type { ArenaGame } from "./useArenaGame";
  */
 const POLL_MS = 100;
 
+/** Where a finished potje is posted. */
+const MATCHES_URL = "/api/arena/matches";
+
+/** What the host needs in order to post a result. */
+export type MatchRecording = {
+  roomCode: string | null;
+  zone: string;
+  isHost: boolean;
+  /** Player id → user id, so a scoreboard row can name the account that earned it. */
+  userIdByPlayer: ReadonlyMap<number, string>;
+};
+
 /** What the overlay needs to draw the phase it is in. */
 export type MatchClock = {
   phase: MatchPhase;
@@ -38,6 +51,48 @@ export type MatchClock = {
 };
 
 /**
+ * Posts a finished potje, if this client is the host and there was more than one player.
+ *
+ * Failures are swallowed after reporting: a scorebord a player is reading must not turn into an
+ * error because a write failed, and the server refuses politely when the potje is not ours to
+ * post or has already been recorded.
+ */
+async function postResult(
+  lines: ScoreLine[],
+  recording: MatchRecording,
+  startedAt: Date | null,
+): Promise<void> {
+  if (!recording.isHost || !recording.roomCode || !startedAt) return;
+  const results = lines
+    .map((line) => ({
+      userId: recording.userIdByPlayer.get(line.playerId),
+      kills: line.kills,
+      deaths: line.deaths,
+      won: line.isWinner,
+    }))
+    .filter((row): row is { userId: string } & typeof row => !!row.userId);
+  // Spec §2 step 4: only a potje that more than one person played is worth recording.
+  if (results.length < 2) return;
+  try {
+    await fetch(MATCHES_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        roomCode: recording.roomCode,
+        zone: recording.zone,
+        startedAt: startedAt.toISOString(),
+        endedAt: new Date().toISOString(),
+        results,
+      }),
+    });
+  } catch (error: unknown) {
+    Sentry.captureException(error, {
+      tags: { area: "arena", kind: "match-post" },
+    });
+  }
+}
+
+/**
  * Drives the potje's phases from the running simulation.
  *
  * The phase is derived from the simulation tick rather than from wall-clock time, so a browser
@@ -47,17 +102,23 @@ export type MatchClock = {
  * @param game - The running game, polled through its non-subscribing `peek`.
  * @returns The clock, and the two actions that move it.
  */
-export function useMatchClock(game: ArenaGame): MatchClock {
+export function useMatchClock(
+  game: ArenaGame,
+  recording: MatchRecording,
+): MatchClock {
   const [match, setMatch] = useState<MatchState>(lobbyMatch);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [left, setLeft] = useState<number | null>(null);
   const [scoreboard, setScoreboard] = useState<ScoreLine[]>([]);
+  const startedAtRef = useRef<Date | null>(null);
+  const recordingRef = useRef(recording);
   const matchRef = useRef(match);
   // Mirrored in an effect rather than during render: React 19 forbids writing a ref while
   // rendering, and the interval below only needs the value on its next tick anyway.
   useEffect(() => {
     matchRef.current = match;
-  }, [match]);
+    recordingRef.current = recording;
+  }, [match, recording]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -70,8 +131,12 @@ export function useMatchClock(game: ArenaGame): MatchClock {
       // The scorebord is read at the moment play ends, so a kill landing during the scorebord
       // itself cannot change a result players are already looking at.
       if (next.phase !== current.phase) {
-        if (next.phase === "scoreboard")
-          setScoreboard(rankScoreboard(peek.tally, peek.players, peek.youId));
+        if (next.phase === "playing") startedAtRef.current = new Date();
+        if (next.phase === "scoreboard") {
+          const lines = rankScoreboard(peek.tally, peek.players, peek.youId);
+          setScoreboard(lines);
+          void postResult(lines, recordingRef.current, startedAtRef.current);
+        }
         setMatch(next);
       }
     }, POLL_MS);

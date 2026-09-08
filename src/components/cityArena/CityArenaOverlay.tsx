@@ -323,11 +323,24 @@ export default function CityArenaOverlay({
   const showTouch = useShowTouchControls();
   const reducedMotion = useReducedMotion();
   const game = useArenaGame({ zoneKey: zone, canvasRef, debug, reducedMotion });
-  const clock = useMatchClock(game);
+  // Seats map to player ids in the order the crew is listed, which is the order the host seated
+  // them. That is what lets a scoreboard row name the account that earned it.
   const crewNames = useMemo(
     () => new Map(room.crew.map((member, seat) => [seat, member.name])),
     [room.crew],
   );
+  const recording = useMemo(
+    () => ({
+      roomCode: room.roomCode,
+      zone,
+      isHost: room.isHost,
+      userIdByPlayer: new Map(
+        room.crew.map((member, seat) => [seat, member.clientId]),
+      ),
+    }),
+    [room.roomCode, room.isHost, room.crew, zone],
+  );
+  const clock = useMatchClock(game, recording);
   useDialogFocusTrap(dialogRef, onClose);
   useLockBodyScroll();
   useWarmDeathArtwork();

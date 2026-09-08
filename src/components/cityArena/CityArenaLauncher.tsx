@@ -10,6 +10,7 @@ import type { ZoneKey } from "@/lib/cityArena/world/mapTypes";
 import { useSession } from "../SessionContext";
 import { ATTRIBUTION_TEXT } from "./ArenaLoadingScreen";
 import { CityArenaLaunchIcon } from "./CityArenaLaunchIcon";
+import { ArenaLeaderboard } from "./launcher/ArenaLeaderboard";
 import { RoomList } from "./launcher/RoomList";
 import { useActiveRooms } from "./launcher/useActiveRooms";
 import type { ArenaEntry } from "./arenaEntry";
@@ -65,12 +66,14 @@ function LauncherHeader({
 type LauncherActionsProps = {
   onNewRoom: () => void;
   onEnterCode: () => void;
+  onLeaderboard: () => void;
 };
 
 /** Nieuw potje / Code invoeren / Ranglijst. */
 function LauncherActions({
   onNewRoom,
   onEnterCode,
+  onLeaderboard,
 }: LauncherActionsProps): React.JSX.Element {
   return (
     <div className="mt-3 flex flex-wrap items-stretch gap-1.5">
@@ -88,15 +91,12 @@ function LauncherActions({
       >
         Code invoeren
       </button>
-      {/* The leaderboard needs the ArenaMatch tables from the persistence plan, so there is no
-          page to link to yet. A disabled control says that honestly; a link to a 404 would not. */}
       <button
         type="button"
-        disabled
-        title="Ranglijst komt met de scorebord-update"
-        className="arena-label flex cursor-not-allowed items-center justify-center border border-transparent px-2 py-3 text-[var(--arena-line-strong)]"
+        onClick={onLeaderboard}
+        className="arena-label flex items-center justify-center border border-transparent px-2 py-3 text-[var(--arena-dim)] transition hover:text-[var(--arena-amber)]"
       >
-        Ranglijst · binnenkort
+        Ranglijst →
       </button>
     </div>
   );
@@ -127,6 +127,7 @@ export default function CityArenaLauncher(): React.JSX.Element {
   const loggedIn = !session.loading && session.loggedIn;
   const rooms = useActiveRooms(loggedIn);
   const [entry, setEntry] = useState<ArenaEntry | null>(null);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [zone] = useState<ZoneKey>(() => loadArenaSettings().lastZone);
 
   const statusLine = useMemo(
@@ -155,10 +156,12 @@ export default function CityArenaLauncher(): React.JSX.Element {
             <LoginHint />
           )}
         </div>
+        {loggedIn && showLeaderboard ? <ArenaLeaderboard /> : null}
         {loggedIn ? (
           <LauncherActions
             onNewRoom={openNewRoom}
             onEnterCode={openCodeEntry}
+            onLeaderboard={() => setShowLeaderboard((open) => !open)}
           />
         ) : null}
         <p className="mt-3 text-[10px] text-[var(--arena-dim)]">
