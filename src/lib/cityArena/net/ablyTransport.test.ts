@@ -23,8 +23,12 @@ vi.mock("@sentry/nextjs", () => ({
   captureException: (...args: unknown[]) => captureException(...args),
 }));
 
+let realtimeOptions: Record<string, unknown> = {};
 vi.mock("ably", () => ({
   Realtime: class {
+    constructor(options: Record<string, unknown>) {
+      realtimeOptions = options;
+    }
     connection = { on: connectionOn, off: connectionOff, once: connectionOnce };
     channels = { get: channelsGet };
     auth = { clientId: "user-1" };
@@ -34,6 +38,9 @@ vi.mock("ably", () => ({
 }));
 
 const { createAblyTransport } = await import("./ablyTransport");
+
+/** A signed token request, as the route returns one. */
+const TOKEN_REQUEST = { keyName: "app.key", mac: "sig" };
 
 const ANN: PresenceData = {
   name: "Ann",
@@ -70,6 +77,35 @@ describe("ablyTransport", () => {
     expect(clientId).toBe("user-1");
     expect(serverTimeOffsetMs).toBeGreaterThan(4000);
     expect(serverTimeOffsetMs).toBeLessThan(6000);
+  });
+
+  it("reports the display name from the token response, without asking again", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ tokenRequest: TOKEN_REQUEST, displayName: "Guido" }),
+          { status: 200 },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const transport = createAblyTransport();
+    // The SDK asks for a token through the auth callback; drive that as Ably would.
+    const authCallback = (
+      Reflect.get(realtimeOptions, "authCallback") as (
+        params: unknown,
+        cb: (error: unknown, token: unknown) => void,
+      ) => Promise<void>
+    ).bind(null);
+    await authCallback({}, () => {});
+    const identity = await transport.connect();
+    expect(identity.displayName).toBe("Guido");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+
+  it("reports an empty name rather than inventing one before the token lands", async () => {
+    const identity = await createAblyTransport().connect();
+    expect(identity.displayName).toBe("");
   });
 
   it("shares one channel object per name", () => {

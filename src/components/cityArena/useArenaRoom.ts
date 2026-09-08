@@ -45,8 +45,6 @@ export type ArenaRoom = {
 /** How {@link useArenaRoom} is configured. */
 export type UseArenaRoomOptions = {
   entry: ArenaEntry;
-  /** This player's display name, shown to the rest of the crew. */
-  playerName: string;
   /** The zone to fall back to when the entry does not name one. */
   fallbackZone: ZoneKey;
   /** Injectable so tests can drive an in-memory transport. */
@@ -82,7 +80,7 @@ function crewFrom(
 export function useArenaRoom(options: UseArenaRoomOptions): ArenaRoom & {
   leave: () => void;
 } {
-  const { entry, playerName, fallbackZone } = options;
+  const { entry, fallbackZone } = options;
   const [connection, setConnection] = useState<ConnectionState>("connecting");
   const [members, setMembers] = useState<PresenceMember[]>([]);
   const [roomCode, setRoomCode] = useState<string | null>(
@@ -91,6 +89,7 @@ export function useArenaRoom(options: UseArenaRoomOptions): ArenaRoom & {
   const [status, setStatus] = useState<ArenaRoom["status"]>("connecting");
   const [failure, setFailure] = useState<JoinFailure | null>(null);
   const [myClientId, setMyClientId] = useState<string>("");
+  const [name, setName] = useState<string>("");
   const transportRef = useRef<RealtimeTransport | null>(null);
   const codeRef = useRef<string | null>(null);
 
@@ -105,13 +104,16 @@ export function useArenaRoom(options: UseArenaRoomOptions): ArenaRoom & {
 
     const run = async (): Promise<void> => {
       try {
-        const { clientId } = await transport.connect();
+        // The name comes from the token response the transport already fetched — the player's
+        // first name in the H3 app — so nothing here has to guess or ask again.
+        const { clientId, displayName } = await transport.connect();
         if (cancelled) return;
         setMyClientId(clientId);
+        setName(displayName);
         setConnection("connected");
 
         const presence: PresenceData = {
-          name: playerName,
+          name: displayName,
           colour: DEFAULT_COLOUR,
           role: "player",
           device: "desktop",
@@ -192,7 +194,7 @@ export function useArenaRoom(options: UseArenaRoomOptions): ArenaRoom & {
     if (!transport || !code || !isHost || members.length === 0) return;
     void updateLobby(transport, {
       host: {
-        name: playerName,
+        name,
         colour: DEFAULT_COLOUR,
         role: "player",
         device: "desktop",
@@ -208,7 +210,7 @@ export function useArenaRoom(options: UseArenaRoomOptions): ArenaRoom & {
         tags: { area: "arena", kind: "lobby-update" },
       });
     });
-  }, [isHost, members.length, playerName, zone]);
+  }, [isHost, members.length, name, zone]);
 
   const leave = useCallback(() => {
     const transport = transportRef.current;

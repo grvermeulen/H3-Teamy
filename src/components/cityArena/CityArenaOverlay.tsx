@@ -314,10 +314,7 @@ export default function CityArenaOverlay({
   onClose,
 }: CityArenaOverlayProps): ReactPortal | null {
   const fallbackZone = ZONE_OPTIONS[0]!.key;
-  // TODO: SessionState carries no display name and the token route returns the user id as
-  // `displayName`, so the crew manifest shows a placeholder. Real names need one of those two to
-  // supply it; that is a follow-up, not something to fake here.
-  const room = useArenaRoom({ entry, playerName: "Speler", fallbackZone });
+  const room = useArenaRoom({ entry, fallbackZone });
   const zone = room.zone;
   const dialogRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);

@@ -87,10 +87,18 @@ export type TransportChannel = {
   detach(): Promise<void>;
 };
 
+/** Who this client is, and how far its clock sits from the server's. */
+export type TransportIdentity = {
+  clientId: string;
+  /** The player's first name, from the same token response that fixed `clientId` (spec §6.2). */
+  displayName: string;
+  serverTimeOffsetMs: number;
+};
+
 /** What the arena needs from a realtime service. */
 export type RealtimeTransport = {
-  /** Connects and reports this client's id and how far its clock sits from the server's. */
-  connect(): Promise<{ clientId: string; serverTimeOffsetMs: number }>;
+  /** Connects and reports who this client is and how far its clock sits from the server's. */
+  connect(): Promise<TransportIdentity>;
   /** The named channel, created on first use and shared afterwards. */
   channel(name: string): TransportChannel;
   /** Watches the connection state; returns the function that stops watching. */

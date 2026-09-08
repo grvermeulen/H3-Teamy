@@ -159,8 +159,15 @@ describe("memoryTransport connection", () => {
     const transport = createMemoryTransport(hub, "a");
     expect(await transport.connect()).toEqual({
       clientId: "a",
+      displayName: "a",
       serverTimeOffsetMs: 0,
     });
+  });
+
+  it("reports the display name it was given", async () => {
+    const hub = createMemoryHub();
+    const transport = createMemoryTransport(hub, "a", "Guido");
+    expect((await transport.connect()).displayName).toBe("Guido");
   });
 
   it("passes connection state changes to its handler", async () => {

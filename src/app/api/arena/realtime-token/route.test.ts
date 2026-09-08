@@ -11,6 +11,10 @@ vi.mock("../../../../lib/activeUser", () => ({
 vi.mock("@sentry/nextjs", () => ({
   captureException: (...args: unknown[]) => captureException(...args),
 }));
+const findUnique = vi.fn();
+vi.mock("../../../../lib/db", () => ({
+  prisma: { user: { findUnique: (...args: unknown[]) => findUnique(...args) } },
+}));
 vi.mock("ably", () => ({
   Rest: class {
     auth = {
@@ -43,6 +47,7 @@ describe("GET /api/arena/realtime-token", () => {
     vi.stubEnv("ABLY_API_KEY", "app.key:secret");
     getActiveUser.mockResolvedValue({ userId: "user-1", needsLink: false });
     createTokenRequest.mockResolvedValue(TOKEN_REQUEST);
+    findUnique.mockResolvedValue({ firstName: "Guido" });
   });
 
   it("signs a token request for the signed-in user", async () => {
@@ -71,6 +76,36 @@ describe("GET /api/arena/realtime-token", () => {
       "subscribe",
       "presence",
     ]);
+  });
+
+  it("names the player by their first name from the H3 app", async () => {
+    const body = await (await GET(request())).json();
+    expect(body.displayName).toBe("Guido");
+    expect(findUnique).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      select: { firstName: true },
+    });
+  });
+
+  it("shows only the first name, not the whole name", async () => {
+    // A crew manifest and a scorebord are read at a glance; a full name pushes the others off
+    // a phone screen. The column holds only the first name, so nothing needs trimming here.
+    findUnique.mockResolvedValue({ firstName: "Anne-Marie" });
+    expect((await (await GET(request())).json()).displayName).toBe(
+      "Anne-Marie",
+    );
+  });
+
+  it("falls back to a label when the account has no first name", async () => {
+    for (const firstName of ["", "   ", null, undefined]) {
+      findUnique.mockResolvedValue({ firstName });
+      expect((await (await GET(request())).json()).displayName).toBe("Speler");
+    }
+  });
+
+  it("falls back when the user row has gone", async () => {
+    findUnique.mockResolvedValue(null);
+    expect((await (await GET(request())).json()).displayName).toBe("Speler");
   });
 
   it("never lets the API key reach the response", async () => {

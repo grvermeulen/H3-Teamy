@@ -16,6 +16,7 @@ import type {
   PresenceMember,
   RealtimeTransport,
   TransportChannel,
+  TransportIdentity,
   TransportMessage,
 } from "./transport";
 
@@ -118,16 +119,28 @@ type AuthResult = (
   tokenRequestOrDetails: Ably.TokenRequest | null,
 ) => void;
 
-/** Fetches a token request from the app's own endpoint, so the API key stays on the server. */
+/**
+ * Fetches a token request from the app's own endpoint, so the API key stays on the server.
+ *
+ * The same response carries the player's display name (spec §6.2), which `onName` keeps: asking
+ * the server again just for a name the browser already has would be a second round trip for
+ * nothing.
+ */
 function tokenCallback(
   authUrl: string,
+  onName: (name: string) => void,
 ): (params: Ably.TokenParams, callback: AuthResult) => void {
   return async (_params: Ably.TokenParams, callback: AuthResult) => {
     try {
       const response = await fetch(authUrl);
       if (!response.ok)
         throw new Error(`realtime-token responded ${response.status}`);
-      const body = (await response.json()) as { tokenRequest: unknown };
+      const body = (await response.json()) as {
+        tokenRequest: unknown;
+        displayName?: unknown;
+      };
+      if (typeof body.displayName === "string" && body.displayName.length > 0)
+        onName(body.displayName);
       callback(null, body.tokenRequest as Ably.TokenRequest);
     } catch (error: unknown) {
       Sentry.captureException(error, {
@@ -147,17 +160,21 @@ function tokenCallback(
 export function createAblyTransport(
   options: AblyTransportOptions = {},
 ): RealtimeTransport {
+  let displayName = "";
   const client = new Ably.Realtime({
-    authCallback: tokenCallback(options.authUrl ?? DEFAULT_AUTH_URL),
+    authCallback: tokenCallback(options.authUrl ?? DEFAULT_AUTH_URL, (name) => {
+      displayName = name;
+    }),
   });
   const channels = new Map<string, TransportChannel>();
 
   return {
-    async connect(): Promise<{ clientId: string; serverTimeOffsetMs: number }> {
+    async connect(): Promise<TransportIdentity> {
       await client.connection.once("connected");
       const serverTimeMs = await client.time();
       return {
         clientId: client.auth.clientId ?? "",
+        displayName,
         serverTimeOffsetMs: serverTimeMs - Date.now(),
       };
     },

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import * as Ably from "ably";
 import { getActiveUser } from "../../../../lib/activeUser";
+import { prisma } from "../../../../lib/db";
 import {
   isDbUnavailableError,
   jsonDatabaseUnavailable,
@@ -21,6 +22,28 @@ const ARENA_CAPABILITY: Record<string, Ably.capabilityOp[]> = {
   "arena:room:*": ["publish", "subscribe", "presence"],
   "arena:lobby": ["subscribe", "presence"],
 };
+
+/** Shown to the rest of the crew when a player has no first name on their account. */
+const FALLBACK_NAME = "Speler";
+
+/**
+ * The player's first name, which is what the crew manifest shows.
+ *
+ * Only the first name: a scorebord and a crew list are read at a glance, and a full name pushes
+ * everyone else's off a phone screen. A player with no name on their account still gets a label
+ * rather than an empty tile.
+ *
+ * @param userId - The signed-in user.
+ * @returns Their first name, or a fallback.
+ */
+async function displayNameFor(userId: string): Promise<string> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { firstName: true },
+  });
+  const first = user?.firstName?.trim() ?? "";
+  return first.length > 0 ? first : FALLBACK_NAME;
+}
 
 /**
  * GET — geeft een ondertekend Ably-tokenverzoek voor de speler in deze sessie.
@@ -66,7 +89,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     const payload = RealtimeTokenResponseSchema.safeParse({
       tokenRequest,
       clientId: userId,
-      displayName: userId,
+      displayName: await displayNameFor(userId),
     });
     if (!payload.success) {
       Sentry.captureException(

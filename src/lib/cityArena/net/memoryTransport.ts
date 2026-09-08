@@ -14,6 +14,7 @@ import type {
   PresenceMember,
   RealtimeTransport,
   TransportChannel,
+  TransportIdentity,
   TransportMessage,
 } from "./transport";
 
@@ -256,18 +257,20 @@ function memoryChannel(
  *
  * @param hub - The bus shared with every other client in the test.
  * @param clientId - This client's id, which is also its presence and publisher identity.
+ * @param displayName - The name `connect` reports; defaults to the client id.
  * @returns A transport that behaves like the Ably one, minus the network.
  */
 export function createMemoryTransport(
   hub: MemoryHub,
   clientId: string,
+  displayName = clientId,
 ): RealtimeTransport {
   const channels = new Map<string, TransportChannel>();
 
   return {
-    async connect(): Promise<{ clientId: string; serverTimeOffsetMs: number }> {
+    async connect(): Promise<TransportIdentity> {
       hub.internals.closed.delete(clientId);
-      return { clientId, serverTimeOffsetMs: 0 };
+      return { clientId, displayName, serverTimeOffsetMs: 0 };
     },
     channel(name: string): TransportChannel {
       const existing = channels.get(name);
