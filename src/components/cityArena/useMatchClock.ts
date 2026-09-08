@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import * as Sentry from "@sentry/nextjs";
 import {
   beginCountdown,
@@ -31,9 +37,10 @@ export type MatchRecording = {
   roomCode: string | null;
   zone: string;
   isHost: boolean;
-  /** Player id → user id, so a scoreboard row can name the account that earned it. */
-  userIdByPlayer: ReadonlyMap<number, string>;
 };
+
+/** Player id → client id, at one moment. */
+type Accounts = ReadonlyMap<number, string>;
 
 /** What the overlay needs to draw the phase it is in. */
 export type MatchClock = {
@@ -44,11 +51,23 @@ export type MatchClock = {
   secondsLeft: number | null;
   /** The ranked scorebord, read once the potje ends. */
   scoreboard: ScoreLine[];
+  /** Who held which player when the potje ended, so a scorebord row can be named. */
+  accounts: Accounts;
   /** Starts the countdown; the host's start button. */
   start: () => void;
   /** Returns the room to its lobby without waiting out the scorebord. */
   backToLobby: () => void;
 };
+
+/**
+ * Inverts the host's seats: a scorebord row carries the player id the host handed out, and this
+ * is what ties it back to the account that earned it.
+ */
+function accountsFrom(seats: ReadonlyMap<string, number>): Accounts {
+  return new Map(
+    [...seats].map(([clientId, playerId]) => [playerId, clientId]),
+  );
+}
 
 /**
  * Posts a finished potje, if this client is the host and there was more than one player.
@@ -61,11 +80,12 @@ async function postResult(
   lines: ScoreLine[],
   recording: MatchRecording,
   startedAt: Date | null,
+  accounts: Accounts,
 ): Promise<void> {
   if (!recording.isHost || !recording.roomCode || !startedAt) return;
   const results = lines
     .map((line) => ({
-      userId: recording.userIdByPlayer.get(line.playerId),
+      userId: accounts.get(line.playerId),
       kills: line.kills,
       deaths: line.deaths,
       won: line.isWinner,
@@ -92,14 +112,61 @@ async function postResult(
   }
 }
 
+/** The state one reading of the clock writes into. */
+type ClockSetters = {
+  setCountdown: (count: number | null) => void;
+  setLeft: (seconds: number | null) => void;
+  setScoreboard: (lines: ScoreLine[]) => void;
+  setAccounts: (accounts: Accounts) => void;
+  setMatch: (match: MatchState) => void;
+};
+
+/** What a reading needs to remember between polls. */
+type ClockRefs = {
+  match: RefObject<MatchState>;
+  recording: RefObject<MatchRecording>;
+  startedAt: RefObject<Date | null>;
+};
+
+/**
+ * One reading of the simulation: moves the clock on when the tick says so.
+ *
+ * A client follows the host's clock from the snapshot; the host, and a player alone, step their
+ * own. Either way the phase comes from the tick, not from counting polls, so a poll can be late
+ * without the clock drifting — and two people can never disagree about whether play started.
+ */
+function pollClock(game: ArenaGame, refs: ClockRefs, set: ClockSetters): void {
+  const peek = game.peek();
+  if (!peek) return;
+  const current = refs.match.current;
+  const next = peek.match ?? stepMatch(current, peek.tick);
+  set.setCountdown(countdownNumber(next, peek.tick));
+  set.setLeft(secondsLeft(next, peek.tick));
+  if (next.phase === current.phase && next.since === current.since) return;
+  if (next.phase === "playing") refs.startedAt.current = new Date();
+  // The scorebord is read at the moment play ends, so a kill landing during the scorebord
+  // itself cannot change a result players are already looking at.
+  if (next.phase === "scoreboard") {
+    const lines = rankScoreboard(peek.tally, peek.players, peek.youId);
+    const accounts = accountsFrom(peek.seats);
+    set.setScoreboard(lines);
+    set.setAccounts(accounts);
+    void postResult(
+      lines,
+      refs.recording.current,
+      refs.startedAt.current,
+      accounts,
+    );
+  }
+  set.setMatch(next);
+  game.setMatch(next);
+}
+
 /**
  * Drives the potje's phases from the running simulation.
  *
- * The phase is derived from the simulation tick rather than from wall-clock time, so a browser
- * that throttles a background tab cannot let the match clock drift away from the world the
- * player is actually in.
- *
  * @param game - The running game, polled through its non-subscribing `peek`.
+ * @param recording - What the host needs to post the result.
  * @returns The clock, and the two actions that move it.
  */
 export function useMatchClock(
@@ -110,6 +177,7 @@ export function useMatchClock(
   const [countdown, setCountdown] = useState<number | null>(null);
   const [left, setLeft] = useState<number | null>(null);
   const [scoreboard, setScoreboard] = useState<ScoreLine[]>([]);
+  const [accounts, setAccounts] = useState<Accounts>(new Map());
   const startedAtRef = useRef<Date | null>(null);
   const recordingRef = useRef(recording);
   const matchRef = useRef(match);
@@ -121,45 +189,44 @@ export function useMatchClock(
   }, [match, recording]);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      const peek = game.peek();
-      if (!peek) return;
-      const current = matchRef.current;
-      const next = stepMatch(current, peek.tick);
-      setCountdown(countdownNumber(next, peek.tick));
-      setLeft(secondsLeft(next, peek.tick));
-      // The scorebord is read at the moment play ends, so a kill landing during the scorebord
-      // itself cannot change a result players are already looking at.
-      if (next.phase !== current.phase) {
-        if (next.phase === "playing") startedAtRef.current = new Date();
-        if (next.phase === "scoreboard") {
-          const lines = rankScoreboard(peek.tally, peek.players, peek.youId);
-          setScoreboard(lines);
-          void postResult(lines, recordingRef.current, startedAtRef.current);
-        }
-        setMatch(next);
-      }
-    }, POLL_MS);
+    const refs: ClockRefs = {
+      match: matchRef,
+      recording: recordingRef,
+      startedAt: startedAtRef,
+    };
+    const set: ClockSetters = {
+      setCountdown,
+      setLeft,
+      setScoreboard,
+      setAccounts,
+      setMatch,
+    };
+    const timer = setInterval(() => pollClock(game, refs, set), POLL_MS);
     return () => clearInterval(timer);
   }, [game]);
 
   const start = useCallback(() => {
     // A fresh potje scores from zero; without this a rematch would inherit the last one's kills.
     game.resetTally();
-    const peek = game.peek();
-    setMatch(beginCountdown(peek?.tick ?? 0));
+    const next = beginCountdown(game.peek()?.tick ?? 0);
+    setMatch(next);
+    game.setMatch(next);
   }, [game]);
 
   const backToLobby = useCallback(() => {
-    setMatch(lobbyMatch());
+    const next = lobbyMatch();
+    setMatch(next);
     setScoreboard([]);
-  }, []);
+    setAccounts(new Map());
+    game.setMatch(next);
+  }, [game]);
 
   return {
     phase: match.phase,
     countdown,
     secondsLeft: left,
     scoreboard,
+    accounts,
     start,
     backToLobby,
   };

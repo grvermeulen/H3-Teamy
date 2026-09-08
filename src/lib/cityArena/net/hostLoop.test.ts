@@ -384,3 +384,37 @@ describe("hostLoop review findings", () => {
     loop.stop();
   });
 });
+
+describe("hostLoop match phase", () => {
+  it("carries where the potje is on every snapshot, so clients follow the host's clock", () => {
+    const { hub, loop, published } = hostOnHub(5);
+    loop.setMatch({ phase: "countdown", since: 7 });
+    for (let index = 0; index < HOST_TICK_HZ / SNAPSHOT_HZ; index += 1) {
+      loop.advance(1000 / HOST_TICK_HZ);
+      hub.flush();
+    }
+    expect(published).toHaveLength(1);
+    expect(decodeSnapshot(published[0]!.data as Snapshot).match).toEqual({
+      phase: "countdown",
+      since: 7,
+    });
+    expect(loop.match()).toEqual({ phase: "countdown", since: 7 });
+  });
+});
+
+describe("hostLoop migration", () => {
+  it("continues from the tally it is given, so a new host does not wipe the score", () => {
+    const tally = new Map([[0, { playerId: 0, kills: 2, deaths: 1 }]]);
+    const loop = createHostLoop({
+      transport: createMemoryTransport(createMemoryHub(), "host"),
+      roomCode: ROOM,
+      world,
+      state: createArenaState({ index, graph, seed: 6, zone }, createRng(6)),
+      random: createRng(7),
+      serverTimeMs: () => 0,
+      tally,
+    });
+    expect(loop.tally()).toEqual(tally);
+    loop.stop();
+  });
+});

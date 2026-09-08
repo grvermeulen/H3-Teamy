@@ -1,4 +1,3 @@
-import { localPlayer } from "@/lib/cityArena/sim/players";
 import type { WorldSession } from "@/lib/cityArena/world/worldSession";
 import type { MapZone, ZoneKey } from "@/lib/cityArena/world/mapTypes";
 import {
@@ -12,6 +11,7 @@ import { currentWantedLevel } from "@/lib/cityArena/sim/wanted";
 import { occupiedVehicle } from "@/lib/cityArena/sim/arena";
 import { forwardSpeed } from "@/lib/cityArena/sim/vehicle";
 import type {
+  ArenaPlayerState,
   AmmoState,
   ArenaState,
   PickupKind,
@@ -42,12 +42,12 @@ export type ArenaHud = {
 export function computeHud(
   session: Pick<WorldSession, "index" | "tiles">,
   state: ArenaState,
+  player: ArenaPlayerState,
   soundEnabled = true,
 ): ArenaHud {
-  const player = localPlayer(state);
   const zone = findZone(session.index(), [player.x, player.y]);
-  const car = occupiedVehicle(state);
-  const zoneSecondsLeft = zoneWarningSeconds(state);
+  const car = occupiedVehicle(state, player);
+  const zoneSecondsLeft = zoneWarningSeconds(state, player);
   return {
     zoneName: zone?.name ?? null,
     zoneKey: zone?.key ?? null,
@@ -64,8 +64,11 @@ export function computeHud(
   };
 }
 
-function zoneWarningSeconds(state: ArenaState): number | null {
-  const outsideSinceTick = localPlayer(state).outsideSinceTick;
+function zoneWarningSeconds(
+  state: ArenaState,
+  player: ArenaPlayerState,
+): number | null {
+  const outsideSinceTick = player.outsideSinceTick;
   if (!state.zoneEnforced || outsideSinceTick === null) return null;
   return Math.max(0, Math.ceil((outsideSinceTick + 150 - state.tick) / 30));
 }
@@ -83,9 +86,9 @@ function withinRadar(
 export function radarZone(
   index: Parameters<typeof findZone>[0],
   state: ArenaState,
+  player: ArenaPlayerState,
 ): MapZone | null {
-  if (!state.zoneEnforced)
-    return findZone(index, [localPlayer(state).x, localPlayer(state).y]);
+  if (!state.zoneEnforced) return findZone(index, [player.x, player.y]);
   const key = state.enforcedZoneKey ?? state.activeZoneKey;
   return key === null ? null : findZoneByKey(index, key);
 }
@@ -93,10 +96,11 @@ export function radarZone(
 /** Builds the radar projection; optional road segments are supplied by the runtime world boundary. */
 export function buildRadarSnapshot(
   state: ArenaState,
+  me: ArenaPlayerState,
   zone: MapZone | null,
   roads: RadarSnapshot["roads"] = [],
 ): RadarSnapshot {
-  const player: [number, number] = [localPlayer(state).x, localPlayer(state).y];
+  const player: [number, number] = [me.x, me.y];
   return {
     player,
     roads,

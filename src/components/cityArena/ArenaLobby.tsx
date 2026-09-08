@@ -9,7 +9,7 @@ import { zoneName, zoneSector } from "./launcher/MissionCard";
 /** One member of the crew, as the lobby draws them. */
 export type CrewMember = {
   clientId: string;
-  /** Position in join order, which is also the player id the host seats them as. */
+  /** Position in join order — a display order, not the player id, which the host hands out. */
   seat: number;
   name: string;
   isHost: boolean;

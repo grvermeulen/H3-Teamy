@@ -14,6 +14,8 @@ import { stepArena, type ArenaWorld } from "../sim/arena";
 import { playerById } from "../sim/players";
 import { EMPTY_INPUT, type ArenaState, type WorldInput } from "../sim/types";
 import { applySnapshot } from "./snapshotApply";
+import type { MatchState } from "./matchPhase";
+import { emptyTally, type Tally } from "./scoreboard";
 import { decodeSnapshot, type Snapshot } from "./snapshotWire";
 import {
   INTERPOLATION_DELAY_MS,
@@ -48,6 +50,8 @@ export type ClientLoopOptions = {
   serverTimeMs: () => number;
   /** The step to run; injectable for tests. Defaults to `stepArena`. */
   step?: typeof stepArena;
+  /** Called after every predicted tick, so sound can react to what this client just did. */
+  onTick?: (state: ArenaState) => void;
 };
 
 /** A running client. */
@@ -62,6 +66,12 @@ export type ClientLoop = {
   state(): ArenaState;
   /** The world to draw: predicted for you, interpolated and blended for everyone else. */
   view(): ArenaState;
+  /** Who drives which player, as the host last said; empty before the first snapshot. */
+  seats(): ReadonlyMap<string, number>;
+  /** The host's tally as of the last snapshot — the only real one; predicted kills are not. */
+  tally(): Tally;
+  /** Where the host says the potje is; `null` before the first snapshot. */
+  match(): MatchState | null;
   /** Stops the loop and releases its subscriptions. */
   stop(): void;
 };
@@ -96,6 +106,9 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
   let ticksRun = 0;
   let offset: Reconciliation = { x: 0, y: 0, leftMs: 0 };
   let running = true;
+  let seats: ReadonlyMap<string, number> = new Map();
+  let tally: Tally = emptyTally();
+  let match: MatchState | null = null;
 
   const unsubscribe = room.subscribe("state", (message) => {
     if (!running) return;
@@ -129,6 +142,7 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
       options.world,
       options.random,
     );
+    options.onTick?.(predicted);
   }
 
   /** Re-applies every buffered input the host had not yet seen. */
@@ -150,6 +164,9 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
   /** Folds in a snapshot, replays unacknowledged inputs and records the error left over. */
   function onSnapshot(snapshot: Snapshot): void {
     const view = decodeSnapshot(snapshot);
+    seats = view.seats;
+    tally = view.tally;
+    match = view.match;
     frames.push({ serverTimeMs: view.serverTimeMs, players: view.players });
     while (frames.length > FRAME_BUFFER) frames.shift();
 
@@ -196,6 +213,15 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
     },
     setInput(input: WorldInput): void {
       held = input;
+    },
+    seats(): ReadonlyMap<string, number> {
+      return seats;
+    },
+    tally(): Tally {
+      return tally;
+    },
+    match(): MatchState | null {
+      return match;
     },
     onSnapshot,
     state(): ArenaState {

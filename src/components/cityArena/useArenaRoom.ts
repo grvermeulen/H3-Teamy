@@ -29,6 +29,7 @@ import type {
   PresenceData,
   PresenceMember,
   RealtimeTransport,
+  TransportIdentity,
 } from "@/lib/cityArena/net/transport";
 import type { ZoneKey } from "@/lib/cityArena/world/mapTypes";
 import type { CrewMember } from "./ArenaLobby";
@@ -42,6 +43,12 @@ export type ArenaRoom = {
   status: "connecting" | "ready" | "failed";
   connection: ConnectionState;
   roomCode: string | null;
+  /** This client's id — the user id — once connected; empty before. */
+  clientId: string;
+  /** Server time minus local time, from the connection; both loops keep time by it. */
+  clockOffsetMs: number;
+  /** The live transport, for the game to run its loop on; null until one is open. */
+  transport: () => RealtimeTransport | null;
   zone: ZoneKey;
   crew: CrewMember[];
   isHost: boolean;
@@ -117,9 +124,10 @@ function leaveQuietly(transport: RealtimeTransport, code: string | null): void {
 /**
  * Turns a presence set into the crew, seated in join order.
  *
- * `presence.get()` promises no order, so the seat is derived from the server-side presence
- * timestamp rather than the array index: it is the order the host seats players too, which is
- * what lets a scoreboard row name the account that earned it even when the list reshuffles.
+ * `presence.get()` promises no order, so the seat comes from the server-side presence timestamp
+ * rather than the array index. It is a display position only: the *player id* a member drives is
+ * an entity id the host hands out, carried on every snapshot as `seats`, and that — not this —
+ * is what ties a scorebord row to an account.
  */
 function crewFrom(
   members: PresenceMember[],
@@ -139,7 +147,7 @@ function crewFrom(
 
 /** What the connection sequence reports back into React state as it progresses. */
 type Report = {
-  connected(clientId: string, name: string): void;
+  connected(identity: TransportIdentity): void;
   refused(reason: JoinFailure): void;
   entered(code: string): void;
   members(present: PresenceMember[]): void;
@@ -162,15 +170,15 @@ async function establish(
 ): Promise<void> {
   // The name comes from the token response the transport already fetched — the player's first
   // name in the H3 app — so nothing here has to guess or ask again.
-  const { clientId, displayName } = await transport.connect();
+  const identity = await transport.connect();
   if (!live()) return;
-  report.connected(clientId, displayName);
+  report.connected(identity);
 
   const entered = await enterRoom(
     transport,
     entry,
     zone,
-    presenceFor(displayName),
+    presenceFor(identity.displayName),
   );
   if (!live()) return;
   if (!entered.ok) return report.refused(entered.reason);
@@ -197,9 +205,43 @@ type Connection = {
   members: PresenceMember[];
   myClientId: string;
   name: string;
+  clockOffsetMs: number;
   transportRef: RefObject<RealtimeTransport | null>;
   codeRef: RefObject<string | null>;
 };
+
+/** What {@link useRoomConnection} keeps in React state. */
+type ConnectionSetters = {
+  setStatus: (status: ArenaRoom["status"]) => void;
+  setConnection: (state: ConnectionState) => void;
+  setRoomCode: (code: string | null) => void;
+  setFailure: (reason: JoinFailure | null) => void;
+  setMembers: (members: PresenceMember[]) => void;
+  setIdentity: (identity: TransportIdentity) => void;
+};
+
+/** The report the connection sequence writes into React state. */
+function reportInto(
+  set: ConnectionSetters,
+  codeRef: RefObject<string | null>,
+): Report {
+  return {
+    connected(identity) {
+      set.setIdentity(identity);
+      set.setConnection("connected");
+    },
+    refused(reason) {
+      set.setFailure(reason);
+      set.setStatus("failed");
+    },
+    entered(code) {
+      codeRef.current = code;
+      set.setRoomCode(code);
+    },
+    members: set.setMembers,
+    ready: () => set.setStatus("ready"),
+  };
+}
 
 /**
  * Opens the transport, enters the room and keeps its presence set current for as long as the
@@ -220,8 +262,7 @@ function useRoomConnection(
   );
   const [failure, setFailure] = useState<JoinFailure | null>(null);
   const [members, setMembers] = useState<PresenceMember[]>([]);
-  const [myClientId, setMyClientId] = useState("");
-  const [name, setName] = useState("");
+  const [identity, setIdentity] = useState<TransportIdentity | null>(null);
   const transportRef = useRef<RealtimeTransport | null>(null);
   const codeRef = useRef<string | null>(null);
 
@@ -230,23 +271,17 @@ function useRoomConnection(
     const transport = createTransport();
     transportRef.current = transport;
     const stopState = transport.onConnectionState(setConnection);
-    const report: Report = {
-      connected(clientId, name) {
-        setMyClientId(clientId);
-        setName(name);
-        setConnection("connected");
+    const report = reportInto(
+      {
+        setStatus,
+        setConnection,
+        setRoomCode,
+        setFailure,
+        setMembers,
+        setIdentity,
       },
-      refused(reason) {
-        setFailure(reason);
-        setStatus("failed");
-      },
-      entered(code) {
-        codeRef.current = code;
-        setRoomCode(code);
-      },
-      members: setMembers,
-      ready: () => setStatus("ready"),
-    };
+      codeRef,
+    );
 
     establish(transport, entry, zone, report, () => !cancelled).catch(
       (error: unknown) => {
@@ -275,8 +310,9 @@ function useRoomConnection(
     roomCode,
     failure,
     members,
-    myClientId,
-    name,
+    myClientId: identity?.clientId ?? "",
+    name: identity?.displayName ?? "",
+    clockOffsetMs: identity?.serverTimeOffsetMs ?? 0,
     transportRef,
     codeRef,
   };
@@ -335,6 +371,11 @@ export function useArenaRoom(options: UseArenaRoomOptions): ArenaRoom & {
   const isHost = hostClientId !== null && hostClientId === link.myClientId;
   useLobbyAdvertisement(link, isHost, zone);
 
+  const transport = useCallback(
+    () => link.transportRef.current,
+    [link.transportRef],
+  );
+
   const leave = useCallback(() => {
     const transport = link.transportRef.current;
     if (!transport) return;
@@ -349,6 +390,9 @@ export function useArenaRoom(options: UseArenaRoomOptions): ArenaRoom & {
     status: link.status,
     connection: link.connection,
     roomCode: link.roomCode,
+    clientId: link.myClientId,
+    clockOffsetMs: link.clockOffsetMs,
+    transport,
     zone,
     crew,
     isHost,

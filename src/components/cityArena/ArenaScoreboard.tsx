@@ -10,7 +10,8 @@ export type ArenaScoreboardProps = {
   names: ReadonlyMap<number, string>;
   /** Seconds until the room returns to its lobby. */
   secondsLeft: number;
-  onRematch: () => void;
+  /** The host's way back to the lobby; absent for everyone else, who follow the host's clock. */
+  onRematch?: () => void;
   onLeave: () => void;
 };
 
@@ -118,13 +119,15 @@ export function ArenaScoreboard({
         >
           Potje verlaten
         </button>
-        <button
-          type="button"
-          onClick={onRematch}
-          className="arena-label bg-[var(--arena-amber)] px-5 py-3.5 text-[var(--arena-void)] transition hover:brightness-110 active:scale-[0.99]"
-        >
-          Terug naar lobby
-        </button>
+        {onRematch ? (
+          <button
+            type="button"
+            onClick={onRematch}
+            className="arena-label bg-[var(--arena-amber)] px-5 py-3.5 text-[var(--arena-void)] transition hover:brightness-110 active:scale-[0.99]"
+          >
+            Terug naar lobby
+          </button>
+        ) : null}
       </footer>
       <p className="text-[10px] text-[var(--arena-dim)]">{ATTRIBUTION_TEXT}</p>
     </section>

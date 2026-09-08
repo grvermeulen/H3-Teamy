@@ -12,7 +12,7 @@ import { createPortal, preload } from "react-dom";
 import { ZONE_OPTIONS } from "@/lib/cityArena/constants";
 import { ArenaPhaseScreens } from "./ArenaPhaseScreens";
 import { ConnectionBanner } from "./ConnectionBanner";
-import { useArenaRoom } from "./useArenaRoom";
+import { useArenaRoom, type ArenaRoom } from "./useArenaRoom";
 import type { ArenaEntry } from "./arenaEntry";
 import { isDebugEnabled } from "@/lib/cityArena/debugFlag";
 import {
@@ -33,7 +33,12 @@ import ArenaWanted from "./ArenaWanted";
 import ArenaZoneWarning from "./ArenaZoneWarning";
 import DeathOverlay, { WASTED_WEBP } from "./DeathOverlay";
 import TouchStick from "./TouchStick";
-import { useArenaGame, type ArenaGame, type ArenaHud } from "./useArenaGame";
+import {
+  useArenaGame,
+  type ArenaGame,
+  type ArenaHud,
+  type ArenaNetplayOptions,
+} from "./useArenaGame";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
 
 /** Media query matching phones and other coarse-pointer devices: shows the touch stick. */
@@ -295,6 +300,19 @@ function ArenaFooter({ showTouch }: ArenaFooterProps): React.JSX.Element {
   );
 }
 
+/** What the game needs from the room to run its loop. */
+function netplayFor(room: ArenaRoom): ArenaNetplayOptions {
+  return {
+    transport: room.transport,
+    ready: room.status === "ready",
+    roomCode: room.roomCode,
+    clientId: room.clientId,
+    clockOffsetMs: room.clockOffsetMs,
+    isHost: room.isHost,
+    memberIds: room.crew.map((member) => member.clientId),
+  };
+}
+
 /** True when the URL carries `?debug=1` in a non-production build (read once on mount). */
 function useDebugFlag(): boolean {
   const [debug] = useState(
@@ -319,7 +337,13 @@ export default function CityArenaOverlay({
   const debug = useDebugFlag();
   const showTouch = useShowTouchControls();
   const reducedMotion = useReducedMotion();
-  const game = useArenaGame({ zoneKey: zone, canvasRef, debug, reducedMotion });
+  const game = useArenaGame({
+    zoneKey: zone,
+    canvasRef,
+    debug,
+    reducedMotion,
+    netplay: netplayFor(room),
+  });
   useDialogFocusTrap(dialogRef, onClose);
   useLockBodyScroll();
   useWarmDeathArtwork();

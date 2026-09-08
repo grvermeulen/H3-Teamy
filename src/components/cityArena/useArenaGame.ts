@@ -1,8 +1,6 @@
 "use client";
 
-import { localPlayer, replacePlayer } from "@/lib/cityArena/sim/players";
-import { emptyTally, type Tally } from "@/lib/cityArena/net/scoreboard";
-import type { ArenaPlayerState } from "@/lib/cityArena/sim/types";
+import { replacePlayer } from "@/lib/cityArena/sim/players";
 import {
   useCallback,
   useEffect,
@@ -58,10 +56,13 @@ import {
 import { findZoneByKey } from "@/lib/cityArena/world/zone";
 import { loadArenaSettings, saveArenaSettings } from "@/lib/cityArena/storage";
 import { computeHud, type ArenaHud } from "./arenaHud";
+import { useMatchSeam, type MatchPeek, type MatchSeam } from "./matchSeam";
+import { useNetplay, type ArenaNetplayOptions } from "./useNetplay";
 import {
   aimAngle,
   applyTeleport,
   createRuntime,
+  myPlayer,
   nearestLandmarkTo,
   reportArenaError,
   startFrameLoop,
@@ -77,6 +78,7 @@ import {
  */
 export { aimAngle, computeHud, nearestLandmarkTo };
 export type { ArenaHud, DebugSnapshot, DeathInfo };
+export type { ArenaNetplayOptions, MatchPeek };
 
 /** Fallback viewport width (CSS px) for the initial zoom, before the canvas has been laid out. */
 const DEFAULT_VIEWPORT_WIDTH_PX = 390;
@@ -104,9 +106,11 @@ export type UseArenaGameOptions = {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   debug: boolean;
   reducedMotion?: boolean;
+  /** The room to play in; omitted for offline free roam. */
+  netplay?: ArenaNetplayOptions;
 };
 /** Hook result consumed by the overlay. */
-export type ArenaGame = {
+export type ArenaGame = MatchSeam & {
   phase: ArenaPhase;
   progress: LoadProgress;
   failed: boolean;
@@ -119,29 +123,6 @@ export type ArenaGame = {
   setButton(name: ButtonName, pressed: boolean): void;
   teleportToZone(key: ZoneKey): void;
   debugSnapshot: DebugSnapshot | null;
-  /**
-   * Clears the kill tally, so a rematch starts from zero rather than carrying the last potje's
-   * kills and deaths into the next scorebord.
-   */
-  resetTally(): void;
-  /**
-   * Reads the live simulation without subscribing to it.
-   *
-   * The match clock and the scorebord need the tick and the running tally, which change 30 times
-   * a second. Pushing that through React state would re-render the whole overlay every tick, so
-   * the caller polls this at whatever rate it actually needs instead.
-   *
-   * @returns The tick, the tally and the players, or `null` before the world has booted.
-   */
-  peek(): MatchPeek | null;
-};
-
-/** What {@link ArenaGame.peek} reports about the running simulation. */
-export type MatchPeek = {
-  tick: number;
-  tally: Tally;
-  players: ArenaPlayerState[];
-  youId: number;
 };
 
 /**
@@ -214,7 +195,7 @@ async function bootSession(
   runtimeRef.current = runtime;
   return {
     index,
-    spawn: [localPlayer(runtime.state).x, localPlayer(runtime.state).y],
+    spawn: [myPlayer(runtime).x, myPlayer(runtime).y],
   };
 }
 
@@ -437,7 +418,7 @@ function createTestHooks(
       const runtime = runtimeRef.current;
       if (!runtime) return;
       const player = damagePlayer(
-        localPlayer(runtime.state),
+        myPlayer(runtime),
         amount,
         runtime.state.tick,
       );
@@ -455,11 +436,7 @@ function createTestHooks(
     addHeat(amount) {
       const runtime = runtimeRef.current;
       if (!runtime) return;
-      const player = addHeat(
-        localPlayer(runtime.state),
-        amount,
-        runtime.state.tick,
-      );
+      const player = addHeat(myPlayer(runtime), amount, runtime.state.tick);
       runtime.state = replacePlayer(runtime.state, player);
     },
     getViolations: () => runtimeRef.current?.violations ?? 0,
@@ -501,7 +478,14 @@ function useTeleport(
       const zone = findZoneByKey(runtime.session.index(), key);
       if (!zone) return;
       applyTeleport(runtime, zone);
-      setHud(computeHud(runtime.session, runtime.state, runtime.soundEnabled));
+      setHud(
+        computeHud(
+          runtime.session,
+          runtime.state,
+          myPlayer(runtime),
+          runtime.soundEnabled,
+        ),
+      );
     },
     [runtimeRef, setHud],
   );
@@ -567,6 +551,7 @@ export function useArenaGame({
   canvasRef,
   debug,
   reducedMotion = false,
+  netplay,
 }: UseArenaGameOptions): ArenaGame {
   const [soundEnabled, setSoundEnabled] = useState(
     () => loadArenaSettings().sound,
@@ -614,6 +599,8 @@ export function useArenaGame({
     setDeath,
     setDebugSnapshot,
   });
+  useNetplay(runtimeRef, phase === "playing", netplay);
+  const seam = useMatchSeam(runtimeRef);
   const teleportToZone = useTeleport(runtimeRef, setHud);
   const setSound = useCallback(
     (enabled: boolean) => {
@@ -631,23 +618,8 @@ export function useArenaGame({
     [hud, initialSoundRef, runtimeRef, setHud],
   );
 
-  const resetTally = useCallback((): void => {
-    const runtime = runtimeRef.current;
-    if (runtime) runtime.tally = emptyTally();
-  }, [runtimeRef]);
-
-  const peek = useCallback((): MatchPeek | null => {
-    const runtime = runtimeRef.current;
-    if (!runtime) return null;
-    return {
-      tick: runtime.state.tick,
-      tally: runtime.tally,
-      players: runtime.state.players,
-      youId: localPlayer(runtime.state).id,
-    };
-  }, [runtimeRef]);
-
   return {
+    ...seam,
     phase,
     progress,
     failed,
@@ -660,7 +632,5 @@ export function useArenaGame({
     setButton,
     teleportToZone,
     debugSnapshot,
-    resetTally,
-    peek,
   };
 }
