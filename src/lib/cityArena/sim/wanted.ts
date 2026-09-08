@@ -99,6 +99,10 @@ export function heatFromEvents(
   let heat = 0;
   for (const kill of eventsOfKind(events, "kill")) {
     if (kill.killerId !== player.id) continue;
+    // Killing another player is the point of the potje, not a crime against the city, so it
+    // earns no heat. Without this the "player" victim would fall through to the pedestrian
+    // branch and quietly make every duel raise the police on the winner.
+    if (kill.victim === "player") continue;
     heat += kill.victim === "cop" ? HEAT_COP_KILL : HEAT_PED_KILL;
   }
   for (const shot of eventsOfKind(events, "shot"))

@@ -230,7 +230,9 @@ export type ArenaEvent =
     }
   | {
       kind: "kill";
-      victim: "ped" | "cop";
+      victim: "ped" | "cop" | "player";
+      /** The entity that died: a ped, cop or player id. Null only for a victim with no id. */
+      victimId: number | null;
       killerId: number | null;
       x: number;
       y: number;

@@ -1,0 +1,99 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  beginCountdown,
+  countdownNumber,
+  lobbyMatch,
+  secondsLeft,
+  stepMatch,
+  type MatchPhase,
+  type MatchState,
+} from "@/lib/cityArena/net/matchPhase";
+import { rankScoreboard, type ScoreLine } from "@/lib/cityArena/net/scoreboard";
+import type { ArenaGame } from "./useArenaGame";
+
+/**
+ * How often the clock reads the simulation.
+ *
+ * The machine is driven by the tick, not by this interval — polling faster than the eye needs
+ * would re-render the overlay for nothing, and polling cannot miss a transition because each poll
+ * asks the machine where it should be for the current tick rather than counting elapsed polls.
+ */
+const POLL_MS = 100;
+
+/** What the overlay needs to draw the phase it is in. */
+export type MatchClock = {
+  phase: MatchPhase;
+  /** 3, 2 or 1 during the countdown, else `null`. */
+  countdown: number | null;
+  /** Seconds left in the current phase, or `null` in the lobby. */
+  secondsLeft: number | null;
+  /** The ranked scorebord, read once the potje ends. */
+  scoreboard: ScoreLine[];
+  /** Starts the countdown; the host's start button. */
+  start: () => void;
+  /** Returns the room to its lobby without waiting out the scorebord. */
+  backToLobby: () => void;
+};
+
+/**
+ * Drives the potje's phases from the running simulation.
+ *
+ * The phase is derived from the simulation tick rather than from wall-clock time, so a browser
+ * that throttles a background tab cannot let the match clock drift away from the world the
+ * player is actually in.
+ *
+ * @param game - The running game, polled through its non-subscribing `peek`.
+ * @returns The clock, and the two actions that move it.
+ */
+export function useMatchClock(game: ArenaGame): MatchClock {
+  const [match, setMatch] = useState<MatchState>(lobbyMatch);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [left, setLeft] = useState<number | null>(null);
+  const [scoreboard, setScoreboard] = useState<ScoreLine[]>([]);
+  const matchRef = useRef(match);
+  // Mirrored in an effect rather than during render: React 19 forbids writing a ref while
+  // rendering, and the interval below only needs the value on its next tick anyway.
+  useEffect(() => {
+    matchRef.current = match;
+  }, [match]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const peek = game.peek();
+      if (!peek) return;
+      const current = matchRef.current;
+      const next = stepMatch(current, peek.tick);
+      setCountdown(countdownNumber(next, peek.tick));
+      setLeft(secondsLeft(next, peek.tick));
+      // The scorebord is read at the moment play ends, so a kill landing during the scorebord
+      // itself cannot change a result players are already looking at.
+      if (next.phase !== current.phase) {
+        if (next.phase === "scoreboard")
+          setScoreboard(rankScoreboard(peek.tally, peek.players, peek.youId));
+        setMatch(next);
+      }
+    }, POLL_MS);
+    return () => clearInterval(timer);
+  }, [game]);
+
+  const start = useCallback(() => {
+    const peek = game.peek();
+    setMatch(beginCountdown(peek?.tick ?? 0));
+  }, [game]);
+
+  const backToLobby = useCallback(() => {
+    setMatch(lobbyMatch());
+    setScoreboard([]);
+  }, []);
+
+  return {
+    phase: match.phase,
+    countdown,
+    secondsLeft: left,
+    scoreboard,
+    start,
+    backToLobby,
+  };
+}

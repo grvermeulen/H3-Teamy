@@ -181,11 +181,27 @@ function applyHit(state: ArenaState, hit: BulletHit, tick: number): ArenaState {
   if (hit.target.kind === "player") {
     const struck = playerById(state, hit.target.playerId);
     if (!struck) return state;
-    return withHitEvent(
-      replacePlayer(state, damagePlayer(struck, hit.bullet.damage, tick)),
+    const damaged = damagePlayer(struck, hit.bullet.damage, tick);
+    const hurt = withHitEvent(
+      replacePlayer(state, damaged),
       "player",
       hit.point,
     );
+    // The shot that finishes a player is the only place the killer is known, so the scoreboard
+    // is built from this event rather than from watching health drop to zero.
+    if (damaged.diedAtTick !== null && struck.diedAtTick === null)
+      return {
+        ...hurt,
+        events: pushEvent(hurt.events, {
+          kind: "kill",
+          victim: "player",
+          victimId: damaged.id,
+          killerId: hit.bullet.ownerId,
+          x: damaged.x,
+          y: damaged.y,
+        }),
+      };
+    return hurt;
   }
   return state;
 }
@@ -271,6 +287,7 @@ function explodeVehicle(
     events = pushEvent(events, {
       kind: "kill",
       victim: "ped",
+      victimId: ped.id,
       killerId: null,
       x: ped.x,
       y: ped.y,
@@ -279,17 +296,37 @@ function explodeVehicle(
     events = pushEvent(events, {
       kind: "kill",
       victim: "cop",
+      victimId: cop.id,
       killerId: null,
       x: cop.x,
       y: cop.y,
     });
+  const blasted = state.players.map((player) =>
+    blastPlayer(player, vehicle, tick),
+  );
+  // A wrecked car has no owner, so an explosion kill is recorded without a killer rather than
+  // being attributed to whoever last shot the car — which the simulation does not track.
+  for (const [position, player] of blasted.entries()) {
+    const before = state.players[position];
+    if (!before || before.diedAtTick !== null || player.diedAtTick === null)
+      continue;
+    events = pushEvent(events, {
+      kind: "kill",
+      victim: "player",
+      victimId: player.id,
+      killerId: null,
+      x: player.x,
+      y: player.y,
+    });
+  }
+
   return {
     ...state,
     vehicles,
     peds: blast.peds,
     cops: copBlast.cops,
     nextId: state.nextId + 1,
-    players: state.players.map((player) => blastPlayer(player, vehicle, tick)),
+    players: blasted,
     events,
     effects: addEffect(state.effects, {
       id: state.nextId,

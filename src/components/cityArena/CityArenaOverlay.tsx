@@ -10,7 +10,10 @@ import {
 } from "react";
 import { createPortal, preload } from "react-dom";
 import { ZONE_OPTIONS } from "@/lib/cityArena/constants";
+import { ArenaCountdown } from "./ArenaCountdown";
 import { ArenaLobby } from "./ArenaLobby";
+import { ArenaScoreboard } from "./ArenaScoreboard";
+import { useMatchClock } from "./useMatchClock";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { useArenaRoom } from "./useArenaRoom";
 import type { ArenaEntry } from "./arenaEntry";
@@ -45,13 +48,12 @@ const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 type CityArenaOverlayProps = { entry: ArenaEntry; onClose: () => void };
 
 /**
- * Which screen the overlay is showing.
+ * The overlay draws whichever phase the match clock is in.
  *
- * Deliberately separate from `ArenaPhase`, which is the *canvas* lifecycle (loading, playing,
- * error). Conflating "the map is still loading" with "we are in the lobby" is how those two end
- * up unable to express a lobby whose city is still loading behind it.
+ * That phase is deliberately separate from `ArenaPhase`, which is the *canvas* lifecycle
+ * (loading, playing, error). Conflating "the map is still loading" with "we are in the lobby"
+ * is how those two end up unable to express a lobby whose city is still loading behind it.
  */
-type ArenaScreen = "lobby" | "match";
 
 /** True while the viewport matches the touch-control media query; updates on resize/rotate. */
 function useShowTouchControls(): boolean {
@@ -312,7 +314,6 @@ export default function CityArenaOverlay({
   onClose,
 }: CityArenaOverlayProps): ReactPortal | null {
   const fallbackZone = ZONE_OPTIONS[0]!.key;
-  const [screen, setScreen] = useState<ArenaScreen>("lobby");
   // TODO: SessionState carries no display name and the token route returns the user id as
   // `displayName`, so the crew manifest shows a placeholder. Real names need one of those two to
   // supply it; that is a follow-up, not something to fake here.
@@ -325,6 +326,11 @@ export default function CityArenaOverlay({
   const showTouch = useShowTouchControls();
   const reducedMotion = useReducedMotion();
   const game = useArenaGame({ zoneKey: zone, canvasRef, debug, reducedMotion });
+  const clock = useMatchClock(game);
+  const crewNames = useMemo(
+    () => new Map(room.crew.map((member, seat) => [seat, member.name])),
+    [room.crew],
+  );
   useDialogFocusTrap(dialogRef, onClose);
   useLockBodyScroll();
   useWarmDeathArtwork();
@@ -361,7 +367,7 @@ export default function CityArenaOverlay({
       {/* The lobby sits *over* the running city rather than beside it: spec §2 has members
           free-roaming the whole map while they wait, so the canvas keeps drawing behind this
           panel instead of being unmounted and reloaded when the potje starts. */}
-      {screen === "lobby" ? (
+      {clock.phase === "lobby" ? (
         <div className="absolute inset-0 z-10 overflow-y-auto bg-[rgba(7,9,11,0.92)] pt-safe pb-safe-bottom-bar pl-safe pr-safe">
           <ArenaLobby
             roomCode={room.roomCode ?? "……"}
@@ -369,8 +375,25 @@ export default function CityArenaOverlay({
             crew={room.crew}
             connection={room.connection}
             isHost={room.isHost}
-            onStart={() => setScreen("match")}
+            onStart={clock.start}
             onEnterCode={onClose}
+            onLeave={() => {
+              room.leave();
+              onClose();
+            }}
+          />
+        </div>
+      ) : null}
+      {clock.phase === "countdown" && clock.countdown !== null ? (
+        <ArenaCountdown count={clock.countdown} zone={zone} />
+      ) : null}
+      {clock.phase === "scoreboard" ? (
+        <div className="absolute inset-0 z-10 overflow-y-auto bg-[rgba(7,9,11,0.92)] pt-safe pb-safe-bottom-bar pl-safe pr-safe">
+          <ArenaScoreboard
+            lines={clock.scoreboard}
+            names={crewNames}
+            secondsLeft={clock.secondsLeft ?? 0}
+            onRematch={clock.backToLobby}
             onLeave={() => {
               room.leave();
               onClose();

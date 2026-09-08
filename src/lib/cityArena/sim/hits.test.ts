@@ -75,7 +75,7 @@ describe("applyEntityHit", () => {
     expect(killed?.peds[0]).toMatchObject({ health: 0, mode: "dead" });
     expect(killed?.events).toEqual([
       { kind: "hit", target: "ped", x: 4.6, y: 0 },
-      { kind: "kill", victim: "ped", killerId: 0, x: 5, y: 0 },
+      { kind: "kill", victim: "ped", victimId: 300, killerId: 0, x: 5, y: 0 },
     ]);
   });
 
@@ -121,6 +121,7 @@ describe("applyEntityHit", () => {
     expect(killed?.events).toContainEqual({
       kind: "kill",
       victim: "cop",
+      victimId: 300,
       killerId: 0,
       x: 5,
       y: 0,

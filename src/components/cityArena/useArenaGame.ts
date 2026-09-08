@@ -1,6 +1,8 @@
 "use client";
 
 import { localPlayer, replacePlayer } from "@/lib/cityArena/sim/players";
+import type { Tally } from "@/lib/cityArena/net/scoreboard";
+import type { ArenaPlayerState } from "@/lib/cityArena/sim/types";
 import {
   useCallback,
   useEffect,
@@ -117,6 +119,24 @@ export type ArenaGame = {
   setButton(name: ButtonName, pressed: boolean): void;
   teleportToZone(key: ZoneKey): void;
   debugSnapshot: DebugSnapshot | null;
+  /**
+   * Reads the live simulation without subscribing to it.
+   *
+   * The match clock and the scorebord need the tick and the running tally, which change 30 times
+   * a second. Pushing that through React state would re-render the whole overlay every tick, so
+   * the caller polls this at whatever rate it actually needs instead.
+   *
+   * @returns The tick, the tally and the players, or `null` before the world has booted.
+   */
+  peek(): MatchPeek | null;
+};
+
+/** What {@link ArenaGame.peek} reports about the running simulation. */
+export type MatchPeek = {
+  tick: number;
+  tally: Tally;
+  players: ArenaPlayerState[];
+  youId: number;
 };
 
 /**
@@ -606,6 +626,17 @@ export function useArenaGame({
     [hud, initialSoundRef, runtimeRef, setHud],
   );
 
+  const peek = useCallback((): MatchPeek | null => {
+    const runtime = runtimeRef.current;
+    if (!runtime) return null;
+    return {
+      tick: runtime.state.tick,
+      tally: runtime.tally,
+      players: runtime.state.players,
+      youId: localPlayer(runtime.state).id,
+    };
+  }, [runtimeRef]);
+
   return {
     phase,
     progress,
@@ -619,5 +650,6 @@ export function useArenaGame({
     setButton,
     teleportToZone,
     debugSnapshot,
+    peek,
   };
 }
