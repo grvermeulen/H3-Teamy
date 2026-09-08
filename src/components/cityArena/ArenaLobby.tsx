@@ -174,7 +174,7 @@ export function ArenaLobby({
           <span className="arena-label block text-[var(--arena-amber)]">
             Room {roomCode} · Lobby
           </span>
-          <h2 className="arena-display mt-1 truncate text-2xl text-[var(--arena-text)] sm:text-3xl">
+          <h2 className="arena-display mt-1 text-2xl text-[var(--arena-text)] sm:truncate sm:text-3xl">
             {zoneName(zone)}
           </h2>
         </div>
