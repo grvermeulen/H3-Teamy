@@ -8,6 +8,19 @@
 /** How a member is taking part, which also sets their host priority (spec §6.6). */
 export type PresenceRole = "player" | "controller" | "display";
 
+/**
+ * A room as it appears in the lobby's presence set (spec §6.3).
+ *
+ * Only the host of a room publishes one, and only onto `arena:lobby`. It is what the launcher's
+ * "Actieve potjes" list is built from.
+ */
+export type LobbyRoomSummary = {
+  roomCode: string;
+  zone: string;
+  players: number;
+  phase: "lobby" | "playing";
+};
+
 /** What every member publishes about themselves into a channel's presence set. */
 export type PresenceData = {
   name: string;
@@ -15,6 +28,8 @@ export type PresenceData = {
   role: PresenceRole;
   device: "mobile" | "desktop";
   displayId?: string;
+  /** Set only on `arena:lobby`, by the host, to advertise the room it is running. */
+  room?: LobbyRoomSummary;
 };
 
 /**
