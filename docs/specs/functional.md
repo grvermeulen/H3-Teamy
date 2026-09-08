@@ -54,6 +54,10 @@ This document reflects the features that exist in the code today. Planned or fut
 - /api/admin/feedback/[id]
 - /api/admin/status
 - /api/admin/users
+- /api/arena/leaderboard
+- /api/arena/matches
+- /api/arena/realtime-token
+- /api/arena/rooms
 - /api/auth/[...nextauth]
 - /api/auth/link
 - /api/auth/passkey/login-options
