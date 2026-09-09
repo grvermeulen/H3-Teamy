@@ -5,6 +5,11 @@ import {
   isDbUnavailableError,
   jsonDatabaseUnavailable,
 } from "../../../../lib/dbUnavailableError";
+import {
+  ARENA_LIMITS,
+  checkRateLimit,
+  rateLimited,
+} from "../../../../lib/rateLimit";
 import { PostMatchSchema } from "../../../../lib/schemas/arena";
 import {
   recordMatch,
@@ -43,6 +48,8 @@ const REFUSALS: Record<RecordFailure, { status: number; error: string }> = {
 export async function POST(req: NextRequest): Promise<Response> {
   try {
     const { userId } = await getActiveUser(req);
+    const verdict = await checkRateLimit(ARENA_LIMITS.matches, userId);
+    if (!verdict.allowed) return rateLimited(verdict);
     const key = process.env.ABLY_API_KEY;
     if (!key) {
       Sentry.captureException(new Error("ABLY_API_KEY is not set"), {

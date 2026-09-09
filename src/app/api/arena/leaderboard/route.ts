@@ -1,9 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import {
   isDbUnavailableError,
   jsonDatabaseUnavailable,
 } from "../../../../lib/dbUnavailableError";
+import {
+  ARENA_LIMITS,
+  checkRateLimit,
+  clientAddress,
+  rateLimited,
+} from "../../../../lib/rateLimit";
 import {
   LEADERBOARD_SIZE,
   leaderboard,
@@ -25,10 +31,16 @@ type LeaderboardResponse = { rows: LeaderboardRow[] };
  * Public: the ranglijst is shown on the launcher card, which signed-out visitors can see.
  * It carries first names only, which is what the crew manifest already shows in play.
  *
+ * @param req - The request; public, so the rate limit counts the client address.
  * @returns The top rows, or an empty list when they cannot be read.
  */
-export async function GET(): Promise<Response> {
+export async function GET(req: NextRequest): Promise<Response> {
   try {
+    const verdict = await checkRateLimit(
+      ARENA_LIMITS.leaderboard,
+      clientAddress(req),
+    );
+    if (!verdict.allowed) return rateLimited(verdict);
     const rows = await leaderboard(LEADERBOARD_SIZE);
     const response = NextResponse.json<LeaderboardResponse>({ rows });
     response.headers.set(
