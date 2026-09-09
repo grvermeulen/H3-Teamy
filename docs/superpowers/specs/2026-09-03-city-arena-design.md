@@ -487,6 +487,15 @@ piggyback on the player's own touch input; never relied upon.
 (4 px hits, 10 px explosions), hit-marker flash when your shots land, low-health heartbeat
 throb below 25. Setting **"Trillen"** (default on).
 
+**Car radio (Plan 7, added 2026-09-09).** Cars have a radio: three stations of instrumental
+music generated with Eleven Music (Grebbe FM, Rijn FM, Cunera Klassiek), one `<audio>` element
+behind the sound layer's master gain, so **Geluid** mutes it and shots duck it. It plays while the
+player sits in a working car, pauses — keeping its place — on the way out, and switches station on
+**R**, a **Radio** touch button in the car, or the menu's **Zender** select; a **Radio** switch in
+the menu turns it off. Settings: `radio: true`, `radioStation?: id`. The tracks live in the repo
+under a size budget, with their credits; the dial is a manifest, so a run of the generator adds
+tracks without touching the game.
+
 **Death screen (`render/deathOverlay.ts`, `components/cityArena/DeathOverlay.tsx`).**
 Replaces the "Wasted!" convention with the owner's artwork
 `public/branding/wasted-screen.{webp,jpg}` (source `assets/branding/wasted-screen.png`,
@@ -580,7 +589,7 @@ Errors follow the house pattern: `Sentry.captureException(err, { tags: { compone
 
 ### 9.3 Client storage (Zod-validated, Space Invaders `storage.ts` pattern)
 
-- `h3-arena-settings-v1`: `{ vibrate: true, sound: true, twinStick: true, lastZone, forceLayout?: "mobile" | "desktop" }`.
+- `h3-arena-settings-v1`: `{ vibrate: true, sound: true, twinStick: true, lastZone, forceLayout?: "mobile" | "desktop", radio: true, radioStation?: string }`.
 - `h3-arena-pending-results-v1`: results whose POST failed after 3 retries; retried on the
   next launcher mount; toast _"Uitslag wordt later opgeslagen"_.
 - `h3-arena-touch-tip-v1`: first-run touch tip dismissed.
@@ -848,4 +857,5 @@ meer · Potje is vol · Kaart laden… · Kaart kon niet volledig laden · Uitsl
 opgeslagen · Geluid · Trillen · Enkele stick · Besturing · Potje verlaten · Kaart ©
 OpenStreetMap-bijdragers. PR 2 additions: Startpunt · Ga naar · Spel laden… · Sluiten. PR 3 additions:
 Gezondheid · Vuist · Pistool · Uzi · Shotgun · Compact · Sedan · Sportwagen · Politieauto · km/u · Je bent
-uitgeschakeld · Vrij rondlopen.
+uitgeschakeld · Vrij rondlopen. PR 7 additions: Radio · Zender · Grebbe FM · Rijn FM · Cunera
+Klassiek.
