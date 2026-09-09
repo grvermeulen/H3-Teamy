@@ -10,11 +10,23 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
   },
-  /** Map tiles are content-versioned by path (`/arena/map/v1/...`), so they can be cached forever. */
+  /**
+   * Map tiles are content-versioned by path (`/arena/map/v1/...`) and radio tracks carry a
+   * content hash in their name, so both can be cached forever.
+   */
   async headers() {
     return [
       {
         source: "/arena/map/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/arena/radio/tracks/:path*",
         headers: [
           {
             key: "Cache-Control",
