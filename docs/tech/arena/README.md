@@ -281,9 +281,12 @@ the settings that switch each of them off, and the rest of the keyboard map.
   gain so the Geluid toggle mutes both. **`play` returning `false` is the whole fallback
   contract:** `createArenaSound` tries the clip for an event first and runs its oscillator branch
   when there is none, and the engine runs from the `engine` loop (rate `engineRate(speed)`, 0.7 at
-  rest to 2.2 at 25 m/s, ramped over 80 ms) or from the drone. A clip the server does not have —
-  every clip today; the files and their `CREDITS.md` are the owner's Task 2 and have not landed —
-  is the expected state and is not reported; one that arrives and will not decode is reported to
+  rest to 2.2 at 25 m/s, ramped over 80 ms) or from the drone. The clips are generated with
+  ElevenLabs' Sound Effects API by `npm run arena:generate-audio` (one prompt per clip in
+  `scripts/arena/generate-audio.ts`; loops requested seamless), credited row by row in
+  `public/arena/audio/CREDITS.md`, and `npm run arena:check-audio` — in CI — fails on any clip
+  without a file, over 200 KB, or without a credit row. A clip the server does not have is not
+  reported; one that arrives and will not decode is reported to
   Sentry once with `kind: "audio"` and the clip name.
 - **Haptics.** `input/haptics.ts`: `hapticPulses(events, me, previousHealth)` is pure and says
   which of spec §7's patterns a tick earns this player (hit 25 ms — read from health dropping, not
@@ -320,5 +323,4 @@ the settings that switch each of them off, and the rest of the keyboard map.
   simulation understands, one tick pressed and one released, and gives up after eight presses so a
   weapon with no ammo — which the simulation skips — cannot spin the rack forever. While the menu
   is open the keyboard is suspended and anything held is released.
-- **Not in this PR.** The audio files and `CREDITS.md` (Task 2, the owner's; `npm run
-arena:check-audio` lands with them), and the device check on a phone.
+- **Still open after Plan 6.** The device check on a phone.
