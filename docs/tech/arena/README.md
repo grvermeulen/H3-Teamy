@@ -323,5 +323,4 @@ the settings that switch each of them off, and the rest of the keyboard map.
   simulation understands, one tick pressed and one released, and gives up after eight presses so a
   weapon with no ammo — which the simulation skips — cannot spin the rack forever. While the menu
   is open the keyboard is suspended and anything held is released.
-- **Not in this PR.** The audio files and `CREDITS.md` (Task 2, the owner's; `npm run
-arena:check-audio` lands with them), and the device check on a phone.
+- **Still open after Plan 6.** The device check on a phone.
