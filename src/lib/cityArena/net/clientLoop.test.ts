@@ -415,3 +415,31 @@ describe("clientLoop match phase", () => {
     loop.stop();
   });
 });
+
+describe("clientLoop host filter", () => {
+  it("applies snapshots from the elected host and nobody else", () => {
+    const hub = createMemoryHub();
+    const loop = createClientLoop({
+      transport: createMemoryTransport(hub, "me"),
+      roomCode: ROOM,
+      world,
+      playerId: 0,
+      state: boot(41),
+      random: createRng(41),
+      serverTimeMs: () => 0,
+      hostClientId: "host",
+    });
+    const snapshot = encodeSnapshot({ ...boot(41), tick: 99 }, 0, {});
+    void createMemoryTransport(hub, "impostor")
+      .channel(`arena:room:${ROOM}`)
+      .publish("state", snapshot);
+    hub.flush();
+    expect(loop.state().tick).toBe(0);
+    void createMemoryTransport(hub, "host")
+      .channel(`arena:room:${ROOM}`)
+      .publish("state", snapshot);
+    hub.flush();
+    expect(loop.state().tick).toBe(99);
+    loop.stop();
+  });
+});

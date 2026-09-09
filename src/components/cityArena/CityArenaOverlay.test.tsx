@@ -118,8 +118,10 @@ vi.mock("./useArenaRoom", () => {
     transport: () => null,
     zone: "wageningen",
     crew: [{ clientId: "me", seat: 0, name: "Jij", isHost: true, isYou: true }],
+    hostClientId: "me",
     isHost: true,
     failure: null,
+    reportHostLost: vi.fn(),
     leave: vi.fn(),
   };
   return { useArenaRoom: () => room };

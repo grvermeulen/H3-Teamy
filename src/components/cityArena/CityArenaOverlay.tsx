@@ -14,6 +14,7 @@ import { ZONE_OPTIONS } from "@/lib/cityArena/constants";
 import { ArenaPhaseScreens } from "./ArenaPhaseScreens";
 import { ArenaSettingsSheet, MENU_LABEL } from "./ArenaSettingsSheet";
 import { ConnectionBanner } from "./ConnectionBanner";
+import { HostToast } from "./HostToast";
 import { useArenaRoom, type ArenaRoom } from "./useArenaRoom";
 import type { ArenaEntry } from "./arenaEntry";
 import { isDebugEnabled } from "@/lib/cityArena/debugFlag";
@@ -312,11 +313,14 @@ function netplayFor(room: ArenaRoom): ArenaNetplayOptions {
   return {
     transport: room.transport,
     ready: room.status === "ready",
+    connected: room.connection === "connected",
     roomCode: room.roomCode,
     clientId: room.clientId,
     clockOffsetMs: room.clockOffsetMs,
+    hostClientId: room.hostClientId,
     isHost: room.isHost,
     memberIds: room.crew.map((member) => member.clientId),
+    onHostLost: room.reportHostLost,
   };
 }
 
@@ -375,6 +379,10 @@ export default function CityArenaOverlay({
       onContextMenu={(event) => event.preventDefault()}
     >
       <ConnectionBanner state={room.connection} />
+      <HostToast
+        hostClientId={room.hostClientId}
+        hostName={room.crew.find((member) => member.isHost)?.name ?? null}
+      />
       <ArenaHudBar
         hud={game.hud}
         zones={game.zones}

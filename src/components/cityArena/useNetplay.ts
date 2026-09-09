@@ -2,7 +2,7 @@
 
 /**
  * Runs the room's loop inside the runtime: the host loop when this client was elected, the
- * client loop otherwise.
+ * client loop otherwise — and notices when the host has gone (spec §6.6).
  *
  * The runtime keeps stepping alone until the room is ready, so the city is playable in the lobby
  * (spec §2) and a room that never connects still leaves the player something to drive around in.
@@ -11,10 +11,11 @@
 import { useEffect, useMemo, useRef, type RefObject } from "react";
 import * as Sentry from "@sentry/nextjs";
 import { createClientLoop } from "@/lib/cityArena/net/clientLoop";
+import { createHostWatch, type HostWatch } from "@/lib/cityArena/net/election";
 import { createHostLoop, type HostLoop } from "@/lib/cityArena/net/hostLoop";
 import type { MatchState } from "@/lib/cityArena/net/matchPhase";
-import type { Tally } from "@/lib/cityArena/net/scoreboard";
 import { roomChannelName } from "@/lib/cityArena/net/room";
+import type { Tally } from "@/lib/cityArena/net/scoreboard";
 import {
   decodeSnapshot,
   type Snapshot,
@@ -30,25 +31,39 @@ export type ArenaNetplayOptions = {
   transport: () => RealtimeTransport | null;
   /** True once the room is entered and its presence set is known. */
   ready: boolean;
+  /** True while this client's own connection is up; a quiet host means nothing otherwise. */
+  connected: boolean;
   roomCode: string | null;
   /** This client's id — the user id — or empty before the connection reports it. */
   clientId: string;
   /** Server time minus local time, so both ends keep time by the same clock. */
   clockOffsetMs: number;
+  /** The elected host, or null while nobody is. Only its snapshots are trusted. */
+  hostClientId: string | null;
   /** Whether this client is the room's elected host right now. */
   isHost: boolean;
   /** Everyone present in the room, by client id, so the host can seat them. */
   memberIds: string[];
+  /**
+   * Called with the host to re-elect without: the one in `hostClientId` after it has been quiet
+   * for the silence window, or this client itself when, hosting, it hears another member publish
+   * the world — the room already moved on while this tab was throttled (spec §6.6).
+   */
+  onHostLost: (clientId: string) => void;
 };
 
 /** Separator for the member key; client ids are cuids, which never contain it. */
 const MEMBER_SEPARATOR = "|";
+
+/** How often the silence watch is fed; coarse is fine against a three-second window. */
+export const WATCH_POLL_MS = 500;
 
 /** What both loops are built from. */
 type LoopSetup = {
   transport: RealtimeTransport;
   roomCode: string;
   clientId: string;
+  hostClientId: string;
   clockOffsetMs: number;
 };
 
@@ -129,12 +144,15 @@ function syncSeats(
  * it saw as a client. Every seat the previous loop knew is claimed rather than added again, so a
  * migration keeps everyone's player where it was; whoever has since left is unseated by the
  * seating effect that runs next.
+ *
+ * @returns A function that stops listening for a rival, for the effect's cleanup.
  */
 function startHosting(
   runtime: Runtime,
   setup: LoopSetup,
   previous: Handover,
-): void {
+  onUsurped: () => void,
+): () => void {
   const loop = createHostLoop({
     transport: setup.transport,
     roomCode: setup.roomCode,
@@ -150,6 +168,12 @@ function startHosting(
   if (previous.match) loop.setMatch(previous.match);
   runtime.state = loop.state();
   runtime.netplay = { kind: "host", loop, playerId: previous.playerId };
+  const room = setup.transport.channel(roomChannelName(setup.roomCode));
+  return room.subscribe("state", (message) => {
+    // Another member publishing the world means the room re-elected while this tab was quiet.
+    // Stepping down is what stops the match forking into two.
+    if (message.clientId !== setup.clientId) onUsurped();
+  });
 }
 
 /** Builds the client loop around the seat the host named, primed with the snapshot that named it. */
@@ -167,6 +191,7 @@ function adoptSeat(
     state: runtime.state,
     random: runtime.random,
     serverTimeMs: () => Date.now() + setup.clockOffsetMs,
+    hostClientId: setup.hostClientId,
     onTick: (state) => feelTick(runtime, state),
   });
   loop.onSnapshot(snapshot);
@@ -178,13 +203,20 @@ function adoptSeat(
 /**
  * Joins as a client. A client cannot know which player it drives until the host's first snapshot
  * names it in `seats`, so this listens for that snapshot and builds the client loop around the
- * seat it names. Until then the runtime keeps roaming its own city.
+ * seat it names. Until then the runtime keeps roaming its own city. Every snapshot from the host,
+ * seated or not, also feeds the silence watch.
  *
  * @returns A function that stops listening, for the effect's cleanup.
  */
-function startJoining(runtime: Runtime, setup: LoopSetup): () => void {
+function startJoining(
+  runtime: Runtime,
+  setup: LoopSetup,
+  watch: () => HostWatch,
+): () => void {
   const room = setup.transport.channel(roomChannelName(setup.roomCode));
   return room.subscribe("state", (message) => {
+    if (message.clientId !== setup.hostClientId) return;
+    watch().sawSnapshot();
     if (runtime.netplay.kind !== "offline" || runtime.disposed) return;
     try {
       const snapshot = message.data as Snapshot;
@@ -211,6 +243,63 @@ function takeHandover(
   return stopNetplay(runtime, roomCode);
 }
 
+/** The scalar pieces of the options, so the effects below can list plain dependencies. */
+type NetplayInputs = {
+  transport: (() => RealtimeTransport | null) | undefined;
+  ready: boolean;
+  connected: boolean;
+  roomCode: string | null;
+  clientId: string;
+  clockOffsetMs: number;
+  hostClientId: string | null;
+  isHost: boolean;
+  memberKey: string;
+  onHostLost: ((clientId: string) => void) | undefined;
+};
+
+/** Reads the options into plain values; absent options read as a room that is not there. */
+function inputsFrom(options: ArenaNetplayOptions | undefined): NetplayInputs {
+  return {
+    transport: options?.transport,
+    ready: options?.ready ?? false,
+    connected: options?.connected ?? false,
+    roomCode: options?.roomCode ?? null,
+    clientId: options?.clientId ?? "",
+    clockOffsetMs: options?.clockOffsetMs ?? 0,
+    hostClientId: options?.hostClientId ?? null,
+    isHost: options?.isHost ?? false,
+    memberKey: options?.memberIds.join(MEMBER_SEPARATOR) ?? "",
+    onHostLost: options?.onHostLost,
+  };
+}
+
+/**
+ * Calls for a re-election once the host has been quiet for the silence window (spec §6.6).
+ *
+ * The watch is replaced whenever the host changes or this client's own connection comes back:
+ * quiet time under the previous host, or while nothing could arrive anyway, says nothing about
+ * the host that is publishing now.
+ */
+function useSilenceWatch(
+  watchRef: RefObject<HostWatch>,
+  active: boolean,
+  hostClientId: string | null,
+  onHostLost: ((clientId: string) => void) | undefined,
+): void {
+  useEffect(() => {
+    if (!active || !hostClientId || !onHostLost) return undefined;
+    watchRef.current = createHostWatch();
+    const timer = setInterval(() => {
+      const watch = watchRef.current;
+      watch.elapsed(WATCH_POLL_MS);
+      if (!watch.isSilent()) return;
+      clearInterval(timer);
+      onHostLost(hostClientId);
+    }, WATCH_POLL_MS);
+    return () => clearInterval(timer);
+  }, [watchRef, active, hostClientId, onHostLost]);
+}
+
 /**
  * Runs the right loop for the room once the world has booted, and swaps it when the election
  * changes. Without options — offline free roam, and every test that is not about the room —
@@ -225,13 +314,18 @@ export function useNetplay(
   booted: boolean,
   options: ArenaNetplayOptions | undefined,
 ): void {
-  const transport = options?.transport;
-  const ready = options?.ready ?? false;
-  const roomCode = options?.roomCode ?? null;
-  const clientId = options?.clientId ?? "";
-  const clockOffsetMs = options?.clockOffsetMs ?? 0;
-  const isHost = options?.isHost ?? false;
-  const memberKey = options?.memberIds.join(MEMBER_SEPARATOR) ?? "";
+  const {
+    transport,
+    ready,
+    connected,
+    roomCode,
+    clientId,
+    clockOffsetMs,
+    hostClientId,
+    isHost,
+    memberKey,
+    onHostLost,
+  } = inputsFrom(options);
   // Derived from the key rather than taken from the options, so a fresh array holding the same
   // members does not re-run the seating effect.
   const memberIds = useMemo(
@@ -239,24 +333,27 @@ export function useNetplay(
     [memberKey],
   );
   const handoverRef = useRef<Handover | null>(null);
+  const watchRef = useRef<HostWatch>(createHostWatch());
 
   useEffect(() => {
     const runtime = runtimeRef.current;
     const live = transport?.() ?? null;
     if (!runtime || !live || !booted || !ready || !roomCode || !clientId)
       return undefined;
+    if (!hostClientId) return undefined;
     const setup: LoopSetup = {
       transport: live,
       roomCode,
       clientId,
+      hostClientId,
       clockOffsetMs,
     };
     const previous = takeHandover(handoverRef, runtime, roomCode);
     const stopListening = isHost
-      ? startHosting(runtime, setup, previous)
-      : startJoining(runtime, setup);
+      ? startHosting(runtime, setup, previous, () => onHostLost?.(clientId))
+      : startJoining(runtime, setup, () => watchRef.current);
     return () => {
-      stopListening?.();
+      stopListening();
       handoverRef.current = stopNetplay(runtime, roomCode);
     };
   }, [
@@ -267,7 +364,9 @@ export function useNetplay(
     roomCode,
     clientId,
     clockOffsetMs,
+    hostClientId,
     isHost,
+    onHostLost,
   ]);
 
   // Declared after the loop effect and keyed on everything it is, so a freshly created host loop
@@ -284,7 +383,16 @@ export function useNetplay(
     roomCode,
     clientId,
     clockOffsetMs,
+    hostClientId,
     isHost,
+    onHostLost,
     memberIds,
   ]);
+
+  useSilenceWatch(
+    watchRef,
+    booted && ready && connected && !isHost,
+    hostClientId,
+    onHostLost,
+  );
 }
