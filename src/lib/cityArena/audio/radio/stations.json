@@ -1,1 +1,38 @@
-{ "version": 1, "stations": [] }
+{
+  "version": 1,
+  "stations": [
+    {
+      "id": "grebbe",
+      "name": "Grebbe FM",
+      "tracks": [
+        {
+          "file": "grebbe-1-864f654e.mp3",
+          "title": "Nachtrit",
+          "seconds": 120
+        }
+      ]
+    },
+    {
+      "id": "rijn",
+      "name": "Rijn FM",
+      "tracks": [
+        {
+          "file": "rijn-1-1ae330ee.mp3",
+          "title": "Rijnkade",
+          "seconds": 120
+        }
+      ]
+    },
+    {
+      "id": "cunera",
+      "name": "Cunera Klassiek",
+      "tracks": [
+        {
+          "file": "cunera-1-decbc818.mp3",
+          "title": "Allegro voor de Cunera",
+          "seconds": 120
+        }
+      ]
+    }
+  ]
+}
