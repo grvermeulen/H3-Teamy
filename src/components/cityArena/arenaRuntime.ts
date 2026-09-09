@@ -71,6 +71,10 @@ import type {
 import type { Point } from "@/lib/cityArena/world/projection";
 import { findPath, pathLength } from "@/lib/cityArena/world/roadGraph";
 import type { WorldSession } from "@/lib/cityArena/world/worldSession";
+import {
+  browserRadio,
+  type RadioSettings,
+} from "@/lib/cityArena/audio/radio/radio";
 import { browserSamplePlayer } from "@/lib/cityArena/audio/samples";
 import {
   createHaptics,
@@ -378,6 +382,7 @@ export function createRuntime(
   reducedMotion: boolean,
   soundEnabled = true,
   audioContextFactory?: AudioContextFactory,
+  radioSettings: RadioSettings = { enabled: true },
 ): Runtime {
   const seed = seedFromString(
     `${SESSION_SEED_PREFIX}:${zone?.key ?? "none"}:${Date.now()}`,
@@ -414,6 +419,7 @@ export function createRuntime(
       audioContextFactory,
       soundEnabled,
       browserSamplePlayer,
+      (context, master) => browserRadio(context, master, radioSettings),
     ),
     soundEnabled,
     haptics: createHaptics(vibrator(), () => runtime.hapticsEnabled),

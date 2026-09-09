@@ -1,6 +1,10 @@
 "use client";
 
 import { useRef } from "react";
+import {
+  RADIO_STATIONS,
+  stationById,
+} from "@/lib/cityArena/audio/radio/stations";
 import type { ArenaLayout, ArenaSettings } from "@/lib/cityArena/schemas";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
 
@@ -18,6 +22,8 @@ export type ArenaSettingsSheetProps = {
 export const MENU_LABEL = "Menu";
 export const SOUND_LABEL = "Geluid";
 export const VIBRATE_LABEL = "Trillen";
+export const RADIO_LABEL = "Radio";
+export const STATION_LABEL = "Zender";
 export const CONTROLS_LABEL = "Besturing";
 export const SINGLE_STICK_LABEL = "Enkele stick";
 export const LAYOUT_LABEL = "Indeling";
@@ -55,8 +61,32 @@ function SettingSwitch({
   );
 }
 
+/** The station picker, shown only when there is a dial to pick from. */
+function StationSelect({
+  settings,
+  onChange,
+}: Pick<ArenaSettingsSheetProps, "settings" | "onChange">): React.JSX.Element {
+  return (
+    <label className="flex min-h-[44px] items-center justify-between gap-4 border-b border-[var(--arena-line)] py-2 text-sm text-[var(--arena-text)]">
+      <span>{STATION_LABEL}</span>
+      <select
+        aria-label={STATION_LABEL}
+        className="rounded border border-[var(--arena-line-strong)] bg-[var(--arena-panel)] px-2 py-1 text-sm text-[var(--arena-text)]"
+        value={stationById(settings.radioStation)?.id ?? ""}
+        onChange={(event) => onChange({ radioStation: event.target.value })}
+      >
+        {RADIO_STATIONS.map((station) => (
+          <option key={station.id} value={station.id}>
+            {station.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 /**
- * The in-game menu (spec §7): Geluid, Trillen, Besturing and the way out. It pauses nothing —
+ * The in-game menu (spec §7): Geluid, Trillen, Radio, Besturing and the way out. It pauses nothing —
  * a potje with other people in it cannot wait for one of them — so the city keeps running
  * behind the veil.
  *
@@ -94,6 +124,14 @@ export function ArenaSettingsSheet({
           checked={settings.vibrate}
           onChange={(vibrate) => onChange({ vibrate })}
         />
+        <SettingSwitch
+          label={RADIO_LABEL}
+          checked={settings.radio}
+          onChange={(radio) => onChange({ radio })}
+        />
+        {RADIO_STATIONS.length > 0 ? (
+          <StationSelect settings={settings} onChange={onChange} />
+        ) : null}
         <p className="arena-label mt-3 text-[var(--arena-dim)]">
           {CONTROLS_LABEL}
         </p>

@@ -217,6 +217,11 @@ async function bootSession(
     width,
     reducedMotionRef.current,
     settingsRef.current.sound,
+    undefined,
+    {
+      enabled: settingsRef.current.radio,
+      stationId: settingsRef.current.radioStation,
+    },
   );
   runtime.hapticsEnabled = settingsRef.current.vibrate;
   runtimeRef.current = runtime;
@@ -621,6 +626,8 @@ function applySettings(runtime: Runtime | null, settings: ArenaSettings): void {
   runtime.sound.setEnabled(settings.sound);
   if (settings.sound) runtime.sound.unlock();
   runtime.hapticsEnabled = settings.vibrate;
+  runtime.sound.radio?.setEnabled(settings.radio);
+  runtime.sound.radio?.tune(settings.radioStation ?? "");
 }
 
 /** Owns the world session, the fixed-step arena loop, the camera, the HUD and the death screen state. */

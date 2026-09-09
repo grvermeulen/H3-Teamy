@@ -114,6 +114,7 @@ describe("ArenaSettingsSchema", () => {
       sound: true,
       vibrate: true,
       twinStick: true,
+      radio: true,
     });
     expect(
       ArenaSettingsSchema.safeParse({ forceLayout: "tablet" }).success,
@@ -121,5 +122,12 @@ describe("ArenaSettingsSchema", () => {
     expect(ArenaSettingsSchema.safeParse({ lastZone: "mars" }).success).toBe(
       false,
     );
+  });
+
+  it("keeps the radio settings, with the station optional", () => {
+    expect(
+      ArenaSettingsSchema.parse({ radio: false, radioStation: "rijn" }),
+    ).toMatchObject({ radio: false, radioStation: "rijn" });
+    expect(ArenaSettingsSchema.parse({}).radioStation).toBeUndefined();
   });
 });
