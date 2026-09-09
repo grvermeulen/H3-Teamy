@@ -71,6 +71,7 @@ import type {
 import type { Point } from "@/lib/cityArena/world/projection";
 import { findPath, pathLength } from "@/lib/cityArena/world/roadGraph";
 import type { WorldSession } from "@/lib/cityArena/world/worldSession";
+import { browserSamplePlayer } from "@/lib/cityArena/audio/samples";
 import {
   createArenaSound,
   type ArenaSound,
@@ -376,7 +377,11 @@ export function createRuntime(
     violations: 0,
     reportedViolations: new Set<string>(),
     reducedMotion,
-    sound: createArenaSound(audioContextFactory, soundEnabled),
+    sound: createArenaSound(
+      audioContextFactory,
+      soundEnabled,
+      browserSamplePlayer,
+    ),
     soundEnabled,
     radarRoadIndex: createRadarRoadIndex(
       session.graph().nodes,

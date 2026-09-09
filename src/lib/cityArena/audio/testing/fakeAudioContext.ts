@@ -1,3 +1,4 @@
+import type { AudioBufferLike, BufferSourceLike } from "../samples";
 import type {
   AudioContextLike,
   AudioNodeLike,
@@ -23,12 +24,26 @@ export type FakeOscillator = OscillatorLike & {
 /** In-memory gain fake used by the synth tests. */
 export type FakeGain = GainNodeLike & { operations: FakeAudioOperation[] };
 
-/** In-memory Web Audio context that records nodes, connections and resume calls. */
+/** In-memory buffer source fake used by the sample tests. */
+export type FakeBufferSource = BufferSourceLike & {
+  operations: FakeAudioOperation[];
+  started: boolean;
+  stopped: boolean;
+};
+
+/**
+ * In-memory Web Audio context that records nodes, connections and resume calls. It decodes any
+ * non-empty buffer to a one-second clip and refuses an empty one, so a test can serve a clip
+ * that "will not decode" by serving nothing.
+ */
 export type FakeAudioContext = AudioContextLike & {
   oscillators: FakeOscillator[];
   gains: FakeGain[];
+  sources: FakeBufferSource[];
   resumeCalls: number;
   closeCalls: number;
+  createBufferSource(): FakeBufferSource;
+  decodeAudioData(data: ArrayBuffer): Promise<AudioBufferLike>;
 };
 
 function param(operations: FakeAudioOperation[]): AudioParamLike {
@@ -65,11 +80,13 @@ export function createFakeAudioContext(): {
 } {
   const oscillators: FakeOscillator[] = [];
   const gains: FakeGain[] = [];
+  const sources: FakeBufferSource[] = [];
   const context: FakeAudioContext = {
     currentTime: 10,
     destination: node([]),
     oscillators,
     gains,
+    sources,
     resumeCalls: 0,
     closeCalls: 0,
     createGain(): FakeGain {
@@ -102,6 +119,33 @@ export function createFakeAudioContext(): {
       } as FakeOscillator;
       oscillators.push(oscillator);
       return oscillator;
+    },
+    createBufferSource(): FakeBufferSource {
+      const operations: FakeAudioOperation[] = [];
+      const source = {
+        ...node(operations),
+        operations,
+        buffer: null,
+        loop: false,
+        playbackRate: param(operations),
+        started: false,
+        stopped: false,
+        start: () => {
+          source.started = true;
+          operations.push({ kind: "start" });
+        },
+        stop: () => {
+          source.stopped = true;
+          operations.push({ kind: "stop" });
+        },
+      } as FakeBufferSource;
+      sources.push(source);
+      return source;
+    },
+    decodeAudioData(data: ArrayBuffer): Promise<AudioBufferLike> {
+      return data.byteLength === 0
+        ? Promise.reject(new Error("undecodable"))
+        : Promise.resolve({ duration: 1 });
     },
     resume(): void {
       context.resumeCalls += 1;
