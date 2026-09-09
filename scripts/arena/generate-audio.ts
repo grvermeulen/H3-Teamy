@@ -51,7 +51,8 @@ const PROMPTS: Record<ClipName, { text: string; seconds: number }> = {
   },
   footstep: {
     text: "one footstep of a sneaker on asphalt, close, dry",
-    seconds: 0.4,
+    // The API's floor is half a second; the step itself is shorter, the rest is silence.
+    seconds: 0.5,
   },
   engine: {
     text: "small car engine idling steadily, heard from inside the car, seamless loop, no revving",
