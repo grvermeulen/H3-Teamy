@@ -213,7 +213,14 @@ export type HitTargetKind = "player" | "ped" | "cop" | "vehicle";
 /** A serialisable simulation event consumed by audio and future netcode. */
 export type ArenaEvent =
   | { kind: "shot"; weapon: WeaponKind; ownerId: number; x: number; y: number }
-  | { kind: "hit"; target: HitTargetKind; x: number; y: number }
+  | {
+      kind: "hit";
+      target: HitTargetKind;
+      /** Whose bullet landed, so the shooter's own screen can show a hit marker. */
+      ownerId: number;
+      x: number;
+      y: number;
+    }
   | {
       kind: "impact";
       vehicleId: number;

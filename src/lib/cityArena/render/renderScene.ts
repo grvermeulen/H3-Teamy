@@ -52,6 +52,8 @@ export type Scene = {
   tick: number;
   aimScreen: [number, number] | null;
   pushIn: number;
+  /** Screen shake for this frame, in pixels; absent or zero draws the scene where it is. */
+  shake?: { x: number; y: number };
   /** Car sprite, absent until its art has loaded — cars fall back to the vector body. */
   carSprite?: VehicleSprite;
   /** Player character art, absent until it has loaded — the player falls back to the circle. */
@@ -130,6 +132,7 @@ export function renderScene(
   context.translate(rect.x, rect.y);
   const size = { width: rect.width, height: rect.height };
   applyPushIn(context, size, scene.pushIn);
+  if (scene.shake) context.translate(scene.shake.x, scene.shake.y);
   const stats = drawVisibleChunks(context, camera, size, scene.world);
   if (scene.zone) drawZoneRing(context, camera, size, scene.zone);
   drawPickups(context, camera, size, scene.pickups, scene.tick);

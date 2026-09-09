@@ -48,7 +48,7 @@ describe("createArenaSound", () => {
     const sound = createArenaSound(factory, true);
     sound.handleEvents([
       { kind: "shot", weapon: "pistol", ownerId: 0, x: 0, y: 0 },
-      { kind: "hit", target: "ped", x: 1, y: 1 },
+      { kind: "hit", target: "ped", ownerId: 0, x: 1, y: 1 },
       { kind: "pickup", pickupKind: "health", playerId: 0, x: 2, y: 2 },
       { kind: "explosion", x: 3, y: 3 },
       { kind: "wanted", playerId: 0, level: 2 },
@@ -131,7 +131,7 @@ describe("createArenaSound", () => {
     await player!.preload();
     sound.handleEvents([
       { kind: "shot", weapon: "pistol", ownerId: 0, x: 0, y: 0 },
-      { kind: "hit", target: "ped", x: 1, y: 1 },
+      { kind: "hit", target: "ped", ownerId: 0, x: 1, y: 1 },
       { kind: "pickup", pickupKind: "health", playerId: 0, x: 2, y: 2 },
       { kind: "explosion", x: 3, y: 3 },
     ]);

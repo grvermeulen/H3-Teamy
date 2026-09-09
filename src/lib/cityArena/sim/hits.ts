@@ -17,6 +17,7 @@ function hitPed(
   let events = pushEvent(state.events, {
     kind: "hit",
     target: "ped",
+    ownerId: hit.bullet.ownerId,
     x: hit.point[0],
     y: hit.point[1],
   });
@@ -50,6 +51,7 @@ function hitCop(
   let events = pushEvent(state.events, {
     kind: "hit",
     target: "cop",
+    ownerId: hit.bullet.ownerId,
     x: hit.point[0],
     y: hit.point[1],
   });

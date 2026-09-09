@@ -69,12 +69,12 @@ describe("applyEntityHit", () => {
     const hurt = applyEntityHit(withPed(), hitOn(300, bulletFrom(0, 20)), 4);
     expect(hurt?.peds[0]).toMatchObject({ health: 20, mode: "walk" });
     expect(hurt?.events).toEqual([
-      { kind: "hit", target: "ped", x: 4.6, y: 0 },
+      { kind: "hit", target: "ped", ownerId: 0, x: 4.6, y: 0 },
     ]);
     const killed = applyEntityHit(withPed(), hitOn(300, bulletFrom(0, 40)), 4);
     expect(killed?.peds[0]).toMatchObject({ health: 0, mode: "dead" });
     expect(killed?.events).toEqual([
-      { kind: "hit", target: "ped", x: 4.6, y: 0 },
+      { kind: "hit", target: "ped", ownerId: 0, x: 4.6, y: 0 },
       { kind: "kill", victim: "ped", victimId: 300, killerId: 0, x: 5, y: 0 },
     ]);
   });
@@ -87,7 +87,7 @@ describe("applyEntityHit", () => {
     );
     expect(absorbed?.peds[0].health).toBe(40);
     expect(absorbed?.events).toEqual([
-      { kind: "hit", target: "ped", x: 4.6, y: 0 },
+      { kind: "hit", target: "ped", ownerId: 77, x: 4.6, y: 0 },
     ]);
     expect(
       applyEntityHit(withPed(), hitOn(0, bulletFrom(77, 40)), 4),
@@ -114,7 +114,7 @@ describe("applyEntityHit", () => {
     const hurt = applyEntityHit(state, hitOn(300, bulletFrom(0, 20)), 4);
     expect(hurt?.cops[0]).toMatchObject({ health: 80, diedAtTick: null });
     expect(hurt?.events).toEqual([
-      { kind: "hit", target: "cop", x: 4.6, y: 0 },
+      { kind: "hit", target: "cop", ownerId: 0, x: 4.6, y: 0 },
     ]);
     const killed = applyEntityHit(state, hitOn(300, bulletFrom(0, 100)), 4);
     expect(killed?.cops[0]).toMatchObject({ health: 0, diedAtTick: 4 });

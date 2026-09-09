@@ -154,12 +154,14 @@ function withHitEvent(
   state: ArenaState,
   target: HitTargetKind,
   point: Point,
+  ownerId: number,
 ): ArenaState {
   return {
     ...state,
     events: pushEvent(state.events, {
       kind: "hit",
       target,
+      ownerId,
       x: point[0],
       y: point[1],
     }),
@@ -177,7 +179,12 @@ function applyHit(state: ArenaState, hit: BulletHit, tick: number): ArenaState {
         ? damageVehicle(vehicle, hit.bullet.damage)
         : vehicle,
     );
-    return withHitEvent({ ...state, vehicles }, "vehicle", hit.point);
+    return withHitEvent(
+      { ...state, vehicles },
+      "vehicle",
+      hit.point,
+      hit.bullet.ownerId,
+    );
   }
   if (hit.target.kind === "player") {
     const struck = playerById(state, hit.target.playerId);
@@ -187,6 +194,7 @@ function applyHit(state: ArenaState, hit: BulletHit, tick: number): ArenaState {
       replacePlayer(state, damaged),
       "player",
       hit.point,
+      hit.bullet.ownerId,
     );
     // The shot that finishes a player is the only place the killer is known, so the scoreboard
     // is built from this event rather than from watching health drop to zero.
