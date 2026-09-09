@@ -4,6 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const getActiveUser = vi.fn();
 const createTokenRequest = vi.fn();
 const captureException = vi.fn();
+const checkRateLimit = vi.fn();
+
+vi.mock("../../../../lib/rateLimit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../../lib/rateLimit")>()),
+  checkRateLimit: (...args: unknown[]) => checkRateLimit(...args),
+}));
 
 vi.mock("../../../../lib/activeUser", () => ({
   getActiveUser: (...args: unknown[]) => getActiveUser(...args),
@@ -48,6 +54,22 @@ describe("GET /api/arena/realtime-token", () => {
     getActiveUser.mockResolvedValue({ userId: "user-1", needsLink: false });
     createTokenRequest.mockResolvedValue(TOKEN_REQUEST);
     findUnique.mockResolvedValue({ firstName: "Guido" });
+    checkRateLimit.mockResolvedValue({ allowed: true });
+  });
+
+  it("counts token requests per user, and refuses with a 429 over the limit", async () => {
+    await GET(request());
+    expect(checkRateLimit).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "arena-token" }),
+      "user-1",
+    );
+    checkRateLimit.mockResolvedValueOnce({ allowed: false, retryAfterSec: 30 });
+    const refused = await GET(request());
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get("Retry-After")).toBe("30");
+    expect((await refused.json()).error).toMatch(/rustig/);
+    // Refused before Ably is asked for anything.
+    expect(createTokenRequest).toHaveBeenCalledTimes(1);
   });
 
   it("signs a token request for the signed-in user", async () => {

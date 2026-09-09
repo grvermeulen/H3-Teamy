@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import * as Ably from "ably";
 import { electHost } from "../../../../lib/cityArena/net/election";
@@ -9,6 +9,12 @@ import {
 } from "../../../../lib/cityArena/net/lobbyPresence";
 import { roomChannelName } from "../../../../lib/cityArena/net/room";
 import type { PresenceMember } from "../../../../lib/cityArena/net/transport";
+import {
+  ARENA_LIMITS,
+  checkRateLimit,
+  clientAddress,
+  rateLimited,
+} from "../../../../lib/rateLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,9 +86,12 @@ function noRooms(): NextResponse<RoomsResponse> {
  * the home page for a game nobody is playing would be worse than saying nothing is running.
  * The failure still reaches Sentry.
  *
+ * @param req - The request; public, so the rate limit counts the client address.
  * @returns The rooms currently advertised, newest host per code.
  */
-export async function GET(): Promise<Response> {
+export async function GET(req: NextRequest): Promise<Response> {
+  const verdict = await checkRateLimit(ARENA_LIMITS.rooms, clientAddress(req));
+  if (!verdict.allowed) return rateLimited(verdict);
   const key = process.env.ABLY_API_KEY;
   if (!key) {
     Sentry.captureException(new Error("ABLY_API_KEY is not set"), {

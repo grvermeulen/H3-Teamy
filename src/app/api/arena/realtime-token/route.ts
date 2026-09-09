@@ -7,6 +7,11 @@ import {
   isDbUnavailableError,
   jsonDatabaseUnavailable,
 } from "../../../../lib/dbUnavailableError";
+import {
+  ARENA_LIMITS,
+  checkRateLimit,
+  rateLimited,
+} from "../../../../lib/rateLimit";
 import { RealtimeTokenResponseSchema } from "../../../../lib/schemas/arena";
 
 export const runtime = "nodejs";
@@ -62,6 +67,8 @@ async function displayNameFor(userId: string): Promise<string> {
 export async function GET(req: NextRequest): Promise<Response> {
   try {
     const { userId } = await getActiveUser(req);
+    const verdict = await checkRateLimit(ARENA_LIMITS.token, userId);
+    if (!verdict.allowed) return rateLimited(verdict);
     const key = process.env.ABLY_API_KEY;
     if (!key) {
       Sentry.captureException(new Error("ABLY_API_KEY is not set"), {

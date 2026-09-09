@@ -320,6 +320,52 @@ export async function kvGetJson<T = any>(key: string): Promise<T | null> {
   }
 }
 
+/** Per-process counters for {@link kvIncrementWindow} when no store is configured. */
+const memoryCounters = new Map<string, { count: number; expiresAt: number }>();
+/** Above this many memory counters, expired ones are swept before adding another. */
+const MEMORY_COUNTER_SWEEP_AT = 1000;
+
+/** Adds one to a memory counter, starting it over once its window has passed. */
+function incrementInMemory(key: string, windowSec: number): number {
+  const now = Date.now();
+  if (memoryCounters.size >= MEMORY_COUNTER_SWEEP_AT)
+    for (const [stale, entry] of memoryCounters)
+      if (entry.expiresAt <= now) memoryCounters.delete(stale);
+  const current = memoryCounters.get(key);
+  if (!current || current.expiresAt <= now) {
+    memoryCounters.set(key, { count: 1, expiresAt: now + windowSec * 1000 });
+    return 1;
+  }
+  current.count += 1;
+  return current.count;
+}
+
+/**
+ * Adds one to a counter that lives for `windowSec` seconds from its first increment, and
+ * returns the new count — the primitive a fixed-window rate limit needs. Redis first (INCR, and
+ * EXPIRE on the first hit), else a per-process memory counter. The KV REST fallback the JSON
+ * helpers keep is not mirrored here: nothing deployed uses it any more.
+ *
+ * `null` means Redis was configured but failed: callers treat that as "unknown" and let the
+ * request through, because a limiter that cannot count must not become an outage.
+ */
+export async function kvIncrementWindow(
+  key: string,
+  windowSec: number,
+): Promise<number | null> {
+  const redis = await getRedis();
+  if (!redis) return incrementInMemory(key, windowSec);
+  try {
+    const count = Number(await redis.incr(key));
+    if (count === 1) await redis.expire(key, windowSec);
+    return count;
+  } catch (error: unknown) {
+    captureKvCacheError(error, "kvIncrementWindow_redis");
+    markRedisUnavailable();
+    return null;
+  }
+}
+
 export async function kvSetJson(key: string, value: any): Promise<void> {
   const redis = await getRedis();
   const payload = JSON.stringify(value);
