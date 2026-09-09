@@ -22,6 +22,8 @@ const TOUCH_BUTTON_CLASS =
 export type ArenaTouchButtonsProps = {
   inVehicle: boolean;
   onButton: (name: ButtonName, pressed: boolean) => void;
+  /** False with the twin-stick layout, where the aim stick fires (spec §7). Defaults to true. */
+  showFire?: boolean;
 };
 
 /** Props for {@link HoldButton}. */
@@ -80,15 +82,20 @@ function HoldButton({
   );
 }
 
-/** Wapen, Instappen/Uitstappen and Schieten stacked at the bottom right, above the footer (spec §7). */
+/**
+ * Wapen, Instappen/Uitstappen and — with a single stick — Schieten, stacked at the bottom right
+ * above the footer (spec §7). Above the aim surface in stacking order, so a thumb on a button
+ * never starts the stick underneath.
+ */
 export default function ArenaTouchButtons({
   inVehicle,
   onButton,
+  showFire = true,
 }: ArenaTouchButtonsProps): React.JSX.Element {
   return (
     <div
       data-testid="arena-touch-buttons"
-      className="absolute right-3 bottom-3 flex flex-col gap-2"
+      className="absolute right-3 bottom-3 z-10 flex flex-col gap-2"
     >
       <HoldButton name="weaponNext" label={WEAPON_LABEL} onButton={onButton} />
       <HoldButton
@@ -96,7 +103,9 @@ export default function ArenaTouchButtons({
         label={inVehicle ? EXIT_LABEL : ENTER_LABEL}
         onButton={onButton}
       />
-      <HoldButton name="fire" label={FIRE_LABEL} onButton={onButton} />
+      {showFire ? (
+        <HoldButton name="fire" label={FIRE_LABEL} onButton={onButton} />
+      ) : null}
     </div>
   );
 }

@@ -127,6 +127,10 @@ vi.mock("./useArenaRoom", () => {
   return { useArenaRoom: () => room };
 });
 
+import {
+  ARENA_SETTINGS_KEY,
+  ARENA_TOUCH_TIP_KEY,
+} from "@/lib/cityArena/storage";
 import { HEALTH_LABEL } from "./ArenaVitals";
 import CityArenaOverlay from "./CityArenaOverlay";
 
@@ -340,13 +344,41 @@ describe("CityArenaOverlay", () => {
       ),
     );
     expect(screen.getByTestId("touch-stick-surface")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Schieten" }),
-    ).toBeInTheDocument();
+    // Twin-stick by default: the aim stick fires, so there is no Schieten button (spec §7).
+    expect(screen.getByTestId("touch-aim-surface")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Schieten" })).toBeNull();
     expect(
       screen.getByRole("button", { name: "Instappen" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Wapen" })).toBeInTheDocument();
     expect(screen.getByText(/Sleep links/)).toBeInTheDocument();
+    // The first-run tip shows once, and Begrepen puts it away for good.
+    await waitFor(() =>
+      expect(screen.getByRole("note")).toHaveTextContent(/richten/),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Begrepen" }));
+    expect(screen.queryByRole("note")).toBeNull();
+    expect(localStorage.getItem(ARENA_TOUCH_TIP_KEY)).toBe("1");
+  });
+
+  it("shows a fire button instead of the aim stick with Enkele stick, and no tip once read", async () => {
+    localStorage.setItem(
+      ARENA_SETTINGS_KEY,
+      JSON.stringify({ twinStick: false, forceLayout: "mobile" }),
+    );
+    localStorage.setItem(ARENA_TOUCH_TIP_KEY, "1");
+    renderOverlay(vi.fn());
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    // Forced to the phone layout on a fine pointer: the touch controls show anyway.
+    expect(screen.getByTestId("touch-stick-surface")).toBeInTheDocument();
+    expect(screen.queryByTestId("touch-aim-surface")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Schieten" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("note")).toBeNull();
   });
 });

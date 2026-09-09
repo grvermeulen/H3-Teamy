@@ -43,3 +43,31 @@ export function saveArenaSettings(patch: Partial<ArenaSettings>): void {
     });
   }
 }
+
+/** localStorage key of the touch-controls tip, set once it has been read (spec §9.3). */
+export const ARENA_TOUCH_TIP_KEY = "h3-arena-touch-tip-v1";
+
+/** Whether the touch tip has been read on this device; a storage failure reads as "yes". */
+export function hasSeenArenaTouchTip(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return localStorage.getItem(ARENA_TOUCH_TIP_KEY) !== null;
+  } catch (error: unknown) {
+    Sentry.captureException(error, {
+      tags: { area: "arena", kind: "touch-tip-load" },
+    });
+    return true;
+  }
+}
+
+/** Records that the touch tip has been read; a storage failure is reported, never thrown. */
+export function markArenaTouchTipSeen(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(ARENA_TOUCH_TIP_KEY, "1");
+  } catch (error: unknown) {
+    Sentry.captureException(error, {
+      tags: { area: "arena", kind: "touch-tip-save" },
+    });
+  }
+}

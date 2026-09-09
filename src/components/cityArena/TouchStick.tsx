@@ -12,7 +12,21 @@ import {
 type TouchStickProps = {
   stick: StickController;
   onVector: (vector: [number, number] | null) => void;
+  /** The left 45 % moves; the right 55 % aims (spec §7). Defaults to the left. */
+  side?: "left" | "right";
 };
+
+/** Where each surface sits and what a test finds it by. */
+const SURFACES = {
+  left: {
+    className: "absolute inset-y-0 left-0 w-[45%] touch-none select-none",
+    testId: "touch-stick-surface",
+  },
+  right: {
+    className: "absolute inset-y-0 right-0 w-[55%] touch-none select-none",
+    testId: "touch-aim-surface",
+  },
+} as const;
 
 /** Radius of the knob circle: half the stick's travel radius. */
 const STICK_KNOB_RADIUS_PX = STICK_RADIUS_PX / 2;
@@ -114,7 +128,7 @@ function StickGraphic({ state }: StickGraphicProps): React.JSX.Element {
 }
 
 /**
- * Floating joystick surface on the left part of the screen. The base and knob are SVG circles
+ * Floating joystick surface: on the left it moves, on the right it aims. The base and knob are SVG circles
  * whose `cx`/`cy` attributes track the finger — not inline styles, and not the CSS-custom-property
  * idiom either, because Space Invaders' touch controls (`src/components/spaceInvaders/`) are static
  * buttons with no moving part to mirror; SVG geometry attributes are the closest existing pattern
@@ -124,15 +138,16 @@ function StickGraphic({ state }: StickGraphicProps): React.JSX.Element {
 export default function TouchStick({
   stick,
   onVector,
+  side = "left",
 }: TouchStickProps): React.JSX.Element {
   const { state, onPointerDown, onPointerMove, onPointerEnd } =
     useStickHandlers(stick, onVector);
 
   return (
     <div
-      data-testid="touch-stick-surface"
+      data-testid={SURFACES[side].testId}
       aria-hidden="true"
-      className="absolute inset-y-0 left-0 w-[45%] touch-none select-none"
+      className={SURFACES[side].className}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerEnd}

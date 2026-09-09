@@ -62,3 +62,18 @@ describe("TouchStick", () => {
     expect(screen.queryByTestId("touch-stick-base")).toBeNull();
   });
 });
+
+describe("TouchStick on the right", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("is the aim surface, anchored to the right edge", () => {
+    render(
+      <TouchStick side="right" stick={createStick()} onVector={vi.fn()} />,
+    );
+    const surface = screen.getByTestId("touch-aim-surface");
+    expect(surface.className).toContain("right-0");
+    expect(screen.queryByTestId("touch-stick-surface")).toBeNull();
+  });
+});

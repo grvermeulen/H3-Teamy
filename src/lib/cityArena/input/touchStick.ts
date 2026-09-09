@@ -82,3 +82,16 @@ export function createStick(
     state: () => current,
   };
 }
+
+/**
+ * The aim a stick vector means: the direction the thumb is pushed, or nothing while it rests.
+ *
+ * Screen and world share their axes (y down, no rotation), so the screen angle is the world angle.
+ *
+ * @param vector - The stick's vector, or null once released.
+ * @returns The angle in radians, or null when there is no direction to aim in.
+ */
+export function aimFromVector(vector: [number, number] | null): number | null {
+  if (!vector || (vector[0] === 0 && vector[1] === 0)) return null;
+  return Math.atan2(vector[1], vector[0]);
+}

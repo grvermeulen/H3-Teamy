@@ -18,6 +18,7 @@ import {
   type InputState,
 } from "@/lib/cityArena/input/inputState";
 import { attachKeyboard } from "@/lib/cityArena/input/keyboard";
+import { aimFromVector } from "@/lib/cityArena/input/touchStick";
 import {
   attachPointerAim,
   type PointerAim,
@@ -125,6 +126,8 @@ export type ArenaGame = MatchSeam & {
   /** Applies and persists a change to the settings. */
   updateSettings(patch: Partial<ArenaSettings>): void;
   setInputVector(vector: [number, number] | null): void;
+  /** The aim stick: a pushed stick aims and fires, a released one stops (spec §7). */
+  setAimVector(vector: [number, number] | null): void;
   setButton(name: ButtonName, pressed: boolean): void;
   teleportToZone(key: ZoneKey): void;
   debugSnapshot: DebugSnapshot | null;
@@ -322,6 +325,7 @@ function useArenaInput(
   runtimeRef: RefObject<Runtime | null>,
 ): {
   setInputVector(vector: [number, number] | null): void;
+  setAimVector(vector: [number, number] | null): void;
   setButton(name: ButtonName, pressed: boolean): void;
 } {
   useEffect(
@@ -350,6 +354,15 @@ function useArenaInput(
     },
     [inputRef, runtimeRef],
   );
+  const setAimVector = useCallback(
+    (vector: [number, number] | null) => {
+      if (vector) runtimeRef.current?.sound.unlock();
+      const angle = aimFromVector(vector);
+      inputRef.current.setStickAim(angle);
+      inputRef.current.setButton("buttons", "fire", angle !== null);
+    },
+    [inputRef, runtimeRef],
+  );
   const setButton = useCallback(
     (name: ButtonName, pressed: boolean) => {
       if (pressed) runtimeRef.current?.sound.unlock();
@@ -357,7 +370,7 @@ function useArenaInput(
     },
     [inputRef, runtimeRef],
   );
-  return { setInputVector, setButton };
+  return { setInputVector, setAimVector, setButton };
 }
 
 /** Drives the fixed-step simulation and render loop via requestAnimationFrame while "playing". */
@@ -593,7 +606,7 @@ export function useArenaGame({
       reducedMotionRef,
       settingsRef,
     });
-  const { setInputVector, setButton } = useArenaInput(
+  const { setInputVector, setAimVector, setButton } = useArenaInput(
     inputRef,
     canvasRef,
     pointerRef,
@@ -647,6 +660,7 @@ export function useArenaGame({
     settings,
     updateSettings,
     setInputVector,
+    setAimVector,
     setButton,
     teleportToZone,
     debugSnapshot,
