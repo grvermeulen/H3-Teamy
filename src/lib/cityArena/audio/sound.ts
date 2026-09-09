@@ -196,10 +196,8 @@ export function createArenaSound(
     }
   }
 
-  /** Stops whichever engine is running: the clip, the drone, or neither. */
-  function stopEngine(): void {
-    engineLoop?.stop();
-    engineLoop = null;
+  /** Stops the oscillator drone, if it is running. */
+  function stopDrone(): void {
     if (!engine || !context) return;
     try {
       engine.stop(context.currentTime);
@@ -212,6 +210,13 @@ export function createArenaSound(
     engineGain = null;
   }
 
+  /** Stops whichever engine is running: the clip, the drone, or both. */
+  function stopEngine(): void {
+    engineLoop?.stop();
+    engineLoop = null;
+    stopDrone();
+  }
+
   /**
    * Runs the engine from the recorded loop, following the speed.
    *
@@ -221,6 +226,9 @@ export function createArenaSound(
     if (!player?.has("engine")) return false;
     engineLoop ??= player.startLoop("engine");
     if (!engineLoop) return false;
+    // The clip lands whenever the preload finishes, mid-drive included: the drone that was
+    // covering for it must not keep playing underneath.
+    stopDrone();
     engineLoop.setRate(engineRate(speedMps));
     return true;
   }

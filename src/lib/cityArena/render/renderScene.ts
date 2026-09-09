@@ -132,7 +132,11 @@ export function renderScene(
   context.translate(rect.x, rect.y);
   const size = { width: rect.width, height: rect.height };
   applyPushIn(context, size, scene.pushIn);
-  if (scene.shake) context.translate(scene.shake.x, scene.shake.y);
+  // The world shakes; the crosshair, drawn after the restore below, stays on the cursor.
+  if (scene.shake) {
+    context.save();
+    context.translate(scene.shake.x, scene.shake.y);
+  }
   const stats = drawVisibleChunks(context, camera, size, scene.world);
   if (scene.zone) drawZoneRing(context, camera, size, scene.zone);
   drawPickups(context, camera, size, scene.pickups, scene.tick);
@@ -149,6 +153,7 @@ export function renderScene(
   drawBullets(context, camera, size, scene.bullets);
   drawEffects(context, camera, size, scene.effects, scene.tick);
   drawPlayerLook(context, camera, size, scene);
+  if (scene.shake) context.restore();
   if (scene.aimScreen) drawCrosshair(context, scene.aimScreen);
   context.restore();
   return stats;

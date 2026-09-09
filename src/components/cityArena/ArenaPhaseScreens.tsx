@@ -119,6 +119,19 @@ export function ArenaPhaseScreens({
         />
       </div>
     );
+  // Before the countdown: Tab during the count still shows the board, as `inPlay` promises.
+  if (showScoreboard && inPlay)
+    return (
+      <div className={VEIL_CLASS}>
+        <ArenaScoreboard
+          title={LIVE_TITLE}
+          lines={live.lines}
+          names={liveNames}
+          secondsLeft={clock.secondsLeft ?? 0}
+          onLeave={leave}
+        />
+      </div>
+    );
   if (clock.phase === "countdown" && clock.countdown !== null)
     return <ArenaCountdown count={clock.countdown} zone={zone} />;
   if (clock.phase === "scoreboard")
@@ -129,18 +142,6 @@ export function ArenaPhaseScreens({
           names={crewNames}
           secondsLeft={clock.secondsLeft ?? 0}
           onRematch={room.isHost ? clock.backToLobby : undefined}
-          onLeave={leave}
-        />
-      </div>
-    );
-  if (showScoreboard && inPlay)
-    return (
-      <div className={VEIL_CLASS}>
-        <ArenaScoreboard
-          title={LIVE_TITLE}
-          lines={live.lines}
-          names={liveNames}
-          secondsLeft={clock.secondsLeft ?? 0}
           onLeave={leave}
         />
       </div>

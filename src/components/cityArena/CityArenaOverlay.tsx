@@ -414,7 +414,8 @@ export default function CityArenaOverlay({
   }, [room, onClose]);
   // Escape opens the menu (spec §7); the menu's own trap closes it again, and "Sluiten" is the
   // way out of the overlay.
-  useDialogFocusTrap(dialogRef, openMenu);
+  // Stood down while the sheet is open: the sheet's own trap owns Tab and Escape until then.
+  useDialogFocusTrap(dialogRef, openMenu, !menuOpen);
   useLockBodyScroll();
   useWarmDeathArtwork();
 

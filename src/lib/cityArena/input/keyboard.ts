@@ -51,8 +51,19 @@ export type WheelTarget = Pick<
   "addEventListener" | "removeEventListener"
 >;
 
-/** Wheel travel that counts as one notch; a trackpad reports many small deltas per flick. */
-const WHEEL_STEP_PX = 40;
+/**
+ * Wheel travel that counts as one notch, in each unit `deltaMode` can report: pixels (a trackpad
+ * reports many small deltas per flick), lines (Firefox reports a mouse wheel in lines, three per
+ * notch) and pages. The units never convert into each other, so a change of mode starts over.
+ */
+const DOM_DELTA_PIXEL = 0;
+const DOM_DELTA_LINE = 1;
+const DOM_DELTA_PAGE = 2;
+const WHEEL_STEPS: Record<number, number> = {
+  [DOM_DELTA_PIXEL]: 40,
+  [DOM_DELTA_LINE]: 3,
+  [DOM_DELTA_PAGE]: 1,
+};
 
 /**
  * Tab, held, is the scorebord (spec §7). Bound in the capture phase on the window and stopped
@@ -93,10 +104,16 @@ export function attachWheel(
   onCycle: () => void,
 ): () => void {
   let travelled = 0;
+  let mode = DOM_DELTA_PIXEL;
   const onWheel = (event: WheelEvent): void => {
     event.preventDefault();
+    if (event.deltaMode !== mode) {
+      mode = event.deltaMode;
+      travelled = 0;
+    }
     travelled += Math.abs(event.deltaY);
-    if (travelled < WHEEL_STEP_PX) return;
+    if (travelled < (WHEEL_STEPS[mode] ?? WHEEL_STEPS[DOM_DELTA_PIXEL]!))
+      return;
     travelled = 0;
     onCycle();
   };

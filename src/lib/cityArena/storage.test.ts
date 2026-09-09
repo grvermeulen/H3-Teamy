@@ -2,7 +2,10 @@ import * as Sentry from "@sentry/nextjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ARENA_SETTINGS_KEY,
+  ARENA_TOUCH_TIP_KEY,
+  hasSeenArenaTouchTip,
   loadArenaSettings,
+  markArenaTouchTipSeen,
   saveArenaSettings,
 } from "./storage";
 
@@ -107,5 +110,35 @@ describe("arena settings storage", () => {
       twinStick: true,
     });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
+  });
+
+  it("remembers that the touch tip has been read", () => {
+    expect(hasSeenArenaTouchTip()).toBe(false);
+    markArenaTouchTipSeen();
+    expect(localStorage.getItem(ARENA_TOUCH_TIP_KEY)).toBe("1");
+    expect(hasSeenArenaTouchTip()).toBe(true);
+  });
+
+  it("treats a storage that refuses to be read as 'seen', and reports it", () => {
+    // Better never to show the tip than to show it on every visit to a browser that blocks storage.
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    expect(hasSeenArenaTouchTip()).toBe(true);
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      { tags: { area: "arena", kind: "touch-tip-load" } },
+    );
+  });
+
+  it("reports a storage that refuses the touch-tip flag without throwing", () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("full");
+    });
+    expect(() => markArenaTouchTipSeen()).not.toThrow();
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      { tags: { area: "arena", kind: "touch-tip-save" } },
+    );
   });
 });

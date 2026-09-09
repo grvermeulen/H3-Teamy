@@ -64,6 +64,10 @@ describe("TouchStick", () => {
 });
 
 describe("TouchStick on the right", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   afterEach(() => {
     cleanup();
   });

@@ -134,6 +134,10 @@ describe("ArenaScoreboard", () => {
 });
 
 describe("ArenaScoreboard as the tussenstand", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("takes the live title instead of the final one", () => {
     renderBoard({ title: "Tussenstand" });
     expect(screen.getByText("Tussenstand")).toBeInTheDocument();

@@ -115,9 +115,15 @@ export function stepFeedback(
   };
 }
 
+/** The classic sine-hash factors: they only have to scatter, not to mean anything. */
+const NOISE_TICK_FACTOR = 12.9898;
+const NOISE_AXIS_FACTOR = 78.233;
+const NOISE_SCALE = 43758.5453;
+
 /** A deterministic value in -1 to 1 for a tick and an axis. */
 function noise(tick: number, axis: number): number {
-  const x = Math.sin(tick * 12.9898 + axis * 78.233) * 43758.5453;
+  const x =
+    Math.sin(tick * NOISE_TICK_FACTOR + axis * NOISE_AXIS_FACTOR) * NOISE_SCALE;
   return (x - Math.floor(x)) * 2 - 1;
 }
 

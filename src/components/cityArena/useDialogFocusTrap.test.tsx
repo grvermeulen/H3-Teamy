@@ -3,9 +3,15 @@ import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
 
-function Dialog({ onClose }: { onClose: () => void }): React.JSX.Element {
+function Dialog({
+  onClose,
+  enabled = true,
+}: {
+  onClose: () => void;
+  enabled?: boolean;
+}): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
-  useDialogFocusTrap(ref, onClose);
+  useDialogFocusTrap(ref, onClose, enabled);
   return (
     <div ref={ref} role="dialog" tabIndex={-1}>
       <button type="button">Eerste</button>
@@ -61,5 +67,15 @@ describe("useDialogFocusTrap", () => {
     expect(document.activeElement).toBe(trigger);
 
     trigger.remove();
+  });
+
+  it("stands down while disabled: neither Escape nor Tab is handled", () => {
+    const onClose = vi.fn();
+    render(<Dialog onClose={onClose} enabled={false} />);
+    screen.getByText("Laatste").focus();
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(screen.getByText("Laatste"));
+    fireEvent.keyDown(document, { code: "Escape", key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

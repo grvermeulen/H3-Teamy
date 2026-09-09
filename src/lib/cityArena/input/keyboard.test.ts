@@ -204,4 +204,22 @@ describe("attachWheel", () => {
     wheel(100);
     expect(onCycle).toHaveBeenCalledTimes(2);
   });
+
+  it("counts a wheel that reports lines in lines, three to the notch", () => {
+    const onCycle = vi.fn();
+    const target = document.createElement("canvas");
+    const detach = attachWheel(target, onCycle);
+    const line = (deltaY: number): void => {
+      target.dispatchEvent(new WheelEvent("wheel", { deltaY, deltaMode: 1 }));
+    };
+    line(1);
+    line(1);
+    expect(onCycle).not.toHaveBeenCalled();
+    line(1);
+    expect(onCycle).toHaveBeenCalledTimes(1);
+    // A page is a notch on its own, and a change of unit starts the count over.
+    target.dispatchEvent(new WheelEvent("wheel", { deltaY: 1, deltaMode: 2 }));
+    expect(onCycle).toHaveBeenCalledTimes(2);
+    detach();
+  });
 });

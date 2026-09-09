@@ -164,6 +164,28 @@ describe("createArenaSound", () => {
     sound.updateEngine(4, true);
     expect(context.oscillators).toHaveLength(1);
   });
+
+  it("stops the drone once the engine clip has landed mid-drive", () => {
+    // The clips arrive whenever the preload finishes; a car already running on the drone must
+    // hand over to the clip rather than play both.
+    const { context, factory } = createFakeAudioContext();
+    const loop = { setRate: vi.fn(), stop: vi.fn() };
+    let landed = false;
+    const player: SamplePlayer = {
+      preload: vi.fn(async () => undefined),
+      play: vi.fn(() => false),
+      startLoop: vi.fn(() => loop),
+      has: () => landed,
+    };
+    const sound = createArenaSound(factory, true, () => player);
+    sound.updateEngine(4, true);
+    expect(context.oscillators).toHaveLength(1);
+    landed = true;
+    sound.updateEngine(6, true);
+    expect(context.oscillators[0]!.stopped).toBe(true);
+    expect(player.startLoop).toHaveBeenCalledTimes(1);
+    expect(loop.setRate).toHaveBeenLastCalledWith(engineRate(6));
+  });
 });
 
 describe("engineRate", () => {
