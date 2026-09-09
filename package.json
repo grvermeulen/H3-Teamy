@@ -24,6 +24,7 @@
     "check:merge-conflicts": "node scripts/check-no-merge-conflict-markers.mjs",
     "arena:check-audio": "tsx scripts/arena/check-audio.ts",
     "arena:generate-audio": "tsx scripts/arena/generate-audio.ts",
+    "arena:generate-radio": "tsx scripts/arena/generate-radio.ts",
     "lint:fix": "eslint . --fix",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",

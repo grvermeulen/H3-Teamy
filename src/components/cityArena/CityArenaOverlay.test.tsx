@@ -321,6 +321,7 @@ describe("CityArenaOverlay", () => {
       "cursor-none",
     );
     expect(screen.getByLabelText("Radar")).toBeInTheDocument();
+    expect(screen.getByText(/R radio · Tab scorebord/)).toBeInTheDocument();
     expect(screen.getByLabelText("Geluid")).toBeChecked();
     fireEvent.click(screen.getByLabelText("Geluid"));
     expect(screen.getByLabelText("Geluid")).not.toBeChecked();

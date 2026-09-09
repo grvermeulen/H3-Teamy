@@ -55,14 +55,23 @@ describe("arena HUD projections", () => {
       current,
       localPlayer(current),
       false,
+      "Grebbe FM",
     );
     expect(hud).toMatchObject({
       wantedLevel: 3,
       zoneSecondsLeft: 2,
       zoneWarning: true,
       soundEnabled: false,
+      radioStation: "Grebbe FM",
     });
     expect(localPlayer(current).outsideSinceTick).toBe(0);
+    expect(
+      computeHud(
+        { index: () => index, tiles: () => [] },
+        current,
+        localPlayer(current),
+      ).radioStation,
+    ).toBeNull();
   });
 
   it("projects nearby pickups, police and zone geometry into the radar", () => {

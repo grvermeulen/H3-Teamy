@@ -324,3 +324,47 @@ the settings that switch each of them off, and the rest of the keyboard map.
   weapon with no ammo — which the simulation skips — cannot spin the rack forever. While the menu
   is open the keyboard is suspended and anything held is released.
 - **Still open after Plan 6.** The device check on a phone.
+
+## Runtime (Plan 7 — car radio)
+
+Plan 7 puts music in the cars. Nothing in the simulation or the netcode knows about it: the radio
+is a leaf of the sound layer that follows the same "in a car" signal the engine loop already gets.
+
+- **The dial.** `audio/radio/stations.json` is the manifest `npm run arena:generate-radio` writes:
+  stations in order (`id`, `name`, `tracks`), each track a content-hashed file under
+  `public/arena/radio/tracks/` with a title and the length that was asked for. `stations.ts` parses
+  it with Zod at import — a manifest of the wrong shape fails the build, not a player — and
+  exposes `RADIO_STATIONS`, `stationById` (unknown or absent id: the first station) and
+  `nextStationAfter` (wrapping). An empty dial means there is no radio at all: `browserRadio`
+  returns `null`, the menu shows no Zender select, R does nothing.
+- **Playback** (`audio/radio/radio.ts`). One `<audio>` element per game, `preload="none"`,
+  attached to Web Audio with `createMediaElementSource` and played through a gain of its own
+  (`RADIO_GAIN = 0.5`) into the sound layer's master, so Geluid mutes it with everything else.
+  `createArenaSound` owns it (`sound.radio`) and forwards to it: `updateEngine`'s `active` — in a
+  car, not wrecked, boarding done — becomes `setInCar`, so getting in plays, getting out pauses
+  and keeps the position, and a wreck falls silent; `unlock` on every gesture; `setEnabled` as
+  `setSoundEnabled`; `dispose`. A shot or an explosion ducks it to 35 % for 0.3 s. A station
+  switch starts the new station from the top; a track that ends moves to the next of the
+  playlist and wraps. The element streams — nothing is decoded up front — and a `play()` the
+  browser refuses for want of a gesture (`NotAllowedError`) is remembered and retried on the next
+  gesture, not reported; the first gesture primes the element with a silent play-then-pause at
+  gain 0 so the frame loop may start it later, on iOS too. A context that cannot attach media
+  means no radio; a `play()` that fails for another reason is reported with `kind: "radio-play"`.
+- **Settings** (spec §9.3): `radio` (default `true`) and `radioStation` (a station id; absent or
+  unknown, the first station). The menu has a Radio switch and, with a dial, a Zender select.
+- **Controls.** R switches to the next station (once per press, `KeyboardHooks.onRadio`), the
+  touch buttons gain a Radio tap while in a car, the HUD names the station playing
+  (`ArenaHud.radioStation`, from `hudRadioStation(runtime)`), and the desktop hint lists the key.
+  A switch goes through the settings, so the station survives a reload.
+- **Files and credits.** `scripts/arena/generate-radio.ts` asks ElevenLabs' Music API
+  (`POST /v1/music`, instrumental, 120 s, `mp3_44100_96`) for each planned track that has no
+  file yet — or every track of the stations named on the command line — names the file after its
+  own SHA-256, deletes the file it replaces, and writes the manifest and
+  `public/arena/radio/CREDITS.md` after each one. The hashed names are why `next.config.js`
+  serves `/arena/radio/tracks/` immutable, like the map tiles. `npm run arena:check-audio` — the
+  CI step — also audits the radio (`scripts/arena/check-radio.ts`): every track has a file under
+  1.6 MiB and a credit row, the set is under 8 MiB, and no file lies in the directory that the
+  manifest does not name.
+- **Still open after Plan 7.** The listening check — `RADIO_GAIN` and `DUCK_LEVEL` are the
+  knobs, `npm run arena:generate-radio <station>` regenerates a station — and the device check
+  on a phone.

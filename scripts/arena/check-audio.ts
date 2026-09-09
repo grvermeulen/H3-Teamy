@@ -1,13 +1,26 @@
 /**
  * `npm run arena:check-audio` — every clip in the clip table has a file under
  * `public/arena/audio/`, the file is under the size cap, and `CREDITS.md` has a row for it
- * (Plan 6, Task 2). Exits non-zero listing what is missing; the repo is public, so an
+ * (Plan 6, Task 2); and the same for the radio's tracks and their manifest (Plan 7, Task 5,
+ * `check-radio.ts`). Exits non-zero listing what is missing; the repo is public, so an
  * unattributed clip is a licence problem, not a nit.
  */
 
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { AUDIO_CLIPS, CLIP_NAMES } from "../../src/lib/cityArena/audio/clips";
+import {
+  RadioManifestSchema,
+  type RadioManifest,
+} from "../../src/lib/cityArena/audio/radio/stations";
+import {
+  RADIO_CREDITS_FILE,
+  RADIO_MANIFEST_FILE,
+  RADIO_TRACK_DIR,
+  auditRadio,
+} from "./check-radio";
+import { creditedFiles } from "./credits";
+import { isMissing, listIfPresent, readIfPresent } from "./files";
 
 /** Where the files live, relative to the repo root. */
 const AUDIO_DIR = path.join("public", "arena", "audio");
@@ -31,12 +44,7 @@ export async function auditAudio(
   credits: string | null,
 ): Promise<AudioProblem[]> {
   const problems: AudioProblem[] = [];
-  const credited = new Set(
-    (credits ?? "")
-      .split("\n")
-      .filter((line) => line.startsWith("| ") && !line.startsWith("| ---"))
-      .map((line) => line.split("|")[1]?.trim() ?? ""),
-  );
+  const credited = creditedFiles(credits);
   for (const clip of CLIP_NAMES) {
     const { file } = AUDIO_CLIPS[clip];
     try {
@@ -46,7 +54,8 @@ export async function auditAudio(
           file,
           problem: `${Math.round(info.size / 1024)} KB, over the ${MAX_CLIP_BYTES / 1024} KB cap`,
         });
-    } catch {
+    } catch (error: unknown) {
+      if (!isMissing(error)) throw error;
       problems.push({ file, problem: "no such file" });
     }
     if (!credited.has(file))
@@ -55,18 +64,44 @@ export async function auditAudio(
   return problems;
 }
 
-/** Runs the audit against the working tree and reports. */
+/** The radio's inputs from the working tree: the dial, the files present, the credits. */
+async function readRadio(): Promise<{
+  manifest: RadioManifest;
+  files: string[];
+  credits: string | null;
+}> {
+  const manifest = RadioManifestSchema.parse(
+    JSON.parse(await readFile(RADIO_MANIFEST_FILE, "utf8")),
+  );
+  const files = await listIfPresent(RADIO_TRACK_DIR);
+  const credits = await readIfPresent(RADIO_CREDITS_FILE);
+  return {
+    manifest,
+    files: files.filter((file) => file.endsWith(".mp3")),
+    credits,
+  };
+}
+
+/** Runs both audits against the working tree and reports. */
 async function main(): Promise<void> {
-  let credits: string | null = null;
-  try {
-    credits = await readFile(CREDITS_FILE, "utf8");
-  } catch {
-    credits = null;
-  }
-  const problems = await auditAudio(AUDIO_DIR, credits);
+  const credits = await readIfPresent(CREDITS_FILE);
+  const radio = await readRadio();
+  const tracks = radio.manifest.stations.reduce(
+    (count, station) => count + station.tracks.length,
+    0,
+  );
+  const problems = [
+    ...(await auditAudio(AUDIO_DIR, credits)),
+    ...(await auditRadio(
+      RADIO_TRACK_DIR,
+      radio.manifest,
+      radio.credits,
+      radio.files,
+    )),
+  ];
   if (problems.length === 0) {
     console.log(
-      `arena audio: ${CLIP_NAMES.length} clips present and credited.`,
+      `arena audio: ${CLIP_NAMES.length} clips and ${tracks} radio tracks present and credited.`,
     );
     return;
   }

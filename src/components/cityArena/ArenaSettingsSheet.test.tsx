@@ -3,6 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_ARENA_SETTINGS } from "@/lib/cityArena/schemas";
 import { ArenaSettingsSheet } from "./ArenaSettingsSheet";
 
+vi.mock("@/lib/cityArena/audio/radio/stations", () => {
+  const stations = [
+    { id: "a", name: "A FM", tracks: [] },
+    { id: "b", name: "B FM", tracks: [] },
+  ];
+  return {
+    RADIO_STATIONS: stations,
+    stationById: (id: string | undefined) =>
+      stations.find((station) => station.id === id) ?? stations[0] ?? null,
+  };
+});
+
 /** The sheet with defaults, overridable per test; returns the spies. */
 function renderSheet(
   props: Partial<React.ComponentProps<typeof ArenaSettingsSheet>> = {},
@@ -51,6 +63,34 @@ describe("ArenaSettingsSheet", () => {
     expect(handlers.onChange).toHaveBeenLastCalledWith({
       forceLayout: "mobile",
     });
+  });
+
+  it("has a Radio switch and a Zender select over the dial that patch the settings", () => {
+    const handlers = renderSheet();
+    expect(screen.getByLabelText("Radio")).toBeChecked();
+    fireEvent.click(screen.getByLabelText("Radio"));
+    expect(handlers.onChange).toHaveBeenCalledTimes(1);
+    expect(handlers.onChange).toHaveBeenLastCalledWith({ radio: false });
+    const select = screen.getByLabelText("Zender");
+    expect(select).toHaveValue("a");
+    expect(
+      screen.getAllByRole("option").map((option) => option.textContent),
+    ).toEqual(expect.arrayContaining(["A FM", "B FM"]));
+    fireEvent.change(select, { target: { value: "b" } });
+    expect(handlers.onChange).toHaveBeenCalledTimes(2);
+    expect(handlers.onChange).toHaveBeenLastCalledWith({ radioStation: "b" });
+  });
+
+  it("shows the stored station, and the first one for an id the dial does not have", () => {
+    renderSheet({
+      settings: { ...DEFAULT_ARENA_SETTINGS, radioStation: "b" },
+    });
+    expect(screen.getByLabelText("Zender")).toHaveValue("b");
+    cleanup();
+    renderSheet({
+      settings: { ...DEFAULT_ARENA_SETTINGS, radioStation: "gone" },
+    });
+    expect(screen.getByLabelText("Zender")).toHaveValue("a");
   });
 
   it("shows a forced layout, and returns it to automatic as no layout at all", () => {

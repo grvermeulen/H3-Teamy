@@ -114,6 +114,10 @@ export const ArenaSettingsSchema = z.object({
   twinStick: z.boolean().default(true),
   /** A forced layout; absent, the device decides. */
   forceLayout: z.enum(layouts).optional(),
+  /** "Radio": music in the car (Plan 7). */
+  radio: z.boolean().default(true),
+  /** The station tuned in, by id; absent or unknown, the first station plays. */
+  radioStation: z.string().optional(),
 });
 
 /** Parsed settings type, inferred from {@link ArenaSettingsSchema} so the two cannot drift. */
@@ -128,4 +132,5 @@ export const DEFAULT_ARENA_SETTINGS: ArenaSettings = {
   sound: true,
   vibrate: true,
   twinStick: true,
+  radio: true,
 };

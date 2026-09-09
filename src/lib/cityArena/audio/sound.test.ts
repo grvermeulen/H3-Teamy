@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClipName } from "./clips";
+import type { RadioPlayer } from "./radio/radio";
 import { createSamplePlayer, type SamplePlayer } from "./samples";
 import { createFakeAudioContext } from "./testing/fakeAudioContext";
 import {
@@ -194,5 +195,41 @@ describe("engineRate", () => {
     expect(engineRate(ENGINE_RATE_TOP_SPEED_MPS)).toBe(ENGINE_RATE_MAX);
     expect(engineRate(ENGINE_RATE_TOP_SPEED_MPS * 2)).toBe(ENGINE_RATE_MAX);
     expect(engineRate(-3)).toBe(ENGINE_RATE_MIN);
+  });
+
+  it("hands the gesture, the toggle, the car and the loud events to the radio", () => {
+    const { factory } = createFakeAudioContext();
+    const radio: RadioPlayer = {
+      unlock: vi.fn(),
+      setInCar: vi.fn(),
+      setEnabled: vi.fn(),
+      setSoundEnabled: vi.fn(),
+      tune: vi.fn(() => null),
+      nextStation: vi.fn(() => null),
+      station: () => null,
+      playing: () => true,
+      duck: vi.fn(),
+      dispose: vi.fn(),
+    };
+    const sound = createArenaSound(factory, true, undefined, () => radio);
+    expect(sound.radio).toBe(radio);
+    sound.unlock();
+    sound.unlock();
+    expect(radio.unlock).toHaveBeenCalledTimes(2);
+    sound.setEnabled(false);
+    expect(radio.setSoundEnabled).toHaveBeenLastCalledWith(false);
+    sound.setEnabled(true);
+    sound.updateEngine(3, true);
+    expect(radio.setInCar).toHaveBeenLastCalledWith(true);
+    sound.updateEngine(0, false);
+    expect(radio.setInCar).toHaveBeenLastCalledWith(false);
+    sound.handleEvents([
+      { kind: "shot", weapon: "pistol", ownerId: 0, x: 0, y: 0 },
+      { kind: "pickup", pickupKind: "health", playerId: 0, x: 2, y: 2 },
+      { kind: "explosion", x: 3, y: 3 },
+    ]);
+    expect(radio.duck).toHaveBeenCalledTimes(2);
+    sound.dispose();
+    expect(radio.dispose).toHaveBeenCalledTimes(1);
   });
 });

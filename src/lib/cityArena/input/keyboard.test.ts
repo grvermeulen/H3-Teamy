@@ -161,6 +161,25 @@ describe("attachKeyboard panels and slots", () => {
     detach();
   });
 
+  it("switches the radio with R, once per press and not on repeat", () => {
+    const onRadio = vi.fn();
+    const onUserGesture = vi.fn();
+    const detach = attachKeyboard(window, createInputState(), onUserGesture, {
+      onRadio,
+    });
+    press("KeyR");
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { code: "KeyR", repeat: true }),
+    );
+    release("KeyR");
+    press("KeyR");
+    expect(onRadio).toHaveBeenCalledTimes(2);
+    expect(onUserGesture).toHaveBeenCalledTimes(2);
+    detach();
+    press("KeyR");
+    expect(onRadio).toHaveBeenCalledTimes(2);
+  });
+
   it("ignores every game key while a menu owns the keyboard", () => {
     const state = createInputState();
     const onScoreboard = vi.fn();
