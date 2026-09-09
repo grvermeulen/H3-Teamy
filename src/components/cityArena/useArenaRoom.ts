@@ -10,12 +10,8 @@ import {
 } from "react";
 import * as Sentry from "@sentry/nextjs";
 import { createAblyTransport } from "@/lib/cityArena/net/ablyTransport";
-import { electHost } from "@/lib/cityArena/net/election";
-import {
-  enterLobby,
-  leaveLobby,
-  updateLobby,
-} from "@/lib/cityArena/net/lobbyPresence";
+import { electPresentHost } from "@/lib/cityArena/net/election";
+import { enterLobby, leaveLobby } from "@/lib/cityArena/net/lobbyPresence";
 import {
   createRoomCode,
   joinRoom,
@@ -51,9 +47,16 @@ export type ArenaRoom = {
   transport: () => RealtimeTransport | null;
   zone: ZoneKey;
   crew: CrewMember[];
+  /** The elected host, or null while nobody is present. */
+  hostClientId: string | null;
   isHost: boolean;
   /** Set when a join was refused, so the lobby can say why in Dutch. */
   failure: JoinFailure | null;
+  /**
+   * Reports a host the game has stopped hearing from — or this client itself, when it hears
+   * someone else hosting — so the room re-elects without them (spec §6.6).
+   */
+  reportHostLost: (clientId: string) => void;
 };
 
 /** How {@link useArenaRoom} is configured. */
@@ -334,7 +337,9 @@ function useLobbyAdvertisement(
     const transport = transportRef.current;
     const code = codeRef.current;
     if (!transport || !code || !isHost || members.length === 0) return;
-    void updateLobby(transport, {
+    // Enter rather than update: a host elected mid-match was never in the lobby, and entering
+    // while already present is an update anyway.
+    void enterLobby(transport, {
       host: presenceFor(name),
       room: { roomCode: code, zone, players: members.length, phase: "lobby" },
     }).catch((error: unknown) => {
@@ -343,6 +348,33 @@ function useLobbyAdvertisement(
       });
     });
   }, [transportRef, codeRef, isHost, members.length, name, zone]);
+}
+
+/**
+ * The hosts this client has given up on, for the election to skip.
+ *
+ * A member who leaves is forgotten, so someone who comes back after a bad connection starts with
+ * a clean slate rather than being passed over for the rest of the evening.
+ */
+function useLostHosts(members: PresenceMember[]): {
+  lost: ReadonlySet<string>;
+  reportHostLost: (clientId: string) => void;
+} {
+  const [lost, setLost] = useState<ReadonlySet<string>>(new Set());
+  const reportHostLost = useCallback((clientId: string) => {
+    setLost((previous) =>
+      previous.has(clientId) ? previous : new Set([...previous, clientId]),
+    );
+  }, []);
+  useEffect(() => {
+    setLost((previous) => {
+      const present = [...previous].filter((id) =>
+        members.some((member) => member.clientId === id),
+      );
+      return present.length === previous.size ? previous : new Set(present);
+    });
+  }, [members]);
+  return { lost, reportHostLost };
 }
 
 /**
@@ -363,7 +395,11 @@ export function useArenaRoom(options: UseArenaRoomOptions): ArenaRoom & {
     options.createTransport ?? createAblyTransport,
   );
 
-  const hostClientId = useMemo(() => electHost(link.members), [link.members]);
+  const { lost, reportHostLost } = useLostHosts(link.members);
+  const hostClientId = useMemo(
+    () => electPresentHost(link.members, lost),
+    [link.members, lost],
+  );
   const crew = useMemo(
     () => crewFrom(link.members, link.myClientId, hostClientId),
     [link.members, link.myClientId, hostClientId],
@@ -395,8 +431,10 @@ export function useArenaRoom(options: UseArenaRoomOptions): ArenaRoom & {
     transport,
     zone,
     crew,
+    hostClientId,
     isHost,
     failure: link.failure,
+    reportHostLost,
     leave,
   };
 }

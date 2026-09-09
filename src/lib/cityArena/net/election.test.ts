@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { PresenceMember, PresenceRole } from "./transport";
-import { HOST_SILENCE_MS, createHostWatch, electHost } from "./election";
+import {
+  HOST_SILENCE_MS,
+  createHostWatch,
+  electHost,
+  electPresentHost,
+} from "./election";
 
 /** A present member with the fields the election actually reads. */
 function member(
@@ -139,5 +144,24 @@ describe("electHost with broken presence data", () => {
       timestamp: 1,
     } as unknown as PresenceMember;
     expect(electHost([half, desktop("d", 9)])).toBe("d");
+  });
+});
+
+describe("electPresentHost", () => {
+  it("skips a host the silence rule has given up on, in favour of the next in line", () => {
+    const members = [desktop("a", 1), desktop("b", 2), mobile("c", 3)];
+    expect(electPresentHost(members, new Set(["a"]))).toBe("b");
+    expect(electPresentHost(members, new Set(["a", "b"]))).toBe("c");
+  });
+
+  it("falls back to the plain election once everyone has been given up on", () => {
+    const members = [desktop("a", 1), desktop("b", 2)];
+    expect(electPresentHost(members, new Set(["a", "b"]))).toBe("a");
+  });
+
+  it("is the plain election when nobody has been given up on", () => {
+    const members = [mobile("c", 1), desktop("a", 2)];
+    expect(electPresentHost(members, new Set())).toBe(electHost(members));
+    expect(electPresentHost([], new Set())).toBeNull();
   });
 });

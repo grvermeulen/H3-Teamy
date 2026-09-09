@@ -1,4 +1,4 @@
-import { cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Sentry from "@sentry/nextjs";
 import { createCollisionGrid } from "@/lib/cityArena/world/collisionGrid";
@@ -12,11 +12,16 @@ import {
   createMemoryTransport,
   type MemoryHub,
 } from "@/lib/cityArena/net/memoryTransport";
+import { HOST_SILENCE_MS } from "@/lib/cityArena/net/election";
 import { HOST_TICK_HZ } from "@/lib/cityArena/net/hostLoop";
 import { emptyTally } from "@/lib/cityArena/net/scoreboard";
 import { encodeSnapshot } from "@/lib/cityArena/net/snapshotWire";
 import type { Runtime } from "./arenaRuntime";
-import { useNetplay, type ArenaNetplayOptions } from "./useNetplay";
+import {
+  WATCH_POLL_MS,
+  useNetplay,
+  type ArenaNetplayOptions,
+} from "./useNetplay";
 
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
@@ -84,13 +89,41 @@ function member(
   return {
     transport: () => transport,
     ready: true,
+    connected: true,
     roomCode: ROOM,
     clientId,
     clockOffsetMs: 0,
+    hostClientId: overrides.isHost ? clientId : "host",
     isHost: false,
     memberIds: [clientId],
+    onHostLost: vi.fn(),
     ...overrides,
   };
+}
+
+/** A snapshot of `state` as `from` would publish it, seating `seats`. */
+function snapshotFrom(
+  hub: MemoryHub,
+  from: string,
+  state: Runtime["state"],
+  seats: [string, number][],
+): void {
+  void createMemoryTransport(hub, from)
+    .channel(`arena:room:${ROOM}`)
+    .publish(
+      "state",
+      encodeSnapshot(
+        state,
+        0,
+        {},
+        {
+          seats: new Map(seats),
+          tally: emptyTally(),
+          match: { phase: "lobby", since: 0 },
+        },
+      ),
+    );
+  hub.flush();
 }
 
 /**
@@ -145,6 +178,7 @@ describe("useNetplay", () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
   });
 
   it("does nothing without a room, and nothing before the room is ready", () => {
@@ -226,7 +260,12 @@ describe("useNetplay", () => {
     // The host closes its tab: its presence leaves, and the joiner is elected.
     hostHook.unmount();
     joinerHook.rerender({
-      options: { ...joinerOptions, isHost: true, memberIds: ["joiner"] },
+      options: {
+        ...joinerOptions,
+        hostClientId: "joiner",
+        isHost: true,
+        memberIds: ["joiner"],
+      },
       booted: true,
     });
     expect(joiner.netplay.kind).toBe("host");
@@ -259,7 +298,7 @@ describe("useNetplay", () => {
       [seat, { playerId: seat, kills: 1, deaths: 2 }],
     ]);
     const match = { phase: "playing" as const, since: 5 };
-    void createMemoryTransport(hub, "old-host")
+    void createMemoryTransport(hub, "host")
       .channel(`arena:room:${ROOM}`)
       .publish(
         "state",
@@ -280,7 +319,12 @@ describe("useNetplay", () => {
     hub.flush();
     hostHook.unmount();
     joinerHook.rerender({
-      options: { ...joinerOptions, isHost: true, memberIds: ["joiner"] },
+      options: {
+        ...joinerOptions,
+        hostClientId: "joiner",
+        isHost: true,
+        memberIds: ["joiner"],
+      },
       booted: true,
     });
     if (joiner.netplay.kind !== "host") throw new Error("not hosting");
@@ -305,5 +349,75 @@ describe("useNetplay", () => {
       expect.any(Error),
       { tags: { area: "arena", kind: "client-seat" } },
     );
+  });
+
+  it("takes snapshots only from the elected host, however well an impostor seats it", () => {
+    const hub = createMemoryHub();
+    const host = fakeRuntime(1);
+    const joiner = fakeRuntime(2);
+    const crew = ["host", "joiner"];
+    renderNetplay(host, member(hub, "host", { isHost: true, memberIds: crew }));
+    renderNetplay(joiner, member(hub, "joiner", { memberIds: crew }));
+    if (host.netplay.kind !== "host") throw new Error("not hosting");
+    const seat = host.netplay.loop.seats().get("joiner")!;
+    snapshotFrom(hub, "impostor", host.state, [
+      ["impostor", 0],
+      ["joiner", seat],
+    ]);
+    expect(joiner.netplay.kind).toBe("offline");
+    publishSnapshot(host, hub);
+    expect(joiner.netplay.kind).toBe("client");
+  });
+
+  it("calls for a re-election once the host has been quiet for the silence window", () => {
+    vi.useFakeTimers();
+    const hub = createMemoryHub();
+    const options = member(hub, "joiner", { memberIds: ["host", "joiner"] });
+    renderNetplay(fakeRuntime(2), options);
+    act(() => {
+      vi.advanceTimersByTime(HOST_SILENCE_MS - WATCH_POLL_MS);
+    });
+    expect(options.onHostLost).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(WATCH_POLL_MS * 3);
+    });
+    expect(options.onHostLost).toHaveBeenCalledTimes(1);
+    expect(options.onHostLost).toHaveBeenCalledWith("host");
+  });
+
+  it("keeps the window open for as long as the host keeps publishing", () => {
+    vi.useFakeTimers();
+    const { host, hub, joinerOptions } = seatedPair();
+    for (let round = 0; round < 4; round += 1) {
+      act(() => {
+        vi.advanceTimersByTime(HOST_SILENCE_MS - WATCH_POLL_MS);
+      });
+      publishSnapshot(host, hub);
+    }
+    expect(joinerOptions.onHostLost).not.toHaveBeenCalled();
+  });
+
+  it("does not blame the host while its own connection is down", () => {
+    vi.useFakeTimers();
+    const hub = createMemoryHub();
+    const options = member(hub, "joiner", {
+      connected: false,
+      memberIds: ["host", "joiner"],
+    });
+    renderNetplay(fakeRuntime(2), options);
+    act(() => {
+      vi.advanceTimersByTime(HOST_SILENCE_MS * 2);
+    });
+    expect(options.onHostLost).not.toHaveBeenCalled();
+  });
+
+  it("steps down when another member publishes the world: the room re-elected while it was quiet", () => {
+    const hub = createMemoryHub();
+    const host = fakeRuntime(1);
+    const options = member(hub, "host", { isHost: true });
+    renderNetplay(host, options);
+    snapshotFrom(hub, "successor", host.state, [["successor", 0]]);
+    expect(options.onHostLost).toHaveBeenCalledTimes(1);
+    expect(options.onHostLost).toHaveBeenCalledWith("host");
   });
 });
