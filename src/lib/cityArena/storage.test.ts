@@ -22,6 +22,8 @@ describe("arena settings storage", () => {
     expect(loadArenaSettings()).toEqual({
       lastZone: "wageningen",
       sound: true,
+      vibrate: true,
+      twinStick: true,
     });
   });
 
@@ -29,7 +31,12 @@ describe("arena settings storage", () => {
     saveArenaSettings({ lastZone: "rhenen" });
     expect(
       JSON.parse(localStorage.getItem(ARENA_SETTINGS_KEY) ?? "{}"),
-    ).toEqual({ lastZone: "rhenen", sound: true });
+    ).toEqual({
+      lastZone: "rhenen",
+      sound: true,
+      vibrate: true,
+      twinStick: true,
+    });
     expect(loadArenaSettings().lastZone).toBe("rhenen");
   });
 
@@ -38,6 +45,8 @@ describe("arena settings storage", () => {
     expect(loadArenaSettings()).toEqual({
       lastZone: "wageningen",
       sound: true,
+      vibrate: true,
+      twinStick: true,
     });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(Error),
@@ -55,6 +64,8 @@ describe("arena settings storage", () => {
     expect(loadArenaSettings()).toEqual({
       lastZone: "wageningen",
       sound: true,
+      vibrate: true,
+      twinStick: true,
     });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(Error),
@@ -75,5 +86,26 @@ describe("arena settings storage", () => {
         tags: { area: "arena", kind: "settings-save" },
       }),
     );
+  });
+
+  it("keeps a forced layout, and drops it again when set to nothing", () => {
+    saveArenaSettings({ forceLayout: "mobile" });
+    expect(loadArenaSettings().forceLayout).toBe("mobile");
+    saveArenaSettings({ forceLayout: undefined });
+    expect(loadArenaSettings().forceLayout).toBeUndefined();
+  });
+
+  it("falls back to the defaults, and reports, when a switch holds something else", () => {
+    localStorage.setItem(
+      ARENA_SETTINGS_KEY,
+      JSON.stringify({ sound: false, vibrate: "ja", twinStick: 1 }),
+    );
+    expect(loadArenaSettings()).toEqual({
+      lastZone: "wageningen",
+      sound: true,
+      vibrate: true,
+      twinStick: true,
+    });
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
   });
 });

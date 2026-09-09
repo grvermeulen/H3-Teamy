@@ -54,6 +54,7 @@ import {
   type WorldSession,
 } from "@/lib/cityArena/world/worldSession";
 import { findZoneByKey } from "@/lib/cityArena/world/zone";
+import type { ArenaSettings } from "@/lib/cityArena/schemas";
 import { loadArenaSettings, saveArenaSettings } from "@/lib/cityArena/storage";
 import { computeHud, type ArenaHud } from "./arenaHud";
 import { useMatchSeam, type MatchPeek, type MatchSeam } from "./matchSeam";
@@ -119,6 +120,10 @@ export type ArenaGame = MatchSeam & {
   death: DeathInfo | null;
   radar: RadarSnapshot;
   setSound(enabled: boolean): void;
+  /** The player's settings, as persisted. */
+  settings: ArenaSettings;
+  /** Applies and persists a change to the settings. */
+  updateSettings(patch: Partial<ArenaSettings>): void;
   setInputVector(vector: [number, number] | null): void;
   setButton(name: ButtonName, pressed: boolean): void;
   teleportToZone(key: ZoneKey): void;
@@ -175,7 +180,7 @@ async function bootSession(
   canvasRef: RefObject<HTMLCanvasElement | null>,
   runtimeRef: RefObject<Runtime | null>,
   reducedMotionRef: RefObject<boolean>,
-  initialSoundRef: RefObject<boolean>,
+  settingsRef: RefObject<ArenaSettings>,
   isCancelled: IsCancelled,
 ): Promise<{ index: MapIndex; spawn: Point } | null> {
   const { index } = await session.ready();
@@ -190,8 +195,9 @@ async function bootSession(
     zone,
     width,
     reducedMotionRef.current,
-    initialSoundRef.current,
+    settingsRef.current.sound,
   );
+  runtime.hapticsEnabled = settingsRef.current.vibrate;
   runtimeRef.current = runtime;
   return {
     index,
@@ -205,7 +211,7 @@ type ArenaBootOptions = {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   runtimeRef: RefObject<Runtime | null>;
   reducedMotionRef: RefObject<boolean>;
-  initialSoundRef: RefObject<boolean>;
+  settingsRef: RefObject<ArenaSettings>;
 };
 
 /**
@@ -254,7 +260,7 @@ async function finishBoot(
 
 /** Boots the world session for `zoneKey`: loads the map, spawns the player, disposes on unmount. */
 function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
-  const { zoneKey, canvasRef, runtimeRef, reducedMotionRef, initialSoundRef } =
+  const { zoneKey, canvasRef, runtimeRef, reducedMotionRef, settingsRef } =
     options;
   const [phase, setPhase] = useState<ArenaPhase>("loading");
   const [progress, setProgress] = useState<LoadProgress>({
@@ -277,7 +283,7 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
       canvasRef,
       runtimeRef,
       reducedMotionRef,
-      initialSoundRef,
+      settingsRef,
       isCancelled,
     )
       .then((booted) =>
@@ -303,7 +309,7 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
     };
     // reducedMotionRef is listed for exhaustive-deps only: ref identity never changes across
     // renders, so a media-query-driven reducedMotion change never re-runs this effect.
-  }, [canvasRef, runtimeRef, zoneKey, reducedMotionRef, initialSoundRef]);
+  }, [canvasRef, runtimeRef, zoneKey, reducedMotionRef, settingsRef]);
 
   return { phase, progress, failed, zones, setProgress, setFailed };
 }
@@ -545,6 +551,15 @@ function useArenaGameState(soundEnabled: boolean): ArenaGameState {
   };
 }
 
+/** Pushes the settings that the runtime acts on into it. */
+function applySettings(runtime: Runtime | null, settings: ArenaSettings): void {
+  if (!runtime) return;
+  runtime.soundEnabled = settings.sound;
+  runtime.sound.setEnabled(settings.sound);
+  if (settings.sound) runtime.sound.unlock();
+  runtime.hapticsEnabled = settings.vibrate;
+}
+
 /** Owns the world session, the fixed-step arena loop, the camera, the HUD and the death screen state. */
 export function useArenaGame({
   zoneKey,
@@ -553,10 +568,10 @@ export function useArenaGame({
   reducedMotion = false,
   netplay,
 }: UseArenaGameOptions): ArenaGame {
-  const [soundEnabled, setSoundEnabled] = useState(
-    () => loadArenaSettings().sound,
+  const [settings, setSettings] = useState<ArenaSettings>(() =>
+    loadArenaSettings(),
   );
-  const initialSoundRef = useRef(soundEnabled);
+  const settingsRef = useRef(settings);
   const { runtimeRef, inputRef, pointerRef, metricsRef, reducedMotionRef } =
     useArenaRuntimeRefs(reducedMotion);
   const {
@@ -568,7 +583,7 @@ export function useArenaGame({
     setDebugSnapshot,
     radar,
     setRadar,
-  } = useArenaGameState(soundEnabled);
+  } = useArenaGameState(settings.sound);
   useReducedMotionSync(reducedMotion, reducedMotionRef, runtimeRef);
   const { phase, progress, failed, zones, setProgress, setFailed } =
     useArenaBoot({
@@ -576,7 +591,7 @@ export function useArenaGame({
       canvasRef,
       runtimeRef,
       reducedMotionRef,
-      initialSoundRef,
+      settingsRef,
     });
   const { setInputVector, setButton } = useArenaInput(
     inputRef,
@@ -602,20 +617,21 @@ export function useArenaGame({
   useNetplay(runtimeRef, phase === "playing", netplay);
   const seam = useMatchSeam(runtimeRef);
   const teleportToZone = useTeleport(runtimeRef, setHud);
-  const setSound = useCallback(
-    (enabled: boolean) => {
-      setSoundEnabled(enabled);
-      initialSoundRef.current = enabled;
-      const runtime = runtimeRef.current;
-      if (runtime) {
-        runtime.soundEnabled = enabled;
-        runtime.sound.setEnabled(enabled);
-        if (enabled) runtime.sound.unlock();
-      }
-      setHud({ ...hud, soundEnabled: enabled });
-      saveArenaSettings({ sound: enabled });
+  const updateSettings = useCallback(
+    (patch: Partial<ArenaSettings>) => {
+      const next = { ...settingsRef.current, ...patch };
+      settingsRef.current = next;
+      setSettings(next);
+      applySettings(runtimeRef.current, next);
+      if (patch.sound !== undefined)
+        setHud({ ...hud, soundEnabled: next.sound });
+      saveArenaSettings(patch);
     },
-    [hud, initialSoundRef, runtimeRef, setHud],
+    [hud, runtimeRef, setHud],
+  );
+  const setSound = useCallback(
+    (enabled: boolean) => updateSettings({ sound: enabled }),
+    [updateSettings],
   );
 
   return {
@@ -628,6 +644,8 @@ export function useArenaGame({
     death,
     radar,
     setSound,
+    settings,
+    updateSettings,
     setInputVector,
     setButton,
     teleportToZone,

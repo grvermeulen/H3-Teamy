@@ -203,9 +203,13 @@ describe("CityArenaOverlay", () => {
       expect(screen.getByTestId("arena-hud")).toHaveTextContent("WUR-campus"),
     );
     expect(screen.getByLabelText("Ga naar")).toHaveValue("campus");
+    // Escape opens the menu (spec §7); leaving the potje from it is what closes the overlay.
     await act(async () => {
       fireEvent.keyDown(document, { code: "Escape", key: "Escape" });
     });
+    expect(screen.getByRole("dialog", { name: "Menu" })).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Potje verlaten" }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

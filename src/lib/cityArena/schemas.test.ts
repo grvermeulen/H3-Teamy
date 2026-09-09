@@ -112,7 +112,12 @@ describe("ArenaSettingsSchema", () => {
     expect(ArenaSettingsSchema.parse({})).toEqual({
       lastZone: "wageningen",
       sound: true,
+      vibrate: true,
+      twinStick: true,
     });
+    expect(
+      ArenaSettingsSchema.safeParse({ forceLayout: "tablet" }).success,
+    ).toBe(false);
     expect(ArenaSettingsSchema.safeParse({ lastZone: "mars" }).success).toBe(
       false,
     );

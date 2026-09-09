@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -11,6 +12,7 @@ import {
 import { createPortal, preload } from "react-dom";
 import { ZONE_OPTIONS } from "@/lib/cityArena/constants";
 import { ArenaPhaseScreens } from "./ArenaPhaseScreens";
+import { ArenaSettingsSheet, MENU_LABEL } from "./ArenaSettingsSheet";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { useArenaRoom, type ArenaRoom } from "./useArenaRoom";
 import type { ArenaEntry } from "./arenaEntry";
@@ -155,10 +157,11 @@ type ArenaHudBarProps = {
   showLoadWarning: boolean;
   onTeleport: (key: ZoneKey) => void;
   onSoundChange: (enabled: boolean) => void;
+  onMenu: () => void;
   onClose: () => void;
 };
 
-/** Top strip: zone/street, vitals, an optional load warning, the zone picker and the close button. */
+/** Top strip: zone/street, vitals, an optional load warning, the zone picker, the menu and the close button. */
 function ArenaHudBar({
   hud,
   zones,
@@ -166,6 +169,7 @@ function ArenaHudBar({
   showLoadWarning,
   onTeleport,
   onSoundChange,
+  onMenu,
   onClose,
 }: ArenaHudBarProps): React.JSX.Element {
   return (
@@ -201,6 +205,9 @@ function ArenaHudBar({
           disabled={pickerDisabled}
           onTeleport={onTeleport}
         />
+        <button type="button" onClick={onMenu}>
+          {MENU_LABEL}
+        </button>
         <button type="button" onClick={onClose}>
           Sluiten
         </button>
@@ -293,7 +300,7 @@ function ArenaFooter({ showTouch }: ArenaFooterProps): React.JSX.Element {
       <span>
         {showTouch
           ? "Sleep links op het scherm om te lopen of te sturen; rechts: Schieten, Instappen, Wapen."
-          : "WASD of pijltjes lopen of sturen · muis richt en schiet · E instappen · Q wapen · Esc sluit."}
+          : "WASD of pijltjes lopen of sturen · muis richt en schiet · E instappen · Q wapen · Esc menu."}
       </span>{" "}
       <span>{ATTRIBUTION_TEXT}</span>
     </p>
@@ -344,7 +351,16 @@ export default function CityArenaOverlay({
     reducedMotion,
     netplay: netplayFor(room),
   });
-  useDialogFocusTrap(dialogRef, onClose);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const openMenu = useCallback(() => setMenuOpen(true), []);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const leave = useCallback(() => {
+    room.leave();
+    onClose();
+  }, [room, onClose]);
+  // Escape opens the menu (spec §7); the menu's own trap closes it again, and "Sluiten" is the
+  // way out of the overlay.
+  useDialogFocusTrap(dialogRef, openMenu);
   useLockBodyScroll();
   useWarmDeathArtwork();
 
@@ -366,6 +382,7 @@ export default function CityArenaOverlay({
         showLoadWarning={game.phase === "playing" && game.failed}
         onTeleport={game.teleportToZone}
         onSoundChange={game.setSound}
+        onMenu={openMenu}
         onClose={onClose}
       />
       <ArenaPlayfield
@@ -378,6 +395,14 @@ export default function CityArenaOverlay({
       />
       <ArenaFooter showTouch={showTouch} />
       <ArenaPhaseScreens game={game} room={room} onClose={onClose} />
+      {menuOpen ? (
+        <ArenaSettingsSheet
+          settings={game.settings}
+          onChange={game.updateSettings}
+          onLeave={leave}
+          onClose={closeMenu}
+        />
+      ) : null}
     </div>
   );
 
