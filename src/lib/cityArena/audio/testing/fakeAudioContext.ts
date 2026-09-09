@@ -44,6 +44,9 @@ export type FakeAudioContext = AudioContextLike & {
   closeCalls: number;
   createBufferSource(): FakeBufferSource;
   decodeAudioData(data: ArrayBuffer): Promise<AudioBufferLike>;
+  /** The nodes handed out for media elements, in order. */
+  mediaSources: AudioNodeLike[];
+  createMediaElementSource(element: HTMLMediaElement): AudioNodeLike;
 };
 
 function param(operations: FakeAudioOperation[]): AudioParamLike {
@@ -81,12 +84,14 @@ export function createFakeAudioContext(): {
   const oscillators: FakeOscillator[] = [];
   const gains: FakeGain[] = [];
   const sources: FakeBufferSource[] = [];
+  const mediaSources: AudioNodeLike[] = [];
   const context: FakeAudioContext = {
     currentTime: 10,
     destination: node([]),
     oscillators,
     gains,
     sources,
+    mediaSources,
     resumeCalls: 0,
     closeCalls: 0,
     createGain(): FakeGain {
@@ -140,6 +145,11 @@ export function createFakeAudioContext(): {
         },
       } as FakeBufferSource;
       sources.push(source);
+      return source;
+    },
+    createMediaElementSource(): AudioNodeLike {
+      const source = node([]);
+      mediaSources.push(source);
       return source;
     },
     decodeAudioData(data: ArrayBuffer): Promise<AudioBufferLike> {

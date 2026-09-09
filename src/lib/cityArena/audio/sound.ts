@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/nextjs";
 import { MAX_EVENTS } from "../sim/limits";
 import type { ArenaEvent, VehicleState, WeaponKind } from "../sim/types";
 import type { ClipName } from "./clips";
+import type { RadioFactory, RadioPlayer } from "./radio/radio";
 import type { LoopHandle, SamplePlayer, SamplePlayerFactory } from "./samples";
 
 /** Minimal audio parameter surface used by the arena synth. */
@@ -34,6 +35,8 @@ export type AudioContextLike = {
   destination: AudioNodeLike;
   createGain(): GainNodeLike;
   createOscillator(): OscillatorLike;
+  /** Attaches a media element; absent in a context that cannot, and then there is no radio. */
+  createMediaElementSource?(element: HTMLMediaElement): AudioNodeLike;
   resume(): Promise<void> | void;
   close?(): Promise<void> | void;
 };
@@ -48,6 +51,8 @@ export type ArenaSound = {
   handleEvents(events: ArenaEvent[]): void;
   updateEngine(speedMps: number, active: boolean): void;
   dispose(): void;
+  /** The car radio (Plan 7), or `null` when there is none. */
+  radio: RadioPlayer | null;
 };
 
 const MASTER_GAIN = 0.18;
@@ -130,17 +135,20 @@ function clipFor(event: ArenaEvent): ClipName | null {
  * @param factory - Makes the audio context; a deterministic fake in tests.
  * @param initiallyEnabled - Whether sound starts on.
  * @param samples - Attaches a sample player to the context; omitted, everything is synthesised.
+ * @param radio - Attaches the car radio to the context; omitted, there is no radio.
  * @returns The controls the runtime drives.
  */
 export function createArenaSound(
   factory: AudioContextFactory = createBrowserAudioContext,
   initiallyEnabled = true,
   samples?: SamplePlayerFactory,
+  radio?: RadioFactory,
 ): ArenaSound {
   let enabled = initiallyEnabled;
   let context: AudioContextLike | null = null;
   let master: GainNodeLike | null = null;
   let player: SamplePlayer | null = null;
+  let radioPlayer: RadioPlayer | null = null;
   let engine: OscillatorLike | null = null;
   let engineGain: GainNodeLike | null = null;
   let engineLoop: LoopHandle | null = null;
@@ -154,12 +162,14 @@ export function createArenaSound(
       master.connect(context.destination);
       setParam(master.gain, enabled ? MASTER_GAIN : 0, context.currentTime);
       player = samples?.(context, master) ?? null;
+      radioPlayer = radio?.(context, master) ?? null;
     }
   } catch (error: unknown) {
     reportAudioError(error, "audio-init");
     context = null;
     master = null;
     player = null;
+    radioPlayer = null;
   }
 
   /** Fetches the clips once audio is allowed to play; a failure costs the clips, nothing else. */
@@ -234,6 +244,8 @@ export function createArenaSound(
   }
 
   function handleEvent(event: ArenaEvent): void {
+    if (event.kind === "shot" || event.kind === "explosion")
+      radioPlayer?.duck();
     // A clip that played is the whole sound; the oscillator branches below are the fallback for
     // a clip that has not landed, and stay for as long as that can be true.
     const clip = clipFor(event);
@@ -254,6 +266,8 @@ export function createArenaSound(
   return {
     unlock(): void {
       if (!enabled || !context || disposed) return;
+      // Every gesture, not just the first: a play the browser refused is retried on the next one.
+      radioPlayer?.unlock();
       if (unlocked) return;
       unlocked = true;
       try {
@@ -272,6 +286,7 @@ export function createArenaSound(
     },
     setEnabled(next: boolean): void {
       enabled = next;
+      radioPlayer?.setSoundEnabled(next);
       if (!master || !context || disposed) return;
       try {
         setParam(master.gain, enabled ? MASTER_GAIN : 0, context.currentTime);
@@ -285,6 +300,7 @@ export function createArenaSound(
     },
     updateEngine(speedMps: number, active: boolean): void {
       if (!context || !master || disposed) return;
+      radioPlayer?.setInCar(active);
       if (!enabled || !active) {
         stopEngine();
         return;
@@ -309,6 +325,7 @@ export function createArenaSound(
     dispose(): void {
       if (disposed) return;
       disposed = true;
+      radioPlayer?.dispose();
       stopEngine();
       try {
         master?.disconnect();
@@ -325,5 +342,6 @@ export function createArenaSound(
       master = null;
       context = null;
     },
+    radio: radioPlayer,
   };
 }
