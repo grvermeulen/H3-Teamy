@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { driveStep } from "../sim/driveInput";
 import { createInputState } from "./inputState";
-import { attachKeyboard } from "./keyboard";
+import { attachKeyboard, attachWheel } from "./keyboard";
 
 const step = 1 / 30;
 
@@ -113,6 +113,113 @@ describe("attachKeyboard", () => {
     // the digital command in one tick regardless, never ramping the way the analog path does.
     expect(driveStep(snapshot, 0, 0.9, step).steer).toBe(1);
     release("KeyD");
+    detach();
+  });
+});
+
+describe("attachKeyboard panels and slots", () => {
+  it("holds Tab as the scorebord, keeps it from the focus trap, and lets go on release or blur", () => {
+    const onScoreboard = vi.fn();
+    const trap = vi.fn();
+    document.addEventListener("keydown", trap, true);
+    const detach = attachKeyboard(window, createInputState(), undefined, {
+      onScoreboard,
+    });
+    const down = new KeyboardEvent("keydown", {
+      code: "Tab",
+      cancelable: true,
+      bubbles: true,
+    });
+    window.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    expect(trap).not.toHaveBeenCalled();
+    expect(onScoreboard).toHaveBeenLastCalledWith(true);
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { code: "Tab", repeat: true }),
+    );
+    expect(onScoreboard).toHaveBeenCalledTimes(1);
+    release("Tab");
+    expect(onScoreboard).toHaveBeenLastCalledWith(false);
+    press("Tab");
+    window.dispatchEvent(new Event("blur"));
+    expect(onScoreboard).toHaveBeenLastCalledWith(false);
+    detach();
+    document.removeEventListener("keydown", trap, true);
+  });
+
+  it("picks a weapon with 1, 2 and 3, once per press", () => {
+    const onWeaponSlot = vi.fn();
+    const detach = attachKeyboard(window, createInputState(), undefined, {
+      onWeaponSlot,
+    });
+    press("Digit2");
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { code: "Digit2", repeat: true }),
+    );
+    press("Digit3");
+    expect(onWeaponSlot.mock.calls.map(([slot]) => slot)).toEqual([2, 3]);
+    detach();
+  });
+
+  it("ignores every game key while a menu owns the keyboard", () => {
+    const state = createInputState();
+    const onScoreboard = vi.fn();
+    let suspended = true;
+    const detach = attachKeyboard(window, state, undefined, {
+      onScoreboard,
+      isSuspended: () => suspended,
+    });
+    press("KeyD");
+    press("Tab");
+    press("Space");
+    expect(state.snapshot().move).toEqual([0, 0]);
+    expect(state.snapshot().fire).toBe(false);
+    expect(onScoreboard).not.toHaveBeenCalled();
+    suspended = false;
+    press("KeyD");
+    expect(state.snapshot().move).toEqual([1, 0]);
+    detach();
+  });
+});
+
+describe("attachWheel", () => {
+  it("cycles the weapon once per notch of travel, not once per trackpad tick", () => {
+    const onCycle = vi.fn();
+    const target = document.createElement("canvas");
+    const detach = attachWheel(target, onCycle);
+    const wheel = (deltaY: number): WheelEvent => {
+      const event = new WheelEvent("wheel", { deltaY, cancelable: true });
+      target.dispatchEvent(event);
+      return event;
+    };
+    expect(wheel(10).defaultPrevented).toBe(true);
+    wheel(10);
+    wheel(10);
+    expect(onCycle).not.toHaveBeenCalled();
+    wheel(10);
+    expect(onCycle).toHaveBeenCalledTimes(1);
+    wheel(-100);
+    expect(onCycle).toHaveBeenCalledTimes(2);
+    detach();
+    wheel(100);
+    expect(onCycle).toHaveBeenCalledTimes(2);
+  });
+
+  it("counts a wheel that reports lines in lines, three to the notch", () => {
+    const onCycle = vi.fn();
+    const target = document.createElement("canvas");
+    const detach = attachWheel(target, onCycle);
+    const line = (deltaY: number): void => {
+      target.dispatchEvent(new WheelEvent("wheel", { deltaY, deltaMode: 1 }));
+    };
+    line(1);
+    line(1);
+    expect(onCycle).not.toHaveBeenCalled();
+    line(1);
+    expect(onCycle).toHaveBeenCalledTimes(1);
+    // A page is a notch on its own, and a change of unit starts the count over.
+    target.dispatchEvent(new WheelEvent("wheel", { deltaY: 1, deltaMode: 2 }));
+    expect(onCycle).toHaveBeenCalledTimes(2);
     detach();
   });
 });

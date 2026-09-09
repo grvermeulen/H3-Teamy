@@ -267,3 +267,58 @@ exactly as it did.
   780 before this work; lifting the per-player half into `playerStep.ts` means moving the shared
   helpers too or accepting a cycle, so it is its own task rather than a rider on a behaviour
   change.
+
+## Runtime (Plan 6 — sound, feel and controls)
+
+Plan 6 makes the arena _feel_ like a game without touching the simulation: recorded sound in
+front of the synthesiser, haptics, damage feedback, the twin-stick touch layout the spec designed,
+the settings that switch each of them off, and the rest of the keyboard map.
+
+- **Sound.** `audio/clips.ts` is the clip table: eleven `ClipName`s (`pistol`, `uzi`, `shotgun`,
+  `footstep`, `engine`, `skid`, `impact`, `explosion`, `siren`, `pickup`, `death`), each with a
+  file name under `public/arena/audio/`, a gain and whether it loops. `audio/samples.ts` fetches
+  and decodes them once, on the first gesture that unlocks audio, and plays into the synth's master
+  gain so the Geluid toggle mutes both. **`play` returning `false` is the whole fallback
+  contract:** `createArenaSound` tries the clip for an event first and runs its oscillator branch
+  when there is none, and the engine runs from the `engine` loop (rate `engineRate(speed)`, 0.7 at
+  rest to 2.2 at 25 m/s, ramped over 80 ms) or from the drone. A clip the server does not have —
+  every clip today; the files and their `CREDITS.md` are the owner's Task 2 and have not landed —
+  is the expected state and is not reported; one that arrives and will not decode is reported to
+  Sentry once with `kind: "audio"` and the clip name.
+- **Haptics.** `input/haptics.ts`: `hapticPulses(events, me, previousHealth)` is pure and says
+  which of spec §7's patterns a tick earns this player (hit 25 ms — read from health dropping, not
+  from the `hit` event, which names the target's kind rather than who was hit; car impact 40–90 ms
+  by speed; explosion `[90, 40, 120]` within 30 m; own death `[120, 60, 220]`; kill `[15, 40, 15]`;
+  pickup 12 ms; wanted `[30, 30, 30]`). `createHaptics(navigator, enabled)` is the device side:
+  pulses under `HAPTIC_MIN_GAP_MS = 80` apart are dropped unless the later outranks the earlier,
+  Trillen off means silence, and a device that throws on a pattern is reported and ignored. iOS
+  gets nothing, as the spec accepts.
+- **Feedback.** `render/feedback.ts` is a pure fold per tick: a red vignette that flashes on damage
+  and fades over 12 ticks, a shake of 4 px for a hit and 10 px for an explosion within 30 m that
+  decays by a quarter per tick and is derived from the tick (so two frames of the same tick shake
+  the same way — it is applied as a transform on the scene, `Scene.shake`, and the overlay is
+  drawn outside it), a hit marker for 6 ticks when one of your shots lands (`hit` events now carry
+  `ownerId`), and a heartbeat throb below 25 health. Under `prefers-reduced-motion` nothing shakes
+  and the vignette plays alone. `components/cityArena/arenaFeel.ts` — `feelTick` — feeds sound,
+  haptics and feedback from the same `state.events` on every tick of every loop, catch-up bursts
+  included.
+- **Settings** (`ArenaSettingsSchema`, spec §9.3): `vibrate` and `twinStick` default `true`,
+  `forceLayout` is `"mobile" | "desktop"` or absent for "let the device decide". A stored value of
+  the wrong shape falls back to the defaults and is reported, as before. The in-game menu
+  (`ArenaSettingsSheet`: Geluid, Trillen, Besturing with Enkele stick and Indeling, Potje verlaten)
+  opens from the HUD's Menu button and from Escape — which no longer closes the overlay; Sluiten
+  does — and pauses nothing, because a potje with other people in it cannot wait for one of them.
+- **Touch.** The right 55 % of the screen is an aim stick (`TouchStick side="right"`): push to aim
+  and fire, release to stop; `Enkele stick` puts the Schieten button back and you shoot where you
+  face. The aim stick is a second aim source in `InputState` (`setStickAim`) that wins over the
+  mouse while held, so the per-frame mouse aim cannot clobber it. The first time the touch controls
+  show, a one-line tip explains them; Begrepen stores `h3-arena-touch-tip-v1`.
+- **Keyboard.** Tab held shows the tussenstand (the live scorebord, re-read twice a second) —
+  bound in the capture phase on the window and stopped there, so the dialog's focus trap never
+  moves focus off the game; 1/2/3 pick a weapon and the wheel cycles one notch per 40 px of travel.
+  Both go through `input/weaponSelect.ts`, which turns a pick into the `weaponNext` edges the
+  simulation understands, one tick pressed and one released, and gives up after eight presses so a
+  weapon with no ammo — which the simulation skips — cannot spin the rack forever. While the menu
+  is open the keyboard is suspended and anything held is released.
+- **Not in this PR.** The audio files and `CREDITS.md` (Task 2, the owner's; `npm run
+arena:check-audio` lands with them), and the device check on a phone.

@@ -14,6 +14,7 @@ import {
 } from "@/lib/cityArena/net/memoryTransport";
 import { HOST_SILENCE_MS } from "@/lib/cityArena/net/election";
 import { HOST_TICK_HZ } from "@/lib/cityArena/net/hostLoop";
+import { INITIAL_FEEDBACK } from "@/lib/cityArena/render/feedback";
 import { emptyTally } from "@/lib/cityArena/net/scoreboard";
 import { encodeSnapshot } from "@/lib/cityArena/net/snapshotWire";
 import type { Runtime } from "./arenaRuntime";
@@ -73,6 +74,9 @@ function fakeRuntime(seed: number): Runtime {
     state: createArenaState({ index, graph, seed, zone }, createRng(seed)),
     random: createRng(seed + 1),
     sound: { handleEvents: vi.fn() },
+    haptics: { fire: vi.fn() },
+    feedback: INITIAL_FEEDBACK,
+    reducedMotion: false,
     netplay: { kind: "offline", playerId: 0 },
     tally: emptyTally(),
     disposed: false,

@@ -17,7 +17,12 @@ import {
   type ButtonName,
   type InputState,
 } from "@/lib/cityArena/input/inputState";
-import { attachKeyboard } from "@/lib/cityArena/input/keyboard";
+import { attachKeyboard, attachWheel } from "@/lib/cityArena/input/keyboard";
+import { aimFromVector } from "@/lib/cityArena/input/touchStick";
+import {
+  SLOT_WEAPONS,
+  type WeaponSlot,
+} from "@/lib/cityArena/input/weaponSelect";
 import {
   attachPointerAim,
   type PointerAim,
@@ -54,6 +59,7 @@ import {
   type WorldSession,
 } from "@/lib/cityArena/world/worldSession";
 import { findZoneByKey } from "@/lib/cityArena/world/zone";
+import type { ArenaSettings } from "@/lib/cityArena/schemas";
 import { loadArenaSettings, saveArenaSettings } from "@/lib/cityArena/storage";
 import { computeHud, type ArenaHud } from "./arenaHud";
 import { useMatchSeam, type MatchPeek, type MatchSeam } from "./matchSeam";
@@ -108,6 +114,16 @@ export type UseArenaGameOptions = {
   reducedMotion?: boolean;
   /** The room to play in; omitted for offline free roam. */
   netplay?: ArenaNetplayOptions;
+  /** What the keyboard says beyond movement, and whether a menu owns it right now. */
+  keys?: ArenaKeyOptions;
+};
+
+/** The overlay's side of the keyboard (spec §7). */
+export type ArenaKeyOptions = {
+  /** Tab held shows the scorebord. */
+  onScoreboard?: (held: boolean) => void;
+  /** True while the menu is open: game keys are ignored and anything held is released. */
+  suspended?: boolean;
 };
 /** Hook result consumed by the overlay. */
 export type ArenaGame = MatchSeam & {
@@ -119,8 +135,18 @@ export type ArenaGame = MatchSeam & {
   death: DeathInfo | null;
   radar: RadarSnapshot;
   setSound(enabled: boolean): void;
+  /** The player's settings, as persisted. */
+  settings: ArenaSettings;
+  /** Applies and persists a change to the settings. */
+  updateSettings(patch: Partial<ArenaSettings>): void;
   setInputVector(vector: [number, number] | null): void;
+  /** The aim stick: a pushed stick aims and fires, a released one stops (spec §7). */
+  setAimVector(vector: [number, number] | null): void;
   setButton(name: ButtonName, pressed: boolean): void;
+  /** Picks a weapon directly, as 1, 2 and 3 do. */
+  selectWeapon(slot: WeaponSlot): void;
+  /** Moves to the next weapon once, as the wheel does. */
+  cycleWeapon(): void;
   teleportToZone(key: ZoneKey): void;
   debugSnapshot: DebugSnapshot | null;
 };
@@ -175,7 +201,7 @@ async function bootSession(
   canvasRef: RefObject<HTMLCanvasElement | null>,
   runtimeRef: RefObject<Runtime | null>,
   reducedMotionRef: RefObject<boolean>,
-  initialSoundRef: RefObject<boolean>,
+  settingsRef: RefObject<ArenaSettings>,
   isCancelled: IsCancelled,
 ): Promise<{ index: MapIndex; spawn: Point } | null> {
   const { index } = await session.ready();
@@ -190,8 +216,9 @@ async function bootSession(
     zone,
     width,
     reducedMotionRef.current,
-    initialSoundRef.current,
+    settingsRef.current.sound,
   );
+  runtime.hapticsEnabled = settingsRef.current.vibrate;
   runtimeRef.current = runtime;
   return {
     index,
@@ -205,7 +232,7 @@ type ArenaBootOptions = {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   runtimeRef: RefObject<Runtime | null>;
   reducedMotionRef: RefObject<boolean>;
-  initialSoundRef: RefObject<boolean>;
+  settingsRef: RefObject<ArenaSettings>;
 };
 
 /**
@@ -254,7 +281,7 @@ async function finishBoot(
 
 /** Boots the world session for `zoneKey`: loads the map, spawns the player, disposes on unmount. */
 function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
-  const { zoneKey, canvasRef, runtimeRef, reducedMotionRef, initialSoundRef } =
+  const { zoneKey, canvasRef, runtimeRef, reducedMotionRef, settingsRef } =
     options;
   const [phase, setPhase] = useState<ArenaPhase>("loading");
   const [progress, setProgress] = useState<LoadProgress>({
@@ -277,7 +304,7 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
       canvasRef,
       runtimeRef,
       reducedMotionRef,
-      initialSoundRef,
+      settingsRef,
       isCancelled,
     )
       .then((booted) =>
@@ -303,9 +330,46 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
     };
     // reducedMotionRef is listed for exhaustive-deps only: ref identity never changes across
     // renders, so a media-query-driven reducedMotion change never re-runs this effect.
-  }, [canvasRef, runtimeRef, zoneKey, reducedMotionRef, initialSoundRef]);
+  }, [canvasRef, runtimeRef, zoneKey, reducedMotionRef, settingsRef]);
 
   return { phase, progress, failed, zones, setProgress, setFailed };
+}
+
+/** Binds the keyboard and the wheel, with the menu able to take the keyboard away. */
+function useKeyboardBindings(
+  inputRef: RefObject<InputState>,
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  runtimeRef: RefObject<Runtime | null>,
+  keys: ArenaKeyOptions | undefined,
+): void {
+  const suspended = keys?.suspended ?? false;
+  const onScoreboard = keys?.onScoreboard;
+  const suspendedRef = useRef(suspended);
+  useEffect(() => {
+    suspendedRef.current = suspended;
+    // A key held as the menu opened must not stay held behind it.
+    if (suspended) inputRef.current.clearKeyboard();
+  }, [suspended, inputRef]);
+  useEffect(
+    () =>
+      attachKeyboard(
+        window,
+        inputRef.current,
+        () => runtimeRef.current?.sound.unlock(),
+        {
+          onScoreboard,
+          onWeaponSlot: (slot) =>
+            runtimeRef.current?.weapons.request(SLOT_WEAPONS[slot]),
+          isSuspended: () => suspendedRef.current,
+        },
+      ),
+    [inputRef, runtimeRef, onScoreboard],
+  );
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    return attachWheel(canvas, () => runtimeRef.current?.weapons.cycle());
+  }, [canvasRef, runtimeRef]);
 }
 
 /** Attaches keyboard and mouse aim on mount; returns the setters the touch controls drive. */
@@ -314,17 +378,13 @@ function useArenaInput(
   canvasRef: RefObject<HTMLCanvasElement | null>,
   pointerRef: RefObject<PointerAim | null>,
   runtimeRef: RefObject<Runtime | null>,
+  keys: ArenaKeyOptions | undefined,
 ): {
   setInputVector(vector: [number, number] | null): void;
+  setAimVector(vector: [number, number] | null): void;
   setButton(name: ButtonName, pressed: boolean): void;
 } {
-  useEffect(
-    () =>
-      attachKeyboard(window, inputRef.current, () =>
-        runtimeRef.current?.sound.unlock(),
-      ),
-    [inputRef, runtimeRef],
-  );
+  useKeyboardBindings(inputRef, canvasRef, runtimeRef, keys);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
@@ -344,6 +404,15 @@ function useArenaInput(
     },
     [inputRef, runtimeRef],
   );
+  const setAimVector = useCallback(
+    (vector: [number, number] | null) => {
+      if (vector) runtimeRef.current?.sound.unlock();
+      const angle = aimFromVector(vector);
+      inputRef.current.setStickAim(angle);
+      inputRef.current.setButton("buttons", "fire", angle !== null);
+    },
+    [inputRef, runtimeRef],
+  );
   const setButton = useCallback(
     (name: ButtonName, pressed: boolean) => {
       if (pressed) runtimeRef.current?.sound.unlock();
@@ -351,7 +420,7 @@ function useArenaInput(
     },
     [inputRef, runtimeRef],
   );
-  return { setInputVector, setButton };
+  return { setInputVector, setAimVector, setButton };
 }
 
 /** Drives the fixed-step simulation and render loop via requestAnimationFrame while "playing". */
@@ -545,6 +614,15 @@ function useArenaGameState(soundEnabled: boolean): ArenaGameState {
   };
 }
 
+/** Pushes the settings that the runtime acts on into it. */
+function applySettings(runtime: Runtime | null, settings: ArenaSettings): void {
+  if (!runtime) return;
+  runtime.soundEnabled = settings.sound;
+  runtime.sound.setEnabled(settings.sound);
+  if (settings.sound) runtime.sound.unlock();
+  runtime.hapticsEnabled = settings.vibrate;
+}
+
 /** Owns the world session, the fixed-step arena loop, the camera, the HUD and the death screen state. */
 export function useArenaGame({
   zoneKey,
@@ -552,11 +630,12 @@ export function useArenaGame({
   debug,
   reducedMotion = false,
   netplay,
+  keys,
 }: UseArenaGameOptions): ArenaGame {
-  const [soundEnabled, setSoundEnabled] = useState(
-    () => loadArenaSettings().sound,
+  const [settings, setSettings] = useState<ArenaSettings>(() =>
+    loadArenaSettings(),
   );
-  const initialSoundRef = useRef(soundEnabled);
+  const settingsRef = useRef(settings);
   const { runtimeRef, inputRef, pointerRef, metricsRef, reducedMotionRef } =
     useArenaRuntimeRefs(reducedMotion);
   const {
@@ -568,7 +647,7 @@ export function useArenaGame({
     setDebugSnapshot,
     radar,
     setRadar,
-  } = useArenaGameState(soundEnabled);
+  } = useArenaGameState(settings.sound);
   useReducedMotionSync(reducedMotion, reducedMotionRef, runtimeRef);
   const { phase, progress, failed, zones, setProgress, setFailed } =
     useArenaBoot({
@@ -576,13 +655,23 @@ export function useArenaGame({
       canvasRef,
       runtimeRef,
       reducedMotionRef,
-      initialSoundRef,
+      settingsRef,
     });
-  const { setInputVector, setButton } = useArenaInput(
+  const { setInputVector, setAimVector, setButton } = useArenaInput(
     inputRef,
     canvasRef,
     pointerRef,
     runtimeRef,
+    keys,
+  );
+  const selectWeapon = useCallback(
+    (slot: WeaponSlot) =>
+      runtimeRef.current?.weapons.request(SLOT_WEAPONS[slot]),
+    [runtimeRef],
+  );
+  const cycleWeapon = useCallback(
+    () => runtimeRef.current?.weapons.cycle(),
+    [runtimeRef],
   );
   useArenaTestHooks(debug, runtimeRef);
   useFrameLoop(phase, {
@@ -602,20 +691,21 @@ export function useArenaGame({
   useNetplay(runtimeRef, phase === "playing", netplay);
   const seam = useMatchSeam(runtimeRef);
   const teleportToZone = useTeleport(runtimeRef, setHud);
-  const setSound = useCallback(
-    (enabled: boolean) => {
-      setSoundEnabled(enabled);
-      initialSoundRef.current = enabled;
-      const runtime = runtimeRef.current;
-      if (runtime) {
-        runtime.soundEnabled = enabled;
-        runtime.sound.setEnabled(enabled);
-        if (enabled) runtime.sound.unlock();
-      }
-      setHud({ ...hud, soundEnabled: enabled });
-      saveArenaSettings({ sound: enabled });
+  const updateSettings = useCallback(
+    (patch: Partial<ArenaSettings>) => {
+      const next = { ...settingsRef.current, ...patch };
+      settingsRef.current = next;
+      setSettings(next);
+      applySettings(runtimeRef.current, next);
+      if (patch.sound !== undefined)
+        setHud({ ...hud, soundEnabled: next.sound });
+      saveArenaSettings(patch);
     },
-    [hud, initialSoundRef, runtimeRef, setHud],
+    [hud, runtimeRef, setHud],
+  );
+  const setSound = useCallback(
+    (enabled: boolean) => updateSettings({ sound: enabled }),
+    [updateSettings],
   );
 
   return {
@@ -628,8 +718,13 @@ export function useArenaGame({
     death,
     radar,
     setSound,
+    settings,
+    updateSettings,
     setInputVector,
+    setAimVector,
     setButton,
+    selectWeapon,
+    cycleWeapon,
     teleportToZone,
     debugSnapshot,
   };

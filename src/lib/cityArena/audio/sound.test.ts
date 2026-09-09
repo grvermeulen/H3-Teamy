@@ -1,10 +1,32 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ClipName } from "./clips";
+import { createSamplePlayer, type SamplePlayer } from "./samples";
 import { createFakeAudioContext } from "./testing/fakeAudioContext";
-import { createArenaSound } from "./sound";
+import {
+  ENGINE_RATE_MAX,
+  ENGINE_RATE_MIN,
+  ENGINE_RATE_TOP_SPEED_MPS,
+  createArenaSound,
+  engineRate,
+} from "./sound";
 
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
+/** A sample player that has exactly the clips named, and remembers what it was asked to play. */
+function playerWith(clips: ClipName[]): SamplePlayer {
+  return {
+    preload: vi.fn(async () => undefined),
+    play: vi.fn((clip: ClipName) => clips.includes(clip)),
+    startLoop: vi.fn(() => null),
+    has: (clip: ClipName) => clips.includes(clip),
+  };
+}
+
 describe("createArenaSound", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("does not create voices while disabled and unlock is idempotent", () => {
     const { context, factory } = createFakeAudioContext();
     const sound = createArenaSound(factory, false);
@@ -26,7 +48,7 @@ describe("createArenaSound", () => {
     const sound = createArenaSound(factory, true);
     sound.handleEvents([
       { kind: "shot", weapon: "pistol", ownerId: 0, x: 0, y: 0 },
-      { kind: "hit", target: "ped", x: 1, y: 1 },
+      { kind: "hit", target: "ped", ownerId: 0, x: 1, y: 1 },
       { kind: "pickup", pickupKind: "health", playerId: 0, x: 2, y: 2 },
       { kind: "explosion", x: 3, y: 3 },
       { kind: "wanted", playerId: 0, level: 2 },
@@ -62,5 +84,115 @@ describe("createArenaSound", () => {
     expect(context.oscillators).toHaveLength(0);
     sound.setEnabled(true);
     expect(context.oscillators).toHaveLength(0);
+  });
+
+  it("prefers a recorded clip and keeps the oscillator for a clip it does not have", () => {
+    const { context, factory } = createFakeAudioContext();
+    const player = playerWith(["pistol", "explosion"]);
+    const sound = createArenaSound(factory, true, () => player);
+    sound.handleEvents([
+      { kind: "shot", weapon: "pistol", ownerId: 0, x: 0, y: 0 },
+      { kind: "explosion", x: 3, y: 3 },
+      { kind: "shot", weapon: "uzi", ownerId: 0, x: 0, y: 0 },
+      { kind: "shot", weapon: "fist", ownerId: 0, x: 0, y: 0 },
+    ]);
+    // The pistol and the explosion played from clips; the uzi fell back; the fist is synth-only.
+    expect(vi.mocked(player.play).mock.calls.map(([clip]) => clip)).toEqual([
+      "pistol",
+      "explosion",
+      "uzi",
+    ]);
+    expect(context.oscillators).toHaveLength(2);
+  });
+
+  it("fetches the clips on the first unlock, and only then", () => {
+    const { factory } = createFakeAudioContext();
+    const player = playerWith([]);
+    const sound = createArenaSound(factory, true, () => player);
+    sound.handleEvents([{ kind: "explosion", x: 3, y: 3 }]);
+    expect(player.preload).not.toHaveBeenCalled();
+    sound.unlock();
+    sound.unlock();
+    expect(player.preload).toHaveBeenCalledTimes(1);
+  });
+
+  it("sounds exactly as before when no audio file exists on the server", async () => {
+    // Plan 6 acceptance 1: the branch is playable before a single clip has been sourced.
+    const { context, factory } = createFakeAudioContext();
+    const notFound = vi.fn(
+      async () => new Response(null, { status: 404 }),
+    ) as unknown as typeof fetch;
+    let player: SamplePlayer | null = null;
+    const sound = createArenaSound(factory, true, (audio, destination) => {
+      player = createSamplePlayer(context, destination, notFound);
+      return audio === context ? player : null;
+    });
+    sound.unlock();
+    await player!.preload();
+    sound.handleEvents([
+      { kind: "shot", weapon: "pistol", ownerId: 0, x: 0, y: 0 },
+      { kind: "hit", target: "ped", ownerId: 0, x: 1, y: 1 },
+      { kind: "pickup", pickupKind: "health", playerId: 0, x: 2, y: 2 },
+      { kind: "explosion", x: 3, y: 3 },
+    ]);
+    expect(context.sources).toHaveLength(0);
+    expect(context.oscillators).toHaveLength(5);
+  });
+
+  it("runs the engine from the clip when it has one: faster is higher, and stopping stops it", () => {
+    const { context, factory } = createFakeAudioContext();
+    const loop = { setRate: vi.fn(), stop: vi.fn() };
+    const player = { ...playerWith(["engine"]), startLoop: vi.fn(() => loop) };
+    const sound = createArenaSound(factory, true, () => player);
+    sound.updateEngine(0, true);
+    sound.updateEngine(20, true);
+    expect(player.startLoop).toHaveBeenCalledTimes(1);
+    expect(loop.setRate).toHaveBeenLastCalledWith(engineRate(20));
+    expect(engineRate(20)).toBeGreaterThan(engineRate(0));
+    expect(context.oscillators).toHaveLength(0);
+    sound.updateEngine(20, false);
+    expect(loop.stop).toHaveBeenCalledTimes(1);
+    sound.updateEngine(5, true);
+    expect(player.startLoop).toHaveBeenCalledTimes(2);
+    sound.dispose();
+    expect(loop.stop).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the oscillator drone when there is no engine clip", () => {
+    const { context, factory } = createFakeAudioContext();
+    const sound = createArenaSound(factory, true, () => playerWith(["pistol"]));
+    sound.updateEngine(4, true);
+    expect(context.oscillators).toHaveLength(1);
+  });
+
+  it("stops the drone once the engine clip has landed mid-drive", () => {
+    // The clips arrive whenever the preload finishes; a car already running on the drone must
+    // hand over to the clip rather than play both.
+    const { context, factory } = createFakeAudioContext();
+    const loop = { setRate: vi.fn(), stop: vi.fn() };
+    let landed = false;
+    const player: SamplePlayer = {
+      preload: vi.fn(async () => undefined),
+      play: vi.fn(() => false),
+      startLoop: vi.fn(() => loop),
+      has: () => landed,
+    };
+    const sound = createArenaSound(factory, true, () => player);
+    sound.updateEngine(4, true);
+    expect(context.oscillators).toHaveLength(1);
+    landed = true;
+    sound.updateEngine(6, true);
+    expect(context.oscillators[0]!.stopped).toBe(true);
+    expect(player.startLoop).toHaveBeenCalledTimes(1);
+    expect(loop.setRate).toHaveBeenLastCalledWith(engineRate(6));
+  });
+});
+
+describe("engineRate", () => {
+  it("idles at rest, tops out at the top speed, and never goes past it", () => {
+    expect(engineRate(0)).toBe(ENGINE_RATE_MIN);
+    expect(engineRate(ENGINE_RATE_TOP_SPEED_MPS)).toBe(ENGINE_RATE_MAX);
+    expect(engineRate(ENGINE_RATE_TOP_SPEED_MPS * 2)).toBe(ENGINE_RATE_MAX);
+    expect(engineRate(-3)).toBe(ENGINE_RATE_MIN);
   });
 });

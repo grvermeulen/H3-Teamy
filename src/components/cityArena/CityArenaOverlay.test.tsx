@@ -127,6 +127,10 @@ vi.mock("./useArenaRoom", () => {
   return { useArenaRoom: () => room };
 });
 
+import {
+  ARENA_SETTINGS_KEY,
+  ARENA_TOUCH_TIP_KEY,
+} from "@/lib/cityArena/storage";
 import { HEALTH_LABEL } from "./ArenaVitals";
 import CityArenaOverlay from "./CityArenaOverlay";
 
@@ -205,9 +209,13 @@ describe("CityArenaOverlay", () => {
       expect(screen.getByTestId("arena-hud")).toHaveTextContent("WUR-campus"),
     );
     expect(screen.getByLabelText("Ga naar")).toHaveValue("campus");
+    // Escape opens the menu (spec §7); leaving the potje from it is what closes the overlay.
     await act(async () => {
       fireEvent.keyDown(document, { code: "Escape", key: "Escape" });
     });
+    expect(screen.getByRole("dialog", { name: "Menu" })).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Potje verlaten" }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -336,13 +344,85 @@ describe("CityArenaOverlay", () => {
       ),
     );
     expect(screen.getByTestId("touch-stick-surface")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Schieten" }),
-    ).toBeInTheDocument();
+    // Twin-stick by default: the aim stick fires, so there is no Schieten button (spec §7).
+    expect(screen.getByTestId("touch-aim-surface")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Schieten" })).toBeNull();
     expect(
       screen.getByRole("button", { name: "Instappen" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Wapen" })).toBeInTheDocument();
     expect(screen.getByText(/Sleep links/)).toBeInTheDocument();
+    // The first-run tip shows once, and Begrepen puts it away for good.
+    await waitFor(() =>
+      expect(screen.getByRole("note")).toHaveTextContent(/richten/),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Begrepen" }));
+    expect(screen.queryByRole("note")).toBeNull();
+    expect(localStorage.getItem(ARENA_TOUCH_TIP_KEY)).toBe("1");
+  });
+
+  it("shows a fire button instead of the aim stick with Enkele stick, and no tip once read", async () => {
+    localStorage.setItem(
+      ARENA_SETTINGS_KEY,
+      JSON.stringify({ twinStick: false, forceLayout: "mobile" }),
+    );
+    localStorage.setItem(ARENA_TOUCH_TIP_KEY, "1");
+    renderOverlay(vi.fn());
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    // Forced to the phone layout on a fine pointer: the touch controls show anyway.
+    expect(screen.getByTestId("touch-stick-surface")).toBeInTheDocument();
+    expect(screen.queryByTestId("touch-aim-surface")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Schieten" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("note")).toBeNull();
+  });
+});
+
+describe("CityArenaOverlay keys", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    vi.stubGlobal("fetch", fetchImpl);
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+      () => createFakeContext() as unknown as CanvasRenderingContext2D,
+    );
+    vi.stubGlobal("requestAnimationFrame", vi.fn());
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("shows the tussenstand for as long as Tab is held", async () => {
+    renderOverlay(vi.fn());
+    await waitFor(() =>
+      expect(screen.getByLabelText("GTA H3 speelveld")).toBeInTheDocument(),
+    );
+    fireEvent.keyDown(window, { code: "Tab", key: "Tab" });
+    expect(screen.getByText("Tussenstand")).toBeInTheDocument();
+    fireEvent.keyUp(window, { code: "Tab", key: "Tab" });
+    expect(screen.queryByText("Tussenstand")).toBeNull();
   });
 });

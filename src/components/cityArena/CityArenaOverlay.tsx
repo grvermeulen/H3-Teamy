@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -11,6 +12,13 @@ import {
 import { createPortal, preload } from "react-dom";
 import { ZONE_OPTIONS } from "@/lib/cityArena/constants";
 import { ArenaPhaseScreens } from "./ArenaPhaseScreens";
+import { ArenaSettingsSheet, MENU_LABEL } from "./ArenaSettingsSheet";
+import { ArenaTouchTip } from "./ArenaTouchTip";
+import type { ArenaLayout } from "@/lib/cityArena/schemas";
+import {
+  hasSeenArenaTouchTip,
+  markArenaTouchTipSeen,
+} from "@/lib/cityArena/storage";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { HostToast } from "./HostToast";
 import { useArenaRoom, type ArenaRoom } from "./useArenaRoom";
@@ -58,8 +66,11 @@ type CityArenaOverlayProps = { entry: ArenaEntry; onClose: () => void };
  * is how those two end up unable to express a lobby whose city is still loading behind it.
  */
 
-/** True while the viewport matches the touch-control media query; updates on resize/rotate. */
-function useShowTouchControls(): boolean {
+/**
+ * True while the viewport matches the touch-control media query (updates on resize/rotate), unless
+ * the settings force a layout, in which case the setting decides.
+ */
+function useShowTouchControls(forceLayout: ArenaLayout | undefined): boolean {
   const [showTouch, setShowTouch] = useState(true);
   useEffect(() => {
     const query = window.matchMedia(TOUCH_MEDIA_QUERY);
@@ -68,7 +79,20 @@ function useShowTouchControls(): boolean {
     query.addEventListener("change", apply);
     return () => query.removeEventListener("change", apply);
   }, []);
-  return showTouch;
+  return forceLayout ? forceLayout === "mobile" : showTouch;
+}
+
+/** The first-run touch tip: shown once the touch controls are up, until it has been read. */
+function useTouchTip(active: boolean): { shown: boolean; dismiss: () => void } {
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    if (active && !hasSeenArenaTouchTip()) setShown(true);
+  }, [active]);
+  const dismiss = useCallback(() => {
+    markArenaTouchTipSeen();
+    setShown(false);
+  }, []);
+  return { shown, dismiss };
 }
 
 /**
@@ -156,10 +180,11 @@ type ArenaHudBarProps = {
   showLoadWarning: boolean;
   onTeleport: (key: ZoneKey) => void;
   onSoundChange: (enabled: boolean) => void;
+  onMenu: () => void;
   onClose: () => void;
 };
 
-/** Top strip: zone/street, vitals, an optional load warning, the zone picker and the close button. */
+/** Top strip: zone/street, vitals, an optional load warning, the zone picker, the menu and the close button. */
 function ArenaHudBar({
   hud,
   zones,
@@ -167,6 +192,7 @@ function ArenaHudBar({
   showLoadWarning,
   onTeleport,
   onSoundChange,
+  onMenu,
   onClose,
 }: ArenaHudBarProps): React.JSX.Element {
   return (
@@ -202,6 +228,9 @@ function ArenaHudBar({
           disabled={pickerDisabled}
           onTeleport={onTeleport}
         />
+        <button type="button" onClick={onMenu}>
+          {MENU_LABEL}
+        </button>
         <button type="button" onClick={onClose}>
           Sluiten
         </button>
@@ -230,6 +259,8 @@ type ArenaPlayfieldProps = {
   showTouch: boolean;
   reducedMotion: boolean;
   stick: StickController;
+  aimStick: StickController;
+  tip: { shown: boolean; dismiss: () => void };
 };
 
 /** Canvas plus the loading, error, stick, buttons, death and debug layers drawn on top of it. */
@@ -240,8 +271,11 @@ function ArenaPlayfield({
   showTouch,
   reducedMotion,
   stick,
+  aimStick,
+  tip,
 }: ArenaPlayfieldProps): React.JSX.Element {
   const playing = game.phase === "playing";
+  const twinStick = game.settings.twinStick;
   return (
     <div className="relative min-h-0 flex-1">
       <canvas
@@ -257,11 +291,22 @@ function ArenaPlayfield({
       {playing && showTouch ? (
         <TouchStick stick={stick} onVector={game.setInputVector} />
       ) : null}
+      {playing && showTouch && twinStick ? (
+        <TouchStick
+          side="right"
+          stick={aimStick}
+          onVector={game.setAimVector}
+        />
+      ) : null}
       {playing && showTouch ? (
         <ArenaTouchButtons
           inVehicle={game.hud.inVehicle}
           onButton={game.setButton}
+          showFire={!twinStick}
         />
+      ) : null}
+      {playing && showTouch && tip.shown ? (
+        <ArenaTouchTip twinStick={twinStick} onDismiss={tip.dismiss} />
       ) : null}
       {game.phase === "loading" ? (
         <ArenaLoadingScreen
@@ -285,17 +330,25 @@ function ArenaPlayfield({
 }
 
 /** Props for {@link ArenaFooter}. */
-type ArenaFooterProps = { showTouch: boolean };
+type ArenaFooterProps = { showTouch: boolean; twinStick: boolean };
+
+/** The hint for each control scheme (spec §7). */
+function controlsHint(showTouch: boolean, twinStick: boolean): string {
+  if (!showTouch)
+    return "WASD of pijltjes lopen of sturen · muis richt en schiet · E instappen · Q, wiel of 1-2-3 wapen · Tab scorebord · Esc menu.";
+  return twinStick
+    ? "Sleep links op het scherm om te lopen of te sturen; sleep rechts om te richten en te schieten."
+    : "Sleep links op het scherm om te lopen of te sturen; rechts: Schieten, Instappen, Wapen.";
+}
 
 /** Bottom hint line: the active control scheme plus the OpenStreetMap attribution. */
-function ArenaFooter({ showTouch }: ArenaFooterProps): React.JSX.Element {
+function ArenaFooter({
+  showTouch,
+  twinStick,
+}: ArenaFooterProps): React.JSX.Element {
   return (
     <p className="muted mx-2 my-1 shrink-0 text-center text-xs">
-      <span>
-        {showTouch
-          ? "Sleep links op het scherm om te lopen of te sturen; rechts: Schieten, Instappen, Wapen."
-          : "WASD of pijltjes lopen of sturen · muis richt en schiet · E instappen · Q wapen · Esc sluit."}
-      </span>{" "}
+      <span>{controlsHint(showTouch, twinStick)}</span>{" "}
       <span>{ATTRIBUTION_TEXT}</span>
     </p>
   );
@@ -338,17 +391,31 @@ export default function CityArenaOverlay({
   const dialogRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stick = useMemo(() => createStick(), []);
+  const aimStick = useMemo(() => createStick(), []);
   const debug = useDebugFlag();
-  const showTouch = useShowTouchControls();
   const reducedMotion = useReducedMotion();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [scoreboardHeld, setScoreboardHeld] = useState(false);
   const game = useArenaGame({
     zoneKey: zone,
     canvasRef,
     debug,
     reducedMotion,
     netplay: netplayFor(room),
+    keys: { onScoreboard: setScoreboardHeld, suspended: menuOpen },
   });
-  useDialogFocusTrap(dialogRef, onClose);
+  const showTouch = useShowTouchControls(game.settings.forceLayout);
+  const tip = useTouchTip(showTouch && game.phase === "playing");
+  const openMenu = useCallback(() => setMenuOpen(true), []);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const leave = useCallback(() => {
+    room.leave();
+    onClose();
+  }, [room, onClose]);
+  // Escape opens the menu (spec §7); the menu's own trap closes it again, and "Sluiten" is the
+  // way out of the overlay.
+  // Stood down while the sheet is open: the sheet's own trap owns Tab and Escape until then.
+  useDialogFocusTrap(dialogRef, openMenu, !menuOpen);
   useLockBodyScroll();
   useWarmDeathArtwork();
 
@@ -374,6 +441,7 @@ export default function CityArenaOverlay({
         showLoadWarning={game.phase === "playing" && game.failed}
         onTeleport={game.teleportToZone}
         onSoundChange={game.setSound}
+        onMenu={openMenu}
         onClose={onClose}
       />
       <ArenaPlayfield
@@ -383,9 +451,24 @@ export default function CityArenaOverlay({
         showTouch={showTouch}
         reducedMotion={reducedMotion}
         stick={stick}
+        aimStick={aimStick}
+        tip={tip}
       />
-      <ArenaFooter showTouch={showTouch} />
-      <ArenaPhaseScreens game={game} room={room} onClose={onClose} />
+      <ArenaFooter showTouch={showTouch} twinStick={game.settings.twinStick} />
+      <ArenaPhaseScreens
+        game={game}
+        room={room}
+        onClose={onClose}
+        showScoreboard={scoreboardHeld}
+      />
+      {menuOpen ? (
+        <ArenaSettingsSheet
+          settings={game.settings}
+          onChange={game.updateSettings}
+          onLeave={leave}
+          onClose={closeMenu}
+        />
+      ) : null}
     </div>
   );
 

@@ -71,6 +71,23 @@ import type {
 import type { Point } from "@/lib/cityArena/world/projection";
 import { findPath, pathLength } from "@/lib/cityArena/world/roadGraph";
 import type { WorldSession } from "@/lib/cityArena/world/worldSession";
+import { browserSamplePlayer } from "@/lib/cityArena/audio/samples";
+import {
+  createHaptics,
+  type Haptics,
+  type VibratorLike,
+} from "@/lib/cityArena/input/haptics";
+import {
+  createWeaponSelector,
+  type WeaponSelector,
+} from "@/lib/cityArena/input/weaponSelect";
+import {
+  INITIAL_FEEDBACK,
+  drawFeedback,
+  shakeOffset,
+  type FeedbackState,
+} from "@/lib/cityArena/render/feedback";
+import { feelTick } from "./arenaFeel";
 import {
   createArenaSound,
   type ArenaSound,
@@ -188,6 +205,13 @@ export type Runtime = {
   reducedMotion: boolean;
   sound: ArenaSound;
   soundEnabled: boolean;
+  haptics: Haptics;
+  /** The Trillen setting, read by the haptics on every pulse. */
+  hapticsEnabled: boolean;
+  /** Direct weapon picks (1/2/3, the wheel), turned into `weaponNext` edges tick by tick. */
+  weapons: WeaponSelector;
+  /** The vignette, shake, hit marker and heartbeat, folded per tick. */
+  feedback: FeedbackState;
   radarRoadIndex: RadarRoadIndex;
   disposed: boolean;
 };
@@ -262,6 +286,7 @@ function buildScene(
     // off from the physical cursor (spec §7's push-in tops out at 1.08×).
     aimScreen: runtime.diedAtMs === null ? aimScreen : null,
     pushIn: deathPhase(runtime, nowMs)?.pushIn ?? 1,
+    shake: shakeOffset(runtime.feedback, state.tick),
     carSprite: session.sprites().car,
     playerSprite: session.sprites().player,
   };
@@ -273,6 +298,7 @@ function paintCanvas(
   rect: DOMRect,
   camera: Camera,
   scene: Scene,
+  feedback: FeedbackState,
 ): void {
   const dpr = window.devicePixelRatio || 1;
   const targetWidth = Math.round(rect.width * dpr);
@@ -290,6 +316,8 @@ function paintCanvas(
     { rect: { x: 0, y: 0, width: rect.width, height: rect.height }, camera },
     scene,
   );
+  // Over the scene and outside its transform: the vignette must not shake with the world.
+  drawFeedback(ctx, { width: rect.width, height: rect.height }, feedback);
 }
 
 /** Straight-line distance in metres between two points. */
@@ -360,7 +388,7 @@ export function createRuntime(
     random,
   );
   const baseZoom = zoomLevelForViewport(viewportWidthPx);
-  return {
+  const runtime: Runtime = {
     session,
     state,
     camera: createCamera(
@@ -382,14 +410,28 @@ export function createRuntime(
     violations: 0,
     reportedViolations: new Set<string>(),
     reducedMotion,
-    sound: createArenaSound(audioContextFactory, soundEnabled),
+    sound: createArenaSound(
+      audioContextFactory,
+      soundEnabled,
+      browserSamplePlayer,
+    ),
     soundEnabled,
+    haptics: createHaptics(vibrator(), () => runtime.hapticsEnabled),
+    hapticsEnabled: true,
+    weapons: createWeaponSelector(),
+    feedback: INITIAL_FEEDBACK,
     radarRoadIndex: createRadarRoadIndex(
       session.graph().nodes,
       session.graph().edges,
     ),
     disposed: false,
   };
+  return runtime;
+}
+
+/** The browser's vibrator, or nothing during SSR. */
+function vibrator(): VibratorLike {
+  return typeof navigator === "undefined" ? {} : navigator;
 }
 
 /** World angle from the player to the mouse on the canvas, or `null` without a mouse position. */
@@ -435,12 +477,16 @@ function buildDebugSnapshot(
 /** The input for the next step: an injected debug input while its ticks last, else the live one. */
 function nextInput(runtime: Runtime, live: WorldInput): WorldInput {
   const injected = runtime.injected;
-  if (!injected || injected.ticksLeft <= 0) {
-    runtime.injected = null;
-    return live;
+  if (injected && injected.ticksLeft > 0) {
+    runtime.injected = { ...injected, ticksLeft: injected.ticksLeft - 1 };
+    return injected.input;
   }
-  runtime.injected = { ...injected, ticksLeft: injected.ticksLeft - 1 };
-  return injected.input;
+  runtime.injected = null;
+  // Looked up rather than through myPlayer: this runs before the networked step checks that the
+  // host still carries this player, and must not be the thing that throws.
+  const held =
+    playerById(runtime.state, runtime.netplay.playerId)?.weapon ?? "pistol";
+  return runtime.weapons.apply(live, held);
 }
 
 /** Runs the invariant checker (debug mode); each distinct message goes to Sentry once per session. */
@@ -639,7 +685,7 @@ function advanceSimulation(
       world,
       runtime.random,
     );
-    runtime.sound.handleEvents(runtime.state.events);
+    feelTick(runtime, runtime.state);
     runtime.tally = tallyEvents(runtime.tally, runtime.state.events);
     updateEngineSound(runtime);
     runtime.accumulator -= SIM_STEP_S;
@@ -793,6 +839,7 @@ function runFrame(
     rect,
     runtime.camera,
     buildScene(runtime, zone, pointer, timestamp),
+    runtime.feedback,
   );
   const drawEnd = performance.now();
   options.metricsRef.current.record({

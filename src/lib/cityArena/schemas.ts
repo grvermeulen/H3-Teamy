@@ -101,17 +101,31 @@ export function isMapRoads(value: unknown): value is MapRoads {
   );
 }
 
-/** Persisted player preferences (extended by later plans). */
+/** The two control layouts (spec §7); the device picks unless one is forced. */
+const layouts = ["mobile", "desktop"] as const;
+
+/** Persisted player preferences (spec §9.3). */
 export const ArenaSettingsSchema = z.object({
   lastZone: z.enum(zoneKeys).default(DEFAULT_ZONE),
   sound: z.boolean().default(true),
+  /** "Trillen": haptics on hits, deaths and pickups. */
+  vibrate: z.boolean().default(true),
+  /** Twin-stick touch layout; off is "Enkele stick", a fire button instead of an aim stick. */
+  twinStick: z.boolean().default(true),
+  /** A forced layout; absent, the device decides. */
+  forceLayout: z.enum(layouts).optional(),
 });
 
 /** Parsed settings type, inferred from {@link ArenaSettingsSchema} so the two cannot drift. */
 export type ArenaSettings = z.infer<typeof ArenaSettingsSchema>;
 
+/** A control layout. */
+export type ArenaLayout = (typeof layouts)[number];
+
 /** Defaults used when nothing valid is stored. */
 export const DEFAULT_ARENA_SETTINGS: ArenaSettings = {
   lastZone: DEFAULT_ZONE,
   sound: true,
+  vibrate: true,
+  twinStick: true,
 };

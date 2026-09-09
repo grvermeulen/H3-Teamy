@@ -30,6 +30,8 @@ export type InputState = {
   setStick(vector: [number, number] | null): void;
   setButton(source: InputSource, name: ButtonName, pressed: boolean): void;
   setAim(angle: number | null): void;
+  /** Aim from the touch aim stick; while it is held it wins over the mouse. */
+  setStickAim(angle: number | null): void;
   clearKeyboard(): void;
   snapshot(): WorldInput;
 };
@@ -44,6 +46,7 @@ export function createInputState(): InputState {
   // the `InputState` doc comment above) — a released stick must keep taking the analog path.
   let stickIsSource = false;
   let aim: number | null = null;
+  let stickAim: number | null = null;
   const buttons: Record<InputSource, ButtonState> = {
     keyboard: { ...RELEASED },
     pointer: { ...RELEASED },
@@ -72,6 +75,9 @@ export function createInputState(): InputState {
     setAim(angle) {
       aim = angle;
     },
+    setStickAim(angle) {
+      stickAim = angle;
+    },
     clearKeyboard() {
       keyboard = [0, 0];
       buttons.keyboard = { ...RELEASED };
@@ -80,7 +86,7 @@ export function createInputState(): InputState {
       ...EMPTY_INPUT,
       move: clampToUnit(movement()),
       moveIsAnalog: stickIsSource,
-      aim,
+      aim: stickAim ?? aim,
       fire: held("fire"),
       enter: held("enter"),
       weaponNext: held("weaponNext"),

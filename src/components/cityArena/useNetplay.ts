@@ -22,6 +22,7 @@ import {
 } from "@/lib/cityArena/net/snapshotWire";
 import type { RealtimeTransport } from "@/lib/cityArena/net/transport";
 import type { ArenaWorld } from "@/lib/cityArena/sim/arena";
+import { feelTick } from "./arenaFeel";
 import type { Runtime } from "./arenaRuntime";
 
 /** The room this game runs in. */
@@ -159,7 +160,7 @@ function startHosting(
     state: runtime.state,
     random: runtime.random,
     serverTimeMs: () => Date.now() + setup.clockOffsetMs,
-    onTick: (state) => runtime.sound.handleEvents(state.events),
+    onTick: (state) => feelTick(runtime, state),
     tally: previous.tally,
   });
   for (const [memberId, seat] of previous.seats) loop.claim(memberId, seat);
@@ -191,7 +192,7 @@ function adoptSeat(
     random: runtime.random,
     serverTimeMs: () => Date.now() + setup.clockOffsetMs,
     hostClientId: setup.hostClientId,
-    onTick: (state) => runtime.sound.handleEvents(state.events),
+    onTick: (state) => feelTick(runtime, state),
   });
   loop.onSnapshot(snapshot);
   // State first, then netplay: myPlayer looks the seat up in whatever state is current.

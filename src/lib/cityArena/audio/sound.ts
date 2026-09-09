@@ -1,6 +1,8 @@
 import * as Sentry from "@sentry/nextjs";
 import { MAX_EVENTS } from "../sim/limits";
 import type { ArenaEvent, VehicleState, WeaponKind } from "../sim/types";
+import type { ClipName } from "./clips";
+import type { LoopHandle, SamplePlayer, SamplePlayerFactory } from "./samples";
 
 /** Minimal audio parameter surface used by the arena synth. */
 export type AudioParamLike = {
@@ -50,6 +52,23 @@ export type ArenaSound = {
 
 const MASTER_GAIN = 0.18;
 const ENGINE_GAIN = 0.06;
+/** The engine clip's playback rate at a standstill. */
+export const ENGINE_RATE_MIN = 0.7;
+/** The engine clip's playback rate at {@link ENGINE_RATE_TOP_SPEED_MPS} and above. */
+export const ENGINE_RATE_MAX = 2.2;
+/** The speed at which the engine clip reaches its top rate. */
+export const ENGINE_RATE_TOP_SPEED_MPS = 25;
+
+/**
+ * The engine clip's playback rate for a speed: idle at rest, rising to the top rate at 25 m/s.
+ *
+ * @param speedMps - The car's speed.
+ * @returns The rate to play the loop at.
+ */
+export function engineRate(speedMps: number): number {
+  const share = Math.max(0, Math.min(1, speedMps / ENGINE_RATE_TOP_SPEED_MPS));
+  return ENGINE_RATE_MIN + share * (ENGINE_RATE_MAX - ENGINE_RATE_MIN);
+}
 
 function reportAudioError(error: unknown, kind: string): void {
   Sentry.captureException(error, { tags: { area: "arena", kind } });
@@ -94,16 +113,37 @@ function shotTone(weapon: WeaponKind): {
   return { frequency: 180, duration: 0.08, type: "square" };
 }
 
-/** Creates the arena's small synthesised sound layer. */
+/** The recorded clip for an event, or null for one that only the synthesiser voices. */
+function clipFor(event: ArenaEvent): ClipName | null {
+  if (event.kind === "shot")
+    return event.weapon === "fist" ? null : event.weapon;
+  if (event.kind === "explosion") return "explosion";
+  if (event.kind === "pickup") return "pickup";
+  if (event.kind === "impact") return "impact";
+  return null;
+}
+
+/**
+ * Creates the arena's sound layer: recorded clips where they exist, the synthesiser everywhere
+ * else.
+ *
+ * @param factory - Makes the audio context; a deterministic fake in tests.
+ * @param initiallyEnabled - Whether sound starts on.
+ * @param samples - Attaches a sample player to the context; omitted, everything is synthesised.
+ * @returns The controls the runtime drives.
+ */
 export function createArenaSound(
   factory: AudioContextFactory = createBrowserAudioContext,
   initiallyEnabled = true,
+  samples?: SamplePlayerFactory,
 ): ArenaSound {
   let enabled = initiallyEnabled;
   let context: AudioContextLike | null = null;
   let master: GainNodeLike | null = null;
+  let player: SamplePlayer | null = null;
   let engine: OscillatorLike | null = null;
   let engineGain: GainNodeLike | null = null;
+  let engineLoop: LoopHandle | null = null;
   let disposed = false;
   let unlocked = false;
 
@@ -113,11 +153,20 @@ export function createArenaSound(
       master = context.createGain();
       master.connect(context.destination);
       setParam(master.gain, enabled ? MASTER_GAIN : 0, context.currentTime);
+      player = samples?.(context, master) ?? null;
     }
   } catch (error: unknown) {
     reportAudioError(error, "audio-init");
     context = null;
     master = null;
+    player = null;
+  }
+
+  /** Fetches the clips once audio is allowed to play; a failure costs the clips, nothing else. */
+  function preloadSamples(): void {
+    void player?.preload().catch((error: unknown) => {
+      reportAudioError(error, "audio-preload");
+    });
   }
 
   function playTone(
@@ -147,7 +196,48 @@ export function createArenaSound(
     }
   }
 
+  /** Stops the oscillator drone, if it is running. */
+  function stopDrone(): void {
+    if (!engine || !context) return;
+    try {
+      engine.stop(context.currentTime);
+      engine.disconnect();
+      engineGain?.disconnect();
+    } catch (error: unknown) {
+      reportAudioError(error, "audio-engine-stop");
+    }
+    engine = null;
+    engineGain = null;
+  }
+
+  /** Stops whichever engine is running: the clip, the drone, or both. */
+  function stopEngine(): void {
+    engineLoop?.stop();
+    engineLoop = null;
+    stopDrone();
+  }
+
+  /**
+   * Runs the engine from the recorded loop, following the speed.
+   *
+   * @returns False when there is no engine clip, so the drone takes over.
+   */
+  function driveSampledEngine(speedMps: number): boolean {
+    if (!player?.has("engine")) return false;
+    engineLoop ??= player.startLoop("engine");
+    if (!engineLoop) return false;
+    // The clip lands whenever the preload finishes, mid-drive included: the drone that was
+    // covering for it must not keep playing underneath.
+    stopDrone();
+    engineLoop.setRate(engineRate(speedMps));
+    return true;
+  }
+
   function handleEvent(event: ArenaEvent): void {
+    // A clip that played is the whole sound; the oscillator branches below are the fallback for
+    // a clip that has not landed, and stay for as long as that can be true.
+    const clip = clipFor(event);
+    if (clip !== null && player?.play(clip)) return;
     if (event.kind === "shot") {
       const tone = shotTone(event.weapon);
       playTone(tone.frequency, tone.duration, tone.type, 0.22);
@@ -177,6 +267,8 @@ export function createArenaSound(
         unlocked = false;
         reportAudioError(error, "audio-unlock");
       }
+      // The first gesture is also the first moment fetching audio is worth the bandwidth.
+      preloadSamples();
     },
     setEnabled(next: boolean): void {
       enabled = next;
@@ -194,19 +286,10 @@ export function createArenaSound(
     updateEngine(speedMps: number, active: boolean): void {
       if (!context || !master || disposed) return;
       if (!enabled || !active) {
-        if (engine) {
-          try {
-            engine.stop(context.currentTime);
-            engine.disconnect();
-            engineGain?.disconnect();
-          } catch (error: unknown) {
-            reportAudioError(error, "audio-engine-stop");
-          }
-          engine = null;
-          engineGain = null;
-        }
+        stopEngine();
         return;
       }
+      if (driveSampledEngine(speedMps)) return;
       try {
         if (!engine || !engineGain) {
           engine = context.createOscillator();
@@ -226,15 +309,7 @@ export function createArenaSound(
     dispose(): void {
       if (disposed) return;
       disposed = true;
-      if (engine && context) {
-        try {
-          engine.stop(context.currentTime);
-          engine.disconnect();
-          engineGain?.disconnect();
-        } catch (error: unknown) {
-          reportAudioError(error, "audio-dispose");
-        }
-      }
+      stopEngine();
       try {
         master?.disconnect();
         const result = context?.close?.();
