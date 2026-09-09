@@ -14,6 +14,8 @@ export const ENTER_LABEL = "Instappen";
 export const EXIT_LABEL = "Uitstappen";
 /** Weapon button label (spec §16). */
 export const WEAPON_LABEL = "Wapen";
+/** Radio button label, shown in a car (Plan 7). */
+export const RADIO_LABEL = "Radio";
 /** Same rules as Space Invaders' touch buttons: ≥ 58 px, `touch-manipulation`, nothing selectable. */
 const TOUCH_BUTTON_CLASS =
   "min-h-[58px] min-w-[96px] touch-manipulation rounded-[10px] bg-white/10 px-3 text-base font-semibold text-white select-none active:bg-white/25 [-webkit-user-select:none] [-webkit-touch-callout:none]";
@@ -24,6 +26,8 @@ export type ArenaTouchButtonsProps = {
   onButton: (name: ButtonName, pressed: boolean) => void;
   /** False with the twin-stick layout, where the aim stick fires (spec §7). Defaults to true. */
   showFire?: boolean;
+  /** Switches the radio station; the button shows in a car, and only when there is a radio. */
+  onRadio?: () => void;
 };
 
 /** Props for {@link HoldButton}. */
@@ -84,19 +88,30 @@ function HoldButton({
 
 /**
  * Wapen, Instappen/Uitstappen and — with a single stick — Schieten, stacked at the bottom right
- * above the footer (spec §7). Above the aim surface in stacking order, so a thumb on a button
- * never starts the stick underneath.
+ * above the footer (spec §7), with Radio on top while in a car (Plan 7). Above the aim surface in
+ * stacking order, so a thumb on a button never starts the stick underneath.
  */
 export default function ArenaTouchButtons({
   inVehicle,
   onButton,
   showFire = true,
+  onRadio,
 }: ArenaTouchButtonsProps): React.JSX.Element {
   return (
     <div
       data-testid="arena-touch-buttons"
       className="absolute right-3 bottom-3 z-10 flex flex-col gap-2"
     >
+      {inVehicle && onRadio ? (
+        <button
+          type="button"
+          className={TOUCH_BUTTON_CLASS}
+          onClick={onRadio}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          {RADIO_LABEL}
+        </button>
+      ) : null}
       <HoldButton name="weaponNext" label={WEAPON_LABEL} onButton={onButton} />
       <HoldButton
         name="enter"

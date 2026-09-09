@@ -35,12 +35,17 @@ const SLOT_KEYS: Partial<Record<string, WeaponSlot>> = {
   Digit3: 3,
 };
 
+/** The key that switches the car radio to the next station (Plan 7). */
+const RADIO_KEY = "KeyR";
+
 /** The keys beyond movement and the held buttons, and who owns the keyboard. */
 export type KeyboardHooks = {
   /** Tab held shows the scorebord; released, it hides it. */
   onScoreboard?: (held: boolean) => void;
   /** 1, 2 and 3 pick a weapon directly. */
   onWeaponSlot?: (slot: WeaponSlot) => void;
+  /** R switches the radio to the next station. */
+  onRadio?: () => void;
   /** True while a menu owns the keyboard: game keys are ignored until it is closed. */
   isSuspended?: () => boolean;
 };
@@ -159,7 +164,7 @@ function publishButtons(pressedButtons: Set<string>, state: InputState): void {
 }
 
 /**
- * Binds WASD/arrows, the Space/E/F/Enter/Q buttons, 1/2/3 and Tab to the input state and the
+ * Binds WASD/arrows, the Space/E/F/Enter/Q buttons, 1/2/3, R and Tab to the input state and the
  * hooks; returns the detach function.
  */
 export function attachKeyboard(
@@ -178,6 +183,13 @@ export function attachKeyboard(
       if (event.repeat) return;
       onUserGesture?.();
       hooks.onWeaponSlot?.(slot);
+      return;
+    }
+    if (event.code === RADIO_KEY) {
+      event.preventDefault();
+      if (event.repeat) return;
+      onUserGesture?.();
+      hooks.onRadio?.();
       return;
     }
     if (KEY_VECTORS[event.code]) {

@@ -564,6 +564,19 @@ function followPlayer(runtime: Runtime, dt: number): void {
   );
 }
 
+/**
+ * The name of the station playing, for the HUD; `null` while the radio is silent.
+ *
+ * @param runtime - The runtime, or the slice of it that holds the sound.
+ * @returns The station name, or `null`.
+ */
+export function hudRadioStation(
+  runtime: Pick<Runtime, "sound">,
+): string | null {
+  const radio = runtime.sound.radio;
+  return radio?.playing() ? (radio.station()?.name ?? null) : null;
+}
+
 /** Drives the engine loop from the car this player sits in, if any. */
 function updateEngineSound(runtime: Runtime): void {
   const player = myPlayer(runtime);
@@ -780,6 +793,7 @@ function refreshThrottled(
         runtime.state,
         myPlayer(runtime),
         runtime.soundEnabled,
+        hudRadioStation(runtime),
       ),
     );
     const zone = radarZone(

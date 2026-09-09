@@ -68,6 +68,7 @@ import {
   aimAngle,
   applyTeleport,
   createRuntime,
+  hudRadioStation,
   myPlayer,
   nearestLandmarkTo,
   reportArenaError,
@@ -105,6 +106,7 @@ const INITIAL_HUD: ArenaHud = {
   zoneSecondsLeft: null,
   zoneWarning: false,
   soundEnabled: true,
+  radioStation: null,
 };
 /** Hook options. */
 export type UseArenaGameOptions = {
@@ -147,6 +149,8 @@ export type ArenaGame = MatchSeam & {
   selectWeapon(slot: WeaponSlot): void;
   /** Moves to the next weapon once, as the wheel does. */
   cycleWeapon(): void;
+  /** Switches the radio to the next station, as R and the Radio button do. */
+  nextStation(): void;
   teleportToZone(key: ZoneKey): void;
   debugSnapshot: DebugSnapshot | null;
 };
@@ -346,6 +350,7 @@ function useKeyboardBindings(
   canvasRef: RefObject<HTMLCanvasElement | null>,
   runtimeRef: RefObject<Runtime | null>,
   keys: ArenaKeyOptions | undefined,
+  onRadio: () => void,
 ): void {
   const suspended = keys?.suspended ?? false;
   const onScoreboard = keys?.onScoreboard;
@@ -365,10 +370,11 @@ function useKeyboardBindings(
           onScoreboard,
           onWeaponSlot: (slot) =>
             runtimeRef.current?.weapons.request(SLOT_WEAPONS[slot]),
+          onRadio,
           isSuspended: () => suspendedRef.current,
         },
       ),
-    [inputRef, runtimeRef, onScoreboard],
+    [inputRef, runtimeRef, onScoreboard, onRadio],
   );
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -384,12 +390,13 @@ function useArenaInput(
   pointerRef: RefObject<PointerAim | null>,
   runtimeRef: RefObject<Runtime | null>,
   keys: ArenaKeyOptions | undefined,
+  onRadio: () => void,
 ): {
   setInputVector(vector: [number, number] | null): void;
   setAimVector(vector: [number, number] | null): void;
   setButton(name: ButtonName, pressed: boolean): void;
 } {
-  useKeyboardBindings(inputRef, canvasRef, runtimeRef, keys);
+  useKeyboardBindings(inputRef, canvasRef, runtimeRef, keys, onRadio);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
@@ -558,6 +565,7 @@ function useTeleport(
           runtime.state,
           myPlayer(runtime),
           runtime.soundEnabled,
+          hudRadioStation(runtime),
         ),
       );
     },
@@ -664,12 +672,16 @@ export function useArenaGame({
       reducedMotionRef,
       settingsRef,
     });
+  // The R key is bound once; what it does is decided below, once the settings can be updated.
+  const nextStationRef = useRef<() => void>(() => undefined);
+  const onRadioKey = useCallback(() => nextStationRef.current(), []);
   const { setInputVector, setAimVector, setButton } = useArenaInput(
     inputRef,
     canvasRef,
     pointerRef,
     runtimeRef,
     keys,
+    onRadioKey,
   );
   const selectWeapon = useCallback(
     (slot: WeaponSlot) =>
@@ -714,6 +726,13 @@ export function useArenaGame({
     (enabled: boolean) => updateSettings({ sound: enabled }),
     [updateSettings],
   );
+  const nextStation = useCallback(() => {
+    const station = runtimeRef.current?.sound.radio?.nextStation();
+    if (station) updateSettings({ radioStation: station.id });
+  }, [runtimeRef, updateSettings]);
+  useEffect(() => {
+    nextStationRef.current = nextStation;
+  }, [nextStation]);
 
   return {
     ...seam,
@@ -732,6 +751,7 @@ export function useArenaGame({
     setButton,
     selectWeapon,
     cycleWeapon,
+    nextStation,
     teleportToZone,
     debugSnapshot,
   };

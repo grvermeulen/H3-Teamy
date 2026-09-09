@@ -36,6 +36,8 @@ export type ArenaHud = {
   zoneSecondsLeft: number | null;
   zoneWarning: boolean;
   soundEnabled: boolean;
+  /** The station playing in the car, or `null` while the radio is silent. */
+  radioStation: string | null;
 };
 
 /** Computes the current pure HUD projection. */
@@ -44,6 +46,7 @@ export function computeHud(
   state: ArenaState,
   player: ArenaPlayerState,
   soundEnabled = true,
+  radioStation: string | null = null,
 ): ArenaHud {
   const zone = findZone(session.index(), [player.x, player.y]);
   const car = occupiedVehicle(state, player);
@@ -61,6 +64,7 @@ export function computeHud(
     zoneSecondsLeft,
     zoneWarning: state.zoneEnforced && zoneSecondsLeft !== null,
     soundEnabled,
+    radioStation,
   };
 }
 

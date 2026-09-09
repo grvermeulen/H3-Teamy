@@ -37,6 +37,24 @@ describe("ArenaTouchButtons", () => {
     expect(screen.queryByRole("button", { name: "Instappen" })).toBeNull();
   });
 
+  it("offers Radio as a tap in a car, and not on foot", () => {
+    const onRadio = vi.fn();
+    render(
+      <ArenaTouchButtons inVehicle onButton={vi.fn()} onRadio={onRadio} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Radio" }));
+    expect(onRadio).toHaveBeenCalledTimes(1);
+    cleanup();
+    render(
+      <ArenaTouchButtons
+        inVehicle={false}
+        onButton={vi.fn()}
+        onRadio={onRadio}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Radio" })).toBeNull();
+  });
+
   it("holds via keyboard Space, ignoring repeat events, and releases on key up", () => {
     const onButton = vi.fn();
     render(<ArenaTouchButtons inVehicle={false} onButton={onButton} />);
