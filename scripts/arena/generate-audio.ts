@@ -106,6 +106,8 @@ async function generate(key: string, clip: ClipName): Promise<Uint8Array> {
       loop: AUDIO_CLIPS[clip].loop,
       prompt_influence: PROMPT_INFLUENCE,
     }),
+    // The key must never travel to wherever a redirect points.
+    redirect: "error",
   });
   if (!response.ok)
     throw new Error(

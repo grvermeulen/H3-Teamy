@@ -159,6 +159,18 @@ describe("createRadio", () => {
     expect(Sentry.captureException).toHaveBeenCalledTimes(1);
   });
 
+  it("reports a priming that fails for another reason, tagged as such", async () => {
+    const { element, radio } = setup();
+    element.refuseWith = new Error("decode");
+    radio.unlock();
+    await flush();
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    expect(Sentry.captureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ tags: { area: "arena", kind: "radio-prime" } }),
+    );
+  });
+
   it("ducks under a loud effect and ramps back, and not while silent", async () => {
     const { radio, gain } = setup();
     radio.duck();

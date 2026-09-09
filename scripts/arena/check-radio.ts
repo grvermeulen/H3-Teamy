@@ -13,6 +13,7 @@ import type {
 } from "../../src/lib/cityArena/audio/radio/stations";
 import type { AudioProblem } from "./check-audio";
 import { creditedFiles } from "./credits";
+import { isMissing } from "./files";
 
 /** Where the tracks live, relative to the repo root. */
 export const RADIO_TRACK_DIR = path.join("public", "arena", "radio", "tracks");
@@ -65,7 +66,8 @@ async function auditTrack(
         problem: `${(info.size / MIB).toFixed(2)} MiB, over the ${(limits.trackBytes / MIB).toFixed(1)} MiB cap`,
       });
     return info.size;
-  } catch {
+  } catch (error: unknown) {
+    if (!isMissing(error)) throw error;
     problems.push({ file: track.file, problem: "no such file" });
     return null;
   }

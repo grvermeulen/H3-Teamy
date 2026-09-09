@@ -16,8 +16,9 @@
  */
 
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 import {
   RadioManifestSchema,
   type RadioManifest,
@@ -29,6 +30,7 @@ import {
   RADIO_TRACK_DIR,
 } from "./check-radio";
 import { creditRows, creditsFile, fileOfRow } from "./credits";
+import { readIfPresent, writeAtomic } from "./files";
 
 /** ElevenLabs' music endpoint; the format is a query parameter, the rest is the body. */
 const ENDPOINT = "https://api.elevenlabs.io/v1/music";
@@ -44,6 +46,8 @@ const TRACK_SECONDS = 120;
 const PAUSE_MS = 2000;
 /** How much of the file's SHA-256 goes into its name. */
 const HASH_CHARS = 8;
+/** The part of the subscription answer the report reads. */
+const SubscriptionSchema = z.object({ character_count: z.number() });
 
 /** A station as planned: what it is called and what it should play. */
 type PlannedStation = {
@@ -100,6 +104,8 @@ async function generate(key: string, prompt: string): Promise<Uint8Array> {
       model_id: MODEL_ID,
       force_instrumental: true,
     }),
+    // The key must never travel to wherever a redirect points.
+    redirect: "error",
   });
   if (!response.ok)
     throw new Error(
@@ -113,10 +119,11 @@ async function creditsUsed(key: string): Promise<number | null> {
   try {
     const response = await fetch(SUBSCRIPTION_ENDPOINT, {
       headers: { "xi-api-key": key },
+      redirect: "error",
     });
     if (!response.ok) return null;
-    const body = (await response.json()) as { character_count?: number };
-    return body.character_count ?? null;
+    const parsed = SubscriptionSchema.safeParse(await response.json());
+    return parsed.success ? parsed.data.character_count : null;
   } catch {
     return null;
   }
@@ -128,15 +135,11 @@ function fileNameFor(id: string, index: number, bytes: Uint8Array): string {
   return `${id}-${index + 1}-${hash.slice(0, HASH_CHARS)}.mp3`;
 }
 
-/** The manifest on disk, or an empty dial. */
+/** The manifest on disk, or an empty dial when there is none; one that will not parse stops the run. */
 async function readManifest(): Promise<RadioManifest> {
-  try {
-    return RadioManifestSchema.parse(
-      JSON.parse(await readFile(RADIO_MANIFEST_FILE, "utf8")),
-    );
-  } catch {
-    return { version: 1, stations: [] };
-  }
+  const raw = await readIfPresent(RADIO_MANIFEST_FILE);
+  if (raw === null) return { version: 1, stations: [] };
+  return RadioManifestSchema.parse(JSON.parse(raw));
 }
 
 /** The manifest's entry for a planned station, created in dial order when it is new. */
@@ -163,7 +166,7 @@ function rowFor(file: string, prompt: string): string {
   return `| ${file} | Generated with Eleven Music (prompt: "${prompt}") | ElevenLabs, for H3-Teamy | ElevenLabs paid-plan commercial licence; not for redistribution as a standalone track | https://elevenlabs.io/music |`;
 }
 
-/** Writes the manifest and a credits file holding exactly the manifest's tracks. */
+/** Writes the manifest and a credits file holding exactly the manifest's tracks, each atomically. */
 async function persist(
   manifest: RadioManifest,
   existingCredits: string,
@@ -177,11 +180,11 @@ async function persist(
     .flatMap((station) => station.tracks)
     .map((track) => known.get(track.file))
     .filter((row): row is string => row !== undefined);
-  await writeFile(
+  await writeAtomic(
     RADIO_MANIFEST_FILE,
     JSON.stringify(manifest, null, 2) + "\n",
   );
-  await writeFile(
+  await writeAtomic(
     RADIO_CREDITS_FILE,
     creditsFile(
       "Radio credits",
@@ -191,26 +194,30 @@ async function persist(
   );
 }
 
-/** Generates one track, replacing the file it supersedes, and records it. */
+/**
+ * Generates one track and records it in the station; returns its credits row and the file it
+ * supersedes, which the caller deletes once the metadata is safely written.
+ */
 async function produce(
   key: string,
   station: RadioStation,
   index: number,
   planned: { title: string; prompt: string },
-): Promise<string> {
+): Promise<{ row: string; superseded: string | null }> {
   const bytes = await generate(key, planned.prompt);
   const file = fileNameFor(station.id, index, bytes);
-  await writeFile(path.join(RADIO_TRACK_DIR, file), bytes);
+  await writeAtomic(path.join(RADIO_TRACK_DIR, file), bytes);
   const previous = station.tracks[index];
-  if (previous && previous.file !== file)
-    await rm(path.join(RADIO_TRACK_DIR, previous.file), { force: true });
   station.tracks[index] = {
     file,
     title: planned.title,
     seconds: TRACK_SECONDS,
   };
   console.log(`${Math.round(bytes.byteLength / 1024)} KB → ${file}`);
-  return rowFor(file, planned.prompt);
+  return {
+    row: rowFor(file, planned.prompt),
+    superseded: previous && previous.file !== file ? previous.file : null,
+  };
 }
 
 /** Generates the tracks of the stations named, or every planned track without a file. */
@@ -221,22 +228,24 @@ async function main(): Promise<void> {
   for (const id of named)
     if (!DIAL.some((station) => station.id === id))
       throw new Error(`Unknown station: ${id}`);
-  await mkdir(RADIO_TRACK_DIR, { recursive: true });
   const manifest = await readManifest();
-  const existingCredits = await readFile(RADIO_CREDITS_FILE, "utf8").catch(
-    () => "",
-  );
+  const existingCredits = (await readIfPresent(RADIO_CREDITS_FILE)) ?? "";
   const before = await creditsUsed(key);
   const freshRows = new Map<string, string>();
   let made = 0;
   for (const planned of DIAL) {
+    // A targeted run touches the stations named and nothing else — every track costs credits.
+    if (named.length > 0 && !named.includes(planned.id)) continue;
     const station = stationEntry(manifest, planned);
     for (const [index, track] of planned.tracks.entries()) {
-      if (station.tracks[index] && !named.includes(planned.id)) continue;
+      if (station.tracks[index] && named.length === 0) continue;
       process.stdout.write(`${planned.name} · ${track.title} … `);
-      const row = await produce(key, station, index, track);
+      const { row, superseded } = await produce(key, station, index, track);
       freshRows.set(fileOfRow(row), row);
       await persist(manifest, existingCredits, freshRows);
+      // Only now, with the manifest pointing at the new file, is the old one surplus.
+      if (superseded)
+        await rm(path.join(RADIO_TRACK_DIR, superseded), { force: true });
       made += 1;
       await new Promise((resolve) => setTimeout(resolve, PAUSE_MS));
     }

@@ -6,7 +6,7 @@
  * unattributed clip is a licence problem, not a nit.
  */
 
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { AUDIO_CLIPS, CLIP_NAMES } from "../../src/lib/cityArena/audio/clips";
 import {
@@ -20,6 +20,7 @@ import {
   auditRadio,
 } from "./check-radio";
 import { creditedFiles } from "./credits";
+import { isMissing, listIfPresent, readIfPresent } from "./files";
 
 /** Where the files live, relative to the repo root. */
 const AUDIO_DIR = path.join("public", "arena", "audio");
@@ -53,7 +54,8 @@ export async function auditAudio(
           file,
           problem: `${Math.round(info.size / 1024)} KB, over the ${MAX_CLIP_BYTES / 1024} KB cap`,
         });
-    } catch {
+    } catch (error: unknown) {
+      if (!isMissing(error)) throw error;
       problems.push({ file, problem: "no such file" });
     }
     if (!credited.has(file))
@@ -71,8 +73,8 @@ async function readRadio(): Promise<{
   const manifest = RadioManifestSchema.parse(
     JSON.parse(await readFile(RADIO_MANIFEST_FILE, "utf8")),
   );
-  const files = await readdir(RADIO_TRACK_DIR).catch(() => [] as string[]);
-  const credits = await readFile(RADIO_CREDITS_FILE, "utf8").catch(() => null);
+  const files = await listIfPresent(RADIO_TRACK_DIR);
+  const credits = await readIfPresent(RADIO_CREDITS_FILE);
   return {
     manifest,
     files: files.filter((file) => file.endsWith(".mp3")),
@@ -82,7 +84,7 @@ async function readRadio(): Promise<{
 
 /** Runs both audits against the working tree and reports. */
 async function main(): Promise<void> {
-  const credits = await readFile(CREDITS_FILE, "utf8").catch(() => null);
+  const credits = await readIfPresent(CREDITS_FILE);
   const radio = await readRadio();
   const tracks = radio.manifest.stations.reduce(
     (count, station) => count + station.tracks.length,

@@ -174,7 +174,7 @@ describe("attachKeyboard panels and slots", () => {
     release("KeyR");
     press("KeyR");
     expect(onRadio).toHaveBeenCalledTimes(2);
-    expect(onUserGesture).toHaveBeenCalled();
+    expect(onUserGesture).toHaveBeenCalledTimes(2);
     detach();
     press("KeyR");
     expect(onRadio).toHaveBeenCalledTimes(2);

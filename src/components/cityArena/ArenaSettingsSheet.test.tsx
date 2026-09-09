@@ -69,6 +69,7 @@ describe("ArenaSettingsSheet", () => {
     const handlers = renderSheet();
     expect(screen.getByLabelText("Radio")).toBeChecked();
     fireEvent.click(screen.getByLabelText("Radio"));
+    expect(handlers.onChange).toHaveBeenCalledTimes(1);
     expect(handlers.onChange).toHaveBeenLastCalledWith({ radio: false });
     const select = screen.getByLabelText("Zender");
     expect(select).toHaveValue("a");
@@ -76,6 +77,7 @@ describe("ArenaSettingsSheet", () => {
       screen.getAllByRole("option").map((option) => option.textContent),
     ).toEqual(expect.arrayContaining(["A FM", "B FM"]));
     fireEvent.change(select, { target: { value: "b" } });
+    expect(handlers.onChange).toHaveBeenCalledTimes(2);
     expect(handlers.onChange).toHaveBeenLastCalledWith({ radioStation: "b" });
   });
 

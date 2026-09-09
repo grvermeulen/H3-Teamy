@@ -145,13 +145,21 @@ export function createRadio(options: RadioOptions): RadioPlayer {
     loaded = url;
   }
 
-  /** Plays; a refusal before a gesture waits for the next unlock, a pause mid-start is routine. */
+  /**
+   * What a rejected `play()` means: a refusal waits for the next gesture, an interrupted start is
+   * routine, and anything else is reported under `kind`.
+   */
+  function onPlayFailure(error: unknown, kind: string): void {
+    if (error instanceof Error && error.name === NOT_ALLOWED) refused = true;
+    else if (!(error instanceof Error && error.name === ABORTED))
+      reportRadioError(error, kind);
+  }
+
+  /** Plays; see {@link onPlayFailure} for what a rejection means. */
   function play(): void {
-    element.play().catch((error: unknown) => {
-      if (error instanceof Error && error.name === NOT_ALLOWED) refused = true;
-      else if (!(error instanceof Error && error.name === ABORTED))
-        reportRadioError(error, "radio-play");
-    });
+    element
+      .play()
+      .catch((error: unknown) => onPlayFailure(error, "radio-play"));
   }
 
   /**
@@ -165,10 +173,7 @@ export function createRadio(options: RadioOptions): RadioPlayer {
       .then(() => {
         if (!wantsPlay()) element.pause();
       })
-      .catch((error: unknown) => {
-        if (error instanceof Error && error.name === NOT_ALLOWED)
-          refused = true;
-      });
+      .catch((error: unknown) => onPlayFailure(error, "radio-prime"));
   }
 
   /** Makes the element match what the radio wants right now. */
