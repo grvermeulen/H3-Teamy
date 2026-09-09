@@ -8,8 +8,10 @@ export type ArenaScoreboardProps = {
   lines: ScoreLine[];
   /** Names by player id; a player the client never saw named falls back to their seat. */
   names: ReadonlyMap<number, string>;
-  /** Seconds until the room returns to its lobby. */
+  /** Seconds until the room returns to its lobby — or, live, until the potje ends. */
   secondsLeft: number;
+  /** The label over the board; the final board by default, "Tussenstand" while Tab is held. */
+  title?: string;
   /** The host's way back to the lobby; absent for everyone else, who follow the host's clock. */
   onRematch?: () => void;
   onLeave: () => void;
@@ -70,10 +72,15 @@ function ScoreRowView({
  * @param props - The ranked lines, names, remaining time and the two actions.
  * @returns The scorebord panel.
  */
+/** The label over the final board, and over the live one (spec §7, §16). */
+export const FINAL_TITLE = "Potje afgelopen";
+export const LIVE_TITLE = "Tussenstand";
+
 export function ArenaScoreboard({
   lines,
   names,
   secondsLeft,
+  title = FINAL_TITLE,
   onRematch,
   onLeave,
 }: ArenaScoreboardProps): React.JSX.Element {
@@ -83,7 +90,7 @@ export function ArenaScoreboard({
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <span className="arena-label block text-[var(--arena-amber)]">
-            Potje afgelopen
+            {title}
           </span>
           <h2 className="arena-display mt-1 text-2xl text-[var(--arena-text)] sm:text-3xl">
             Scorebord

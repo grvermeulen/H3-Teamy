@@ -335,7 +335,7 @@ type ArenaFooterProps = { showTouch: boolean; twinStick: boolean };
 /** The hint for each control scheme (spec §7). */
 function controlsHint(showTouch: boolean, twinStick: boolean): string {
   if (!showTouch)
-    return "WASD of pijltjes lopen of sturen · muis richt en schiet · E instappen · Q wapen · Esc menu.";
+    return "WASD of pijltjes lopen of sturen · muis richt en schiet · E instappen · Q, wiel of 1-2-3 wapen · Tab scorebord · Esc menu.";
   return twinStick
     ? "Sleep links op het scherm om te lopen of te sturen; sleep rechts om te richten en te schieten."
     : "Sleep links op het scherm om te lopen of te sturen; rechts: Schieten, Instappen, Wapen.";
@@ -394,16 +394,18 @@ export default function CityArenaOverlay({
   const aimStick = useMemo(() => createStick(), []);
   const debug = useDebugFlag();
   const reducedMotion = useReducedMotion();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [scoreboardHeld, setScoreboardHeld] = useState(false);
   const game = useArenaGame({
     zoneKey: zone,
     canvasRef,
     debug,
     reducedMotion,
     netplay: netplayFor(room),
+    keys: { onScoreboard: setScoreboardHeld, suspended: menuOpen },
   });
   const showTouch = useShowTouchControls(game.settings.forceLayout);
   const tip = useTouchTip(showTouch && game.phase === "playing");
-  const [menuOpen, setMenuOpen] = useState(false);
   const openMenu = useCallback(() => setMenuOpen(true), []);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const leave = useCallback(() => {
@@ -452,7 +454,12 @@ export default function CityArenaOverlay({
         tip={tip}
       />
       <ArenaFooter showTouch={showTouch} twinStick={game.settings.twinStick} />
-      <ArenaPhaseScreens game={game} room={room} onClose={onClose} />
+      <ArenaPhaseScreens
+        game={game}
+        room={room}
+        onClose={onClose}
+        showScoreboard={scoreboardHeld}
+      />
       {menuOpen ? (
         <ArenaSettingsSheet
           settings={game.settings}

@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { rankScoreboard, type ScoreLine } from "@/lib/cityArena/net/scoreboard";
 import { ArenaCountdown } from "./ArenaCountdown";
 import { ArenaLobby, type CrewMember } from "./ArenaLobby";
-import { ArenaScoreboard } from "./ArenaScoreboard";
+import { ArenaScoreboard, LIVE_TITLE } from "./ArenaScoreboard";
 import type { ArenaGame } from "./useArenaGame";
 import type { ArenaRoom } from "./useArenaRoom";
 import { useMatchClock } from "./useMatchClock";
@@ -13,7 +14,36 @@ export type ArenaPhaseScreensProps = {
   game: ArenaGame;
   room: ArenaRoom & { leave: () => void };
   onClose: () => void;
+  /** True while Tab is held: the scorebord as it stands, over the running match (spec §7). */
+  showScoreboard?: boolean;
 };
+
+/** How often the live scorebord re-reads the simulation while it is up. */
+const LIVE_SCOREBOARD_MS = 500;
+
+/** The scorebord as it stands right now, re-read twice a second for as long as it is shown. */
+function useLiveScoreboard(
+  game: ArenaGame,
+  active: boolean,
+): { lines: ScoreLine[]; accounts: ReadonlyMap<number, string> } {
+  const [, setBeat] = useState(0);
+  useEffect(() => {
+    if (!active) return undefined;
+    const timer = setInterval(
+      () => setBeat((beat) => beat + 1),
+      LIVE_SCOREBOARD_MS,
+    );
+    return () => clearInterval(timer);
+  }, [active]);
+  const peek = active ? game.peek() : null;
+  if (!peek) return { lines: [], accounts: new Map() };
+  return {
+    lines: rankScoreboard(peek.tally, peek.players, peek.youId),
+    accounts: new Map(
+      [...peek.seats].map(([clientId, playerId]) => [playerId, clientId]),
+    ),
+  };
+}
 
 /** The dim veil every panel sits on, over the city that keeps running underneath. */
 const VEIL_CLASS =
@@ -57,6 +87,7 @@ export function ArenaPhaseScreens({
   game,
   room,
   onClose,
+  showScoreboard = false,
 }: ArenaPhaseScreensProps): React.JSX.Element | null {
   const { zone } = room;
   const recording = useMemo(
@@ -65,6 +96,9 @@ export function ArenaPhaseScreens({
   );
   const clock = useMatchClock(game, recording);
   const crewNames = useScoreboardNames(room.crew, clock.accounts);
+  const inPlay = clock.phase === "countdown" || clock.phase === "playing";
+  const live = useLiveScoreboard(game, showScoreboard && inPlay);
+  const liveNames = useScoreboardNames(room.crew, live.accounts);
   const leave = (): void => {
     room.leave();
     onClose();
@@ -95,6 +129,18 @@ export function ArenaPhaseScreens({
           names={crewNames}
           secondsLeft={clock.secondsLeft ?? 0}
           onRematch={room.isHost ? clock.backToLobby : undefined}
+          onLeave={leave}
+        />
+      </div>
+    );
+  if (showScoreboard && inPlay)
+    return (
+      <div className={VEIL_CLASS}>
+        <ArenaScoreboard
+          title={LIVE_TITLE}
+          lines={live.lines}
+          names={liveNames}
+          secondsLeft={clock.secondsLeft ?? 0}
           onLeave={leave}
         />
       </div>

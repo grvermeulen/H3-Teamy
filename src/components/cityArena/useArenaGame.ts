@@ -17,8 +17,12 @@ import {
   type ButtonName,
   type InputState,
 } from "@/lib/cityArena/input/inputState";
-import { attachKeyboard } from "@/lib/cityArena/input/keyboard";
+import { attachKeyboard, attachWheel } from "@/lib/cityArena/input/keyboard";
 import { aimFromVector } from "@/lib/cityArena/input/touchStick";
+import {
+  SLOT_WEAPONS,
+  type WeaponSlot,
+} from "@/lib/cityArena/input/weaponSelect";
 import {
   attachPointerAim,
   type PointerAim,
@@ -110,6 +114,16 @@ export type UseArenaGameOptions = {
   reducedMotion?: boolean;
   /** The room to play in; omitted for offline free roam. */
   netplay?: ArenaNetplayOptions;
+  /** What the keyboard says beyond movement, and whether a menu owns it right now. */
+  keys?: ArenaKeyOptions;
+};
+
+/** The overlay's side of the keyboard (spec §7). */
+export type ArenaKeyOptions = {
+  /** Tab held shows the scorebord. */
+  onScoreboard?: (held: boolean) => void;
+  /** True while the menu is open: game keys are ignored and anything held is released. */
+  suspended?: boolean;
 };
 /** Hook result consumed by the overlay. */
 export type ArenaGame = MatchSeam & {
@@ -129,6 +143,10 @@ export type ArenaGame = MatchSeam & {
   /** The aim stick: a pushed stick aims and fires, a released one stops (spec §7). */
   setAimVector(vector: [number, number] | null): void;
   setButton(name: ButtonName, pressed: boolean): void;
+  /** Picks a weapon directly, as 1, 2 and 3 do. */
+  selectWeapon(slot: WeaponSlot): void;
+  /** Moves to the next weapon once, as the wheel does. */
+  cycleWeapon(): void;
   teleportToZone(key: ZoneKey): void;
   debugSnapshot: DebugSnapshot | null;
 };
@@ -317,24 +335,56 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
   return { phase, progress, failed, zones, setProgress, setFailed };
 }
 
+/** Binds the keyboard and the wheel, with the menu able to take the keyboard away. */
+function useKeyboardBindings(
+  inputRef: RefObject<InputState>,
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  runtimeRef: RefObject<Runtime | null>,
+  keys: ArenaKeyOptions | undefined,
+): void {
+  const suspended = keys?.suspended ?? false;
+  const onScoreboard = keys?.onScoreboard;
+  const suspendedRef = useRef(suspended);
+  useEffect(() => {
+    suspendedRef.current = suspended;
+    // A key held as the menu opened must not stay held behind it.
+    if (suspended) inputRef.current.clearKeyboard();
+  }, [suspended, inputRef]);
+  useEffect(
+    () =>
+      attachKeyboard(
+        window,
+        inputRef.current,
+        () => runtimeRef.current?.sound.unlock(),
+        {
+          onScoreboard,
+          onWeaponSlot: (slot) =>
+            runtimeRef.current?.weapons.request(SLOT_WEAPONS[slot]),
+          isSuspended: () => suspendedRef.current,
+        },
+      ),
+    [inputRef, runtimeRef, onScoreboard],
+  );
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    return attachWheel(canvas, () => runtimeRef.current?.weapons.cycle());
+  }, [canvasRef, runtimeRef]);
+}
+
 /** Attaches keyboard and mouse aim on mount; returns the setters the touch controls drive. */
 function useArenaInput(
   inputRef: RefObject<InputState>,
   canvasRef: RefObject<HTMLCanvasElement | null>,
   pointerRef: RefObject<PointerAim | null>,
   runtimeRef: RefObject<Runtime | null>,
+  keys: ArenaKeyOptions | undefined,
 ): {
   setInputVector(vector: [number, number] | null): void;
   setAimVector(vector: [number, number] | null): void;
   setButton(name: ButtonName, pressed: boolean): void;
 } {
-  useEffect(
-    () =>
-      attachKeyboard(window, inputRef.current, () =>
-        runtimeRef.current?.sound.unlock(),
-      ),
-    [inputRef, runtimeRef],
-  );
+  useKeyboardBindings(inputRef, canvasRef, runtimeRef, keys);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
@@ -580,6 +630,7 @@ export function useArenaGame({
   debug,
   reducedMotion = false,
   netplay,
+  keys,
 }: UseArenaGameOptions): ArenaGame {
   const [settings, setSettings] = useState<ArenaSettings>(() =>
     loadArenaSettings(),
@@ -611,6 +662,16 @@ export function useArenaGame({
     canvasRef,
     pointerRef,
     runtimeRef,
+    keys,
+  );
+  const selectWeapon = useCallback(
+    (slot: WeaponSlot) =>
+      runtimeRef.current?.weapons.request(SLOT_WEAPONS[slot]),
+    [runtimeRef],
+  );
+  const cycleWeapon = useCallback(
+    () => runtimeRef.current?.weapons.cycle(),
+    [runtimeRef],
   );
   useArenaTestHooks(debug, runtimeRef);
   useFrameLoop(phase, {
@@ -662,6 +723,8 @@ export function useArenaGame({
     setInputVector,
     setAimVector,
     setButton,
+    selectWeapon,
+    cycleWeapon,
     teleportToZone,
     debugSnapshot,
   };

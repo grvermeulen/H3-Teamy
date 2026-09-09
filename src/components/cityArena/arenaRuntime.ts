@@ -78,6 +78,10 @@ import {
   type VibratorLike,
 } from "@/lib/cityArena/input/haptics";
 import {
+  createWeaponSelector,
+  type WeaponSelector,
+} from "@/lib/cityArena/input/weaponSelect";
+import {
   INITIAL_FEEDBACK,
   drawFeedback,
   shakeOffset,
@@ -204,6 +208,8 @@ export type Runtime = {
   haptics: Haptics;
   /** The Trillen setting, read by the haptics on every pulse. */
   hapticsEnabled: boolean;
+  /** Direct weapon picks (1/2/3, the wheel), turned into `weaponNext` edges tick by tick. */
+  weapons: WeaponSelector;
   /** The vignette, shake, hit marker and heartbeat, folded per tick. */
   feedback: FeedbackState;
   radarRoadIndex: RadarRoadIndex;
@@ -412,6 +418,7 @@ export function createRuntime(
     soundEnabled,
     haptics: createHaptics(vibrator(), () => runtime.hapticsEnabled),
     hapticsEnabled: true,
+    weapons: createWeaponSelector(),
     feedback: INITIAL_FEEDBACK,
     radarRoadIndex: createRadarRoadIndex(
       session.graph().nodes,
@@ -470,12 +477,16 @@ function buildDebugSnapshot(
 /** The input for the next step: an injected debug input while its ticks last, else the live one. */
 function nextInput(runtime: Runtime, live: WorldInput): WorldInput {
   const injected = runtime.injected;
-  if (!injected || injected.ticksLeft <= 0) {
-    runtime.injected = null;
-    return live;
+  if (injected && injected.ticksLeft > 0) {
+    runtime.injected = { ...injected, ticksLeft: injected.ticksLeft - 1 };
+    return injected.input;
   }
-  runtime.injected = { ...injected, ticksLeft: injected.ticksLeft - 1 };
-  return injected.input;
+  runtime.injected = null;
+  // Looked up rather than through myPlayer: this runs before the networked step checks that the
+  // host still carries this player, and must not be the thing that throws.
+  const held =
+    playerById(runtime.state, runtime.netplay.playerId)?.weapon ?? "pistol";
+  return runtime.weapons.apply(live, held);
 }
 
 /** Runs the invariant checker (debug mode); each distinct message goes to Sentry once per session. */

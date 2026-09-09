@@ -132,3 +132,11 @@ describe("ArenaScoreboard", () => {
     expect(screen.getByText(/openstreetmap/i)).toBeInTheDocument();
   });
 });
+
+describe("ArenaScoreboard as the tussenstand", () => {
+  it("takes the live title instead of the final one", () => {
+    renderBoard({ title: "Tussenstand" });
+    expect(screen.getByText("Tussenstand")).toBeInTheDocument();
+    expect(screen.queryByText("Potje afgelopen")).toBeNull();
+  });
+});

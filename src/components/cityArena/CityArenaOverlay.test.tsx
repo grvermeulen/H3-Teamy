@@ -382,3 +382,47 @@ describe("CityArenaOverlay", () => {
     expect(screen.queryByRole("note")).toBeNull();
   });
 });
+
+describe("CityArenaOverlay keys", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    vi.stubGlobal("fetch", fetchImpl);
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+      () => createFakeContext() as unknown as CanvasRenderingContext2D,
+    );
+    vi.stubGlobal("requestAnimationFrame", vi.fn());
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("shows the tussenstand for as long as Tab is held", async () => {
+    renderOverlay(vi.fn());
+    await waitFor(() =>
+      expect(screen.getByLabelText("GTA H3 speelveld")).toBeInTheDocument(),
+    );
+    fireEvent.keyDown(window, { code: "Tab", key: "Tab" });
+    expect(screen.getByText("Tussenstand")).toBeInTheDocument();
+    fireEvent.keyUp(window, { code: "Tab", key: "Tab" });
+    expect(screen.queryByText("Tussenstand")).toBeNull();
+  });
+});

@@ -1,4 +1,5 @@
 import type { ButtonName, InputState } from "./inputState";
+import type { WeaponSlot } from "./weaponSelect";
 
 /** The subset of `window` the keyboard binding needs (injectable in tests). */
 export type KeyboardTarget = Pick<
@@ -26,6 +27,82 @@ const KEY_BUTTONS: Partial<Record<string, ButtonName>> = {
   Enter: "enter",
   KeyQ: "weaponNext",
 };
+
+/** The number keys that pick a weapon directly (spec §7). */
+const SLOT_KEYS: Partial<Record<string, WeaponSlot>> = {
+  Digit1: 1,
+  Digit2: 2,
+  Digit3: 3,
+};
+
+/** The keys beyond movement and the held buttons, and who owns the keyboard. */
+export type KeyboardHooks = {
+  /** Tab held shows the scorebord; released, it hides it. */
+  onScoreboard?: (held: boolean) => void;
+  /** 1, 2 and 3 pick a weapon directly. */
+  onWeaponSlot?: (slot: WeaponSlot) => void;
+  /** True while a menu owns the keyboard: game keys are ignored until it is closed. */
+  isSuspended?: () => boolean;
+};
+
+/** The subset of the canvas the wheel binding needs (injectable in tests). */
+export type WheelTarget = Pick<
+  HTMLElement,
+  "addEventListener" | "removeEventListener"
+>;
+
+/** Wheel travel that counts as one notch; a trackpad reports many small deltas per flick. */
+const WHEEL_STEP_PX = 40;
+
+/**
+ * Tab, held, is the scorebord (spec §7). Bound in the capture phase on the window and stopped
+ * there, so the dialog's focus trap — which listens on the document — never moves focus off the
+ * game while Tab means "scorebord".
+ */
+function bindPanelKeys(
+  target: KeyboardTarget,
+  hooks: KeyboardHooks,
+): () => void {
+  const onDown = (event: KeyboardEvent): void => {
+    if (event.code !== "Tab" || isTypingTarget(event.target)) return;
+    if (hooks.isSuspended?.()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!event.repeat) hooks.onScoreboard?.(true);
+  };
+  const onUp = (event: KeyboardEvent): void => {
+    if (event.code === "Tab") hooks.onScoreboard?.(false);
+  };
+  const onBlur = (): void => hooks.onScoreboard?.(false);
+  target.addEventListener("keydown", onDown, true);
+  target.addEventListener("keyup", onUp, true);
+  target.addEventListener("blur", onBlur);
+  return () => {
+    target.removeEventListener("keydown", onDown, true);
+    target.removeEventListener("keyup", onUp, true);
+    target.removeEventListener("blur", onBlur);
+  };
+}
+
+/**
+ * Binds the mouse wheel over the canvas to cycling the weapon (spec §7); returns the detach
+ * function. Travel is summed so a trackpad flick is one notch, not twenty.
+ */
+export function attachWheel(
+  target: WheelTarget,
+  onCycle: () => void,
+): () => void {
+  let travelled = 0;
+  const onWheel = (event: WheelEvent): void => {
+    event.preventDefault();
+    travelled += Math.abs(event.deltaY);
+    if (travelled < WHEEL_STEP_PX) return;
+    travelled = 0;
+    onCycle();
+  };
+  target.addEventListener("wheel", onWheel, { passive: false });
+  return () => target.removeEventListener("wheel", onWheel);
+}
 
 /** True for editable targets whose keystrokes must not steer the game. */
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -64,16 +141,28 @@ function publishButtons(pressedButtons: Set<string>, state: InputState): void {
   }
 }
 
-/** Binds WASD/arrows and the Space/E/F/Enter/Q buttons to the input state; returns the detach function. */
+/**
+ * Binds WASD/arrows, the Space/E/F/Enter/Q buttons, 1/2/3 and Tab to the input state and the
+ * hooks; returns the detach function.
+ */
 export function attachKeyboard(
   target: KeyboardTarget,
   state: InputState,
   onUserGesture?: () => void,
+  hooks: KeyboardHooks = {},
 ): () => void {
   const pressed = new Set<string>();
   const pressedButtons = new Set<string>();
   const onKeyDown = (event: KeyboardEvent): void => {
-    if (isTypingTarget(event.target)) return;
+    if (isTypingTarget(event.target) || hooks.isSuspended?.()) return;
+    const slot = SLOT_KEYS[event.code];
+    if (slot) {
+      event.preventDefault();
+      if (event.repeat) return;
+      onUserGesture?.();
+      hooks.onWeaponSlot?.(slot);
+      return;
+    }
     if (KEY_VECTORS[event.code]) {
       if (event.code.startsWith("Arrow")) event.preventDefault();
       onUserGesture?.();
@@ -102,10 +191,12 @@ export function attachKeyboard(
     pressedButtons.clear();
     state.clearKeyboard();
   };
+  const detachPanels = bindPanelKeys(target, hooks);
   target.addEventListener("keydown", onKeyDown);
   target.addEventListener("keyup", onKeyUp);
   target.addEventListener("blur", onBlur);
   return () => {
+    detachPanels();
     state.clearKeyboard();
     target.removeEventListener("keydown", onKeyDown);
     target.removeEventListener("keyup", onKeyUp);
