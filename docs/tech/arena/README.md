@@ -429,8 +429,9 @@ two new ammo counts sit past the original player row, so an older row still deco
   art is tinted from `CAR_BODY_COLOURS` (ten now, `VEHICLE_COLOUR_COUNT` with it), liveried art
   (police, bus, tractor) is drawn as is — and `personSources` lists the player, `ped1`…`ped6` and
   `cop`, each a still that the script turns into an eight-frame walk. The manifest's `vehicles`
-  and `people` are open records; `ArenaSprites` keeps `car` (the sedan's) and `player`, and adds
-  `vehicles` and `people`. `vehicleSpriteFor(art, kind, colour)` takes a kind's own art or the
+  is a partial record over `VehicleKind` (a key that is no kind fails the parse, which
+  `check-sprites` runs in CI) and `people` an open record; `ArenaSprites` keeps `car` (the
+  sedan's) and `player`, and adds `vehicles` and `people`. `vehicleSpriteFor(art, kind, colour)` takes a kind's own art or the
   sedan's; `hasOwnVehicleArt` is what lets `drawVehicles` leave the vector light bar off a police
   car whose sprite carries one. Every size in the painter comes from the kind. Sources were
   generated with SpriteCook (gpt-image-2, the sedan's prompt template and style snapshot,

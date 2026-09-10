@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import type { VehicleKind } from "../sim/types";
+import { VEHICLE_KINDS } from "../sim/vehicle";
 import type { CanvasFactory } from "./canvasTypes";
 import { CAR_BODY_COLOURS } from "./palette";
 import {
@@ -17,7 +18,7 @@ import {
 } from "./sprites";
 
 /** One vehicle entry of the manifest. */
-type VehicleEntry = SpriteManifest["vehicles"][string];
+type VehicleEntry = NonNullable<SpriteManifest["vehicles"][VehicleKind]>;
 /** One character entry of the manifest. */
 type PersonEntry = SpriteManifest["people"][string];
 
@@ -150,20 +151,23 @@ async function loadVehicle(
   }
 }
 
-/** Loads every vehicle kind's sprite; a kind whose file is missing stays on the sedan's art. */
+/** Loads every kind's sprite the manifest has; a kind whose file is missing stays on the sedan's art. */
 async function loadVehicles(
   loadImage: ImageLoader,
   factory: CanvasFactory,
   manifest: SpriteManifest,
 ): Promise<VehicleSprites> {
-  const entries = Object.entries(manifest.vehicles);
+  const entries = VEHICLE_KINDS.flatMap((kind) => {
+    const entry = manifest.vehicles[kind];
+    return entry ? [{ kind, entry }] : [];
+  });
   const loaded = await Promise.all(
-    entries.map(([, entry]) => loadVehicle(loadImage, factory, entry)),
+    entries.map(({ entry }) => loadVehicle(loadImage, factory, entry)),
   );
   const vehicles: VehicleSprites = {};
-  entries.forEach(([kind, entry], index) => {
+  entries.forEach(({ kind }, index) => {
     const sprite = loaded[index];
-    if (sprite && entry) vehicles[kind as VehicleKind] = sprite;
+    if (sprite) vehicles[kind] = sprite;
   });
   return vehicles;
 }

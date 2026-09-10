@@ -123,4 +123,17 @@ describe("auditSprites", () => {
     const problems = await auditSprites(dir, MANIFEST, null);
     expect(problems).toHaveLength(FILES.length);
   });
+
+  it("lets a filesystem error other than a missing file through", async () => {
+    for (const file of FILES)
+      await writeFile(path.join(spriteDir, file), "PNG");
+    const denied = async (): Promise<{ size: number }> => {
+      throw Object.assign(new Error("EACCES: permission denied"), {
+        code: "EACCES",
+      });
+    };
+    await expect(
+      auditSprites(dir, MANIFEST, creditsFor(FILES), SPRITE_LIMITS, denied),
+    ).rejects.toThrow("EACCES");
+  });
 });

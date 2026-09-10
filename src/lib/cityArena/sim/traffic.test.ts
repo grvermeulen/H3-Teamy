@@ -171,8 +171,8 @@ describe("pickTrafficKind", () => {
   });
 
   it("sends a tractor down an unclassified road three times in ten, and nowhere else", () => {
-    expect(pickTrafficKind("unclassified", () => 0.1)).toBe("tractor");
-    expect(pickTrafficKind("unclassified", () => 0.5)).not.toBe("tractor");
+    expect(pickTrafficKind("unclassified", () => 0.29)).toBe("tractor");
+    expect(pickTrafficKind("unclassified", () => 0.3)).not.toBe("tractor");
     expect(pickTrafficKind("primary", () => 0.1)).not.toBe("tractor");
   });
 });

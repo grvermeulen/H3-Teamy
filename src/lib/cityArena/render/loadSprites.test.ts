@@ -182,6 +182,12 @@ describe("createSpriteStore", () => {
     expect(store.current().people?.ped1).toBeUndefined();
     expect(store.current().people?.player).toBeDefined();
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: expect.objectContaining({ area: "arena", kind: "sprite" }),
+      }),
+    );
   });
 
   it("fetches the manifest once however often load is called", async () => {

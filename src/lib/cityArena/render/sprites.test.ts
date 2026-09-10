@@ -49,10 +49,25 @@ describe("parseSpriteManifest", () => {
       expect(manifest.surfaces[name].tileMetres).toBe(8);
       expect(manifest.surfaces[name].tilePixels).toBe(128);
     }
-    expect(manifest.vehicles.sedan.lengthMetres).toBe(4.2);
-    expect(manifest.vehicles.sedan.widthMetres).toBe(1.8);
+    expect(manifest.vehicles.sedan?.lengthMetres).toBe(4.2);
+    expect(manifest.vehicles.sedan?.widthMetres).toBe(1.8);
     // The character art is packed onto the collision circle's box, so the two must not drift.
     expect(manifest.people.player.radiusMetres).toBe(PLAYER_RADIUS_M);
+  });
+
+  it("rejects a vehicle key that is no kind, and takes any subset of the kinds", () => {
+    const manifest = parseSpriteManifest(generatedManifest());
+    const sedan = manifest.vehicles.sedan;
+    expect(() =>
+      parseSpriteManifest({
+        ...manifest,
+        vehicles: { ...manifest.vehicles, buss: sedan },
+      }),
+    ).toThrow();
+    expect(
+      parseSpriteManifest({ ...manifest, vehicles: { police: sedan } })
+        .vehicles,
+    ).toEqual({ police: sedan });
   });
 
   it("rejects a manifest missing a surface", () => {

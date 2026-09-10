@@ -47,6 +47,9 @@ export const LONG_VEHICLE_M = 8;
 /** One file the manifest names, with the cap that applies to it. */
 type SpriteEntry = { file: string; cap: number };
 
+/** Reads a file's size; injectable so a test can hand the audit a failure other than a missing file. */
+export type StatFile = (file: string) => Promise<{ size: number }>;
+
 /** Every file the manifest names, with its cap. */
 function entriesOf(
   manifest: SpriteManifest,
@@ -56,13 +59,15 @@ function entriesOf(
     file: entry.file,
     cap: limits.surfaceBytes,
   }));
-  const vehicles = Object.values(manifest.vehicles).map((entry) => ({
-    file: entry.file,
-    cap:
-      entry.lengthMetres >= LONG_VEHICLE_M
-        ? limits.longVehicleBytes
-        : limits.vehicleBytes,
-  }));
+  const vehicles = Object.values(manifest.vehicles)
+    .filter((entry) => entry !== undefined)
+    .map((entry) => ({
+      file: entry.file,
+      cap:
+        entry.lengthMetres >= LONG_VEHICLE_M
+          ? limits.longVehicleBytes
+          : limits.vehicleBytes,
+    }));
   const people = Object.values(manifest.people).map((entry) => ({
     file: entry.file,
     cap: limits.personBytes,
@@ -77,6 +82,7 @@ function entriesOf(
  * @param manifest - The parsed manifest.
  * @param credits - The contents of `CREDITS.md`, or null when it does not exist.
  * @param limits - The size caps; the defaults unless a test lowers them.
+ * @param statFile - How a file's size is read; the filesystem unless a test says otherwise.
  * @returns The problems, empty when everything is in order.
  */
 export async function auditSprites(
@@ -84,13 +90,14 @@ export async function auditSprites(
   manifest: SpriteManifest,
   credits: string | null,
   limits: SpriteLimits = SPRITE_LIMITS,
+  statFile: StatFile = stat,
 ): Promise<AudioProblem[]> {
   const problems: AudioProblem[] = [];
   const credited = creditedFiles(credits);
   for (const entry of entriesOf(manifest, limits)) {
     const name = path.basename(entry.file);
     try {
-      const info = await stat(path.join(publicDir, entry.file));
+      const info = await statFile(path.join(publicDir, entry.file));
       if (info.size > entry.cap)
         problems.push({
           file: name,

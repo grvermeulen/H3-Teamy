@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { VehicleKind } from "../sim/types";
+import { VEHICLE_KINDS } from "../sim/vehicle";
 import type { GroundKind } from "../world/mapTypes";
 import type { RasterContext } from "./canvasTypes";
 
@@ -40,8 +41,10 @@ export const PersonEntrySchema = z.object({
 /**
  * Zod schema for `manifest.json`; runtime validation happens once per session. `surfaces` lists
  * every seamless texture flat, keyed as the build script writes them: the two road surfaces,
- * water, and one per {@link GroundKind}. `vehicles` is keyed by {@link VehicleKind} and `people`
- * by look (`player`, `ped1`…`ped6`, `cop`); both are open, so art can land kind by kind.
+ * water, and one per {@link GroundKind}. `vehicles` is a partial record over {@link VehicleKind},
+ * so art can land kind by kind but a key that is no kind fails the parse — which
+ * `arena:check-sprites` runs in CI, so a typo in the pack script never ships. `people` is keyed by
+ * look (`player`, `ped1`…`ped6`, `cop`) and stays open.
  */
 export const SpriteManifestSchema = z.object({
   version: z.literal(1),
@@ -54,7 +57,7 @@ export const SpriteManifestSchema = z.object({
     forest: SurfaceEntrySchema,
     urban: SurfaceEntrySchema,
   }),
-  vehicles: z.record(z.string(), VehicleEntrySchema),
+  vehicles: z.partialRecord(z.enum(VEHICLE_KINDS), VehicleEntrySchema),
   people: z.record(z.string(), PersonEntrySchema),
 });
 
