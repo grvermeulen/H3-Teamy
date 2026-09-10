@@ -3,10 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /** Presence per channel name; the route now reads the lobby *and* each advertised room. */
 const presenceByChannel = new Map<string, unknown[]>();
+/** History per channel name, newest first; the route reads a room's latest snapshot from it. */
+const historyByChannel = new Map<string, unknown[]>();
 const channelsGet = vi.fn((name: string) => ({
   presence: {
     get: async () => ({ items: presenceByChannel.get(name) ?? [] }),
   },
+  history: async () => ({ items: historyByChannel.get(name) ?? [] }),
 }));
 const captureException = vi.fn();
 const checkRateLimit = vi.fn();
@@ -82,6 +85,7 @@ describe("GET /api/arena/rooms", () => {
     checkRateLimit.mockResolvedValue({ allowed: true });
     vi.stubEnv("ABLY_API_KEY", "app.key:secret");
     presenceByChannel.clear();
+    historyByChannel.clear();
   });
 
   it("reads the lobby channel, not a room channel", async () => {
@@ -130,6 +134,22 @@ describe("GET /api/arena/rooms", () => {
     const body = await (await GET(request())).json();
     expect(body.rooms).toEqual([]);
     expect(channelsGet).toHaveBeenCalledWith("arena:room:7K4M2Q");
+  });
+
+  it("lists a room under its migrated host while the old host lingers in presence", async () => {
+    // "a" hosted first and its presence entry has not timed out, but "b" took over and is the
+    // one publishing snapshots — so "b"'s advertisement is the real one.
+    presenceByChannel.set("arena:lobby", [entry("b", ROOM, 5, "Sam")]);
+    presenceByChannel.set("arena:room:7K4M2Q", [
+      entry("a", undefined, 1),
+      entry("b", undefined, 2),
+    ]);
+    historyByChannel.set("arena:room:7K4M2Q", [
+      { name: "state", clientId: "b", timestamp: Date.now() - 1000 },
+    ]);
+    const body = await (await GET(request())).json();
+    expect(body.rooms).toHaveLength(1);
+    expect(body.rooms[0].hostName).toBe("Sam");
   });
 
   it("drops a room that nobody is in at all", async () => {

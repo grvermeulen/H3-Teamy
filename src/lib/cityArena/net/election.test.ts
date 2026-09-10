@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { PresenceMember, PresenceRole } from "./transport";
 import {
+  ACTING_HOST_FRESH_MS,
   HOST_SILENCE_MS,
+  actingHost,
   createHostWatch,
   electHost,
   electPresentHost,
@@ -163,5 +165,44 @@ describe("electPresentHost", () => {
     const members = [mobile("c", 1), desktop("a", 2)];
     expect(electPresentHost(members, new Set())).toBe(electHost(members));
     expect(electPresentHost([], new Set())).toBeNull();
+  });
+});
+
+describe("actingHost", () => {
+  const sighting = (clientId: string, timestamp: number) => ({
+    clientId,
+    timestamp,
+  });
+
+  it("names the recent publisher even when the election would pick someone else", () => {
+    const members = [desktop("a", 1), desktop("b", 2)];
+    expect(actingHost(members, sighting("b", 9_000), 10_000)).toBe("b");
+  });
+
+  it("falls back to the election for a stale sighting", () => {
+    const members = [desktop("a", 1), desktop("b", 2)];
+    expect(
+      actingHost(members, sighting("b", 0), ACTING_HOST_FRESH_MS + 1),
+    ).toBe("a");
+    expect(actingHost(members, sighting("b", 0), ACTING_HOST_FRESH_MS)).toBe(
+      "b",
+    );
+  });
+
+  it("falls back to the election when the publisher has left", () => {
+    expect(actingHost([desktop("a", 1)], sighting("gone", 9_000), 10_000)).toBe(
+      "a",
+    );
+  });
+
+  it("has no host when nobody is present, whatever the history says", () => {
+    expect(actingHost([], sighting("b", 9_000), 10_000)).toBeNull();
+    expect(actingHost([], null, 10_000)).toBeNull();
+  });
+
+  it("takes a window of its own when one is given", () => {
+    const members = [desktop("a", 1), desktop("b", 2)];
+    expect(actingHost(members, sighting("b", 7_000), 10_000, 2_000)).toBe("a");
+    expect(actingHost(members, sighting("b", 9_000), 10_000, 2_000)).toBe("b");
   });
 });

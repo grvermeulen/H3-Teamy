@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Prisma } from "@prisma/client";
 
 const presenceGet = vi.fn();
+const historyGet = vi.fn();
 const channelsGet = vi.fn();
 const matchFindUnique = vi.fn();
 const matchCreate = vi.fn();
@@ -56,7 +57,11 @@ function potje(overrides: Record<string, unknown> = {}) {
 describe("recordMatch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    channelsGet.mockReturnValue({ presence: { get: presenceGet } });
+    channelsGet.mockReturnValue({
+      presence: { get: presenceGet },
+      history: historyGet,
+    });
+    historyGet.mockResolvedValue({ items: [] });
     // "host" entered first, so electHost picks it.
     presenceGet.mockResolvedValue({
       items: [member("host", 1), member("guest", 2)],
@@ -77,6 +82,31 @@ describe("recordMatch", () => {
       reason: "not-host",
     });
     expect(matchCreate).not.toHaveBeenCalled();
+  });
+
+  it("records a potje posted by a host that took over while the old host lingers", async () => {
+    historyGet.mockResolvedValue({
+      items: [
+        { name: "state", clientId: "guest", timestamp: Date.now() - 500 },
+      ],
+    });
+    expect(await recordMatch(KEY, "guest", potje())).toEqual({
+      ok: true,
+      matchId: "match-1",
+      recorded: 2,
+    });
+  });
+
+  it("refuses a member who published nothing, even once the host has gone quiet", async () => {
+    historyGet.mockResolvedValue({
+      items: [
+        { name: "state", clientId: "host", timestamp: Date.now() - 60_000 },
+      ],
+    });
+    expect(await recordMatch(KEY, "guest", potje())).toEqual({
+      ok: false,
+      reason: "not-host",
+    });
   });
 
   it("refuses someone who was never in the room at all", async () => {
@@ -245,7 +275,11 @@ describe("leaderboard", () => {
 describe("recordMatch when two hosts race", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    channelsGet.mockReturnValue({ presence: { get: presenceGet } });
+    channelsGet.mockReturnValue({
+      presence: { get: presenceGet },
+      history: historyGet,
+    });
+    historyGet.mockResolvedValue({ items: [] });
     presenceGet.mockResolvedValue({
       items: [member("host", 1), member("guest", 2)],
     });

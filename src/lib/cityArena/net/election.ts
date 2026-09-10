@@ -54,6 +54,41 @@ export function electHost(members: PresenceMember[]): string | null {
   return sorted[0]?.clientId ?? null;
 }
 
+/** A snapshot this old still names the acting host; a migrated host publishes well within it. */
+export const ACTING_HOST_FRESH_MS = 10_000;
+
+/** Who published a snapshot, and when the server received it. */
+export type SnapshotSighting = { clientId: string; timestamp: number };
+
+/**
+ * The member actually hosting: whoever published the room's latest snapshot recently and is
+ * still present, else the presence election.
+ *
+ * The server has no silence watch, and an old host's presence entry outlives its tab by up to
+ * minutes; what it does have is the channel's history, and a host is someone you hear from — the
+ * rule the clients live by (spec §6.6, amended 2026-09-10).
+ *
+ * @param members - Everyone present, in any order.
+ * @param latest - The newest snapshot seen on the room channel, or `null`.
+ * @param nowMs - The clock to judge freshness by.
+ * @param freshMs - How old a snapshot may be and still count.
+ * @returns The host's client id, or `null` when nobody is present.
+ */
+export function actingHost(
+  members: PresenceMember[],
+  latest: SnapshotSighting | null,
+  nowMs: number,
+  freshMs: number = ACTING_HOST_FRESH_MS,
+): string | null {
+  if (
+    latest &&
+    nowMs - latest.timestamp <= freshMs &&
+    members.some((member) => member.clientId === latest.clientId)
+  )
+    return latest.clientId;
+  return electHost(members);
+}
+
 /** How a host watch is configured. */
 export type HostWatchOptions = {
   /** How long the host may be quiet before a re-election; defaults to {@link HOST_SILENCE_MS}. */
