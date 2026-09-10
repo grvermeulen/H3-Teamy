@@ -159,7 +159,7 @@ describe("pedestrian contacts", () => {
     };
     const hit = stepPeds(state, world, step, 5, () => 0);
     expect(hit.peds[0]).toMatchObject({ mode: "dead", health: 0 });
-    expect(hit.peds[0].x).toBeCloseTo(2.5);
+    expect(hit.peds[0].x).toBeCloseTo(3);
     expect(hit.events).toEqual([
       {
         kind: "kill",

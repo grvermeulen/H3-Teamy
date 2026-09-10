@@ -138,6 +138,23 @@ describe("snapshot wire format", () => {
     expect(back.vehicles[0]!.kind).toBe("sedan");
   });
 
+  it("round-trips the kinds added later by their appended indices", () => {
+    const base = boot();
+    const state: ArenaState = {
+      ...base,
+      vehicles: [
+        createVehicle(90, "bus", [10, 0], 0, 0),
+        createVehicle(91, "tractor", [30, 0], 0, 0),
+      ],
+    };
+    const back = decodeSnapshot(encodeSnapshot(state, 0, {}));
+    expect(back.vehicles.map((vehicle) => vehicle.kind)).toEqual([
+      "bus",
+      "tractor",
+    ]);
+    expect(back.vehicles[0]!.health).toBe(220);
+  });
+
   it("round-trips cars, pedestrians, cops, bullets and pickups", () => {
     const state = boot(4);
     const back = decodeSnapshot(encodeSnapshot(state, 0, {}));

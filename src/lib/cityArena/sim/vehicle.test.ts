@@ -2,13 +2,19 @@ import { describe, expect, it } from "vitest";
 import type { Point } from "../world/projection";
 import type { VehicleState } from "./types";
 import {
+  HULL_CIRCLE_OFFSET_M,
   HULL_CIRCLE_RADIUS_M,
   NO_CONTROLS,
+  VEHICLE_KINDS,
+  VEHICLE_SPECS,
   createVehicle,
   distanceToVehicle,
   forwardSpeed,
+  healthMaxOf,
   hullCircles,
+  hullLayout,
   localToWorld,
+  smokeHealthOf,
   stepVehicle,
   vehicleCorners,
   type VehicleControls,
@@ -196,5 +202,65 @@ describe("stepVehicle", () => {
     const still = drive(wreck, { throttle: 1, steer: 1 }, 30);
     expect(still.x).toBe(0);
     expect(still.heading).toBe(0);
+  });
+});
+
+describe("vehicle kinds", () => {
+  it("lists nine kinds in wire order, the four originals first", () => {
+    expect(VEHICLE_KINDS.slice(0, 4)).toEqual([
+      "compact",
+      "sedan",
+      "sport",
+      "police",
+    ]);
+    expect(VEHICLE_KINDS).toHaveLength(9);
+    for (const kind of VEHICLE_KINDS)
+      expect(VEHICLE_SPECS[kind].label).toBeTruthy();
+  });
+
+  it("keeps the original kinds' hull, and gives a bus six circles along its length", () => {
+    const sedan = hullLayout("sedan");
+    expect(sedan.offsetsM.map((o) => Math.round(o * 100) / 100)).toEqual([
+      HULL_CIRCLE_OFFSET_M,
+      -HULL_CIRCLE_OFFSET_M,
+    ]);
+    expect(sedan.radiusM).toBeCloseTo(HULL_CIRCLE_RADIUS_M);
+    const bus = hullLayout("bus");
+    expect(bus.offsetsM).toHaveLength(6);
+    expect(bus.offsetsM[0]).toBeCloseTo(5);
+    expect(bus.offsetsM.at(-1)).toBeCloseTo(-5);
+    expect(bus.radiusM).toBeGreaterThan(sedan.radiusM);
+    const busCircles = hullCircles(createVehicle(1, "bus", [0, 0], 0, 0));
+    expect(busCircles[0]?.[0]).toBeCloseTo(5);
+    expect(busCircles[5]?.[0]).toBeCloseTo(-5);
+  });
+
+  it("spawns each kind with its own health and smokes at the same share of it", () => {
+    expect(createVehicle(1, "bus", [0, 0], 0, 0).health).toBe(220);
+    expect(createVehicle(2, "compact", [0, 0], 0, 0).health).toBe(100);
+    expect(healthMaxOf("oldtimer")).toBe(70);
+    expect(smokeHealthOf("bus")).toBeCloseTo(88);
+    expect(smokeHealthOf("sedan")).toBeCloseTo(40);
+  });
+
+  it("turns a bus more slowly than a compact at the same speed", () => {
+    const controls: VehicleControls = { throttle: 1, steer: 1 };
+    const bus = drive(
+      { ...createVehicle(1, "bus", [0, 0], 0, 0), velocityX: 8 },
+      controls,
+      15,
+    );
+    const compact = drive(
+      { ...createVehicle(2, "compact", [0, 0], 0, 0), velocityX: 8 },
+      controls,
+      15,
+    );
+    expect(bus.heading).toBeLessThan(compact.heading * 0.75);
+  });
+
+  it("measures the body of a long kind from its own corners", () => {
+    const bus = createVehicle(1, "bus", [0, 0], 0, 0);
+    expect(vehicleCorners(bus)[0]?.[0]).toBeCloseTo(6);
+    expect(distanceToVehicle(bus, [8, 0])).toBeCloseTo(2);
   });
 });

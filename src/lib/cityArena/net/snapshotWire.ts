@@ -7,6 +7,7 @@
  * bandwidth ten times a second for state nobody renders.
  */
 
+import { VEHICLE_KINDS } from "../sim/vehicle";
 import type { MatchPhase, MatchState } from "./matchPhase";
 import type { ScoreRow, Tally } from "./scoreboard";
 import type {
@@ -45,13 +46,6 @@ export const MAX_SNAPSHOT_BYTES = 8192;
 
 /** Weapons in wire order; the index travels, not the name. */
 const WEAPONS: readonly WeaponKind[] = ["fist", "pistol", "uzi", "shotgun"];
-/** Car kinds in wire order. */
-const VEHICLE_KINDS: readonly VehicleKind[] = [
-  "compact",
-  "sedan",
-  "sport",
-  "police",
-];
 /** Pickup kinds in wire order. */
 const PICKUP_KINDS: readonly PickupKind[] = ["uzi", "shotgun", "health"];
 /** Pedestrian modes in wire order. */

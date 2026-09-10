@@ -31,6 +31,7 @@ import {
   forwardSpeed,
   stepVehicle,
   type VehicleControls,
+  massOf,
 } from "./vehicle";
 import { occupiedVehicle } from "./boarding";
 import type { ArenaWorld } from "./arenaWorld";
@@ -88,8 +89,18 @@ function stepVehicles(
   const damaged = [...pairs.vehicles];
   for (const impact of pairs.impacts) {
     const amount = impactDamage(impact.impactSpeed);
-    damaged[impact.first] = damageVehicle(damaged[impact.first], amount);
-    damaged[impact.second] = damageVehicle(damaged[impact.second], amount);
+    const first = damaged[impact.first];
+    const second = damaged[impact.second];
+    // The lighter car takes the larger share; two equal cars take the same amount each.
+    const total = massOf(first.kind) + massOf(second.kind);
+    damaged[impact.first] = damageVehicle(
+      first,
+      (amount * 2 * massOf(second.kind)) / total,
+    );
+    damaged[impact.second] = damageVehicle(
+      second,
+      (amount * 2 * massOf(first.kind)) / total,
+    );
     events = withImpactEvent(
       events,
       damaged[impact.first].id,

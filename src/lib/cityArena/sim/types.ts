@@ -66,7 +66,16 @@ export type FreeRoamState = {
 export type WeaponKind = "fist" | "pistol" | "uzi" | "shotgun";
 
 /** Car kinds (spec §5). */
-export type VehicleKind = "compact" | "sedan" | "sport" | "police";
+export type VehicleKind =
+  | "compact"
+  | "sedan"
+  | "sport"
+  | "police"
+  | "van"
+  | "pickup"
+  | "bus"
+  | "oldtimer"
+  | "tractor";
 
 /** A car; `heading` in radians, velocity in world m/s, `colour` indexes the render palette. */
 export type VehicleState = {

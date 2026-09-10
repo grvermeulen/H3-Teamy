@@ -3,7 +3,7 @@ import type { Point } from "../world/projection";
 import { firstBuildingHit } from "../world/raycast";
 import { PLAYER_RADIUS_M } from "./player";
 import type { BulletState, VehicleState, WeaponKind } from "./types";
-import { VEHICLE_LENGTH_M, VEHICLE_WIDTH_M, worldToLocal } from "./vehicle";
+import { lengthOf, widthOf, worldToLocal } from "./vehicle";
 import type { WeaponSpec } from "./weapons";
 
 /** Hard cap on live bullets (checked by the invariants). */
@@ -100,7 +100,10 @@ export function segmentHitsVehicle(
 ): number | null {
   const start = worldToLocal(vehicle, from);
   const end = worldToLocal(vehicle, to);
-  const halfExtents: Point = [VEHICLE_LENGTH_M / 2, VEHICLE_WIDTH_M / 2];
+  const halfExtents: Point = [
+    lengthOf(vehicle.kind) / 2,
+    widthOf(vehicle.kind) / 2,
+  ];
   const axes: (0 | 1)[] = [0, 1];
   let entry = 0;
   let exit = 1;

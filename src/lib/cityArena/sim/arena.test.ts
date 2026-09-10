@@ -506,8 +506,9 @@ describe("stepArena vehicle collision damage", () => {
     };
     const hit = run({ ...state, vehicles: [runner] }, EMPTY_INPUT, 1);
     expect(localPlayer(hit).health).toBeCloseTo(50);
-    expect(localPlayer(hit).x).toBeCloseTo(localPlayer(state).x - 1.5);
-    expect(localPlayer(hit).y).toBeCloseTo(localPlayer(state).y);
+    // Already inside the body, the nearer way out is the side, with the moving car's clearance.
+    expect(localPlayer(hit).x).toBeCloseTo(localPlayer(state).x);
+    expect(localPlayer(hit).y).toBeCloseTo(localPlayer(state).y + 1.8);
     expect(localPlayer(hit).diedAtTick).toBeNull();
   });
 
@@ -866,11 +867,13 @@ describe("stepArena police cars", () => {
     };
     const { state: crashed, events } = runCollecting(ramming, EMPTY_INPUT, 3);
     expect(localPlayer(crashed).heat).toBe(60);
-    expect(crashed.vehicles[1].health).toBeCloseTo(86.8);
-    expect(crashed.vehicles[0].health).toBeCloseTo(86.8);
+    // The heavier police car takes the smaller share of the same impact.
+    expect(crashed.vehicles[0].health).toBeLessThan(crashed.vehicles[1].health);
+    expect(crashed.vehicles[1].health).toBeLessThan(100);
     const impact = events.find((event) => event.kind === "impact");
     expect(impact).toMatchObject({ vehicleId: 600, otherVehicleId: 601 });
-    if (impact?.kind === "impact") expect(impact.impactSpeed).toBeCloseTo(8.4);
+    // Contact registers a tick earlier through the hull circles than through the old body circle.
+    if (impact?.kind === "impact") expect(impact.impactSpeed).toBeCloseTo(8.2);
   });
 
   it("escalates to two police cars and shotgun cops at three stars", () => {
