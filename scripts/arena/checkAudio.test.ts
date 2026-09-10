@@ -63,6 +63,19 @@ describe("auditAudio", () => {
     expect(problems).toHaveLength(3);
   });
 
+  it("names a clip credited twice", async () => {
+    for (const clip of CLIP_NAMES)
+      await writeFile(path.join(dir, AUDIO_CLIPS[clip].file), "ID3");
+    const files = CLIP_NAMES.map((clip) => AUDIO_CLIPS[clip].file);
+    const problems = await auditAudio(
+      dir,
+      creditsFor([...files, " siren.mp3 "]),
+    );
+    expect(problems).toEqual([
+      { file: "siren.mp3", problem: "credited twice in CREDITS.md" },
+    ]);
+  });
+
   it("treats a missing credits file as nothing credited", async () => {
     const problems = await auditAudio(dir, null);
     expect(

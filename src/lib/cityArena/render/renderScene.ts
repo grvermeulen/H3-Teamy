@@ -49,6 +49,8 @@ export type Scene = {
   vehicles: VehicleState[];
   bullets: BulletState[];
   effects: EffectState[];
+  /** Cars the police are driving: their lights flash, and near this player the siren sounds. */
+  sirenVehicleIds?: ReadonlySet<number>;
   tick: number;
   aimScreen: [number, number] | null;
   pushIn: number;
@@ -151,6 +153,7 @@ export function renderScene(
     scene.tick,
     localVehicleId(scene),
     scene.vehicleArt,
+    scene.sirenVehicleIds,
   );
   drawPeople(
     context,

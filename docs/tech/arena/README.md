@@ -276,7 +276,10 @@ the settings that switch each of them off, and the rest of the keyboard map.
 
 - **Sound.** `audio/clips.ts` is the clip table: eleven `ClipName`s (`pistol`, `uzi`, `shotgun`,
   `footstep`, `engine`, `skid`, `impact`, `explosion`, `siren`, `pickup`, `death`), each with a
-  file name under `public/arena/audio/`, a gain and whether it loops. `audio/samples.ts` fetches
+  file name under `public/arena/audio/`, a gain and whether it loops (`siren` is an American-style
+  wail since 2026-09-10, the owner's call over the European two-tone; `generate-audio.ts` now
+  matches a padded credits row when it replaces one, and `check-audio` fails on a file credited
+  twice, which is how three stale rows had gone unnoticed). `audio/samples.ts` fetches
   and decodes them once, on the first gesture that unlocks audio, and plays into the synth's master
   gain so the Geluid toggle mutes both. **`play` returning `false` is the whole fallback
   contract:** `createArenaSound` tries the clip for an event first and runs its oscillator branch
@@ -433,7 +436,11 @@ two new ammo counts sit past the original player row, so an older row still deco
   `check-sprites` runs in CI) and `people` an open record; `ArenaSprites` keeps `car` (the
   sedan's) and `player`, and adds `vehicles` and `people`. `vehicleSpriteFor(art, kind, colour)` takes a kind's own art or the
   sedan's; `hasOwnVehicleArt` is what lets `drawVehicles` leave the vector light bar off a police
-  car whose sprite carries one. Every size in the painter comes from the kind. Sources were
+  car whose sprite carries one. Either way the lights glow and flash — and, within 120 m of this
+  player, the siren loop plays — only while a police driver holds the car (`policeCarIds` and
+  `sirenWithin` in `sim/police.ts`, `Scene.sirenVehicleIds`, `ArenaSound.updateSiren`; the
+  owner's question of 2026-09-10, when the sprite had left the bar standing still and the siren
+  clip had never been wired up). Every size in the painter comes from the kind. Sources were
   generated with SpriteCook (gpt-image-2, the sedan's prompt template and style snapshot,
   `bg_mode: "transparent"`; one render needed `remove_background`) and are credited in
   `public/arena/sprites/CREDITS.md`; `npm run arena:check-sprites` (`scripts/arena/check-sprites.ts`,
