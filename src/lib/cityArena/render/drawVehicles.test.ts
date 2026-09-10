@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createVehicle } from "../sim/vehicle";
 import { createCamera } from "./camera";
-import { drawVehicle, drawVehicles } from "./drawVehicles";
-import { PLAYER_RING } from "./palette";
+import {
+  LIGHT_BAR_FLASH_TICKS,
+  drawVehicle,
+  drawVehicles,
+} from "./drawVehicles";
+import { PLAYER_RING, POLICE_LIGHT_BLUE, POLICE_LIGHT_RED } from "./palette";
 import type { VehicleSprite } from "./sprites";
 import { createFakeContext } from "./testing/fakeContext";
 
@@ -64,7 +68,7 @@ describe("drawVehicles", () => {
     expect(context.calls).toContain(`stroke(${PLAYER_RING},2)`);
   });
 
-  it("paints an alternating light bar on intact police cars only", () => {
+  it("paints a light bar on intact police cars only", () => {
     const context = createFakeContext();
     drawVehicle(
       context,
@@ -105,7 +109,7 @@ describe("drawVehicles", () => {
     ).toHaveLength(0);
   });
 
-  it("still flashes the light bars over a police car's sprite", () => {
+  it("keeps the light bar over a police car's borrowed sprite", () => {
     const context = createFakeContext();
     const police = createVehicle(2, "police", [10, 10], 0, 0);
     drawVehicle(context, camera, viewport, police, 0, false, { car: sprite });
@@ -115,6 +119,59 @@ describe("drawVehicles", () => {
     expect(context.calls.filter((call) => call.startsWith("fillRect"))).toEqual(
       ["fillRect(11.2,-3,5.6,2)", "fillRect(11.2,1,5.6,2)"],
     );
+  });
+
+  it("glows and swaps the lights only while the police are driving the car", () => {
+    const police = createVehicle(3, "police", [10, 10], 0, 5);
+    const off = createFakeContext();
+    drawVehicle(off, camera, viewport, police, LIGHT_BAR_FLASH_TICKS, false);
+    expect(off.calls.filter((call) => call.startsWith("arc("))).toEqual([]);
+    expect(off.calls.filter((call) => call.startsWith("fill("))).toEqual([]);
+    const on = createFakeContext();
+    drawVehicle(on, camera, viewport, police, 0, false, undefined, true);
+    expect(on.calls.filter((call) => call.startsWith("arc("))).toHaveLength(2);
+    expect(on.calls.filter((call) => call.startsWith("fill("))).toEqual([
+      `fill(${POLICE_LIGHT_BLUE})`,
+      `fill(${POLICE_LIGHT_RED})`,
+    ]);
+    const later = createFakeContext();
+    drawVehicle(
+      later,
+      camera,
+      viewport,
+      police,
+      LIGHT_BAR_FLASH_TICKS,
+      false,
+      undefined,
+      true,
+    );
+    expect(later.calls.filter((call) => call.startsWith("fill("))).toEqual([
+      `fill(${POLICE_LIGHT_RED})`,
+      `fill(${POLICE_LIGHT_BLUE})`,
+    ]);
+  });
+
+  it("glows over a police car's own art, for the ids drawVehicles is told to light", () => {
+    const context = createFakeContext();
+    drawVehicles(
+      context,
+      camera,
+      viewport,
+      [
+        createVehicle(1, "police", [10, 10], 0, 5),
+        createVehicle(2, "police", [12, 10], 0, 5),
+      ],
+      0,
+      null,
+      { vehicles: { police: sprite } },
+      new Set([2]),
+    );
+    expect(
+      context.calls.filter((call) => call.startsWith("arc(")),
+    ).toHaveLength(2);
+    expect(
+      context.calls.filter((call) => call.startsWith("fillRect(")),
+    ).toEqual([]);
   });
 
   it("leaves the light bar to a police car's own art", () => {

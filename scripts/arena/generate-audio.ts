@@ -21,6 +21,7 @@ import {
   CLIP_NAMES,
   type ClipName,
 } from "../../src/lib/cityArena/audio/clips";
+import { fileOfRow } from "./credits";
 
 /** Where the files go, relative to the repo root. */
 const AUDIO_DIR = path.join("public", "arena", "audio");
@@ -80,8 +81,8 @@ const PROMPTS: Record<
     seconds: 2.5,
   },
   siren: {
-    text: "Dutch police car siren, the classic European two-tone hi-lo alternating steadily about once a second, loud and clean, heard close by, seamless loop, no engine, no traffic, no voices",
-    seconds: 4,
+    text: "American police car siren, the classic electronic wail sweeping slowly up and down in pitch, one full sweep about every three seconds, loud, clean and close, seamless loop, no engine, no traffic, no horn, no voices",
+    seconds: 6,
     influence: LITERAL_INFLUENCE,
   },
   pickup: {
@@ -156,7 +157,7 @@ function creditsWith(existing: string, clip: ClipName): string {
         !line.startsWith("| File") &&
         !line.startsWith("| ---"),
     )
-    .filter((line) => !line.startsWith(`| ${file} |`));
+    .filter((line) => fileOfRow(line) !== file);
   return [...header, ...rows, row].join("\n") + "\n";
 }
 

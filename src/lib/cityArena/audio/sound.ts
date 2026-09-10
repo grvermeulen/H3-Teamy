@@ -50,6 +50,8 @@ export type ArenaSound = {
   setEnabled(enabled: boolean): void;
   handleEvents(events: ArenaEvent[]): void;
   updateEngine(speedMps: number, active: boolean): void;
+  /** Runs the siren loop while a police car is chasing within earshot; silent without its clip. */
+  updateSiren(on: boolean): void;
   dispose(): void;
   /** The car radio (Plan 7), or `null` when there is none. */
   radio: RadioPlayer | null;
@@ -156,6 +158,7 @@ export function createArenaSound(
   let engine: OscillatorLike | null = null;
   let engineGain: GainNodeLike | null = null;
   let engineLoop: LoopHandle | null = null;
+  let sirenLoop: LoopHandle | null = null;
   let disposed = false;
   let unlocked = false;
 
@@ -229,6 +232,12 @@ export function createArenaSound(
     engineLoop?.stop();
     engineLoop = null;
     stopDrone();
+  }
+
+  /** Stops the siren, if it is sounding. */
+  function stopSiren(): void {
+    sirenLoop?.stop();
+    sirenLoop = null;
   }
 
   /**
@@ -326,11 +335,20 @@ export function createArenaSound(
         reportAudioError(error, "audio-engine");
       }
     },
+    updateSiren(on: boolean): void {
+      if (!enabled || !on || disposed) {
+        stopSiren();
+        return;
+      }
+      if (!player?.has("siren")) return;
+      sirenLoop ??= player.startLoop("siren");
+    },
     dispose(): void {
       if (disposed) return;
       disposed = true;
       radioPlayer?.dispose();
       stopEngine();
+      stopSiren();
       try {
         master?.disconnect();
         const result = context?.close?.();

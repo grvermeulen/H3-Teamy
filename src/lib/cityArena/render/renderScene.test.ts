@@ -12,6 +12,7 @@ import {
   PICKUP_UZI,
   PLAYER_FILL,
   PLAYER_OTHER_FILL,
+  POLICE_LIGHT_BLUE,
 } from "./palette";
 import { renderScene, type Scene } from "./renderScene";
 import { createStaticRaster } from "./staticRaster";
@@ -151,5 +152,26 @@ describe("renderScene", () => {
     ];
     expect(order.every((index) => index >= 0)).toBe(true);
     expect([...order].sort((left, right) => left - right)).toEqual(order);
+  });
+});
+
+describe("renderScene police lights", () => {
+  it("lights the cars the scene says the police are driving", () => {
+    const context = createFakeContext();
+    renderScene(
+      context,
+      viewport,
+      sceneWith({
+        vehicles: [
+          createVehicle(1, "police", [5, 0], 0, 5),
+          createVehicle(2, "police", [-5, 0], 0, 5),
+        ],
+        sirenVehicleIds: new Set([1]),
+      }),
+    );
+    expect(context.calls).toContain(`fill(${POLICE_LIGHT_BLUE})`);
+    expect(
+      context.calls.filter((call) => call === `fill(${POLICE_LIGHT_BLUE})`),
+    ).toHaveLength(1);
   });
 });

@@ -21,6 +21,7 @@ function runtime(): FeelRuntime {
       setEnabled: vi.fn(),
       handleEvents: vi.fn(),
       updateEngine: vi.fn(),
+      updateSiren: vi.fn(),
       dispose: vi.fn(),
     },
     haptics: { fire: vi.fn() },

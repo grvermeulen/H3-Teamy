@@ -50,7 +50,11 @@ const LIGHT_BAR_SIDE_M = 0.25;
 /** Distance from the nose back to the light bar's centre, metres. */
 const LIGHT_BAR_INSET_M = 0.35;
 /** Ticks each colour of the light bar stays lit before the pair swaps. */
-const LIGHT_BAR_FLASH_TICKS = 6;
+export const LIGHT_BAR_FLASH_TICKS = 6;
+/** Radius of the glow each light throws while the lights are on, metres. */
+const LIGHT_GLOW_RADIUS_M = 0.45;
+/** Opacity of that glow, so the bar underneath still shows through it. */
+const LIGHT_GLOW_ALPHA = 0.85;
 /**
  * Quarter turn that maps the sprite art, drawn nose-up, onto the car frame's forward +X axis.
  * `drawVehicle` has already rotated the context by the car's heading when this is applied.
@@ -137,14 +141,23 @@ function drawSpriteBody(
   context.restore();
 }
 
-/** The pair of light bars on a police car's roof, swapping colour every few ticks. */
-function drawPoliceLights(
+/** Whether the left light shows blue this tick; the pair swaps every few ticks while lit. */
+function leftIsBlue(tick: number, lit: boolean): boolean {
+  return !lit || Math.floor(tick / LIGHT_BAR_FLASH_TICKS) % 2 === 0;
+}
+
+/**
+ * The pair of light bars on a police car's roof, for a body without a painted bar. The colours
+ * swap every few ticks while the lights are on and hold still while they are off.
+ */
+function drawLightBar(
   context: RasterContext,
   vehicle: VehicleState,
   zoom: number,
   tick: number,
+  lit: boolean,
 ): void {
-  const blue = Math.floor(tick / LIGHT_BAR_FLASH_TICKS) % 2 === 0;
+  const blue = leftIsBlue(tick, lit);
   const forward = lengthOf(vehicle.kind) / 2 - LIGHT_BAR_INSET_M;
   fillLocalRect(
     context,
@@ -166,11 +179,41 @@ function drawPoliceLights(
   );
 }
 
+/** The glow the lights throw while they are on: a disc over each light, swapping with the bar. */
+function drawLightGlow(
+  context: RasterContext,
+  vehicle: VehicleState,
+  zoom: number,
+  tick: number,
+): void {
+  const blue = leftIsBlue(tick, true);
+  const forward = lengthOf(vehicle.kind) / 2 - LIGHT_BAR_INSET_M;
+  const lights: [number, string][] = [
+    [-LIGHT_BAR_SIDE_M, blue ? POLICE_LIGHT_BLUE : POLICE_LIGHT_RED],
+    [LIGHT_BAR_SIDE_M, blue ? POLICE_LIGHT_RED : POLICE_LIGHT_BLUE],
+  ];
+  context.save();
+  context.globalAlpha = LIGHT_GLOW_ALPHA;
+  for (const [side, colour] of lights) {
+    context.beginPath();
+    context.arc(
+      forward * zoom,
+      side * zoom,
+      LIGHT_GLOW_RADIUS_M * zoom,
+      0,
+      Math.PI * 2,
+    );
+    context.fillStyle = colour;
+    context.fill();
+  }
+  context.restore();
+}
+
 /**
  * One car's body: the sprite when its art has loaded, else the vector body it was drawn as
- * before. A wreck stays a dark slab either way — the sprites are intact cars. The vector light
- * bar flashes over a police car only while it borrows the sedan's art or has none; its own
- * sprite carries the bar.
+ * before. A wreck stays a dark slab either way — the sprites are intact cars. A police car gets
+ * the vector light bar only while it borrows the sedan's art or has none (its own sprite carries
+ * the bar), and either way its lights glow and flash only while the police are driving it.
  */
 function drawBody(
   context: RasterContext,
@@ -179,6 +222,7 @@ function drawBody(
   tick: number,
   sprite: CanvasImageSource | undefined,
   ownArt: boolean,
+  lit: boolean,
 ): void {
   if (vehicle.wrecked) {
     fillLocalRect(
@@ -194,8 +238,9 @@ function drawBody(
   }
   if (sprite) drawSpriteBody(context, vehicle, sprite, zoom);
   else drawVectorBody(context, vehicle, zoom);
-  if (vehicle.kind === "police" && !ownArt)
-    drawPoliceLights(context, vehicle, zoom, tick);
+  if (vehicle.kind !== "police") return;
+  if (!ownArt) drawLightBar(context, vehicle, zoom, tick, lit);
+  if (lit) drawLightGlow(context, vehicle, zoom, tick);
 }
 
 /** Grey puffs trailing behind a damaged car, drifting with the tick. */
@@ -246,7 +291,10 @@ function drawOccupiedRing(
   context.stroke();
 }
 
-/** Draws one car in its own frame: body, smoke when damaged, and the occupant ring. */
+/**
+ * Draws one car in its own frame: body, smoke when damaged, and the occupant ring. `lit` turns a
+ * police car's lights on.
+ */
 export function drawVehicle(
   context: RasterContext,
   camera: Camera,
@@ -255,6 +303,7 @@ export function drawVehicle(
   tick: number,
   occupied: boolean,
   art?: VehicleArt,
+  lit = false,
 ): void {
   const [x, y] = worldToScreen(camera, viewport, [vehicle.x, vehicle.y]);
   context.save();
@@ -267,6 +316,7 @@ export function drawVehicle(
     tick,
     vehicleSpriteFor(art, vehicle.kind, vehicle.colour),
     hasOwnVehicleArt(art, vehicle.kind),
+    lit,
   );
   if (!vehicle.wrecked && vehicle.health < smokeHealthOf(vehicle.kind))
     drawSmoke(context, vehicle, camera.zoom, tick);
@@ -274,7 +324,7 @@ export function drawVehicle(
   context.restore();
 }
 
-/** Draws every car near the view; `occupiedId` gets the ring. */
+/** Draws every car near the view; `occupiedId` gets the ring, the `litIds` their lights. */
 export function drawVehicles(
   context: RasterContext,
   camera: Camera,
@@ -283,6 +333,7 @@ export function drawVehicles(
   tick: number,
   occupiedId: number | null,
   art?: VehicleArt,
+  litIds?: ReadonlySet<number>,
 ): void {
   const view = visibleRect(camera, viewport);
   for (const vehicle of vehicles) {
@@ -300,6 +351,7 @@ export function drawVehicles(
       tick,
       vehicle.id === occupiedId,
       art,
+      litIds?.has(vehicle.id) ?? false,
     );
   }
 }

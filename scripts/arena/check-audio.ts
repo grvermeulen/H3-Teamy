@@ -19,7 +19,7 @@ import {
   RADIO_TRACK_DIR,
   auditRadio,
 } from "./check-radio";
-import { creditedFiles } from "./credits";
+import { creditedFiles, creditedTwice } from "./credits";
 import { isMissing, listIfPresent, readIfPresent } from "./files";
 
 /** Where the files live, relative to the repo root. */
@@ -61,6 +61,8 @@ export async function auditAudio(
     if (!credited.has(file))
       problems.push({ file, problem: "no row in CREDITS.md" });
   }
+  for (const file of creditedTwice(credits))
+    problems.push({ file, problem: "credited twice in CREDITS.md" });
   return problems;
 }
 

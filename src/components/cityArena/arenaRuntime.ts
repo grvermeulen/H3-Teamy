@@ -52,6 +52,7 @@ import {
 import { checkInvariants } from "@/lib/cityArena/sim/invariants";
 import { SIM_STEP_S } from "@/lib/cityArena/sim/player";
 import { createRng, seedFromString } from "@/lib/cityArena/sim/rng";
+import { policeCarIds, sirenWithin } from "@/lib/cityArena/sim/police";
 import { forwardSpeed } from "@/lib/cityArena/sim/vehicle";
 import { currentWantedLevel } from "@/lib/cityArena/sim/wanted";
 import { zoneSecondsLeft } from "@/lib/cityArena/sim/zoneRule";
@@ -286,6 +287,7 @@ function buildScene(
     vehicles: state.vehicles,
     bullets: state.bullets,
     effects: state.effects,
+    sirenVehicleIds: policeCarIds(state),
     tick: state.tick,
     // Hidden during the death screen: the push-in transform would otherwise draw it up to 8%
     // off from the physical cursor (spec §7's push-in tops out at 1.08×).
@@ -602,6 +604,12 @@ function updateEngineSound(runtime: Runtime): void {
   );
 }
 
+/** Runs the siren while a police car is chasing within earshot of this player. */
+function updateSirenSound(runtime: Runtime): void {
+  const player = myPlayer(runtime);
+  runtime.sound.updateSiren(sirenWithin(runtime.state, [player.x, player.y]));
+}
+
 /** True when the input is doing anything, which is what unlocks audio on the first gesture. */
 function isActive(input: WorldInput): boolean {
   return (
@@ -684,6 +692,7 @@ function advanceNetworked(
   // The only real tally is the host's; a client's predicted kills are not.
   runtime.tally = net.loop.tally();
   updateEngineSound(runtime);
+  updateSirenSound(runtime);
   if (debug) recordViolations(runtime);
 }
 
@@ -724,6 +733,7 @@ function advanceSimulation(
     feelTick(runtime, runtime.state);
     runtime.tally = tallyEvents(runtime.tally, runtime.state.events);
     updateEngineSound(runtime);
+    updateSirenSound(runtime);
     runtime.accumulator -= SIM_STEP_S;
     steps += 1;
     if (debug) recordViolations(runtime);

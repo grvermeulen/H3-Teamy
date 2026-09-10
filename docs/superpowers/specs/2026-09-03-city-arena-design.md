@@ -314,7 +314,9 @@ nothing and adds heat.
 15 m of a cop +10, ramming a police car +20; decays 5/s after 8 quiet seconds;
 level = min(3, ⌊heat / 40⌋). Level 1: two cops on foot spawn 60–120 m away out of view
 and A\* to you, pistol at ≤ 20 m (1.5/s, 15° inaccuracy). Level 2: plus one police car
-that chases and rams. Level 3: four cops, two cars, shotguns. Cops target the wanted
+that chases and rams, lights flashing and siren sounding within 120 m of a player for as
+long as a police driver holds it (a stolen or wrecked police car shows neither; the siren
+is an American-style wail — 2026-09-10). Level 3: four cops, two cars, shotguns. Cops target the wanted
 player; other players who kill cops gain heat. Your death resets your heat to 0.
 
 **Pickups.** Per zone at match start: 6 weapon spots (up to 4 at landmarks, rest at seeded

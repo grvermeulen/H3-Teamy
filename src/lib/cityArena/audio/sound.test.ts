@@ -159,6 +159,41 @@ describe("createArenaSound", () => {
     expect(loop.stop).toHaveBeenCalledTimes(2);
   });
 
+  it("runs the siren loop once while a chase is near and stops it when it is not", () => {
+    const { context, factory } = createFakeAudioContext();
+    const loop = { setRate: vi.fn(), stop: vi.fn() };
+    const player = { ...playerWith(["siren"]), startLoop: vi.fn(() => loop) };
+    const sound = createArenaSound(factory, true, () => player);
+    sound.updateSiren(true);
+    sound.updateSiren(true);
+    expect(player.startLoop).toHaveBeenCalledTimes(1);
+    expect(player.startLoop).toHaveBeenCalledWith("siren");
+    sound.updateSiren(false);
+    expect(loop.stop).toHaveBeenCalledTimes(1);
+    sound.updateSiren(true);
+    sound.dispose();
+    expect(loop.stop).toHaveBeenCalledTimes(2);
+    expect(context.oscillators).toHaveLength(0);
+  });
+
+  it("keeps the siren silent while sound is off and without its clip", () => {
+    const { factory } = createFakeAudioContext();
+    const loop = { setRate: vi.fn(), stop: vi.fn() };
+    const player = { ...playerWith(["siren"]), startLoop: vi.fn(() => loop) };
+    const sound = createArenaSound(factory, false, () => player);
+    sound.updateSiren(true);
+    expect(player.startLoop).not.toHaveBeenCalled();
+    sound.setEnabled(true);
+    sound.updateSiren(true);
+    expect(player.startLoop).toHaveBeenCalledTimes(1);
+    sound.setEnabled(false);
+    sound.updateSiren(true);
+    expect(loop.stop).toHaveBeenCalledTimes(1);
+    const mute = createArenaSound(factory, true, () => playerWith(["engine"]));
+    mute.updateSiren(true);
+    expect(player.startLoop).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the oscillator drone when there is no engine clip", () => {
     const { context, factory } = createFakeAudioContext();
     const sound = createArenaSound(factory, true, () => playerWith(["pistol"]));

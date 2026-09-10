@@ -50,6 +50,22 @@ export function creditedFiles(credits: string | null): Set<string> {
 }
 
 /**
+ * The files a credits file credits more than once — a stale row a regeneration left behind.
+ *
+ * @param credits - The file's contents, or null when it does not exist.
+ * @returns The file names, each once.
+ */
+export function creditedTwice(credits: string | null): string[] {
+  const seen = new Set<string>();
+  const twice = new Set<string>();
+  for (const file of creditRows(credits).map(fileOfRow)) {
+    if (seen.has(file)) twice.add(file);
+    seen.add(file);
+  }
+  return [...twice];
+}
+
+/**
  * A whole credits file: a title, an intro line, the table.
  *
  * @param title - The Markdown heading.
