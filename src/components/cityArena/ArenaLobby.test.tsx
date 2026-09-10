@@ -1,7 +1,13 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CrewMember } from "./ArenaLobby";
-import { ArenaLobby } from "./ArenaLobby";
+import { ArenaLobby, COPIED_FOR_MS } from "./ArenaLobby";
 
 /** One crew member. */
 function member(overrides: Partial<CrewMember> = {}): CrewMember {
@@ -46,10 +52,41 @@ describe("ArenaLobby", () => {
     cleanup();
   });
 
-  it("names the room and the zone", () => {
+  it("shows the code large, the zone, and a copy button that says so for a moment", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    vi.useFakeTimers();
+    try {
+      renderLobby();
+      expect(screen.getByText("Lobby · code")).toBeInTheDocument();
+      expect(screen.getByTestId("room-code")).toHaveTextContent("7K4M2Q");
+      expect(screen.getByText("Wageningen centrum")).toBeInTheDocument();
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Kopieer" }));
+      });
+      expect(writeText).toHaveBeenCalledWith("7K4M2Q");
+      expect(
+        screen.getByRole("button", { name: "Gekopieerd" }),
+      ).toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(COPIED_FOR_MS);
+      });
+      expect(
+        screen.getByRole("button", { name: "Kopieer" }),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+      Reflect.deleteProperty(navigator, "clipboard");
+    }
+  });
+
+  it("offers no copy button where there is no clipboard", () => {
     renderLobby();
-    expect(screen.getByText("Room 7K4M2Q · Lobby")).toBeInTheDocument();
-    expect(screen.getByText("Wageningen centrum")).toBeInTheDocument();
+    expect(screen.getByTestId("room-code")).toHaveTextContent("7K4M2Q");
+    expect(screen.queryByRole("button", { name: "Kopieer" })).toBeNull();
   });
 
   it("shows the crew count against the capacity", () => {
