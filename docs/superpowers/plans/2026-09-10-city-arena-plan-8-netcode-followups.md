@@ -22,7 +22,7 @@
 
 ## Design decisions
 
-- **The acting host is whoever published the room's latest snapshot** within `ACTING_HOST_FRESH_MS = 10_000` ms and is present in the room. A migrated host publishes within three seconds of taking over (spec §6.6's silence rule), so the server sees it before the old host's presence entry has timed out. When nobody has published in that window — a room that has not started stepping — the presence election (`electHost`) decides, as before. **Trust model, unchanged in strength:** the server already trusted self-declared roles for the election; a member who publishes forged state messages could now pass as host for the server, exactly as one who declared itself a `display` already could, and the clients ignore both (they accept snapshots from the elected host only). The service's header states this.
+- **The acting host is the best-ranked present member heard from** — one with a snapshot within `ACTING_HOST_FRESH_MS = 10_000` ms; a lower-ranked member only while everyone above it is silent, which is when the clients re-elect too. A migrated host publishes within three seconds of taking over (spec §6.6's silence rule), so the server sees it before the old host's presence entry has timed out. When nobody has published in that window — a room that has not started stepping — the presence election (`electHost`) decides, as before. **Trust model, unchanged in strength:** the server already trusted self-declared roles for the election; a member who publishes forged state messages could now pass as host for the server, exactly as one who declared itself a `display` already could, and the clients ignore both (they accept snapshots from the elected host only). The service's header states this.
 - **Ably history without persistence keeps two minutes of messages**, which is plenty for a ten-second window. One `history({ limit: 5, direction: "backwards" })` call per advertised room per listing (cached five seconds) and one per result posted.
 - **A cut, not a pan.** The camera has an exponential ease with no distance cap; a joiner seated kilometres from where it was roaming gets a half-second fly-over of unrastered tiles. `cutTo(runtime, point)` snaps the camera and sets `feedback.cutFade = 1`, which `stepFeedback` walks down to 0 over `CUT_FADE_TICKS = 12` (0.4 s) while `drawFeedback` paints black at that alpha. The zone teleport and the lost-seat recovery get the same cut. Reduced motion keeps the fade: a fade is not motion.
 - **The code is for reading out loud.** Display type, letter-spaced, amber, with **Kopieer** next to it when the Clipboard API exists; the zone name steps down to the second line.
@@ -139,7 +139,7 @@ export function actingHost(
 **Files:**
 
 - Modify: `src/lib/cityArena/render/feedback.ts`, `src/components/cityArena/arenaRuntime.ts`, `src/components/cityArena/useNetplay.ts`
-- Test: `src/lib/cityArena/render/feedback.test.ts`, `src/components/cityArena/useNetplay.test.tsx` (the seat-adoption case)
+- Test: `src/lib/cityArena/render/feedback.test.ts`, `src/components/cityArena/useNetplay.test.ts` (the seat-adoption case)
 
 **Interfaces:**
 
@@ -153,7 +153,7 @@ export function withCut(state: FeedbackState): FeedbackState; // { ...state, cut
 export function cutTo(runtime: Runtime, point: Point): void;
 ```
 
-- [ ] **Step 1: Write the failing tests** — `stepFeedback` walks `cutFade` from 1 to 0 over twelve ticks and reduced motion does not skip it; `drawFeedback` fills the whole viewport black at `globalAlpha = cutFade` and still draws nothing for a quiet state; `withCut` sets 1 and keeps the rest. In `useNetplay.test.tsx`, after a client adopts its seat: the runtime's camera sits on its player and `feedback.cutFade` is 1.
+- [ ] **Step 1: Write the failing tests** — `stepFeedback` walks `cutFade` from 1 to 0 over twelve ticks and reduced motion does not skip it; `drawFeedback` fills the whole viewport black at `globalAlpha = cutFade` and still draws nothing for a quiet state; `withCut` sets 1 and keeps the rest. In `useNetplay.test.ts`, after a client adopts its seat: the runtime's camera sits on its player and `feedback.cutFade` is 1.
 
 - [ ] **Step 2: Run them and watch them fail.**
 

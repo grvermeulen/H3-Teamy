@@ -9,7 +9,11 @@ const channelsGet = vi.fn((name: string) => ({
   presence: {
     get: async () => ({ items: presenceByChannel.get(name) ?? [] }),
   },
-  history: async () => ({ items: historyByChannel.get(name) ?? [] }),
+  history: async () => ({
+    items: historyByChannel.get(name) ?? [],
+    hasNext: () => false,
+    next: async () => null,
+  }),
 }));
 const captureException = vi.fn();
 const checkRateLimit = vi.fn();
@@ -150,6 +154,22 @@ describe("GET /api/arena/rooms", () => {
     const body = await (await GET(request())).json();
     expect(body.rooms).toHaveLength(1);
     expect(body.rooms[0].hostName).toBe("Sam");
+  });
+
+  it("keeps a room with its real host when a member publishes state beside it", async () => {
+    // "x" publishes snapshots too and advertises the room; "a" outranks it and is still heard
+    // from, so "x" is not the host and its advertisement is dropped.
+    presenceByChannel.set("arena:lobby", [entry("x", ROOM, 5, "Forger")]);
+    presenceByChannel.set("arena:room:7K4M2Q", [
+      entry("a", undefined, 1),
+      entry("x", undefined, 2),
+    ]);
+    historyByChannel.set("arena:room:7K4M2Q", [
+      { name: "state", clientId: "x", timestamp: Date.now() - 100 },
+      { name: "state", clientId: "a", timestamp: Date.now() - 200 },
+    ]);
+    const body = await (await GET(request())).json();
+    expect(body.rooms).toEqual([]);
   });
 
   it("drops a room that nobody is in at all", async () => {

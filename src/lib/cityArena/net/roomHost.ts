@@ -5,21 +5,32 @@
  * minutes, so presence alone names the wrong host right after a migration — the rooms list would
  * hide the room and a result posted by the new host would be refused. What the server does have
  * is the room channel's history: a host is someone you hear from, which is the rule the clients
- * already live by. This module reads both through Ably's REST API.
+ * already live by. Rank still decides between publishers (see `actingHost`), so a member cannot
+ * talk itself into hosting by publishing beside a living host. This module reads presence and
+ * history through Ably's REST API.
  */
 
 import type * as Ably from "ably";
-import { actingHost, type SnapshotSighting } from "./election";
+import {
+  ACTING_HOST_FRESH_MS,
+  actingHost,
+  type SnapshotSighting,
+} from "./election";
 import { roomChannelName } from "./room";
 import type { PresenceMember } from "./transport";
 
 /** The slice of an Ably REST client this module reads through; a fake in tests. */
 export type RoomRest = Pick<Ably.Rest, "channels">;
 
-/** How many of the newest messages to look through for the latest snapshot. */
-const HISTORY_PAGE = 5;
+/** Messages per history page. At thirty snapshots a second, one page is over three seconds. */
+const HISTORY_PAGE = 100;
+/** Pages read at most: the window is covered long before this, and a busy channel cannot make the server page forever. */
+const HISTORY_PAGES_MAX = 5;
 /** The message name the host loop publishes snapshots under. */
 const SNAPSHOT_MESSAGE = "state";
+
+/** The fields of a history message the sightings read. */
+type HistoryItem = { name?: string; clientId?: string; timestamp?: number };
 
 /**
  * A channel's presence set.
@@ -41,34 +52,60 @@ export async function presenceOf(
 }
 
 /**
- * Who published the channel's newest snapshot, and when.
+ * Records a page's snapshots, newest first, one per publisher.
+ *
+ * @returns False once the page reached messages older than the window, so paging can stop.
+ */
+function collectSightings(
+  items: HistoryItem[],
+  sinceMs: number,
+  newest: Map<string, number>,
+): boolean {
+  for (const item of items) {
+    if (typeof item.timestamp !== "number") continue;
+    if (item.timestamp < sinceMs) return false;
+    if (item.name !== SNAPSHOT_MESSAGE || typeof item.clientId !== "string")
+      continue;
+    if (!newest.has(item.clientId)) newest.set(item.clientId, item.timestamp);
+  }
+  return true;
+}
+
+/**
+ * The newest snapshot from each publisher within the window, paging back through the channel's
+ * history until the messages are older than `sinceMs`. Every member may publish on the room
+ * channel, so other messages are skipped rather than allowed to hide a snapshot behind them.
  *
  * @param rest - The REST client.
  * @param channel - The room channel name.
- * @returns The sighting, or `null` when no recent message is a snapshot with a publisher.
+ * @param sinceMs - The oldest server timestamp that still counts.
+ * @returns One sighting per publisher heard from within the window.
  */
-export async function latestSnapshotOf(
+export async function snapshotSightings(
   rest: RoomRest,
   channel: string,
-): Promise<SnapshotSighting | null> {
-  const page = await rest.channels
+  sinceMs: number,
+): Promise<SnapshotSighting[]> {
+  const newest = new Map<string, number>();
+  let page = await rest.channels
     .get(channel)
     .history({ limit: HISTORY_PAGE, direction: "backwards" });
-  for (const item of page.items) {
-    if (item.name !== SNAPSHOT_MESSAGE) continue;
-    if (typeof item.clientId !== "string" || typeof item.timestamp !== "number")
-      return null;
-    return { clientId: item.clientId, timestamp: item.timestamp };
+  for (let pages = 0; pages < HISTORY_PAGES_MAX; pages += 1) {
+    if (!collectSightings(page.items, sinceMs, newest) || !page.hasNext())
+      break;
+    const next = await page.next();
+    if (!next) break;
+    page = next;
   }
-  return null;
+  return [...newest].map(([clientId, timestamp]) => ({ clientId, timestamp }));
 }
 
 /** A room's host as the server sees it, with the presence set the answer came from. */
 export type RoomHost = { host: string | null; members: PresenceMember[] };
 
 /**
- * The acting host of a room: the latest recent snapshot's publisher when present, else the
- * presence election.
+ * The acting host of a room: the best-ranked present member heard from within the window, else
+ * the presence election.
  *
  * @param rest - The REST client.
  * @param roomCode - The room.
@@ -81,9 +118,9 @@ export async function resolveRoomHost(
   nowMs: number = Date.now(),
 ): Promise<RoomHost> {
   const channel = roomChannelName(roomCode);
-  const [members, latest] = await Promise.all([
+  const [members, sightings] = await Promise.all([
     presenceOf(rest, channel),
-    latestSnapshotOf(rest, channel),
+    snapshotSightings(rest, channel, nowMs - ACTING_HOST_FRESH_MS),
   ]);
-  return { host: actingHost(members, latest, nowMs), members };
+  return { host: actingHost(members, sightings, nowMs), members };
 }

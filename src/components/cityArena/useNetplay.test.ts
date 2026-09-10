@@ -224,7 +224,6 @@ describe("useNetplay", () => {
     expect(playersOf(joiner.state).map((player) => player.id)).toEqual(
       playersOf(host.state).map((player) => player.id),
     );
-    // And the camera cut to the seat rather than flying there, with the fade started.
     const me = playersOf(joiner.state).find((player) => player.id === seat);
     expect([joiner.camera.x, joiner.camera.y]).toEqual([me?.x, me?.y]);
     expect(joiner.feedback.cutFade).toBe(1);

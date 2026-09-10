@@ -433,8 +433,8 @@ the zone disc + 100 m (lobby: within 150 m of any player).
 - Host tick exceptions: log to Sentry, skip the tick; 5 consecutive failures → stop
   publishing so the silence rule re-elects.
 - **Server side (amended 2026-09-10).** `GET /api/arena/rooms` and match recording take the
-  **acting host**: whoever published the room's latest snapshot within 10 s and is still present,
-  read from the room channel's history through Ably REST (`net/roomHost.ts`), with the presence
+  **acting host**: the best-ranked present member heard from within 10 s — a lower-ranked one only
+  while everyone above it is silent — read from the room channel's history through Ably REST (`net/roomHost.ts`), with the presence
   election as the fallback for a room that has not started stepping. An old host's presence entry
   can linger for minutes, so presence alone named the wrong host after a migration.
 

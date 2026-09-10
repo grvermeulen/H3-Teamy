@@ -61,7 +61,11 @@ describe("recordMatch", () => {
       presence: { get: presenceGet },
       history: historyGet,
     });
-    historyGet.mockResolvedValue({ items: [] });
+    vi.mocked(historyGet).mockResolvedValue({
+      hasNext: () => false,
+      next: async () => null,
+      items: [],
+    });
     // "host" entered first, so electHost picks it.
     presenceGet.mockResolvedValue({
       items: [member("host", 1), member("guest", 2)],
@@ -85,7 +89,9 @@ describe("recordMatch", () => {
   });
 
   it("records a potje posted by a host that took over while the old host lingers", async () => {
-    historyGet.mockResolvedValue({
+    vi.mocked(historyGet).mockResolvedValue({
+      hasNext: () => false,
+      next: async () => null,
       items: [
         { name: "state", clientId: "guest", timestamp: Date.now() - 500 },
       ],
@@ -98,7 +104,9 @@ describe("recordMatch", () => {
   });
 
   it("refuses a member who published nothing, even once the host has gone quiet", async () => {
-    historyGet.mockResolvedValue({
+    vi.mocked(historyGet).mockResolvedValue({
+      hasNext: () => false,
+      next: async () => null,
       items: [
         { name: "state", clientId: "host", timestamp: Date.now() - 60_000 },
       ],
@@ -107,6 +115,29 @@ describe("recordMatch", () => {
       ok: false,
       reason: "not-host",
     });
+  });
+
+  it("refuses a member publishing state beside a host that is still heard from", async () => {
+    vi.mocked(historyGet).mockResolvedValue({
+      hasNext: () => false,
+      next: async () => null,
+      items: [
+        { name: "state", clientId: "guest", timestamp: Date.now() - 100 },
+        { name: "state", clientId: "host", timestamp: Date.now() - 200 },
+      ],
+    });
+    expect(await recordMatch(KEY, "guest", potje())).toEqual({
+      ok: false,
+      reason: "not-host",
+    });
+  });
+
+  it("lets a failed Ably read surface rather than guessing a host", async () => {
+    vi.mocked(presenceGet).mockRejectedValue(new Error("ably down"));
+    await expect(recordMatch(KEY, "host", potje())).rejects.toThrow(
+      "ably down",
+    );
+    expect(matchCreate).not.toHaveBeenCalled();
   });
 
   it("refuses someone who was never in the room at all", async () => {
@@ -279,7 +310,11 @@ describe("recordMatch when two hosts race", () => {
       presence: { get: presenceGet },
       history: historyGet,
     });
-    historyGet.mockResolvedValue({ items: [] });
+    vi.mocked(historyGet).mockResolvedValue({
+      hasNext: () => false,
+      next: async () => null,
+      items: [],
+    });
     presenceGet.mockResolvedValue({
       items: [member("host", 1), member("guest", 2)],
     });

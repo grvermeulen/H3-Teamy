@@ -6,8 +6,11 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as Sentry from "@sentry/nextjs";
 import type { CrewMember } from "./ArenaLobby";
 import { ArenaLobby, COPIED_FOR_MS } from "./ArenaLobby";
+
+vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
 /** One crew member. */
 function member(overrides: Partial<CrewMember> = {}): CrewMember {
@@ -77,6 +80,55 @@ describe("ArenaLobby", () => {
       expect(
         screen.getByRole("button", { name: "Kopieer" }),
       ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+      Reflect.deleteProperty(navigator, "clipboard");
+    }
+  });
+
+  it("restarts the confirmation on a second copy, and reports a clipboard that refuses", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    vi.useFakeTimers();
+    try {
+      renderLobby();
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Kopieer" }));
+      });
+      act(() => {
+        vi.advanceTimersByTime(COPIED_FOR_MS / 2);
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Gekopieerd" }));
+      });
+      act(() => {
+        vi.advanceTimersByTime(COPIED_FOR_MS / 2 + 100);
+      });
+      expect(
+        screen.getByRole("button", { name: "Gekopieerd" }),
+      ).toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(COPIED_FOR_MS);
+      });
+      expect(
+        screen.getByRole("button", { name: "Kopieer" }),
+      ).toBeInTheDocument();
+      writeText.mockRejectedValueOnce(new Error("no clipboard access"));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Kopieer" }));
+      });
+      expect(
+        screen.getByRole("button", { name: "Kopieer" }),
+      ).toBeInTheDocument();
+      expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({
+          tags: { area: "arena", kind: "lobby-copy" },
+        }),
+      );
     } finally {
       vi.useRealTimers();
       Reflect.deleteProperty(navigator, "clipboard");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as Sentry from "@sentry/nextjs";
 import { ROOM_CAPACITY } from "@/lib/cityArena/net/room";
 import type { ConnectionState } from "@/lib/cityArena/net/transport";
@@ -66,16 +66,23 @@ export const COPIED_FOR_MS = 2000;
 /** Copies the code to the clipboard and says so for a moment; absent where there is no clipboard. */
 function CopyCodeButton({ code }: { code: string }): React.JSX.Element | null {
   const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) return undefined;
-    const timer = setTimeout(() => setCopied(false), COPIED_FOR_MS);
-    return () => clearTimeout(timer);
-  }, [copied]);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
   if (typeof navigator === "undefined" || !navigator.clipboard) return null;
   const copy = (): void => {
     navigator.clipboard
       .writeText(code)
-      .then(() => setCopied(true))
+      .then(() => {
+        // Every copy restarts the confirmation, a second one while it still shows included.
+        setCopied(true);
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => setCopied(false), COPIED_FOR_MS);
+      })
       .catch((error: unknown) => {
         Sentry.captureException(error, {
           tags: { area: "arena", kind: "lobby-copy" },

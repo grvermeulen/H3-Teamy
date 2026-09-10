@@ -8,8 +8,8 @@
  *
  * What it *can* close, and does:
  *
- * - only the **acting host of a live room** may post: whoever published the room's latest
- *   snapshot and is still present, else the host the presence election every client runs names
+ * - only the **acting host of a live room** may post: the best-ranked present member heard from
+ *   in the room's recent snapshots, else the host the presence election every client runs names
  *   (`net/roomHost.ts`) — so an outsider cannot post for a room at all, and a host that took over
  *   mid-potje is not refused while the old host's presence entry lingers;
  * - only **players who were actually in that room** get a line, so a host cannot award or ruin

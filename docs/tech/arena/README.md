@@ -378,8 +378,9 @@ Two gaps left open by Plans 3b and 6, and one request from the owner.
   the host) used to ask the presence election — and an old host's presence entry outlives its tab
   by up to minutes, so a host that took over mid-potje had its advert hidden and its result
   refused. `net/roomHost.ts` now reads the room channel's presence set **and** its history through
-  Ably REST: whoever published the latest `state` message within `ACTING_HOST_FRESH_MS` (10 s) and
-  is still present is the acting host (`actingHost` in `net/election.ts`); the presence election is
+  Ably REST: the best-ranked present member with a `state` message within `ACTING_HOST_FRESH_MS` (10 s)
+  is the acting host (`actingHost` in `net/election.ts`) — a lower-ranked member only while
+  everyone above it is silent, which is when the clients re-elect too; the presence election is
   the fallback for a room that has not started stepping. A host is someone you hear from — the
   rule the clients already live by. History without persistence keeps two minutes of messages,
   which is plenty; it costs one extra REST call per advertised room per listing (cached 5 s) and
