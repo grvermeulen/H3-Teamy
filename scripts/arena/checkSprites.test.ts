@@ -48,12 +48,22 @@ const MANIFEST: SpriteManifest = {
       frames: 8,
     },
   },
+  props: {
+    treeLarge: {
+      file: "/arena/sprites/tree-large.png",
+      lengthMetres: 10,
+      widthMetres: 10,
+      pixelWidth: 160,
+      pixelHeight: 160,
+    },
+  },
 };
 const FILES = [
   ...Object.values(MANIFEST.surfaces),
   ...Object.values(MANIFEST.vehicles),
   ...Object.values(MANIFEST.people),
-].map((entry) => path.basename(entry.file));
+  ...Object.values(MANIFEST.props),
+].flatMap((entry) => (entry ? [path.basename(entry.file)] : []));
 
 /** A credits table naming every file given. */
 function creditsFor(files: string[]): string {

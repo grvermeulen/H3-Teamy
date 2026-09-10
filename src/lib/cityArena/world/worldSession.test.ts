@@ -274,6 +274,8 @@ function decodedTile(x: number, y: number, withBuilding: boolean): DecodedTile {
       : [],
     ground: [],
     water: [],
+    trees: [],
+    furniture: [],
   };
 }
 

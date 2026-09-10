@@ -9,8 +9,12 @@ import {
   parseSpriteManifest,
   type ArenaSprites,
   type GroundTextures,
+  PROP_KEYS,
   type PersonSprite,
   type PersonSprites,
+  type PropKey,
+  type PropSprite,
+  type PropSprites,
   type SpriteManifest,
   type SurfaceTexture,
   type VehicleSprite,
@@ -21,6 +25,8 @@ import {
 type VehicleEntry = NonNullable<SpriteManifest["vehicles"][VehicleKind]>;
 /** One character entry of the manifest. */
 type PersonEntry = SpriteManifest["people"][string];
+/** One prop entry of the manifest. */
+type PropEntry = NonNullable<SpriteManifest["props"][PropKey]>;
 
 /** Decodes one image URL; injectable so tests need no real network or `Image` decoding. */
 export type ImageLoader = (src: string) => Promise<CanvasImageSource>;
@@ -203,6 +209,40 @@ async function loadPeople(
   return people;
 }
 
+/** Loads one prop, or `undefined` when its file is missing. */
+async function loadProp(
+  loadImage: ImageLoader,
+  entry: PropEntry,
+): Promise<PropSprite | undefined> {
+  const { file, lengthMetres, widthMetres } = entry;
+  try {
+    return { image: await loadImage(file), lengthMetres, widthMetres };
+  } catch (error: unknown) {
+    reportSpriteFailure(error, "prop");
+    return undefined;
+  }
+}
+
+/** Loads every prop the manifest has; a prop whose file is missing stays a flat shape. */
+async function loadProps(
+  loadImage: ImageLoader,
+  manifest: SpriteManifest,
+): Promise<PropSprites> {
+  const entries = PROP_KEYS.flatMap((key) => {
+    const entry = manifest.props[key];
+    return entry ? [{ key, entry }] : [];
+  });
+  const loaded = await Promise.all(
+    entries.map(({ entry }) => loadProp(loadImage, entry)),
+  );
+  const props: PropSprites = {};
+  entries.forEach(({ key }, index) => {
+    const sprite = loaded[index];
+    if (sprite) props[key] = sprite;
+  });
+  return props;
+}
+
 /** Loads the four ground textures; a texture that fails leaves its kind on the flat fill. */
 async function loadGround(
   loadImage: ImageLoader,
@@ -222,14 +262,16 @@ async function loadAll(
   options: Required<SpriteStoreOptions>,
 ): Promise<ArenaSprites> {
   const manifest = await fetchManifest(options.fetchImpl, options.manifestPath);
-  const [road, pavement, water, ground, vehicles, people] = await Promise.all([
-    loadSurface(options.loadImage, manifest.surfaces.road),
-    loadSurface(options.loadImage, manifest.surfaces.pavement),
-    loadSurface(options.loadImage, manifest.surfaces.water),
-    loadGround(options.loadImage, manifest.surfaces),
-    loadVehicles(options.loadImage, options.canvasFactory, manifest),
-    loadPeople(options.loadImage, manifest),
-  ]);
+  const [road, pavement, water, ground, vehicles, people, props] =
+    await Promise.all([
+      loadSurface(options.loadImage, manifest.surfaces.road),
+      loadSurface(options.loadImage, manifest.surfaces.pavement),
+      loadSurface(options.loadImage, manifest.surfaces.water),
+      loadGround(options.loadImage, manifest.surfaces),
+      loadVehicles(options.loadImage, options.canvasFactory, manifest),
+      loadPeople(options.loadImage, manifest),
+      loadProps(options.loadImage, manifest),
+    ]);
   return {
     road,
     pavement,
@@ -239,6 +281,7 @@ async function loadAll(
     vehicles,
     player: people.player,
     people,
+    props,
   };
 }
 
@@ -247,6 +290,7 @@ function hasAnySprite(sprites: ArenaSprites): boolean {
   if (Object.values(sprites.ground ?? {}).some(Boolean)) return true;
   if (Object.values(sprites.vehicles ?? {}).some(Boolean)) return true;
   if (Object.values(sprites.people ?? {}).some(Boolean)) return true;
+  if (Object.values(sprites.props ?? {}).some(Boolean)) return true;
   return Boolean(sprites.road ?? sprites.pavement ?? sprites.water);
 }
 

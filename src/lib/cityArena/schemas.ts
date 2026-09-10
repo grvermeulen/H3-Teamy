@@ -1,5 +1,12 @@
 import { z } from "zod";
-import type { MapIndex, MapRoads, MapTile, ZoneKey } from "./world/mapTypes";
+import {
+  FURNITURE_KINDS,
+  type FurnitureKind,
+  type MapIndex,
+  type MapRoads,
+  type MapTile,
+  type ZoneKey,
+} from "./world/mapTypes";
 
 const zoneKeys = ["rhenen", "wageningen", "campus", "bennekom"] as const;
 const unitPoint = z.tuple([z.number().int(), z.number().int()]);
@@ -77,6 +84,46 @@ function isStringArray(value: unknown): boolean {
   );
 }
 
+/** True for `[x, y, size]` tree rows, or for the field's absence (a tile built before Plan 9b). */
+function isTreeList(value: unknown): boolean {
+  if (value === undefined) return true;
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        Array.isArray(entry) &&
+        entry.length === 3 &&
+        isFlatNumberArray(entry) &&
+        (entry[2] === 0 || entry[2] === 1),
+    )
+  );
+}
+
+/** True when the value names one of the furniture kinds. */
+function isFurnitureKind(value: unknown): value is FurnitureKind {
+  return (
+    typeof value === "string" &&
+    (FURNITURE_KINDS as readonly string[]).includes(value)
+  );
+}
+
+/** True for `[x, y, kind, heading]` furniture rows of a known kind, or for the field's absence. */
+function isFurnitureList(value: unknown): boolean {
+  if (value === undefined) return true;
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        Array.isArray(entry) &&
+        entry.length === 4 &&
+        typeof entry[0] === "number" &&
+        typeof entry[1] === "number" &&
+        isFurnitureKind(entry[2]) &&
+        typeof entry[3] === "number",
+    )
+  );
+}
+
 /** Cheap structural guard for a tile payload (full Zod validation would be too slow at 10 Hz loads). */
 export function isMapTile(value: unknown): value is MapTile {
   if (!isRecord(value)) return false;
@@ -86,7 +133,9 @@ export function isMapTile(value: unknown): value is MapTile {
     isGeometryList(value.roads) &&
     isGeometryList(value.buildings) &&
     isGeometryList(value.ground) &&
-    isGeometryList(value.water)
+    isGeometryList(value.water) &&
+    isTreeList(value.trees) &&
+    isFurnitureList(value.furniture)
   );
 }
 

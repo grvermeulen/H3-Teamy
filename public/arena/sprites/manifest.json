@@ -144,5 +144,42 @@
       "pixelSize": 51,
       "frames": 8
     }
+  },
+  "props": {
+    "treeSmall": {
+      "file": "/arena/sprites/tree-small.png",
+      "lengthMetres": 6,
+      "widthMetres": 6,
+      "pixelWidth": 96,
+      "pixelHeight": 96
+    },
+    "treeLarge": {
+      "file": "/arena/sprites/tree-large.png",
+      "lengthMetres": 10,
+      "widthMetres": 10,
+      "pixelWidth": 160,
+      "pixelHeight": 160
+    },
+    "lamp": {
+      "file": "/arena/sprites/furniture-lamp.png",
+      "lengthMetres": 1,
+      "widthMetres": 0.6,
+      "pixelWidth": 32,
+      "pixelHeight": 19
+    },
+    "bench": {
+      "file": "/arena/sprites/furniture-bench.png",
+      "lengthMetres": 1.8,
+      "widthMetres": 0.6,
+      "pixelWidth": 58,
+      "pixelHeight": 19
+    },
+    "busStop": {
+      "file": "/arena/sprites/furniture-busstop.png",
+      "lengthMetres": 3,
+      "widthMetres": 1.5,
+      "pixelWidth": 96,
+      "pixelHeight": 48
+    }
   }
 }

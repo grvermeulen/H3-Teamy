@@ -21,7 +21,9 @@ documented as their PRs land. Design: `docs/superpowers/specs/2026-09-03-city-ar
   (`a, b, classIndex, nameIndex, oneway, lengthUnits`), class and name lookup tables.
 - `tile_x_y.json` — roads (`points` centre line, `roadClass`, optional `name`), buildings (`points`
   outer ring, `levels`, optional `landmark`), ground (`points`, `kind`: `grass|field|forest`), water
-  (`points`). Coordinates are integers in 0.25 m units; north is negative y.
+  (`points`), and since Plan 9b trees (`[x, y, size]`, size 0 = 6 m canopy, 1 = 10 m) and street
+  furniture (`[x, y, kind, headingDeg]`, kind `lamp|bench|busStop`) — points, each in the one tile
+  whose own rectangle holds it. Coordinates are integers in 0.25 m units; north is negative y.
 - Source: OpenStreetMap via Overpass, licence ODbL. The asset is a derived database; the app shows
   "Kaart © OpenStreetMap-bijdragers".
 
@@ -46,7 +48,9 @@ documented as their PRs land. Design: `docs/superpowers/specs/2026-09-03-city-ar
    matter most; raising `TERRAIN_SIMPLIFY_TOLERANCE_M` (coarser ground/water polygons) helps
    less. Record the change in the spec.
 4. Regenerating a shipped map — bump `MAP_VERSION` in `src/lib/cityArena/constants.ts`, build into the
-   new folder, delete the old folder in the same PR.
+   new folder (`npx tsx scripts/arena/build-map.ts --out=public/arena/map/<version>`), delete the old
+   folder in the same PR (done for v2 on 2026-09-10; the Overpass cache in `.cache/arena/` is
+   per checkout, so a fresh worktree fetches all five queries again, a few minutes).
 5. `npm run arena:build-map:check` — validates and reports sizes without writing (used by the nightly
    map-freshness job planned for PR 7).
 
@@ -462,3 +466,52 @@ two new ammo counts sit past the original player row, so an older row still deco
   generated with ElevenLabs behind synth tones.
 - **Still open after 9a.** How the kinds drive and how the sprites read on a phone — the owner's
   eyes; every number lives in the two tables.
+
+## Map (Plan 9b — trees and street furniture)
+
+The map half of Plan 9 (`docs/superpowers/plans/2026-09-10-city-arena-plan-9-world-enrichment.md`,
+Tasks 7, 8 and 10). The asset is **v2** now (`MAP_VERSION`); `public/arena/map/v1/` is deleted,
+because the tiles are served immutable and a rebuilt tile needs a new path.
+
+- **Where the trees come from** (`mapBuild/overpassQueries.ts` `buildSceneryQuery`,
+  `mapBuild/vegetation.ts`, `mapBuild/scenery.ts`). A fifth Overpass query fetches `natural=tree`
+  nodes, `natural=tree_row` ways and the three furniture kinds (`highway=street_lamp`,
+  `amenity=bench`, `highway=bus_stop`) within `SCENERY_RADIUS_M` (the building radius, 1500 m) of
+  each zone centre. The ground polygons grow the rest: `treeBedFor` gives a forest or wood one tree
+  per 80 m², scrub one small tree per 160 m², a park one per 400 m², and fields, meadows, lawns and
+  pitches none. `scatterTrees` puts one tree per grid cell of that area, jittered by `cellNoise` — a
+  hash of the cell, so the scatter is deterministic and anchored to the world: two polygons over the
+  same ground agree, and a polygon cut at a tile edge scatters exactly as the whole would. A row
+  gets a tree every 8 m, both ends included. Every candidate is cleared of roads (the surface plus
+  `TREE_ROAD_CLEARANCE_M` 3 m past the edge for a scattered tree, the surface alone for a mapped
+  one), buildings and water — `indexObstacles` over a build-time `gridIndex.ts` — and `thinTrees`
+  then drops any tree within 3 m of an earlier one, where the order is the priority: mapped trees
+  first, then the scattered ones nearest a zone centre first.
+- **Into the tiles** (`placeScenery`). Trees and furniture are points, so each lands in the one
+  tile whose _own_ rectangle holds it; the 20 m overlap plays no part, and a chunk at a tile border
+  still paints the neighbour's trees because `tilesTouching` pulls both tiles in. Per tile the
+  first `MAX_TREES_PER_TILE` (4000) and `MAX_FURNITURE_PER_TILE` (1500) stay, in priority order,
+  so what a cap drops is the far countryside. Furniture turns to its nearest road within 30 m
+  (`alignToRoad`, whole degrees). `MapTile` has both fields optional, `isMapTile` takes their
+  absence and `decodeTile` gives `[]`, so a tile built before this still decodes. The metre sizes
+  live in `world/mapTypes.ts`: `TREE_CANOPY_M` 6 and 10 m by `TreeSize`, `FURNITURE_SIZE_M` (lamp
+  1 × 0.6, bench 1.8 × 0.6, bus stop 3 × 1.5). The build report prints what stands. This build:
+  78,316 (of 290,619 placed; 13 of 35 tiles sit at the cap) trees (8,266 mapped) and 388 (297 benches, 74 bus stops, 17 lamps) pieces of furniture, the fullest tile at
+  4000 trees; the largest tile (`tile_4_2.json`) is 223.7 KB gzipped and the whole
+  asset 1529.2 KB, under the 512 KB and 4 MB guardrails.
+- **On screen** (`render/drawScenery.ts`, called from `paintChunk` between the buildings and the
+  labels: furniture first, then every tree's shadow, then every canopy, so no canopy is darkened
+  by its neighbour's shadow). The props ship in the manifest's `props` record (`z.partialRecord`
+  over `PROP_KEYS`: `treeSmall`, `treeLarge`, `lamp`, `bench`, `busStop`), packed by the sprite
+  script onto their metre boxes — a canopy at 16 px/m (96 and 160 px), furniture at 32 px/m with
+  the long side along the image's x axis. A canopy is drawn turned by an angle from its own
+  position, so a wood does not tile, over a shadow disc offset 1.2 m to the south-east; a piece of
+  furniture is turned to its heading. Without art a tree is a flat disc in `TREE_CANOPY_FILL` and
+  the furniture a shape in `FURNITURE_FILL`. The sources (SpriteCook, gpt-image-2) are credited in
+  `public/arena/sprites/CREDITS.md`; `check-sprites` caps a prop at 96 KB.
+- **Solid trunks** (`world/collisionGrid.ts`). Each tree adds a `TRUNK_M` 0.35 m square as an
+  obstacle of kind `tree`: a car's hull circle and a walker stop at the trunk and pass under the
+  canopy, while `firstBuildingHit` keeps ignoring it, so bullets fly through a wood. Furniture
+  blocks nothing.
+- **Still open.** How a wood feels to drive through and whether 4000 trees per tile is the right
+  cap — the owner's drive; every number is a named constant.

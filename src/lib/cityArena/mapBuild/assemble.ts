@@ -44,6 +44,8 @@ import {
   type ProjectedGround,
   type ProjectedWater,
 } from "./tiles";
+import { buildScenery, placeScenery, type SceneryCounts } from "./scenery";
+import { treeBedFor } from "./vegetation";
 import {
   buildZones,
   indexObstacles,
@@ -52,12 +54,14 @@ import {
   type ZoneCentre,
 } from "./zones";
 
-/** Overpass responses for the four query stages plus configuration. */
+/** Overpass responses for the five queries plus configuration. */
 export type AssembleInput = {
   landmarkOsm: OverpassJson;
   roadsOsm: OverpassJson;
   areasOsm: OverpassJson;
   buildingsOsm: OverpassJson;
+  /** Mapped trees, tree rows and street furniture (Plan 9b). */
+  sceneryOsm: OverpassJson;
   config: LandmarkConfig[];
   generatedAt: string;
 };
@@ -70,6 +74,8 @@ export type AssembledMap = {
   /** Landmark keys with no building after attachment and footprint synthesis — rendered
    * as labels only (spec §3.2). */
   unattachedLandmarks: string[];
+  /** What the tiles hold after the per-tile caps, for the build report. */
+  scenery: SceneryCounts;
 };
 
 /**
@@ -302,6 +308,7 @@ function buildStaticGeometry(
     .map((feature) => ({
       ring: ringToMetres(feature.ring, TERRAIN_SIMPLIFY_TOLERANCE_M),
       kind: feature.kind,
+      bed: treeBedFor(feature.tags),
     }))
     .filter((feature) => feature.ring.length >= 3);
 
@@ -360,14 +367,20 @@ export function assembleMap(input: AssembleInput): AssembledMap {
   );
 
   const bounds = regionBoundsMetres();
-  const tiles = buildTiles(
-    bounds,
-    renderRoads(ways, nodeCoords),
-    keptBuildings,
+  const rendered = renderRoads(ways, nodeCoords);
+  const scenery = buildScenery({
+    osm: input.sceneryOsm,
     ground,
-    water,
-  );
+    roads: rendered,
+    solids: [
+      ...keptBuildings.map((building) => building.ring),
+      ...water.map((feature) => feature.ring),
+    ],
+    keepNear: zoneCentres.map((zone) => zone.center),
+  });
+  const tiles = buildTiles(bounds, rendered, keptBuildings, ground, water);
+  const counts = placeScenery(tiles, bounds, scenery);
 
   const index = buildIndex(input, landmarks, tiles, zones, bounds);
-  return { index, roads, tiles, unattachedLandmarks };
+  return { index, roads, tiles, unattachedLandmarks, scenery: counts };
 }

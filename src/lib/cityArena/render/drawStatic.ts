@@ -7,6 +7,7 @@ import type { DecodedRoad, DecodedTile } from "../world/decode";
 import type { GroundKind, LandmarkStyle } from "../world/mapTypes";
 import type { Point } from "../world/projection";
 import type { RasterContext } from "./canvasTypes";
+import { paintFurniture, paintTrees } from "./drawScenery";
 import {
   BUILDING_STROKE,
   CENTRE_LINE_CLASSES,
@@ -314,14 +315,16 @@ function tilesTouching(tiles: DecodedTile[], chunkRect: Rect): DecodedTile[] {
 /**
  * Paints everything static inside `chunkRect` at `zoom` px/m into a context that maps metres to
  * pixels. Each layer runs once over every touching tile's geometry (ground, then water, then
- * pavements, road surfaces and centre lines, then buildings, then labels) rather than painting
+ * pavements, road surfaces and centre lines, then buildings, street furniture, trees, then
+ * labels) rather than painting
  * every layer of one tile before moving to the next — `tilesTouching` pulls in neighbouring
  * tiles' overlap geometry, and painting per tile let a later tile's ground or road fill
  * overwrite an earlier tile's water or centre line right at the shared border.
  *
  * Every surface layer — the chunk background, ground, water, pavement and road — takes a
  * repeating texture from `sprites` when one has loaded, and falls back to its flat palette
- * colour when that texture is missing. Buildings, centre lines and labels stay flat colour.
+ * colour when that texture is missing; furniture and trees draw their prop art the same way,
+ * flat shapes until it lands. Buildings, centre lines and labels stay flat colour.
  */
 export function paintChunk(
   context: RasterContext,
@@ -357,6 +360,8 @@ export function paintChunk(
   paintCentreLines(context, roads);
   for (const tile of touching)
     paintBuildings(context, tile, chunkRect, landmarks);
+  paintFurniture(context, touching, chunkRect, sprites.props);
+  paintTrees(context, touching, chunkRect, sprites.props);
   for (const tile of touching)
     paintLabels(context, tile, chunkRect, zoom, landmarks);
 }

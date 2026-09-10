@@ -14,6 +14,9 @@ export const BUILDING_RADIUS_M = 1500;
 /** Service roads (parking access) are fetched within this radius of each zone centre. */
 export const SERVICE_ROAD_RADIUS_M = 500;
 
+/** Mapped trees and street furniture are fetched within this radius of each zone centre. */
+export const SCENERY_RADIUS_M = BUILDING_RADIUS_M;
+
 const HEADER = "[out:json][timeout:300];";
 const OUTPUT = "out body;\n>;\nout skel qt;";
 
@@ -59,6 +62,22 @@ export function buildAreasQuery(): string {
     `nwr["leisure"~"^(park|pitch)$"](${OVERPASS_BBOX});`,
     `nwr["natural"~"^(wood|scrub)$"](${OVERPASS_BBOX});`,
   ]);
+}
+
+/** Mapped trees, tree rows, street lamps, benches and bus stops near each zone centre (Plan 9b). */
+export function buildSceneryQuery(centres: LatLon[]): string {
+  return wrapUnion(
+    centres.flatMap((centre) => {
+      const around = aroundClause(SCENERY_RADIUS_M, centre);
+      return [
+        `node["natural"="tree"]${around};`,
+        `way["natural"="tree_row"]${around};`,
+        `node["highway"="street_lamp"]${around};`,
+        `node["amenity"="bench"]${around};`,
+        `node["highway"="bus_stop"]${around};`,
+      ];
+    }),
+  );
 }
 
 /** Buildings near each zone centre plus explicitly listed landmark ways/relations. */

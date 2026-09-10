@@ -1,4 +1,9 @@
-import type { GroundKind, LandmarkStyle, RoadClass } from "../world/mapTypes";
+import type {
+  FurnitureKind,
+  GroundKind,
+  LandmarkStyle,
+  RoadClass,
+} from "../world/mapTypes";
 
 /**
  * Ground fills; `urban` is also the chunk background where no polygon exists, so it covers most
@@ -72,6 +77,19 @@ export const LANDMARK_FILL: Record<LandmarkStyle, string> = {
   pool: "#2f7fb5",
   campus: "#3f8552",
   cafe: "#b8702c",
+};
+/** Canopy fill by tree size class: the flat stand-in for the tree art, a shade off the forest ground. */
+export const TREE_CANOPY_FILL: readonly [string, string] = [
+  "#3d6a2c",
+  "#345f28",
+];
+/** The shadow a canopy throws to its south-east. */
+export const TREE_SHADOW = "rgba(0,0,0,0.3)";
+/** Flat stand-ins for the furniture art, by kind: galvanised steel, weathered wood, a glass roof. */
+export const FURNITURE_FILL: Record<FurnitureKind, string> = {
+  lamp: "#9aa0a6",
+  bench: "#8b6a43",
+  busStop: "#5b6770",
 };
 /** Label ink colour, light now that it is read against dark asphalt and roofs. */
 export const LABEL_FILL = "#e8e4dc";

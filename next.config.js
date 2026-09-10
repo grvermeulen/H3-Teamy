@@ -11,7 +11,7 @@ const nextConfig = {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
   },
   /**
-   * Map tiles are content-versioned by path (`/arena/map/v1/...`) and radio tracks carry a
+   * Map tiles are content-versioned by path (`/arena/map/<version>/...`) and radio tracks carry a
    * content hash in their name, so both can be cached forever.
    */
   async headers() {
