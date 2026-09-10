@@ -7,6 +7,7 @@ import {
   NO_SPRITES,
   parseSpriteManifest,
   surfaceFill,
+  hasOwnVehicleArt,
   vehicleSpriteFor,
   type SurfaceTexture,
   type VehicleSprite,
@@ -136,17 +137,43 @@ describe("vehicleSpriteFor", () => {
   };
 
   it("picks the tint for the car's colour, wrapping past the last one", () => {
-    expect(vehicleSpriteFor(sprite, 0)).toBe(tinted[0]);
-    expect(vehicleSpriteFor(sprite, 1)).toBe(tinted[1]);
-    expect(vehicleSpriteFor(sprite, 2)).toBe(tinted[0]);
+    expect(vehicleSpriteFor({ car: sprite }, "sedan", 0)).toBe(tinted[0]);
+    expect(vehicleSpriteFor({ car: sprite }, "sedan", 1)).toBe(tinted[1]);
+    expect(vehicleSpriteFor({ car: sprite }, "sedan", 2)).toBe(tinted[0]);
   });
 
   it("falls back to the untinted art when no tint could be built", () => {
     const untinted: VehicleSprite = { base: sprite.base, tinted: [] };
-    expect(vehicleSpriteFor(untinted, 3)).toBe(sprite.base);
+    expect(vehicleSpriteFor({ car: untinted }, "sedan", 3)).toBe(sprite.base);
   });
 
   it("has nothing to draw when the sprite has not loaded", () => {
-    expect(vehicleSpriteFor(NO_SPRITES.car, 0)).toBeUndefined();
+    expect(
+      vehicleSpriteFor({ car: NO_SPRITES.car }, "sedan", 0),
+    ).toBeUndefined();
+  });
+});
+
+describe("vehicleSpriteFor by kind", () => {
+  const own: VehicleSprite = {
+    base: document.createElement("canvas"),
+    tinted: [],
+  };
+  const sedan: VehicleSprite = {
+    base: document.createElement("canvas"),
+    tinted: [document.createElement("canvas")],
+  };
+
+  it("prefers a kind's own art, uncoloured when it keeps its own colours", () => {
+    const art = { car: sedan, vehicles: { sedan, bus: own } };
+    expect(vehicleSpriteFor(art, "bus", 3)).toBe(own.base);
+    expect(hasOwnVehicleArt(art, "bus")).toBe(true);
+  });
+
+  it("borrows the sedan's tinted art for a kind without its own, and says so", () => {
+    const art = { car: sedan, vehicles: { sedan } };
+    expect(vehicleSpriteFor(art, "compact", 0)).toBe(sedan.tinted[0]);
+    expect(hasOwnVehicleArt(art, "compact")).toBe(false);
+    expect(vehicleSpriteFor(undefined, "compact", 0)).toBeUndefined();
   });
 });

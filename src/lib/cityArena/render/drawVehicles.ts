@@ -17,7 +17,7 @@ import {
   POLICE_LIGHT_RED,
   PLAYER_RING,
 } from "./palette";
-import { vehicleSpriteFor, type VehicleSprite } from "./sprites";
+import { hasOwnVehicleArt, vehicleSpriteFor, type VehicleArt } from "./sprites";
 
 /** Window glass size along the body, metres. */
 const WINDOW_LENGTH_M = 1.4;
@@ -168,7 +168,9 @@ function drawPoliceLights(
 
 /**
  * One car's body: the sprite when its art has loaded, else the vector body it was drawn as
- * before. A wreck stays a dark slab either way — the sprite is an intact sedan.
+ * before. A wreck stays a dark slab either way — the sprites are intact cars. The vector light
+ * bar flashes over a police car only while it borrows the sedan's art or has none; its own
+ * sprite carries the bar.
  */
 function drawBody(
   context: RasterContext,
@@ -176,6 +178,7 @@ function drawBody(
   zoom: number,
   tick: number,
   sprite: CanvasImageSource | undefined,
+  ownArt: boolean,
 ): void {
   if (vehicle.wrecked) {
     fillLocalRect(
@@ -191,7 +194,8 @@ function drawBody(
   }
   if (sprite) drawSpriteBody(context, vehicle, sprite, zoom);
   else drawVectorBody(context, vehicle, zoom);
-  if (vehicle.kind === "police") drawPoliceLights(context, vehicle, zoom, tick);
+  if (vehicle.kind === "police" && !ownArt)
+    drawPoliceLights(context, vehicle, zoom, tick);
 }
 
 /** Grey puffs trailing behind a damaged car, drifting with the tick. */
@@ -250,7 +254,7 @@ export function drawVehicle(
   vehicle: VehicleState,
   tick: number,
   occupied: boolean,
-  sprite?: VehicleSprite,
+  art?: VehicleArt,
 ): void {
   const [x, y] = worldToScreen(camera, viewport, [vehicle.x, vehicle.y]);
   context.save();
@@ -261,7 +265,8 @@ export function drawVehicle(
     vehicle,
     camera.zoom,
     tick,
-    vehicleSpriteFor(sprite, vehicle.colour),
+    vehicleSpriteFor(art, vehicle.kind, vehicle.colour),
+    hasOwnVehicleArt(art, vehicle.kind),
   );
   if (!vehicle.wrecked && vehicle.health < smokeHealthOf(vehicle.kind))
     drawSmoke(context, vehicle, camera.zoom, tick);
@@ -277,7 +282,7 @@ export function drawVehicles(
   vehicles: VehicleState[],
   tick: number,
   occupiedId: number | null,
-  sprite?: VehicleSprite,
+  art?: VehicleArt,
 ): void {
   const view = visibleRect(camera, viewport);
   for (const vehicle of vehicles) {
@@ -294,7 +299,7 @@ export function drawVehicles(
       vehicle,
       tick,
       vehicle.id === occupiedId,
-      sprite,
+      art,
     );
   }
 }

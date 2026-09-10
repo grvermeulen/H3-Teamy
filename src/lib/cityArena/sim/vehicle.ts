@@ -168,7 +168,7 @@ export const SMOKE_HEALTH_SHARE = 0.4;
 /** Below this health one of the original kinds smokes (spec §5). */
 export const SMOKE_HEALTH = VEHICLE_MAX_HEALTH * SMOKE_HEALTH_SHARE;
 /** Number of body colours the render palette offers; `colour` stays below it. */
-export const VEHICLE_COLOUR_COUNT = 6;
+export const VEHICLE_COLOUR_COUNT = 10;
 
 /** Body length of a kind, metres. */
 export function lengthOf(kind: VehicleKind): number {

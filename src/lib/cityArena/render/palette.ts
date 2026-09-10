@@ -94,7 +94,7 @@ export const PLAYER_FILL = "#f5f5f5";
 export const PLAYER_RING = "#e11d48";
 /** Zone boundary ring. */
 export const ZONE_RING = "rgba(29,78,216,0.7)";
-/** Car body colours indexed by `VehicleState.colour` (six entries, matching `VEHICLE_COLOUR_COUNT`). */
+/** Car body colours indexed by `VehicleState.colour` (ten entries, matching `VEHICLE_COLOUR_COUNT`). */
 export const CAR_BODY_COLOURS: string[] = [
   "#c0392b",
   "#2e86de",
@@ -102,6 +102,10 @@ export const CAR_BODY_COLOURS: string[] = [
   "#27ae60",
   "#8e44ad",
   "#ecf0f1",
+  "#e67e22",
+  "#16a085",
+  "#7f8c8d",
+  "#2c3e50",
 ];
 /** Car window glass. */
 export const CAR_WINDOW = "#1b2631";

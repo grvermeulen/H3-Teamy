@@ -32,10 +32,24 @@ const manifest = {
       pixelWidth: 58,
       pixelHeight: 134,
     },
+    bus: {
+      file: "/arena/sprites/bus.png",
+      lengthMetres: 12,
+      widthMetres: 2.5,
+      pixelWidth: 80,
+      pixelHeight: 384,
+      tint: false,
+    },
   },
   people: {
     player: {
       file: "/arena/sprites/person.png",
+      radiusMetres: 0.4,
+      pixelSize: 51,
+      frames: 8,
+    },
+    ped1: {
+      file: "/arena/sprites/ped1.png",
       radiusMetres: 0.4,
       pixelSize: 51,
       frames: 8,
@@ -136,6 +150,38 @@ describe("createSpriteStore", () => {
     });
     await store.load();
     expect(store.current().car?.tinted).toHaveLength(CAR_BODY_COLOURS.length);
+  });
+
+  it("loads every kind's art, tinting only what the manifest says is tintable, and every look", async () => {
+    const store = createSpriteStore({
+      canvasFactory,
+      loadImage,
+      fetchImpl: fakeFetch(manifest),
+    });
+    await store.load();
+    const sprites = store.current();
+    expect(sprites.vehicles?.sedan).toBe(sprites.car);
+    expect(sprites.vehicles?.bus?.tinted).toEqual([]);
+    expect(sprites.vehicles?.bus?.base).toBeDefined();
+    expect(sprites.people?.player).toBe(sprites.player);
+    expect(sprites.people?.ped1?.frames).toBe(8);
+  });
+
+  it("keeps the kinds and looks whose art did load when one image is missing", async () => {
+    const store = createSpriteStore({
+      canvasFactory,
+      fetchImpl: fakeFetch(manifest),
+      loadImage: (src) =>
+        src.includes("bus") || src.includes("ped1")
+          ? Promise.reject(new Error("missing"))
+          : loadImage(src),
+    });
+    await store.load();
+    expect(store.current().vehicles?.bus).toBeUndefined();
+    expect(store.current().vehicles?.sedan).toBeDefined();
+    expect(store.current().people?.ped1).toBeUndefined();
+    expect(store.current().people?.player).toBeDefined();
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(2);
   });
 
   it("fetches the manifest once however often load is called", async () => {

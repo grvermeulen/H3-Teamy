@@ -27,7 +27,7 @@ import {
   type DrawStats,
   type WorldDrawSource,
 } from "./drawWorld";
-import type { PersonSprite, VehicleSprite } from "./sprites";
+import type { PersonSprite, PersonSprites, VehicleArt } from "./sprites";
 
 /** A rectangle of the canvas (CSS px) rendered through one camera — several of these make a split screen. */
 export type SceneViewport = {
@@ -55,7 +55,10 @@ export type Scene = {
   /** Screen shake for this frame, in pixels; absent or zero draws the scene where it is. */
   shake?: { x: number; y: number };
   /** Car sprite, absent until its art has loaded — cars fall back to the vector body. */
-  carSprite?: VehicleSprite;
+  /** The vehicle art: every kind's sprite, and the sedan's for the kinds without one. */
+  vehicleArt?: VehicleArt;
+  /** The pedestrians' and officers' strips by look. */
+  peopleSprites?: PersonSprites;
   /** Player character art, absent until it has loaded — the player falls back to the circle. */
   playerSprite?: PersonSprite;
 };
@@ -147,9 +150,17 @@ export function renderScene(
     scene.vehicles,
     scene.tick,
     localVehicleId(scene),
-    scene.carSprite,
+    scene.vehicleArt,
   );
-  drawPeople(context, camera, size, scene.peds, scene.cops);
+  drawPeople(
+    context,
+    camera,
+    size,
+    scene.peds,
+    scene.cops,
+    scene.peopleSprites,
+    scene.tick,
+  );
   drawBullets(context, camera, size, scene.bullets);
   drawEffects(context, camera, size, scene.effects, scene.tick);
   drawPlayerLook(context, camera, size, scene);

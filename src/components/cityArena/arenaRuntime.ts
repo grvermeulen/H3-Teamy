@@ -292,7 +292,8 @@ function buildScene(
     aimScreen: runtime.diedAtMs === null ? aimScreen : null,
     pushIn: deathPhase(runtime, nowMs)?.pushIn ?? 1,
     shake: shakeOffset(runtime.feedback, state.tick),
-    carSprite: session.sprites().car,
+    vehicleArt: session.sprites(),
+    peopleSprites: session.sprites().people,
     playerSprite: session.sprites().player,
   };
 }
