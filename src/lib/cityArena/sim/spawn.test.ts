@@ -1,3 +1,4 @@
+import { VEHICLE_COLOUR_COUNT } from "./vehicle";
 import { describe, expect, it } from "vitest";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
@@ -11,6 +12,7 @@ import {
   shuffle,
   spawnParkedCars,
   zoneParkingSpots,
+  PARKED_CAR_KINDS,
 } from "./spawn";
 
 /** Twenty spawn nodes 10 m apart along y = 0 (40 units per node). */
@@ -109,8 +111,8 @@ describe("spawn", () => {
       expect(
         Math.hypot(car.x - avoid[0], car.y - avoid[1]),
       ).toBeGreaterThanOrEqual(8);
-      expect(["compact", "sedan", "sport"]).toContain(car.kind);
-      expect(car.colour).toBeLessThan(6);
+      expect(PARKED_CAR_KINDS).toContain(car.kind);
+      expect(car.colour).toBeLessThan(VEHICLE_COLOUR_COUNT);
     }
     for (const first of campusCars) {
       for (const second of campusCars) {

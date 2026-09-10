@@ -16,9 +16,6 @@ const sharp = require("sharp");
 const TEXTURE_TILE_METRES = 8;
 const TEXTURE_TILE_PX = 128;
 
-// Car body size in metres, mirroring VEHICLE_LENGTH_M / VEHICLE_WIDTH_M in sim/vehicle.ts.
-const VEHICLE_LENGTH_M = 4.2;
-const VEHICLE_WIDTH_M = 1.8;
 // Vehicles are drawn straight into the device-pixel-ratio-scaled main canvas and rotated by
 // heading, so they get twice the ground texture's density as resampling headroom.
 const VEHICLE_PX_PER_METRE = 32;
@@ -56,13 +53,48 @@ const surfaceSources = {
   forest: "ground-forest.png",
   urban: "ground-urban.png",
 };
+// Vehicles by kind, mirroring VEHICLE_SPECS in sim/vehicle.ts: each source is a nose-up cut-out
+// packed onto its own metre box at VEHICLE_PX_PER_METRE. `tint: true` ships greyscale art the
+// renderer recolours from the palette; `tint: false` keeps the art's own colours — the police
+// striping, the bus livery, the tractor's green. A kind without art (compact, sport) draws the
+// sedan's.
 const vehicleSources = {
-  sedan: "car-sedan.png",
+  sedan: { file: "car-sedan.png", lengthM: 4.2, widthM: 1.8, tint: true },
+  police: {
+    file: "vehicle-police.png",
+    lengthM: 4.2,
+    widthM: 1.8,
+    tint: false,
+  },
+  van: { file: "vehicle-van.png", lengthM: 5, widthM: 2, tint: true },
+  pickup: { file: "vehicle-pickup.png", lengthM: 5.2, widthM: 1.9, tint: true },
+  bus: { file: "vehicle-bus.png", lengthM: 12, widthM: 2.5, tint: false },
+  oldtimer: {
+    file: "vehicle-oldtimer.png",
+    lengthM: 4.4,
+    widthM: 1.7,
+    tint: true,
+  },
+  tractor: {
+    file: "vehicle-tractor.png",
+    lengthM: 4,
+    widthM: 2.2,
+    tint: false,
+  },
 };
 // Character art: a horizontal strip of square frames, drawn facing down its own image so the
-// canvas can rotate it by the player's facing. One frame means a still character.
+// canvas can rotate it by the person's facing. One frame means a still character; a still
+// source is turned into an eight-frame walk here. `ped1`…`ped6` are the pedestrians' looks
+// (sim/peds.ts pedLook), `cop` the officers'.
 const personSources = {
   player: { file: "person-player.png", frames: 8 },
+  ped1: { file: "person-ped1.png", frames: 8 },
+  ped2: { file: "person-ped2.png", frames: 8 },
+  ped3: { file: "person-ped3.png", frames: 8 },
+  ped4: { file: "person-ped4.png", frames: 8 },
+  ped5: { file: "person-ped5.png", frames: 8 },
+  ped6: { file: "person-ped6.png", frames: 8 },
+  cop: { file: "person-cop.png", frames: 8 },
 };
 
 /**
@@ -71,7 +103,7 @@ const personSources = {
 function assertSourcesExist() {
   const files = [
     ...Object.values(surfaceSources),
-    ...Object.values(vehicleSources),
+    ...Object.values(vehicleSources).map((vehicle) => vehicle.file),
     ...Object.values(personSources).map((person) => person.file),
   ];
   for (const file of files) {
@@ -173,17 +205,18 @@ async function packCutout(file, pixelWidth, pixelHeight) {
     .toFile(path.join(outputDir, file));
 }
 
-/** Trims one vehicle sprite to its artwork and resizes it to the car's own metre box. */
-async function packVehicleSprite(file) {
-  const pixelWidth = Math.round(VEHICLE_WIDTH_M * VEHICLE_PX_PER_METRE);
-  const pixelHeight = Math.round(VEHICLE_LENGTH_M * VEHICLE_PX_PER_METRE);
-  await packCutout(file, pixelWidth, pixelHeight);
+/** Trims one vehicle sprite to its artwork and resizes it to its kind's own metre box. */
+async function packVehicleSprite(source) {
+  const pixelWidth = Math.round(source.widthM * VEHICLE_PX_PER_METRE);
+  const pixelHeight = Math.round(source.lengthM * VEHICLE_PX_PER_METRE);
+  await packCutout(source.file, pixelWidth, pixelHeight);
   return {
-    file: `${PUBLIC_BASE_PATH}/${file}`,
-    lengthMetres: VEHICLE_LENGTH_M,
-    widthMetres: VEHICLE_WIDTH_M,
+    file: `${PUBLIC_BASE_PATH}/${source.file}`,
+    lengthMetres: source.lengthM,
+    widthMetres: source.widthM,
     pixelWidth,
     pixelHeight,
+    tint: source.tint,
   };
 }
 
@@ -320,8 +353,8 @@ async function packSprites() {
   for (const [name, file] of Object.entries(surfaceSources))
     surfaces[name] = await packSurfaceTexture(file);
   const vehicles = {};
-  for (const [name, file] of Object.entries(vehicleSources))
-    vehicles[name] = await packVehicleSprite(file);
+  for (const [name, source] of Object.entries(vehicleSources))
+    vehicles[name] = await packVehicleSprite(source);
   const people = {};
   for (const [name, person] of Object.entries(personSources))
     people[name] = await packPersonSprite(person.file, person.frames);
@@ -343,7 +376,7 @@ function reportDone(manifest) {
     );
   for (const [name, vehicle] of Object.entries(manifest.vehicles))
     console.log(
-      `${name}: ${vehicle.file} ${vehicle.pixelWidth}×${vehicle.pixelHeight}px for ${vehicle.widthMetres}×${vehicle.lengthMetres} m`,
+      `${name}: ${vehicle.file} ${vehicle.pixelWidth}×${vehicle.pixelHeight}px for ${vehicle.widthMetres}×${vehicle.lengthMetres} m${vehicle.tint ? ", tinted" : ""}`,
     );
   for (const [name, person] of Object.entries(manifest.people))
     console.log(

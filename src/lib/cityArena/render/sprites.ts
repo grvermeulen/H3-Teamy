@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { VehicleKind } from "../sim/types";
+import { VEHICLE_KINDS } from "../sim/vehicle";
 import type { GroundKind } from "../world/mapTypes";
 import type { RasterContext } from "./canvasTypes";
 
@@ -12,13 +14,17 @@ export const SurfaceEntrySchema = z.object({
   tilePixels: z.number().int().positive(),
 });
 
-/** One vehicle sprite, drawn nose-up so the canvas can rotate it by heading. */
+/**
+ * One vehicle sprite, drawn nose-up so the canvas can rotate it by heading. `tint` says whether
+ * the art is greyscale for the palette to recolour, or keeps its own colours.
+ */
 export const VehicleEntrySchema = z.object({
   file: z.string(),
   lengthMetres: z.number().positive(),
   widthMetres: z.number().positive(),
   pixelWidth: z.number().int().positive(),
   pixelHeight: z.number().int().positive(),
+  tint: z.boolean().default(true),
 });
 
 /**
@@ -35,7 +41,10 @@ export const PersonEntrySchema = z.object({
 /**
  * Zod schema for `manifest.json`; runtime validation happens once per session. `surfaces` lists
  * every seamless texture flat, keyed as the build script writes them: the two road surfaces,
- * water, and one per {@link GroundKind}.
+ * water, and one per {@link GroundKind}. `vehicles` is a partial record over {@link VehicleKind},
+ * so art can land kind by kind but a key that is no kind fails the parse — which
+ * `arena:check-sprites` runs in CI, so a typo in the pack script never ships. `people` is keyed by
+ * look (`player`, `ped1`…`ped6`, `cop`) and stays open.
  */
 export const SpriteManifestSchema = z.object({
   version: z.literal(1),
@@ -48,8 +57,8 @@ export const SpriteManifestSchema = z.object({
     forest: SurfaceEntrySchema,
     urban: SurfaceEntrySchema,
   }),
-  vehicles: z.object({ sedan: VehicleEntrySchema }),
-  people: z.object({ player: PersonEntrySchema }),
+  vehicles: z.partialRecord(z.enum(VEHICLE_KINDS), VehicleEntrySchema),
+  people: z.record(z.string(), PersonEntrySchema),
 });
 
 /** Parsed sprite manifest, inferred from {@link SpriteManifestSchema} so the two cannot drift. */
@@ -67,11 +76,20 @@ export type SurfaceTexture = {
   tilePixels: number;
 };
 
-/** A decoded car sprite: the greyscale art plus one pre-tinted copy per body colour. */
+/**
+ * A decoded car sprite: the art plus one pre-tinted copy per body colour, or none at all for art
+ * that keeps its own colours.
+ */
 export type VehicleSprite = {
   base: CanvasImageSource;
   tinted: CanvasImageSource[];
 };
+
+/** Vehicle sprites by kind; a kind without art of its own draws the sedan's, tinted. */
+export type VehicleSprites = Partial<Record<VehicleKind, VehicleSprite>>;
+
+/** Character strips by look: `ped1`…`ped6` for the pedestrians (`pedLook`), `cop` for officers. */
+export type PersonSprites = Partial<Record<string, PersonSprite>>;
 
 /** The ground textures, one per {@link GroundKind}; each stays absent until its file decodes. */
 export type GroundTextures = Partial<Record<GroundKind, SurfaceTexture>>;
@@ -86,9 +104,15 @@ export type ArenaSprites = {
   pavement?: SurfaceTexture;
   water?: SurfaceTexture;
   ground?: GroundTextures;
+  /** The sedan's sprite: what every kind without art of its own is drawn with. */
   car?: VehicleSprite;
+  vehicles?: VehicleSprites;
   player?: PersonSprite;
+  people?: PersonSprites;
 };
+
+/** The slice of the sprites the vehicle painter reads. */
+export type VehicleArt = Pick<ArenaSprites, "car" | "vehicles">;
 
 /** A decoded character strip: the art plus the cell size and how many cells it holds. */
 export type PersonSprite = {
@@ -128,12 +152,50 @@ export function surfaceFill(
   return pattern;
 }
 
-/** The car sprite tinted for `colour`, the untinted art when no tint was built, else `undefined`. */
+/**
+ * True when `kind` has art of its own rather than borrowing the sedan's.
+ *
+ * @param art - The loaded sprites.
+ * @param kind - The vehicle kind.
+ * @returns Whether the kind's own sprite decoded.
+ */
+export function hasOwnVehicleArt(
+  art: VehicleArt | undefined,
+  kind: VehicleKind,
+): boolean {
+  return Boolean(art?.vehicles?.[kind]);
+}
+
+/**
+ * The image to draw a car with: its kind's art or the sedan's, tinted for `colour` when the art
+ * is tintable, the art itself when it keeps its own colours, and `undefined` with no art at all.
+ *
+ * @param art - The loaded sprites.
+ * @param kind - The vehicle kind.
+ * @param colour - The body colour index.
+ * @returns The image, or `undefined` for the vector body.
+ */
 export function vehicleSpriteFor(
-  sprite: VehicleSprite | undefined,
+  art: VehicleArt | undefined,
+  kind: VehicleKind,
   colour: number,
 ): CanvasImageSource | undefined {
+  const sprite = art?.vehicles?.[kind] ?? art?.car;
   if (!sprite) return undefined;
   if (sprite.tinted.length === 0) return sprite.base;
   return sprite.tinted[colour % sprite.tinted.length];
+}
+
+/**
+ * The character strip for a look, or `undefined` while its art has not loaded.
+ *
+ * @param people - The loaded strips by look.
+ * @param look - `ped1`…`ped6` or `cop`.
+ * @returns The strip, or `undefined`.
+ */
+export function personSpriteFor(
+  people: PersonSprites | undefined,
+  look: string,
+): PersonSprite | undefined {
+  return people?.[look];
 }

@@ -94,7 +94,7 @@ describe("drawVehicles", () => {
   it("draws the sprite over the body's metre box instead of the vector body", () => {
     const context = createFakeContext();
     const car = createVehicle(1, "sedan", [10, 10], 0, 0);
-    drawVehicle(context, camera, viewport, car, 0, false, sprite);
+    drawVehicle(context, camera, viewport, car, 0, false, { car: sprite });
     // The art is drawn nose-up, so it takes a quarter turn onto the car frame's forward axis.
     expect(context.calls).toContain("rotate(1.57)");
     expect(
@@ -108,7 +108,7 @@ describe("drawVehicles", () => {
   it("still flashes the light bars over a police car's sprite", () => {
     const context = createFakeContext();
     const police = createVehicle(2, "police", [10, 10], 0, 0);
-    drawVehicle(context, camera, viewport, police, 0, false, sprite);
+    drawVehicle(context, camera, viewport, police, 0, false, { car: sprite });
     expect(context.calls.some((call) => call.startsWith("drawImage"))).toBe(
       true,
     );
@@ -117,13 +117,27 @@ describe("drawVehicles", () => {
     );
   });
 
+  it("leaves the light bar to a police car's own art", () => {
+    const context = createFakeContext();
+    const police = createVehicle(3, "police", [0, 0], 0, 5);
+    drawVehicle(context, camera, viewport, police, 0, false, {
+      vehicles: { police: sprite },
+    });
+    expect(context.calls.some((call) => call.startsWith("drawImage("))).toBe(
+      true,
+    );
+    expect(
+      context.calls.filter((call) => call.startsWith("fillRect(")),
+    ).toEqual([]);
+  });
+
   it("keeps a wreck as one dark slab even once the sprite has loaded", () => {
     const context = createFakeContext();
     const wreck = {
       ...createVehicle(3, "sedan", [10, 10], 0, 0),
       wrecked: true,
     };
-    drawVehicle(context, camera, viewport, wreck, 0, false, sprite);
+    drawVehicle(context, camera, viewport, wreck, 0, false, { car: sprite });
     expect(context.calls.some((call) => call.startsWith("drawImage"))).toBe(
       false,
     );

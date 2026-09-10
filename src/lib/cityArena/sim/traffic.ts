@@ -50,10 +50,10 @@ export const AI_ROAD_CLASSES: RoadClass[] = [
   "residential",
   "living_street",
 ];
-/** Fewest ambient cars in a populated zone. */
-export const TRAFFIC_MIN_PER_ZONE = 6;
+/** Fewest ambient cars in a populated zone; the top-up refills to this. */
+export const TRAFFIC_MIN_PER_ZONE = 10;
 /** Most ambient cars in a populated zone. */
-export const TRAFFIC_MAX_PER_ZONE = 10;
+export const TRAFFIC_MAX_PER_ZONE = 16;
 /** Slowest ambient cruise speed. */
 export const TRAFFIC_MIN_SPEED_MPS = 8;
 /** Fastest ambient cruise speed. */
@@ -68,8 +68,28 @@ export const NODE_REACH_M = 4;
 export const TRAFFIC_PATH_AHEAD = 2;
 /** Fresh traffic keeps this distance from players. */
 export const TRAFFIC_SPAWN_MIN_FROM_PLAYER_M = 30;
-/** Kinds used by ambient traffic. */
-export const TRAFFIC_KINDS: VehicleKind[] = ["compact", "sedan", "sport"];
+/** Kinds ambient traffic is drawn from where a road class names no pool of its own. */
+export const TRAFFIC_KINDS: VehicleKind[] = [
+  "compact",
+  "sedan",
+  "van",
+  "pickup",
+];
+/**
+ * Kinds by road class: buses keep to through-roads, oldtimers to the quieter ones, and a sport
+ * car is never ambient traffic — it is the prize, parked.
+ */
+export const TRAFFIC_KINDS_BY_CLASS: Partial<Record<RoadClass, VehicleKind[]>> =
+  {
+    primary: ["compact", "sedan", "van", "pickup", "bus"],
+    secondary: ["compact", "sedan", "van", "pickup", "bus"],
+    tertiary: ["compact", "sedan", "oldtimer", "van", "pickup", "bus"],
+    unclassified: ["compact", "sedan", "oldtimer", "van", "pickup"],
+  };
+/** Chance that a car on an unclassified road — the countryside's — is a tractor. */
+export const TRACTOR_CHANCE = 0.3;
+/** The road class whose traffic includes tractors. */
+const TRACTOR_ROAD_CLASS: RoadClass = "unclassified";
 const SPAWN_ATTEMPTS = 20;
 const COIN_FLIP = 0.5;
 
@@ -265,6 +285,23 @@ function trafficRail(
   return { edge, direction, edgeT: random(), side: 1 };
 }
 
+/**
+ * A seeded kind for ambient traffic on a road of `roadClass`.
+ *
+ * @param roadClass - The road the car spawns on.
+ * @param random - The seeded generator.
+ * @returns The kind.
+ */
+export function pickTrafficKind(
+  roadClass: RoadClass,
+  random: () => number,
+): VehicleKind {
+  if (roadClass === TRACTOR_ROAD_CLASS && random() < TRACTOR_CHANCE)
+    return "tractor";
+  const pool = TRAFFIC_KINDS_BY_CLASS[roadClass] ?? TRAFFIC_KINDS;
+  return pool[Math.floor(random() * pool.length)] ?? "compact";
+}
+
 /** Spawns seeded ambient cars on through-roads, spaced from players, cars and the view. */
 export function spawnTraffic(
   zone: MapZone,
@@ -287,7 +324,7 @@ export function spawnTraffic(
   for (let attempt = 0; attempt < count * SPAWN_ATTEMPTS; attempt++) {
     if (cars.length >= count) break;
     const rail = trafficRail(graph, edges, random);
-    const kind = TRAFFIC_KINDS[Math.floor(random() * TRAFFIC_KINDS.length)];
+    const kind = pickTrafficKind(graph.edges[rail.edge].roadClass, random);
     const colour = Math.floor(random() * VEHICLE_COLOUR_COUNT);
     const cruise =
       TRAFFIC_MIN_SPEED_MPS +

@@ -94,7 +94,7 @@ export const PLAYER_FILL = "#f5f5f5";
 export const PLAYER_RING = "#e11d48";
 /** Zone boundary ring. */
 export const ZONE_RING = "rgba(29,78,216,0.7)";
-/** Car body colours indexed by `VehicleState.colour` (six entries, matching `VEHICLE_COLOUR_COUNT`). */
+/** Car body colours indexed by `VehicleState.colour` (ten entries, matching `VEHICLE_COLOUR_COUNT`). */
 export const CAR_BODY_COLOURS: string[] = [
   "#c0392b",
   "#2e86de",
@@ -102,6 +102,10 @@ export const CAR_BODY_COLOURS: string[] = [
   "#27ae60",
   "#8e44ad",
   "#ecf0f1",
+  "#e67e22",
+  "#16a085",
+  "#7f8c8d",
+  "#2c3e50",
 ];
 /** Car window glass. */
 export const CAR_WINDOW = "#1b2631";
@@ -149,6 +153,10 @@ export const PERSON_HEALTH = "#ef4444";
 /** Weapon pickup colours by weapon kind. */
 export const PICKUP_UZI = "#16a34a";
 export const PICKUP_SHOTGUN = "#f97316";
+/** Rifle pickup diamond. */
+export const PICKUP_RIFLE = "#0ea5e9";
+/** Bat pickup diamond. */
+export const PICKUP_BAT = "#a16207";
 /** Health pickup diamond. */
 export const PICKUP_HEALTH = "#22c55e";
 /** Health pickup cross. */

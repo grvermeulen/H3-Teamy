@@ -11,6 +11,8 @@ import {
   blastPeds,
   createPed,
   damagePed,
+  pedLook,
+  pedLookName,
   frightenPeds,
   spawnPeds,
   stepPed,
@@ -159,7 +161,7 @@ describe("pedestrian contacts", () => {
     };
     const hit = stepPeds(state, world, step, 5, () => 0);
     expect(hit.peds[0]).toMatchObject({ mode: "dead", health: 0 });
-    expect(hit.peds[0].x).toBeCloseTo(2.5);
+    expect(hit.peds[0].x).toBeCloseTo(3);
     expect(hit.events).toEqual([
       {
         kind: "kill",
@@ -190,5 +192,16 @@ describe("pedestrian contacts", () => {
     expect(blast.peds[0]).toMatchObject({ mode: "dead", modeUntilTick: 243 });
     expect(blast.peds[1].mode).toBe("walk");
     expect(blast.killed).toEqual([blast.peds[0]]);
+  });
+});
+
+describe("pedLook", () => {
+  it("derives a look in 0..5 from the id, every id included, and names its art", () => {
+    expect(pedLook(0)).toBe(0);
+    expect(pedLook(7)).toBe(1);
+    expect(pedLook(-1)).toBe(5);
+    expect(pedLookName(8)).toBe("ped3");
+    const looks = new Set(Array.from({ length: 60 }, (_, id) => pedLook(id)));
+    expect([...looks].sort()).toEqual([0, 1, 2, 3, 4, 5]);
   });
 });

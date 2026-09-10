@@ -1,4 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
+import type { VehicleKind } from "../sim/types";
+import { VEHICLE_KINDS } from "../sim/vehicle";
 import type { CanvasFactory } from "./canvasTypes";
 import { CAR_BODY_COLOURS } from "./palette";
 import {
@@ -8,10 +10,17 @@ import {
   type ArenaSprites,
   type GroundTextures,
   type PersonSprite,
+  type PersonSprites,
   type SpriteManifest,
   type SurfaceTexture,
   type VehicleSprite,
+  type VehicleSprites,
 } from "./sprites";
+
+/** One vehicle entry of the manifest. */
+type VehicleEntry = NonNullable<SpriteManifest["vehicles"][VehicleKind]>;
+/** One character entry of the manifest. */
+type PersonEntry = SpriteManifest["people"][string];
 
 /** Decodes one image URL; injectable so tests need no real network or `Image` decoding. */
 export type ImageLoader = (src: string) => Promise<CanvasImageSource>;
@@ -89,16 +98,22 @@ function tintSprite(
   return target.canvas;
 }
 
-/** The car sprite plus one copy per entry of {@link CAR_BODY_COLOURS}. */
+/** A vehicle sprite plus, for tintable art, one copy per entry of {@link CAR_BODY_COLOURS}. */
 function buildVehicleSprite(
   factory: CanvasFactory,
   image: CanvasImageSource,
-  manifest: SpriteManifest,
+  entry: VehicleEntry,
 ): VehicleSprite {
-  const { pixelWidth, pixelHeight } = manifest.vehicles.sedan;
   const tinted: CanvasImageSource[] = [];
+  if (!entry.tint) return { base: image, tinted };
   for (const colour of CAR_BODY_COLOURS) {
-    const copy = tintSprite(factory, image, pixelWidth, pixelHeight, colour);
+    const copy = tintSprite(
+      factory,
+      image,
+      entry.pixelWidth,
+      entry.pixelHeight,
+      colour,
+    );
     if (copy) tinted.push(copy);
   }
   return { base: image, tinted };
@@ -121,33 +136,71 @@ async function loadSurface(
   }
 }
 
-/** Loads the car sprite and its tints, or `undefined` when the file is missing. */
+/** Loads one vehicle sprite and its tints, or `undefined` when the file is missing. */
 async function loadVehicle(
   loadImage: ImageLoader,
   factory: CanvasFactory,
-  manifest: SpriteManifest,
+  entry: VehicleEntry,
 ): Promise<VehicleSprite | undefined> {
   try {
-    const image = await loadImage(manifest.vehicles.sedan.file);
-    return buildVehicleSprite(factory, image, manifest);
+    const image = await loadImage(entry.file);
+    return buildVehicleSprite(factory, image, entry);
   } catch (error: unknown) {
     reportSpriteFailure(error, "vehicle");
     return undefined;
   }
 }
 
-/** Loads the player's character strip, or `undefined` when the file is missing. */
+/** Loads every kind's sprite the manifest has; a kind whose file is missing stays on the sedan's art. */
+async function loadVehicles(
+  loadImage: ImageLoader,
+  factory: CanvasFactory,
+  manifest: SpriteManifest,
+): Promise<VehicleSprites> {
+  const entries = VEHICLE_KINDS.flatMap((kind) => {
+    const entry = manifest.vehicles[kind];
+    return entry ? [{ kind, entry }] : [];
+  });
+  const loaded = await Promise.all(
+    entries.map(({ entry }) => loadVehicle(loadImage, factory, entry)),
+  );
+  const vehicles: VehicleSprites = {};
+  entries.forEach(({ kind }, index) => {
+    const sprite = loaded[index];
+    if (sprite) vehicles[kind] = sprite;
+  });
+  return vehicles;
+}
+
+/** Loads one character strip, or `undefined` when the file is missing. */
 async function loadPerson(
   loadImage: ImageLoader,
-  manifest: SpriteManifest,
+  entry: PersonEntry,
 ): Promise<PersonSprite | undefined> {
-  const { file, pixelSize, frames } = manifest.people.player;
+  const { file, pixelSize, frames } = entry;
   try {
     return { image: await loadImage(file), pixelSize, frames };
   } catch (error: unknown) {
     reportSpriteFailure(error, "person");
     return undefined;
   }
+}
+
+/** Loads every look's strip; a look whose file is missing stays on its flat circle. */
+async function loadPeople(
+  loadImage: ImageLoader,
+  manifest: SpriteManifest,
+): Promise<PersonSprites> {
+  const entries = Object.entries(manifest.people);
+  const loaded = await Promise.all(
+    entries.map(([, entry]) => loadPerson(loadImage, entry)),
+  );
+  const people: PersonSprites = {};
+  entries.forEach(([look], index) => {
+    const sprite = loaded[index];
+    if (sprite) people[look] = sprite;
+  });
+  return people;
 }
 
 /** Loads the four ground textures; a texture that fails leaves its kind on the flat fill. */
@@ -169,27 +222,32 @@ async function loadAll(
   options: Required<SpriteStoreOptions>,
 ): Promise<ArenaSprites> {
   const manifest = await fetchManifest(options.fetchImpl, options.manifestPath);
-  const [road, pavement, water, ground, car, player] = await Promise.all([
+  const [road, pavement, water, ground, vehicles, people] = await Promise.all([
     loadSurface(options.loadImage, manifest.surfaces.road),
     loadSurface(options.loadImage, manifest.surfaces.pavement),
     loadSurface(options.loadImage, manifest.surfaces.water),
     loadGround(options.loadImage, manifest.surfaces),
-    loadVehicle(options.loadImage, options.canvasFactory, manifest),
-    loadPerson(options.loadImage, manifest),
+    loadVehicles(options.loadImage, options.canvasFactory, manifest),
+    loadPeople(options.loadImage, manifest),
   ]);
-  return { road, pavement, water, ground, car, player };
+  return {
+    road,
+    pavement,
+    water,
+    ground,
+    car: vehicles.sedan,
+    vehicles,
+    player: people.player,
+    people,
+  };
 }
 
 /** True when at least one sprite decoded, i.e. the renderer has something new to paint with. */
 function hasAnySprite(sprites: ArenaSprites): boolean {
   if (Object.values(sprites.ground ?? {}).some(Boolean)) return true;
-  return Boolean(
-    sprites.road ??
-    sprites.pavement ??
-    sprites.water ??
-    sprites.car ??
-    sprites.player,
-  );
+  if (Object.values(sprites.vehicles ?? {}).some(Boolean)) return true;
+  if (Object.values(sprites.people ?? {}).some(Boolean)) return true;
+  return Boolean(sprites.road ?? sprites.pavement ?? sprites.water);
 }
 
 /**

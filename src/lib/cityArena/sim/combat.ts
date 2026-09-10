@@ -39,7 +39,13 @@ import type {
   VehicleState,
   WorldInput,
 } from "./types";
-import { WEAPONS, consumeAmmo, cooldownTicks, hasAmmo } from "./weapons";
+import {
+  WEAPONS,
+  consumeAmmo,
+  cooldownTicks,
+  hasAmmo,
+  isMelee,
+} from "./weapons";
 import { exitVehicle } from "./boarding";
 import type { ArenaWorld } from "./arenaWorld";
 
@@ -77,7 +83,7 @@ type FireResult = {
   nextId: number;
 };
 
-/** Creates the pellets of one trigger pull and, for anything but the fist, its muzzle flash. */
+/** Creates the pellets of one trigger pull and, for anything but a melee weapon, its muzzle flash. */
 function fireShots(
   state: ArenaState,
   player: ArenaPlayerState,
@@ -102,17 +108,16 @@ function fireShots(
     random,
   ).slice(0, remainingCapacity);
   const muzzleId = state.nextId + shots.length;
-  const effects =
-    player.weapon === "fist"
-      ? state.effects
-      : addEffect(state.effects, {
-          id: muzzleId,
-          kind: "muzzle",
-          x: player.x,
-          y: player.y,
-          angle,
-          bornTick: tick,
-        });
+  const effects = isMelee(player.weapon)
+    ? state.effects
+    : addEffect(state.effects, {
+        id: muzzleId,
+        kind: "muzzle",
+        x: player.x,
+        y: player.y,
+        angle,
+        bornTick: tick,
+      });
   return { shots, effects, nextId: muzzleId + 1 };
 }
 

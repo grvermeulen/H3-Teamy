@@ -12,7 +12,7 @@ import {
   MAX_VEHICLES,
 } from "./limits";
 import type { ArenaPlayerState, ArenaState } from "./types";
-import { VEHICLE_MAX_HEALTH } from "./vehicle";
+import { healthMaxOf } from "./vehicle";
 import { PICKUP_RESPAWN_TICKS } from "./pickups";
 
 /** Records `message` when `condition` is false. */
@@ -109,7 +109,7 @@ function checkVehicles(
     );
     check(
       violations,
-      vehicle.health >= 0 && vehicle.health <= VEHICLE_MAX_HEALTH,
+      vehicle.health >= 0 && vehicle.health <= healthMaxOf(vehicle.kind),
       `vehicle ${vehicle.id} health out of range`,
     );
     check(

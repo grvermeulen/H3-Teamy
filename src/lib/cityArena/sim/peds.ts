@@ -30,7 +30,7 @@ import type {
 } from "./types";
 
 /** Living pedestrians kept per zone. */
-export const PEDS_PER_ZONE = 25;
+export const PEDS_PER_ZONE = 35;
 /** Walking speed on the pavement. */
 export const PED_WALK_SPEED_MPS = 1.4;
 /** Speed away from gunfire and explosions. */
@@ -71,6 +71,30 @@ function railOffset(graph: RailGraph, rail: RailPosition): number {
 }
 
 /** A healthy pedestrian standing on its rail, facing along it. */
+/** Looks a pedestrian can have; the art is `ped1`…`ped6` in the sprite manifest. */
+export const PED_LOOKS = 6;
+
+/**
+ * The look of a pedestrian, derived from its id so it costs nothing on the wire and every client
+ * agrees.
+ *
+ * @param id - The pedestrian's id.
+ * @returns A look index in `0..PED_LOOKS - 1`.
+ */
+export function pedLook(id: number): number {
+  return ((id % PED_LOOKS) + PED_LOOKS) % PED_LOOKS;
+}
+
+/**
+ * The sprite manifest key of a pedestrian's look.
+ *
+ * @param id - The pedestrian's id.
+ * @returns `ped1`…`ped6`.
+ */
+export function pedLookName(id: number): string {
+  return `ped${pedLook(id) + 1}`;
+}
+
 export function createPed(
   id: number,
   graph: RailGraph,

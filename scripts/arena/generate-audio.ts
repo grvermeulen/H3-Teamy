@@ -92,6 +92,16 @@ const PROMPTS: Record<
     text: "short dramatic low orchestral sting for a game over, no melody",
     seconds: 1.5,
   },
+  bat: {
+    text: "one swing of a wooden baseball bat and a dull heavy thud as it lands on a body, close microphone, short, no voices",
+    seconds: 0.6,
+    influence: LITERAL_INFLUENCE,
+  },
+  rifle: {
+    text: "single hunting rifle shot fired outdoors, sharp loud crack with a short echo off buildings, no reload, no voices",
+    seconds: 1.2,
+    influence: LITERAL_INFLUENCE,
+  },
 };
 
 /** True when the file exists. */

@@ -1,7 +1,9 @@
 import type { PickupState } from "../sim/types";
 import {
+  PICKUP_BAT,
   PICKUP_HEALTH,
   PICKUP_HEALTH_CROSS,
+  PICKUP_RIFLE,
   PICKUP_SHOTGUN,
   PICKUP_UZI,
 } from "./palette";
@@ -27,6 +29,8 @@ export function pickupBob(pickup: PickupState, tick: number): number {
 /** Colour used by a pickup diamond. */
 export function pickupColour(kind: PickupState["kind"]): string {
   if (kind === "health") return PICKUP_HEALTH;
+  if (kind === "rifle") return PICKUP_RIFLE;
+  if (kind === "bat") return PICKUP_BAT;
   return kind === "uzi" ? PICKUP_UZI : PICKUP_SHOTGUN;
 }
 

@@ -397,3 +397,61 @@ Two gaps left open by Plans 3b and 6, and one request from the owner.
   element (`data-testid="room-code"`) with a **Kopieer** button where the Clipboard API exists
   (**Gekopieerd** for two seconds after a copy; a clipboard failure is reported, not shown), and
   the zone name on the line under it.
+
+## Runtime (Plan 9a — cars, people and weapons)
+
+Plan 9 fills the city out; 9a is the simulation half (9b, the map half, adds trees and street
+furniture). Nothing here changes the netcode: kinds and weapons are appended in wire order and the
+two new ammo counts sit past the original player row, so an older row still decodes.
+
+- **Nine vehicle kinds** (`sim/vehicle.ts`). `VehicleSpec` gained `steerRateRadS`, `healthMax`,
+  `lengthM`, `widthM` and `massT`; the four originals keep every number they had, and `van`
+  (Bestelbus), `pickup`, `bus` (Stadsbus, 12 × 2.5 m, 220 health, 12 t), `oldtimer` and `tractor`
+  (Trekker, 8 m/s flat out) join them. `VEHICLE_KINDS` is the wire order: append, never reorder.
+  The hull is circles along the body — `hullLayout(kind)`, one per ~2 m at the radius the width
+  calls for, the originals' two at ±1.1 m and r 0.95 unchanged — used against walls and, in
+  `sim/collisions.ts`, against each other: the contact normal runs centre to centre, the overlap is
+  what the deepest pair of touching circles has to be pulled apart (a crossed pair included), and
+  push and impulse split by mass, so a bus shoves a compact. Impact damage splits the same way
+  (`sim/movement.ts`). People meet a kind's body rectangle grown by their radius and leave through
+  the nearer face, so someone clipped at the side steps aside and someone hit head-on is carried
+  in front — never pushed the length of a bus. `CAR_BODY_RADIUS_M` survives only as the clearance
+  the traffic AI, the spawns and the exit keep around a car.
+- **Where they appear** (`sim/spawn.ts`, `sim/traffic.ts`). `PARKED_CAR_KINDS` has six kinds;
+  traffic draws from `TRAFFIC_KINDS_BY_CLASS` — buses on primary/secondary/tertiary roads,
+  oldtimers on the quieter ones, never a sport car (the prize stays parked) — and
+  `pickTrafficKind` makes one car in three on an unclassified road a tractor (`TRACTOR_CHANCE`;
+  there is no point-to-ground lookup in the simulation, so the countryside is read from the road
+  class). Ten to sixteen ambient cars and thirty-five pedestrians per zone; `MAX_TRAFFIC` 20,
+  `MAX_PEDS` 60; `net/wire.test.ts` proves a world at every cap under `MAX_SNAPSHOT_BYTES`.
+- **Art** (`scripts/generate-arena-sprites.js`, `render/sprites.ts`, `render/loadSprites.ts`).
+  `vehicleSources` is a registry per kind with the kind's metre box and a `tint` flag — greyscale
+  art is tinted from `CAR_BODY_COLOURS` (ten now, `VEHICLE_COLOUR_COUNT` with it), liveried art
+  (police, bus, tractor) is drawn as is — and `personSources` lists the player, `ped1`…`ped6` and
+  `cop`, each a still that the script turns into an eight-frame walk. The manifest's `vehicles`
+  is a partial record over `VehicleKind` (a key that is no kind fails the parse, which
+  `check-sprites` runs in CI) and `people` an open record; `ArenaSprites` keeps `car` (the
+  sedan's) and `player`, and adds `vehicles` and `people`. `vehicleSpriteFor(art, kind, colour)` takes a kind's own art or the
+  sedan's; `hasOwnVehicleArt` is what lets `drawVehicles` leave the vector light bar off a police
+  car whose sprite carries one. Every size in the painter comes from the kind. Sources were
+  generated with SpriteCook (gpt-image-2, the sedan's prompt template and style snapshot,
+  `bg_mode: "transparent"`; one render needed `remove_background`) and are credited in
+  `public/arena/sprites/CREDITS.md`; `npm run arena:check-sprites` (`scripts/arena/check-sprites.ts`,
+  a CI step) fails on a manifest file that is missing, over its cap (64 KB, 96 KB for a vehicle of
+  8 m or more, 48 KB for a strip) or uncredited.
+- **People with faces** (`sim/peds.ts`, `render/drawPeople.ts`, `render/drawPersonSprite.ts`).
+  `pedLook(id)` is `id % PED_LOOKS` — nothing on the wire, every client agrees — and
+  `pedLookName` is the manifest key. The strip painter that drew the player now draws pedestrians
+  (walk speed from their mode) and cops (the `cop` strip) too, over the colour circle that keeps
+  them findable zoomed out; a body keeps the flat marker. The painter reads `PED_RADIUS_M` and
+  `PED_MAX_HEALTH` instead of its own copies.
+- **Two weapons** (`sim/weapons.ts`). **Knuppel** (`bat`: melee, 30 damage at 1.6 m, 1.5/s,
+  twenty swings, forty carried) and **Geweer** (`rifle`: 45 damage, 0.8/s, 70 m, 160 m/s, magazine
+  of ten, thirty carried). `AmmoState` is `Record<MagazineWeapon, number>` and the helpers work
+  from `MAGAZINE_WEAPONS`; `isMelee` is what withholds the muzzle flash. `WEAPON_ORDER` runs fist,
+  bat, pistol, uzi, shotgun, rifle; keys 4 and 5 (`SLOT_WEAPONS`) reach the new pair and the
+  selector gives up after twelve presses. Pickups: six gun spots rotating uzi/shotgun/rifle, four
+  health, then two bats where spots remain (`MAX_PICKUPS` 18). Clips `bat` and `rifle` were
+  generated with ElevenLabs behind synth tones.
+- **Still open after 9a.** How the kinds drive and how the sprites read on a phone — the owner's
+  eyes; every number lives in the two tables.

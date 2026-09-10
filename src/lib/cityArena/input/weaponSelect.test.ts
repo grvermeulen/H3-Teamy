@@ -62,8 +62,9 @@ describe("createWeaponSelector", () => {
     const selector = createWeaponSelector();
     selector.request("shotgun");
     const { trace } = simulate(selector, "pistol", 40, ["shotgun"]);
-    expect(trace.slice(0, 16).filter(Boolean)).toHaveLength(8);
-    expect(trace.slice(16).some(Boolean)).toBe(false);
+    // Two laps of the six-weapon rack: twelve presses, a tick each with a release between.
+    expect(trace.slice(0, 24).filter(Boolean)).toHaveLength(12);
+    expect(trace.slice(24).some(Boolean)).toBe(false);
   });
 
   it("does nothing for the weapon already held", () => {

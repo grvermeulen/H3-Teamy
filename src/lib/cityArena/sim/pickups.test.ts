@@ -82,10 +82,10 @@ describe("placePickups", () => {
     expect(pickups.map((pickup) => pickup.kind)).toEqual([
       "uzi",
       "shotgun",
+      "rifle",
       "uzi",
       "shotgun",
-      "uzi",
-      "shotgun",
+      "rifle",
       "health",
       "health",
     ]);
@@ -120,8 +120,8 @@ describe("placePickups", () => {
     expect(few.map((pickup) => pickup.kind)).toEqual([
       "uzi",
       "shotgun",
+      "rifle",
       "uzi",
-      "shotgun",
     ]);
   });
 });
@@ -133,14 +133,14 @@ describe("taking pickups", () => {
     expect(canTakePickup(player, pickupAt("health", 0))).toBe(false);
     expect(
       canTakePickup(
-        { ...player, ammo: { uzi: 120, shotgun: 0 } },
+        { ...player, ammo: { uzi: 120, shotgun: 0, rifle: 0, bat: 0 } },
         pickupAt("uzi", 0),
       ),
     ).toBe(false);
     const armed = applyPickupToPlayer(player, pickupAt("shotgun", 0));
     expect(armed).toMatchObject({
       weapon: "shotgun",
-      ammo: { uzi: 0, shotgun: 8 },
+      ammo: { uzi: 0, shotgun: 8, rifle: 0, bat: 0 },
     });
     const kept = applyPickupToPlayer(
       { ...armed, weapon: "shotgun" },
@@ -148,7 +148,7 @@ describe("taking pickups", () => {
     );
     expect(kept).toMatchObject({
       weapon: "shotgun",
-      ammo: { uzi: 60, shotgun: 8 },
+      ammo: { uzi: 60, shotgun: 8, rifle: 0, bat: 0 },
     });
     expect(
       applyPickupToPlayer({ ...player, health: 30 }, pickupAt("health", 0))
@@ -164,7 +164,7 @@ describe("taking pickups", () => {
     const taken = stepPickups(state, 5);
     expect(localPlayer(taken)).toMatchObject({
       weapon: "uzi",
-      ammo: { uzi: 60, shotgun: 0 },
+      ammo: { uzi: 60, shotgun: 0, rifle: 0, bat: 0 },
     });
     expect(taken.pickups[0].takenAtTick).toBe(5);
     expect(taken.events).toEqual([

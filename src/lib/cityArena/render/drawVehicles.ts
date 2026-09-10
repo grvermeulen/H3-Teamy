@@ -1,9 +1,5 @@
 import type { VehicleState } from "../sim/types";
-import {
-  SMOKE_HEALTH,
-  VEHICLE_LENGTH_M,
-  VEHICLE_WIDTH_M,
-} from "../sim/vehicle";
+import { lengthOf, smokeHealthOf, widthOf } from "../sim/vehicle";
 import {
   visibleRect,
   worldToScreen,
@@ -21,7 +17,7 @@ import {
   POLICE_LIGHT_RED,
   PLAYER_RING,
 } from "./palette";
-import { vehicleSpriteFor, type VehicleSprite } from "./sprites";
+import { hasOwnVehicleArt, vehicleSpriteFor, type VehicleArt } from "./sprites";
 
 /** Window glass size along the body, metres. */
 const WINDOW_LENGTH_M = 1.4;
@@ -86,13 +82,15 @@ function drawVectorBody(
   vehicle: VehicleState,
   zoom: number,
 ): void {
+  const length = lengthOf(vehicle.kind);
+  const width = widthOf(vehicle.kind);
   fillLocalRect(
     context,
     zoom,
     0,
     0,
-    VEHICLE_LENGTH_M,
-    VEHICLE_WIDTH_M,
+    length,
+    width,
     CAR_BODY_COLOURS[vehicle.colour % CAR_BODY_COLOURS.length],
   );
   fillLocalRect(
@@ -104,8 +102,8 @@ function drawVectorBody(
     WINDOW_WIDTH_M,
     CAR_WINDOW,
   );
-  const front = VEHICLE_LENGTH_M / 2 - HEADLIGHT_SIZE_M / 2;
-  const side = VEHICLE_WIDTH_M / 2 - HEADLIGHT_SIZE_M / 2;
+  const front = length / 2 - HEADLIGHT_SIZE_M / 2;
+  const side = width / 2 - HEADLIGHT_SIZE_M / 2;
   for (const offset of [-side, side])
     fillLocalRect(
       context,
@@ -118,20 +116,23 @@ function drawVectorBody(
     );
 }
 
-/** The car sprite stretched over the body's metre box, so art and collision hull agree. */
+/** The car sprite stretched over the kind's metre box, so art and collision hull agree. */
 function drawSpriteBody(
   context: RasterContext,
+  vehicle: VehicleState,
   sprite: CanvasImageSource,
   zoom: number,
 ): void {
+  const length = lengthOf(vehicle.kind);
+  const width = widthOf(vehicle.kind);
   context.save();
   context.rotate(SPRITE_NOSE_UP_TURN_RAD);
   context.drawImage(
     sprite,
-    (-VEHICLE_WIDTH_M / 2) * zoom,
-    (-VEHICLE_LENGTH_M / 2) * zoom,
-    VEHICLE_WIDTH_M * zoom,
-    VEHICLE_LENGTH_M * zoom,
+    (-width / 2) * zoom,
+    (-length / 2) * zoom,
+    width * zoom,
+    length * zoom,
   );
   context.restore();
 }
@@ -139,11 +140,12 @@ function drawSpriteBody(
 /** The pair of light bars on a police car's roof, swapping colour every few ticks. */
 function drawPoliceLights(
   context: RasterContext,
+  vehicle: VehicleState,
   zoom: number,
   tick: number,
 ): void {
   const blue = Math.floor(tick / LIGHT_BAR_FLASH_TICKS) % 2 === 0;
-  const forward = VEHICLE_LENGTH_M / 2 - LIGHT_BAR_INSET_M;
+  const forward = lengthOf(vehicle.kind) / 2 - LIGHT_BAR_INSET_M;
   fillLocalRect(
     context,
     zoom,
@@ -166,7 +168,9 @@ function drawPoliceLights(
 
 /**
  * One car's body: the sprite when its art has loaded, else the vector body it was drawn as
- * before. A wreck stays a dark slab either way — the sprite is an intact sedan.
+ * before. A wreck stays a dark slab either way — the sprites are intact cars. The vector light
+ * bar flashes over a police car only while it borrows the sedan's art or has none; its own
+ * sprite carries the bar.
  */
 function drawBody(
   context: RasterContext,
@@ -174,6 +178,7 @@ function drawBody(
   zoom: number,
   tick: number,
   sprite: CanvasImageSource | undefined,
+  ownArt: boolean,
 ): void {
   if (vehicle.wrecked) {
     fillLocalRect(
@@ -181,25 +186,32 @@ function drawBody(
       zoom,
       0,
       0,
-      VEHICLE_LENGTH_M,
-      VEHICLE_WIDTH_M,
+      lengthOf(vehicle.kind),
+      widthOf(vehicle.kind),
       CAR_WRECK,
     );
     return;
   }
-  if (sprite) drawSpriteBody(context, sprite, zoom);
+  if (sprite) drawSpriteBody(context, vehicle, sprite, zoom);
   else drawVectorBody(context, vehicle, zoom);
-  if (vehicle.kind === "police") drawPoliceLights(context, zoom, tick);
+  if (vehicle.kind === "police" && !ownArt)
+    drawPoliceLights(context, vehicle, zoom, tick);
 }
 
 /** Grey puffs trailing behind a damaged car, drifting with the tick. */
-function drawSmoke(context: RasterContext, zoom: number, tick: number): void {
+function drawSmoke(
+  context: RasterContext,
+  vehicle: VehicleState,
+  zoom: number,
+  tick: number,
+): void {
   context.fillStyle = CAR_SMOKE;
+  const tail = -lengthOf(vehicle.kind) / 2;
   for (let puff = 0; puff < SMOKE_PUFFS; puff++) {
     const drift =
       ((tick + puff * SMOKE_PUFF_STAGGER_TICKS) % SMOKE_DRIFT_TICKS) /
       SMOKE_DRIFT_TICKS;
-    const forward = -VEHICLE_LENGTH_M / 2 - (puff + drift) * SMOKE_SPACING_M;
+    const forward = tail - (puff + drift) * SMOKE_SPACING_M;
     context.beginPath();
     context.arc(
       forward * zoom,
@@ -214,16 +226,22 @@ function drawSmoke(context: RasterContext, zoom: number, tick: number): void {
 }
 
 /** Outline around the car the player sits in. */
-function drawOccupiedRing(context: RasterContext, zoom: number): void {
+function drawOccupiedRing(
+  context: RasterContext,
+  vehicle: VehicleState,
+  zoom: number,
+): void {
+  const length = lengthOf(vehicle.kind);
+  const width = widthOf(vehicle.kind);
   context.strokeStyle = PLAYER_RING;
   context.lineWidth = OCCUPIED_RING_WIDTH_PX;
   context.setLineDash([]);
   context.beginPath();
   context.rect(
-    (-VEHICLE_LENGTH_M / 2) * zoom,
-    (-VEHICLE_WIDTH_M / 2) * zoom,
-    VEHICLE_LENGTH_M * zoom,
-    VEHICLE_WIDTH_M * zoom,
+    (-length / 2) * zoom,
+    (-width / 2) * zoom,
+    length * zoom,
+    width * zoom,
   );
   context.stroke();
 }
@@ -236,7 +254,7 @@ export function drawVehicle(
   vehicle: VehicleState,
   tick: number,
   occupied: boolean,
-  sprite?: VehicleSprite,
+  art?: VehicleArt,
 ): void {
   const [x, y] = worldToScreen(camera, viewport, [vehicle.x, vehicle.y]);
   context.save();
@@ -247,11 +265,12 @@ export function drawVehicle(
     vehicle,
     camera.zoom,
     tick,
-    vehicleSpriteFor(sprite, vehicle.colour),
+    vehicleSpriteFor(art, vehicle.kind, vehicle.colour),
+    hasOwnVehicleArt(art, vehicle.kind),
   );
-  if (!vehicle.wrecked && vehicle.health < SMOKE_HEALTH)
-    drawSmoke(context, camera.zoom, tick);
-  if (occupied) drawOccupiedRing(context, camera.zoom);
+  if (!vehicle.wrecked && vehicle.health < smokeHealthOf(vehicle.kind))
+    drawSmoke(context, vehicle, camera.zoom, tick);
+  if (occupied) drawOccupiedRing(context, vehicle, camera.zoom);
   context.restore();
 }
 
@@ -263,7 +282,7 @@ export function drawVehicles(
   vehicles: VehicleState[],
   tick: number,
   occupiedId: number | null,
-  sprite?: VehicleSprite,
+  art?: VehicleArt,
 ): void {
   const view = visibleRect(camera, viewport);
   for (const vehicle of vehicles) {
@@ -280,7 +299,7 @@ export function drawVehicles(
       vehicle,
       tick,
       vehicle.id === occupiedId,
-      sprite,
+      art,
     );
   }
 }

@@ -50,7 +50,8 @@ The repository is public (relevant for ODbL).
 
 - TV mode UI (Scherm page, split-screen compositor, Controller UI, display token route) — slice 2.
 - Missions/jobs, gangs, more weapons, garages, "busted", wanted levels 4–6, team modes,
-  persistent cash/unlocks — slice 3+.
+  persistent cash/unlocks — slice 3+ (amended 2026-09-10: Plan 9 added a bat and a rifle,
+  nine vehicle kinds and six pedestrian looks; the rest stays out).
 - Anti-cheat beyond host-side input clamping. This is a private team app; the trust model
   is "teammates".
 - Mouse-free desktop fallback beyond keyboard-only movement + facing-direction fire.
@@ -275,20 +276,26 @@ Player colours from an 8-colour palette by join order; name label above the spri
 
 **Weapons.**
 
-| Weapon  | Source  | Ammo | Damage         | Rate  | Range | Projectile          |
-| ------- | ------- | ---- | -------------- | ----- | ----- | ------------------- |
-| Pistool | default | ∞    | 20             | 2.5/s | 40 m  | 120 m/s             |
-| Uzi     | pickup  | 60   | 10             | 10/s  | 35 m  | 110 m/s, ±4° spread |
-| Shotgun | pickup  | 8    | 5 pellets × 12 | 1.2/s | 15 m  | 90 m/s, 20° cone    |
+| Weapon  | Source  | Ammo      | Damage         | Rate  | Range | Projectile                   |
+| ------- | ------- | --------- | -------------- | ----- | ----- | ---------------------------- |
+| Pistool | default | ∞         | 20             | 2.5/s | 40 m  | 120 m/s                      |
+| Uzi     | pickup  | 60        | 10             | 10/s  | 35 m  | 110 m/s, ±4° spread          |
+| Shotgun | pickup  | 8         | 5 pellets × 12 | 1.2/s | 15 m  | 90 m/s, 20° cone             |
+| Knuppel | pickup  | 20 swings | 30             | 1.5/s | 1.6 m | melee (Plan 9, 2026-09-10)   |
+| Geweer  | pickup  | 10        | 45             | 0.8/s | 70 m  | 160 m/s (Plan 9, 2026-09-10) |
 
 Fire rate enforced host-side. Bullets are swept segments; they stop at buildings, hit
 people (circle), cars (OBB — damage goes to the car; the driver dies only when the car
 explodes), and despawn at max range.
 
 **Cars.** Kinds: compact (accel 6 m/s², max 22 m/s), sedan (8, 28), sport (11, 36),
-police (9, 30). Parked cars spawn along residential roads inside the zone at ≈ 1 per 40 m,
-offset to the kerb; 6–10 ambient traffic cars follow the road graph at 8–12 m/s and stop
-for obstacles. Enter within 1.5 m of a car (**Instappen**) → 0.6 s → driving; exit
+police (9, 30); Plan 9 (2026-09-10) adds van (5, 24; 5 × 2 m; 140 health; 2.2 t), pickup
+(7, 27; 5.2 × 1.9 m; 120; 2 t), bus (3, 18; 12 × 2.5 m; 220; 12 t; through-roads only),
+oldtimer (5, 20; 4.4 × 1.7 m; 70; 1.1 t) and tractor (2, 8; 4 × 2.2 m; 180; 4 t; one car in
+three on an unclassified road), each with its own steer rate, a hull of circles along the
+body, and collisions that split push and damage by mass. Parked cars spawn along residential
+roads inside the zone at ≈ 1 per 40 m, offset to the kerb; 10–16 ambient traffic cars (6–10
+before Plan 9) follow the road graph at 8–12 m/s and stop for obstacles. Enter within 1.5 m of a car (**Instappen**) → 0.6 s → driving; exit
 (**Uitstappen**) places you beside the car. Physics: throttle/brake along heading, brake
 14 m/s², reverse ≤ 8 m/s; angular velocity = steer × 2.6 rad/s × grip × (1 − 0.5·v/vmax)
 where grip = 0 below 0.5 m/s and 0.45 + 0.55·min(1, v/6) above it (amended 2026-09-06:
@@ -298,8 +305,8 @@ decays 90 %/s. Collisions: restitution 0.3, damage
 < 40 → explosion at 0 (3 m radius, 80 damage, kills the occupant). Firing in a car is a
 drive-by toward the aim direction. Running over people at > 5 m/s: damage = 5 × speed.
 
-**Pedestrians.** ≈ 25 inside the zone disc + 100 m (fewer in lobby free-roam: 12 near
-each player). States: walk (pavement polylines, random turns), flee (5.5 m/s away from
+**Pedestrians.** ≈ 35 inside the zone disc + 100 m (25 before Plan 9; fewer in lobby
+free-roam: 12 near each player), in six looks derived from their id. States: walk (pavement polylines, random turns), flee (5.5 m/s away from
 gunfire/explosions within 25 m for 4 s), dead (body persists 8 s). Killing one scores
 nothing and adds heat.
 
@@ -311,7 +318,8 @@ that chases and rams. Level 3: four cops, two cars, shotguns. Cops target the wa
 player; other players who kill cops gain heat. Your death resets your heat to 0.
 
 **Pickups.** Per zone at match start: 6 weapon spots (up to 4 at landmarks, rest at seeded
-spawn nodes; alternating Uzi/Shotgun) and 4 health spots (+50). Respawn 20 s after taken.
+spawn nodes; rotating Uzi/Shotgun/Geweer since Plan 9), 4 health spots (+50) and, where
+spots remain, 2 bats. Respawn 20 s after taken.
 
 **Zone.** 500 m disc. Outside during a match: HUD _"Terug naar het strijdgebied! 5…"_
 countdown, then 10 damage/s until back. No zone in the lobby.
@@ -865,4 +873,5 @@ opgeslagen · Geluid · Trillen · Enkele stick · Besturing · Potje verlaten �
 OpenStreetMap-bijdragers. PR 2 additions: Startpunt · Ga naar · Spel laden… · Sluiten. PR 3 additions:
 Gezondheid · Vuist · Pistool · Uzi · Shotgun · Compact · Sedan · Sportwagen · Politieauto · km/u · Je bent
 uitgeschakeld · Vrij rondlopen. PR 7 additions: Radio · Zender · Grebbe FM · Rijn FM · Cunera
-Klassiek. PR 8 additions: Kopieer · Gekopieerd.
+Klassiek. PR 8 additions: Kopieer · Gekopieerd. PR 9 additions: Bestelbus · Pick-up ·
+Stadsbus · Oldtimer · Trekker · Knuppel · Geweer.

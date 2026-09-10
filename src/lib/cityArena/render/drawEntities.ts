@@ -1,3 +1,4 @@
+import { drawPersonStrip, walkFrameAt } from "./drawPersonSprite";
 import { isDead, isInvulnerable } from "../sim/damage";
 import { PLAYER_RADIUS_M } from "../sim/player";
 import type { ArenaPlayerState, PlayerState } from "../sim/types";
@@ -59,36 +60,19 @@ export function playerLook(player: ArenaPlayerState, tick: number): PlayerLook {
 }
 
 /**
- * The character art faces *down* its own image: the generator drew him head at the top and feet
- * at the bottom, so his toes point at the bottom edge — the opposite of the nose-up car sprite.
- * With `facing` 0 pointing along +x, that makes the turn a negative quarter, not a positive one;
- * the positive version had him looking exactly half a turn away from the crosshair.
- */
-const PLAYER_SPRITE_TURN_RAD = -Math.PI / 2;
-/**
- * How far the character art overhangs the collision circle. A standing man's arms and shoulders
- * reach past his 0.4 m hull anyway, and the hull alone lands on the 6 px floor at every zoom the
- * arena offers — 12 px is too small to recognise anyone in.
- */
-const PLAYER_SPRITE_SCALE = 1.6;
-
-/** Ticks each walk frame is held. At 30 Hz that is 7.5 frames a second, a stride you can read. */
-const WALK_FRAME_TICKS = 4;
-/** Below this speed (m/s) the player is standing, so the strip rests on its first frame. */
-const WALK_ANIMATION_MIN_SPEED_MPS = 0.2;
-
-/**
- * The strip cell to draw this tick. The cycle runs off the tick rather than off distance
- * walked, which the simulation does not track: at one walk speed the two agree closely enough,
- * and a standing player always rests on frame 0 so he never moon-walks on the spot.
+ * The strip cell to draw this tick; see {@link walkFrameAt}.
+ *
+ * @param player - The player, whose speed decides between standing and walking.
+ * @param tick - The simulation tick.
+ * @param frames - Cells in the strip.
+ * @returns The cell index.
  */
 export function walkFrame(
   player: PlayerState,
   tick: number,
   frames: number,
 ): number {
-  if (frames <= 1 || player.speed < WALK_ANIMATION_MIN_SPEED_MPS) return 0;
-  return Math.floor(tick / WALK_FRAME_TICKS) % frames;
+  return walkFrameAt(player.speed, tick, frames);
 }
 
 /** Draws the character art over the player's collision circle, turned to face where they face. */
@@ -101,23 +85,15 @@ function drawPlayerSprite(
   player: PlayerState,
   tick: number,
 ): void {
-  const half = radius * PLAYER_SPRITE_SCALE;
-  const frame = walkFrame(player, tick, sprite.frames);
-  context.save();
-  context.translate(x, y);
-  context.rotate(player.facing + PLAYER_SPRITE_TURN_RAD);
-  context.drawImage(
-    sprite.image,
-    frame * sprite.pixelSize,
-    0,
-    sprite.pixelSize,
-    sprite.pixelSize,
-    -half,
-    -half,
-    half * 2,
-    half * 2,
+  drawPersonStrip(
+    context,
+    sprite,
+    x,
+    y,
+    radius,
+    player.facing,
+    walkFrame(player, tick, sprite.frames),
   );
-  context.restore();
 }
 
 /**
