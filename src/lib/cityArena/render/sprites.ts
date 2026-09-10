@@ -39,6 +39,39 @@ export const PersonEntrySchema = z.object({
 });
 
 /**
+ * The scenery props the manifest may carry (Plan 9b): the two tree canopies by size class, and
+ * one piece of art per {@link FurnitureKind}, keyed by the kind itself.
+ */
+export const PROP_KEYS = [
+  "treeSmall",
+  "treeLarge",
+  "lamp",
+  "bench",
+  "busStop",
+] as const;
+
+/** A key of {@link PROP_KEYS}. */
+export type PropKey = (typeof PROP_KEYS)[number];
+
+/** The prop key of a tree, by its size class. */
+export const TREE_PROP_KEYS: readonly [PropKey, PropKey] = [
+  "treeSmall",
+  "treeLarge",
+];
+
+/**
+ * One scenery prop: art packed onto its metre footprint, the long side along the image's x axis
+ * (a canopy is square). The painter turns it to the piece's heading.
+ */
+export const PropEntrySchema = z.object({
+  file: z.string(),
+  lengthMetres: z.number().positive(),
+  widthMetres: z.number().positive(),
+  pixelWidth: z.number().int().positive(),
+  pixelHeight: z.number().int().positive(),
+});
+
+/**
  * Zod schema for `manifest.json`; runtime validation happens once per session. `surfaces` lists
  * every seamless texture flat, keyed as the build script writes them: the two road surfaces,
  * water, and one per {@link GroundKind}. `vehicles` is a partial record over {@link VehicleKind},
@@ -59,6 +92,7 @@ export const SpriteManifestSchema = z.object({
   }),
   vehicles: z.partialRecord(z.enum(VEHICLE_KINDS), VehicleEntrySchema),
   people: z.record(z.string(), PersonEntrySchema),
+  props: z.partialRecord(z.enum(PROP_KEYS), PropEntrySchema),
 });
 
 /** Parsed sprite manifest, inferred from {@link SpriteManifestSchema} so the two cannot drift. */
@@ -94,6 +128,16 @@ export type PersonSprites = Partial<Record<string, PersonSprite>>;
 /** The ground textures, one per {@link GroundKind}; each stays absent until its file decodes. */
 export type GroundTextures = Partial<Record<GroundKind, SurfaceTexture>>;
 
+/** A decoded scenery prop: the art and the metre footprint it is drawn over. */
+export type PropSprite = {
+  image: CanvasImageSource;
+  lengthMetres: number;
+  widthMetres: number;
+};
+
+/** Scenery props by key; each stays absent until its file decodes. */
+export type PropSprites = Partial<Record<PropKey, PropSprite>>;
+
 /**
  * Sprites the painters may use. Every field is optional: a missing texture is the normal state
  * before the images have loaded and after a failed load, and each painter falls back to the flat
@@ -109,6 +153,8 @@ export type ArenaSprites = {
   vehicles?: VehicleSprites;
   player?: PersonSprite;
   people?: PersonSprites;
+  /** Tree canopies and street furniture, painted into the chunk rasters. */
+  props?: PropSprites;
 };
 
 /** The slice of the sprites the vehicle painter reads. */

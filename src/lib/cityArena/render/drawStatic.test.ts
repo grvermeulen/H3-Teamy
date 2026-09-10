@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { DecodedTile } from "../world/decode";
 import { paintChunk, type LandmarkLookup } from "./drawStatic";
 import {
+  FURNITURE_FILL,
   GROUND_FILL,
   LANDMARK_FILL,
   PAVEMENT_FILL,
   ROAD_CENTRE_LINE,
   ROAD_FILL,
+  TREE_CANOPY_FILL,
+  TREE_SHADOW,
   WATER_FILL,
 } from "./palette";
 import type { ArenaSprites } from "./sprites";
@@ -100,6 +103,31 @@ const farTile: DecodedTile = {
 const landmarks: LandmarkLookup = new Map([
   ["cunerakerk", { name: "Cunerakerk", style: "church" }],
 ]);
+/** The first tile with two trees and a bench beside the church (Plan 9b). */
+const sceneryTile: DecodedTile = {
+  ...tile,
+  trees: [
+    {
+      point: [40, 40],
+      size: 0,
+      bounds: { minX: 37, minY: 37, maxX: 43, maxY: 43 },
+    },
+    {
+      point: [60, 60],
+      size: 1,
+      bounds: { minX: 55, minY: 55, maxX: 65, maxY: 65 },
+    },
+    {
+      point: [500, 500],
+      size: 1,
+      bounds: { minX: 495, minY: 495, maxX: 505, maxY: 505 },
+    },
+  ],
+  furniture: [
+    { point: [35, 12], kind: "bench", heading: Math.PI / 2 },
+    { point: [700, 12], kind: "lamp", heading: 0 },
+  ],
+};
 
 // Fixtures for the "keeps the layer order across two touching tiles" test below: tileWest only
 // has water near the border, tileEast only has ground there. Painting "per tile" (tileWest's
@@ -198,6 +226,69 @@ describe("paintChunk", () => {
         call.startsWith(`fill(${GROUND_FILL.forest})`),
       ),
     ).toBe(false);
+  });
+
+  it("paints furniture after the buildings and trees after that, shadows before canopies, flat without art", () => {
+    const context = createFakeContext();
+    paintChunk(
+      context,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [sceneryTile],
+      landmarks,
+    );
+    const calls = context.calls;
+    const church = calls.indexOf(`fill(${LANDMARK_FILL.church})`);
+    const bench = calls.indexOf("fillRect(-0.9,-0.3,1.8,0.6)");
+    const shadows = calls
+      .map((call, index) => (call === `fill(${TREE_SHADOW})` ? index : -1))
+      .filter((index) => index >= 0);
+    const canopies = [
+      calls.indexOf(`fill(${TREE_CANOPY_FILL[0]})`),
+      calls.indexOf(`fill(${TREE_CANOPY_FILL[1]})`),
+    ];
+    const label = calls.indexOf("fillText(Cunerakerk,0,0)");
+    expect(church).toBeGreaterThan(-1);
+    expect(bench).toBeGreaterThan(church);
+    expect(shadows).toHaveLength(2);
+    expect(Math.min(...shadows)).toBeGreaterThan(bench);
+    expect(Math.min(...canopies)).toBeGreaterThan(Math.max(...shadows));
+    expect(label).toBeGreaterThan(Math.max(...canopies));
+    expect(calls).toContain("rotate(1.57)");
+    expect(
+      calls.some((call) => call.startsWith(`fill(${FURNITURE_FILL.lamp})`)),
+    ).toBe(false);
+    expect(calls.filter((call) => call.startsWith("arc(")).length).toBe(4);
+  });
+
+  it("draws the prop art over the same footprints once it has loaded", () => {
+    const context = createFakeContext();
+    const image = document.createElement("canvas");
+    const sprites: ArenaSprites = {
+      props: {
+        treeSmall: { image, lengthMetres: 6, widthMetres: 6 },
+        treeLarge: { image, lengthMetres: 10, widthMetres: 10 },
+        bench: { image, lengthMetres: 1.8, widthMetres: 0.6 },
+      },
+    };
+    paintChunk(
+      context,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [sceneryTile],
+      landmarks,
+      sprites,
+    );
+    const images = context.calls.filter((call) =>
+      call.startsWith("drawImage("),
+    );
+    expect(images).toHaveLength(3);
+    expect(images[0]).toBe(`drawImage(${String(image)},-0.9,-0.3,1.8,0.6)`);
+    expect(images[1]).toBe(`drawImage(${String(image)},-3,-3,6,6)`);
+    expect(images[2]).toBe(`drawImage(${String(image)},-5,-5,10,10)`);
+    expect(context.calls.filter((call) => call.startsWith("arc(")).length).toBe(
+      2,
+    );
   });
 
   it("sets the world transform for the chunk", () => {

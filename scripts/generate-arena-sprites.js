@@ -27,6 +27,12 @@ const PERSON_RADIUS_M = 0.4;
 // headroom for rotation and still a few kB.
 const PERSON_PX_PER_METRE = 64;
 
+// Scenery is painted into the chunk rasters like the ground, so a tree canopy ships at the
+// textures' density; a piece of street furniture is a metre or three across and gets the
+// vehicles' density so it survives being turned to its street.
+const TREE_PX_PER_METRE = 16;
+const FURNITURE_PX_PER_METRE = 32;
+
 // The generator's cut-out leaves the whole car body around 55 % opaque and only its silhouette
 // fully transparent, so the alpha channel is rebuilt: at or below ALPHA_BACKGROUND_MAX is
 // background, at or above ALPHA_BODY_MIN is solid bodywork, and the narrow band between the two
@@ -97,6 +103,43 @@ const personSources = {
   cop: { file: "person-cop.png", frames: 8 },
 };
 
+// Scenery props, mirroring TREE_CANOPY_M and FURNITURE_SIZE_M in world/mapTypes.ts (Plan 9b).
+// A tree is a canopy seen from above, packed square onto its diameter; furniture is packed onto
+// its footprint with the long side along the image's x axis, which the painter turns to the
+// piece's heading. The keys are what the manifest's `props` record and the painter use.
+const propSources = {
+  treeSmall: {
+    file: "tree-small.png",
+    lengthM: 6,
+    widthM: 6,
+    pxPerMetre: TREE_PX_PER_METRE,
+  },
+  treeLarge: {
+    file: "tree-large.png",
+    lengthM: 10,
+    widthM: 10,
+    pxPerMetre: TREE_PX_PER_METRE,
+  },
+  lamp: {
+    file: "furniture-lamp.png",
+    lengthM: 1,
+    widthM: 0.6,
+    pxPerMetre: FURNITURE_PX_PER_METRE,
+  },
+  bench: {
+    file: "furniture-bench.png",
+    lengthM: 1.8,
+    widthM: 0.6,
+    pxPerMetre: FURNITURE_PX_PER_METRE,
+  },
+  busStop: {
+    file: "furniture-busstop.png",
+    lengthM: 3,
+    widthM: 1.5,
+    pxPerMetre: FURNITURE_PX_PER_METRE,
+  },
+};
+
 /**
  * Exits the process if any sprite source file is missing from assets/arena/sprites/.
  */
@@ -105,6 +148,7 @@ function assertSourcesExist() {
     ...Object.values(surfaceSources),
     ...Object.values(vehicleSources).map((vehicle) => vehicle.file),
     ...Object.values(personSources).map((person) => person.file),
+    ...Object.values(propSources).map((prop) => prop.file),
   ];
   for (const file of files) {
     const full = path.join(sourceDir, file);
@@ -217,6 +261,20 @@ async function packVehicleSprite(source) {
     pixelWidth,
     pixelHeight,
     tint: source.tint,
+  };
+}
+
+/** Trims one prop to its artwork and resizes it onto its metre footprint. */
+async function packPropSprite(source) {
+  const pixelWidth = Math.round(source.lengthM * source.pxPerMetre);
+  const pixelHeight = Math.round(source.widthM * source.pxPerMetre);
+  await packCutout(source.file, pixelWidth, pixelHeight);
+  return {
+    file: `${PUBLIC_BASE_PATH}/${source.file}`,
+    lengthMetres: source.lengthM,
+    widthMetres: source.widthM,
+    pixelWidth,
+    pixelHeight,
   };
 }
 
@@ -358,7 +416,10 @@ async function packSprites() {
   const people = {};
   for (const [name, person] of Object.entries(personSources))
     people[name] = await packPersonSprite(person.file, person.frames);
-  const manifest = { version: 1, surfaces, vehicles, people };
+  const props = {};
+  for (const [name, source] of Object.entries(propSources))
+    props[name] = await packPropSprite(source);
+  const manifest = { version: 1, surfaces, vehicles, people, props };
   fs.writeFileSync(
     path.join(outputDir, "manifest.json"),
     `${JSON.stringify(manifest, null, 2)}\n`,
@@ -381,6 +442,10 @@ function reportDone(manifest) {
   for (const [name, person] of Object.entries(manifest.people))
     console.log(
       `${name}: ${person.file} ${person.frames} × ${person.pixelSize}px for a ${person.radiusMetres} m radius`,
+    );
+  for (const [name, prop] of Object.entries(manifest.props))
+    console.log(
+      `${name}: ${prop.file} ${prop.pixelWidth}×${prop.pixelHeight}px for ${prop.lengthMetres}×${prop.widthMetres} m`,
     );
   console.log(`Arena sprites written to ${outputDir}`);
 }

@@ -9,11 +9,14 @@ import type { Point } from "./projection";
 /** Cell size of the uniform grid in metres. */
 export const COLLISION_CELL_M = 16;
 
+/** Side of the square a tree trunk blocks, metres (Plan 9b); the canopy above is walked under. */
+export const TRUNK_M = 0.35;
+
 /** A solid polygon the player cannot enter. */
 export type Obstacle = {
   ring: Point[];
   bounds: Rect;
-  kind: "building" | "water";
+  kind: "building" | "water" | "tree";
 };
 
 /**
@@ -131,7 +134,28 @@ function forEachCell(
       visit(cellKey(cellX, cellY));
 }
 
-/** Obstacle list for one decoded tile: its buildings and water, tagged by kind. */
+/** The square a trunk blocks, centred on the tree. */
+function trunkObstacle(point: Point): Obstacle {
+  const half = TRUNK_M / 2;
+  const bounds: Rect = {
+    minX: point[0] - half,
+    minY: point[1] - half,
+    maxX: point[0] + half,
+    maxY: point[1] + half,
+  };
+  return {
+    ring: [
+      [bounds.minX, bounds.minY],
+      [bounds.maxX, bounds.minY],
+      [bounds.maxX, bounds.maxY],
+      [bounds.minX, bounds.maxY],
+    ],
+    bounds,
+    kind: "tree",
+  };
+}
+
+/** Obstacle list for one decoded tile: its buildings, water and tree trunks, tagged by kind. */
 function buildObstaclesForTile(tile: DecodedTile): Obstacle[] {
   return [
     ...tile.buildings.map((building) => ({
@@ -144,6 +168,7 @@ function buildObstaclesForTile(tile: DecodedTile): Obstacle[] {
       bounds: water.bounds,
       kind: "water" as const,
     })),
+    ...tile.trees.map((tree) => trunkObstacle(tree.point)),
   ];
 }
 

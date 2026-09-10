@@ -55,6 +55,22 @@ const manifest = {
       frames: 8,
     },
   },
+  props: {
+    treeLarge: {
+      file: "/arena/sprites/tree-large.png",
+      lengthMetres: 10,
+      widthMetres: 10,
+      pixelWidth: 160,
+      pixelHeight: 160,
+    },
+    bench: {
+      file: "/arena/sprites/furniture-bench.png",
+      lengthMetres: 1.8,
+      widthMetres: 0.6,
+      pixelWidth: 58,
+      pixelHeight: 19,
+    },
+  },
 };
 
 /** A `fetch` that answers the manifest request with `body`, or with `status` when not 200. */
@@ -165,6 +181,19 @@ describe("createSpriteStore", () => {
     expect(sprites.vehicles?.bus?.base).toBeDefined();
     expect(sprites.people?.player).toBe(sprites.player);
     expect(sprites.people?.ped1?.frames).toBe(8);
+  });
+
+  it("loads the props the manifest has, with their metre footprints", async () => {
+    const store = createSpriteStore({
+      canvasFactory,
+      loadImage,
+      fetchImpl: fakeFetch(manifest),
+    });
+    await store.load();
+    const props = store.current().props;
+    expect(props?.treeLarge?.lengthMetres).toBe(10);
+    expect(props?.bench?.widthMetres).toBe(0.6);
+    expect(props?.lamp).toBeUndefined();
   });
 
   it("keeps the kinds and looks whose art did load when one image is missing", async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Point } from "./projection";
 import type { DecodedTile } from "./decode";
 import {
+  TRUNK_M,
   createCollisionGrid,
   nearestPointOnRing,
   nearestPointOnSegment,
@@ -163,6 +164,30 @@ describe("createCollisionGrid", () => {
     expect(
       grid.query({ minX: 0, minY: 0, maxX: 30, maxY: 30 }).map((o) => o.kind),
     ).toEqual(["building"]);
+  });
+
+  it("blocks a tree's trunk, not its canopy, and leaves furniture walkable", () => {
+    const grid = createCollisionGrid();
+    grid.insertTile({
+      ...tileWith([]),
+      trees: [
+        {
+          point: [50, 50],
+          size: 1,
+          bounds: { minX: 45, minY: 45, maxX: 55, maxY: 55 },
+        },
+      ],
+      furniture: [{ point: [60, 50], kind: "bench", heading: 0 }],
+    });
+    expect(grid.obstacleCount()).toBe(1);
+    expect(
+      grid.query({ minX: 49, minY: 49, maxX: 51, maxY: 51 }).map((o) => o.kind),
+    ).toEqual(["tree"]);
+    const pushed = grid.resolveCircle([50.3, 50], 0.4);
+    expect(pushed[0]).toBeCloseTo(50 + TRUNK_M / 2 + 0.4);
+    expect(pushed[1]).toBeCloseTo(50);
+    expect(grid.resolveCircle([53, 50], 0.4)).toEqual([53, 50]);
+    expect(grid.resolveCircle([60, 50], 0.4)).toEqual([60, 50]);
   });
 
   it.each([0, -1, NaN, Infinity])(
