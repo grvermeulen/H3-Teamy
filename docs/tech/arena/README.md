@@ -368,3 +368,31 @@ is a leaf of the sound layer that follows the same "in a car" signal the engine 
 - **Still open after Plan 7.** The listening check — `RADIO_GAIN` and `DUCK_LEVEL` are the
   knobs, `npm run arena:generate-radio <station>` regenerates a station — and the device check
   on a phone.
+
+## Runtime (Plan 8 — netcode follow-ups and the lobby code)
+
+Two gaps left open by Plans 3b and 6, and one request from the owner.
+
+- **The server recognises the acting host.** `GET /api/arena/rooms` (which drops an advertised
+  room whose advertiser is not its host) and `recordMatch` (which refuses a result from anyone but
+  the host) used to ask the presence election — and an old host's presence entry outlives its tab
+  by up to minutes, so a host that took over mid-potje had its advert hidden and its result
+  refused. `net/roomHost.ts` now reads the room channel's presence set **and** its history through
+  Ably REST: whoever published the latest `state` message within `ACTING_HOST_FRESH_MS` (10 s) and
+  is still present is the acting host (`actingHost` in `net/election.ts`); the presence election is
+  the fallback for a room that has not started stepping. A host is someone you hear from — the
+  rule the clients already live by. History without persistence keeps two minutes of messages,
+  which is plenty; it costs one extra REST call per advertised room per listing (cached 5 s) and
+  one per result. The trust model is unchanged in strength: the election already trusted
+  self-declared roles, and clients still accept snapshots from the elected host only.
+- **A cut, not a fly-over.** A joiner is seated wherever the host put it, usually kilometres from
+  where it was roaming, and the camera's exponential ease flew across unrastered tiles to get
+  there. `cutTo(runtime, point)` snaps the camera and sets `feedback.cutFade = 1`, which the
+  feedback fold walks down to 0 over `CUT_FADE_TICKS` (12, 0.4 s) while `drawFeedback` paints the
+  arena's void colour over the scene at that alpha. `adoptSeat` (the joiner), `applyTeleport` (the
+  zone picker) and `recoverSeat` (a lost seat) all cut. Reduced motion keeps the fade: a fade is
+  not motion, and the alternative is a hard cut.
+- **The lobby code.** `ArenaLobby`'s header shows the code as a display-size, letter-spaced amber
+  element (`data-testid="room-code"`) with a **Kopieer** button where the Clipboard API exists
+  (**Gekopieerd** for two seconds after a copy; a clipboard failure is reported, not shown), and
+  the zone name on the line under it.
