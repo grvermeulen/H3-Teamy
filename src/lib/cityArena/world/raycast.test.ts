@@ -22,6 +22,8 @@ function tileWith(buildings: Point[][], water: Point[][] = []): DecodedTile {
     x: 0,
     y: 0,
     rect: { minX: -100, minY: -100, maxX: 1900, maxY: 1900 },
+    trees: [],
+    furniture: [],
     roads: [],
     buildings: buildings.map((ring) => ({
       ring,

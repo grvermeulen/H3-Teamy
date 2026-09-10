@@ -6,6 +6,7 @@ import {
   buildBuildingsQuery,
   buildLandmarkQuery,
   buildRoadsQuery,
+  buildSceneryQuery,
 } from "./overpassQueries";
 
 describe("overpass query builders", () => {
@@ -48,6 +49,23 @@ describe("overpass query builders", () => {
     expect(query).toContain('nwr["leisure"~"^(park|pitch)$"]');
     expect(query).toContain('nwr["natural"~"^(wood|scrub)$"]');
     expect(query).not.toContain("residential");
+  });
+
+  it("builds the scenery query: trees, rows and furniture around each centre", () => {
+    const query = buildSceneryQuery([
+      { lat: 51.96, lon: 5.57 },
+      { lat: 51.97, lon: 5.66 },
+    ]);
+    expect(query).toContain(
+      `node["natural"="tree"](around:${BUILDING_RADIUS_M},51.96,5.57);`,
+    );
+    expect(query).toContain(
+      `way["natural"="tree_row"](around:${BUILDING_RADIUS_M},51.97,5.66);`,
+    );
+    expect(query.match(/\["highway"="street_lamp"\]/g)).toHaveLength(2);
+    expect(query.match(/\["amenity"="bench"\]/g)).toHaveLength(2);
+    expect(query.match(/\["highway"="bus_stop"\]/g)).toHaveLength(2);
+    expect(query.trim().endsWith("out skel qt;")).toBe(true);
   });
 
   it("builds the buildings query around centres plus explicit landmark elements", () => {

@@ -30,6 +30,24 @@ export function squareWay(
   ];
 }
 
+/** A single tagged node at a metre offset (east, south) from (lat, lon). */
+export function nodeNear(
+  id: number,
+  lat: number,
+  lon: number,
+  eastMetres: number,
+  southMetres: number,
+  tags?: OsmTags,
+): OverpassElement {
+  return {
+    type: "node",
+    id,
+    lat: lat - southMetres * DEGREES_PER_METRE_LAT,
+    lon: lon + eastMetres * DEGREES_PER_METRE_LON,
+    ...(tags ? { tags } : {}),
+  };
+}
+
 /** A road of consecutive nodes offset east of (lat, lon) by `spacingMetres` each. */
 export function roadWay(
   wayId: number,
@@ -128,6 +146,36 @@ export const overpassMini: OverpassJson = {
     }),
     ...squareWay(20, 51.95, 5.62, 200, { natural: "water", name: "Plas" }),
     ...squareWay(21, 51.99, 5.6, 300, { landuse: "farmland" }),
+    // Plan 9b scenery, all within the Wageningen keep radius: a forest and a park to scatter
+    // over, three single trees, a row of four, and one of each piece of furniture. The lamp
+    // stands 4 m south of the Dorpsstraat (an east–west road), so it turns to heading 0.
+    ...squareWay(22, WAGENINGEN.lat + 0.004, WAGENINGEN.lon + 0.005, 120, {
+      landuse: "forest",
+    }),
+    ...squareWay(23, WAGENINGEN.lat - 0.003, WAGENINGEN.lon + 0.003, 60, {
+      leisure: "park",
+    }),
+    nodeNear(300, WAGENINGEN.lat + 0.0005, WAGENINGEN.lon, 10, 12, {
+      natural: "tree",
+    }),
+    nodeNear(301, WAGENINGEN.lat + 0.0005, WAGENINGEN.lon, 30, 12, {
+      natural: "tree",
+    }),
+    nodeNear(302, WAGENINGEN.lat - 0.003, WAGENINGEN.lon + 0.003, 0, 0, {
+      natural: "tree",
+    }),
+    nodeNear(310, WAGENINGEN.lat + 0.0005, WAGENINGEN.lon, 0, 20),
+    nodeNear(311, WAGENINGEN.lat + 0.0005, WAGENINGEN.lon, 24, 20),
+    { type: "way", id: 31, nodes: [310, 311], tags: { natural: "tree_row" } },
+    nodeNear(320, WAGENINGEN.lat + 0.0005, WAGENINGEN.lon, 20, 4, {
+      highway: "street_lamp",
+    }),
+    nodeNear(321, WAGENINGEN.lat - 0.003, WAGENINGEN.lon + 0.003, 5, 5, {
+      amenity: "bench",
+    }),
+    nodeNear(322, WAGENINGEN.lat + 0.0005, WAGENINGEN.lon, 60, -5, {
+      highway: "bus_stop",
+    }),
   ],
 };
 

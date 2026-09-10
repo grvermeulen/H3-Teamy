@@ -101,7 +101,48 @@ export type TileGround = { points: number[]; kind: GroundKind };
 /** Water polygon. */
 export type TileWater = { points: number[] };
 
-/** `tile_x_y.json` — all static geometry inside one 2 km tile (plus 20 m overlap). */
+/** A tree's size class: 0 a small canopy, 1 a large one — {@link TREE_CANOPY_M} has the metres. */
+export type TreeSize = 0 | 1;
+
+/** Canopy diameter by {@link TreeSize}, metres. */
+export const TREE_CANOPY_M: readonly [number, number] = [6, 10];
+
+/** A tree: position in units and its size class. */
+export type TileTree = [x: number, y: number, size: TreeSize];
+
+/** Street furniture kinds. */
+export type FurnitureKind = "lamp" | "bench" | "busStop";
+
+/** The furniture kinds, in the order the pack script and the palette list them. */
+export const FURNITURE_KINDS: readonly FurnitureKind[] = [
+  "lamp",
+  "bench",
+  "busStop",
+];
+
+/** Footprint of each furniture kind, metres: along its heading, then across. */
+export const FURNITURE_SIZE_M: Record<
+  FurnitureKind,
+  readonly [number, number]
+> = {
+  lamp: [1, 0.6],
+  bench: [1.8, 0.6],
+  busStop: [3, 1.5],
+};
+
+/** A piece of street furniture: position in units, its kind, and its heading in whole degrees. */
+export type TileFurniture = [
+  x: number,
+  y: number,
+  kind: FurnitureKind,
+  headingDeg: number,
+];
+
+/**
+ * `tile_x_y.json` — all static geometry inside one 2 km tile (plus 20 m overlap). Trees and
+ * furniture are points, so each lives in the one tile whose own rectangle holds it (Plan 9b);
+ * a tile built before then has neither field, and the decoder reads that as none.
+ */
 export type MapTile = {
   x: number;
   y: number;
@@ -109,4 +150,6 @@ export type MapTile = {
   buildings: TileBuilding[];
   ground: TileGround[];
   water: TileWater[];
+  trees?: TileTree[];
+  furniture?: TileFurniture[];
 };

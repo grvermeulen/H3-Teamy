@@ -16,6 +16,8 @@ const tile: DecodedTile = {
   x: 0,
   y: 0,
   rect: { minX: 0, minY: 0, maxX: 2000, maxY: 2000 },
+  trees: [],
+  furniture: [],
   roads: [
     {
       points: [
@@ -78,6 +80,8 @@ const farTile: DecodedTile = {
   x: 3,
   y: 3,
   rect: { minX: 6000, minY: 6000, maxX: 8000, maxY: 8000 },
+  trees: [],
+  furniture: [],
   roads: [],
   buildings: [],
   ground: [
@@ -106,6 +110,8 @@ const tileWest: DecodedTile = {
   x: 0,
   y: 0,
   rect: { minX: 0, minY: 0, maxX: 100, maxY: 100 },
+  trees: [],
+  furniture: [],
   roads: [
     {
       points: [
@@ -134,6 +140,8 @@ const tileEast: DecodedTile = {
   x: 1,
   y: 0,
   rect: { minX: 100, minY: 0, maxX: 200, maxY: 100 },
+  trees: [],
+  furniture: [],
   roads: [
     {
       points: [

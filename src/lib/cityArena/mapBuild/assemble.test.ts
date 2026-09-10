@@ -9,6 +9,7 @@ const input = {
   roadsOsm: overpassMini,
   areasOsm: overpassMini,
   buildingsOsm: overpassMini,
+  sceneryOsm: overpassMini,
   config: MINI_LANDMARKS,
   generatedAt: "2026-09-03T12:00:00.000Z",
 };
@@ -109,6 +110,7 @@ describe("assembleMap", () => {
       roadsOsm: { elements: [] },
       areasOsm: { elements: [] },
       buildingsOsm: { elements: [] },
+      sceneryOsm: { elements: [] },
       config,
       generatedAt: "2026-09-03T12:00:00.000Z",
     };
@@ -135,6 +137,25 @@ describe("assembleMap", () => {
         tile.ground.some((ground) => ground.kind === "field"),
       ),
     ).toBe(true);
+  });
+
+  it("scatters trees over the forest and the park, keeps the mapped ones, and files the furniture", () => {
+    const { tiles, scenery } = assembleMap(input);
+    const trees = tiles.flatMap((tile) => tile.trees ?? []);
+    expect(trees.length).toBe(scenery.trees);
+    expect(scenery.trees).toBeGreaterThan(120);
+    // Three single trees and a row of four.
+    expect(scenery.mappedTrees).toBe(7);
+    expect(tiles.every((tile) => tile.trees && tile.furniture)).toBe(true);
+    const furniture = tiles.flatMap((tile) => tile.furniture ?? []);
+    expect(furniture.map((piece) => piece[2]).sort()).toEqual([
+      "bench",
+      "busStop",
+      "lamp",
+    ]);
+    const lamp = furniture.find((piece) => piece[2] === "lamp");
+    expect(lamp?.[3]).toBe(0);
+    expect(scenery.furniture).toBe(3);
   });
 
   it("throws a MapBuildError listing landmark problems", () => {

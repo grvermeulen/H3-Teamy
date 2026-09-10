@@ -68,6 +68,28 @@ describe("isMapTile", () => {
     expect(isMapTile(42)).toBe(false);
   });
 
+  it("takes trees and furniture as tuples, absent or well-formed, and nothing else", () => {
+    const tile = {
+      x: 1,
+      y: 2,
+      roads: [],
+      buildings: [],
+      ground: [],
+      water: [],
+    };
+    expect(
+      isMapTile({
+        ...tile,
+        trees: [[4, 8, 1]],
+        furniture: [[4, 8, "lamp", 90]],
+      }),
+    ).toBe(true);
+    expect(isMapTile({ ...tile, trees: [[4, 8]] })).toBe(false);
+    expect(isMapTile({ ...tile, trees: [[4, 8, 2]] })).toBe(false);
+    expect(isMapTile({ ...tile, furniture: [[4, 8, 3, 90]] })).toBe(false);
+    expect(isMapTile({ ...tile, furniture: "lamp" })).toBe(false);
+  });
+
   it("rejects geometry entries without numeric points arrays", () => {
     expect(
       isMapTile({

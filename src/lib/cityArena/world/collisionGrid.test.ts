@@ -34,6 +34,8 @@ function tileWith(
     x,
     y,
     rect: { minX: 0, minY: 0, maxX: 2000, maxY: 2000 },
+    trees: [],
+    furniture: [],
     roads: [],
     buildings: buildings.map((ring) => ({
       ring,

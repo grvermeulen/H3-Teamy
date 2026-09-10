@@ -77,6 +77,38 @@ function isStringArray(value: unknown): boolean {
   );
 }
 
+/** True for `[x, y, size]` tree rows, or for the field's absence (a tile built before Plan 9b). */
+function isTreeList(value: unknown): boolean {
+  if (value === undefined) return true;
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        Array.isArray(entry) &&
+        entry.length === 3 &&
+        isFlatNumberArray(entry) &&
+        (entry[2] === 0 || entry[2] === 1),
+    )
+  );
+}
+
+/** True for `[x, y, kind, heading]` furniture rows, or for the field's absence. */
+function isFurnitureList(value: unknown): boolean {
+  if (value === undefined) return true;
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        Array.isArray(entry) &&
+        entry.length === 4 &&
+        typeof entry[0] === "number" &&
+        typeof entry[1] === "number" &&
+        typeof entry[2] === "string" &&
+        typeof entry[3] === "number",
+    )
+  );
+}
+
 /** Cheap structural guard for a tile payload (full Zod validation would be too slow at 10 Hz loads). */
 export function isMapTile(value: unknown): value is MapTile {
   if (!isRecord(value)) return false;
@@ -86,7 +118,9 @@ export function isMapTile(value: unknown): value is MapTile {
     isGeometryList(value.roads) &&
     isGeometryList(value.buildings) &&
     isGeometryList(value.ground) &&
-    isGeometryList(value.water)
+    isGeometryList(value.water) &&
+    isTreeList(value.trees) &&
+    isFurnitureList(value.furniture)
   );
 }
 

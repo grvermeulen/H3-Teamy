@@ -73,5 +73,38 @@ describe("decode", () => {
     expect(decoded.ground[0].kind).toBe("grass");
     expect(decoded.water[0].ring[2]).toEqual([10, 10]);
     expect(decoded.rect).toEqual(tileRectMetres(4, 2, index));
+    expect(decoded.trees).toEqual([]);
+    expect(decoded.furniture).toEqual([]);
+  });
+
+  it("decodes trees with their canopy boxes and furniture with headings in radians", () => {
+    const tile: MapTile = {
+      x: 0,
+      y: 0,
+      roads: [],
+      buildings: [],
+      ground: [],
+      water: [],
+      trees: [
+        [40, -80, 0],
+        [400, 400, 1],
+      ],
+      furniture: [[8, 8, "bench", 90]],
+    };
+    const decoded = decodeTile(tile, index);
+    expect(decoded.trees[0]).toEqual({
+      point: [10, -20],
+      size: 0,
+      bounds: { minX: 7, minY: -23, maxX: 13, maxY: -17 },
+    });
+    expect(decoded.trees[1].bounds).toEqual({
+      minX: 95,
+      minY: 95,
+      maxX: 105,
+      maxY: 105,
+    });
+    expect(decoded.furniture[0].point).toEqual([2, 2]);
+    expect(decoded.furniture[0].kind).toBe("bench");
+    expect(decoded.furniture[0].heading).toBeCloseTo(Math.PI / 2);
   });
 });

@@ -22,6 +22,7 @@ import {
   buildBuildingsQuery,
   buildLandmarkQuery,
   buildRoadsQuery,
+  buildSceneryQuery,
 } from "../../src/lib/cityArena/mapBuild/overpassQueries";
 import { tileFileName } from "../../src/lib/cityArena/mapBuild/tiles";
 import type { MapIndex } from "../../src/lib/cityArena/world/mapTypes";
@@ -87,7 +88,7 @@ export function findOversizedTiles(
   );
 }
 
-/** Stage 1 (landmarks, matched and validated) and stage 2 (roads/areas/buildings) fetches. */
+/** Stage 1 (landmarks, matched and validated) and stage 2 (roads/areas/buildings/scenery) fetches. */
 async function fetchStages(
   options: RunBuildOptions,
   config: LandmarkConfig[],
@@ -97,6 +98,7 @@ async function fetchStages(
   roadsOsm: OverpassJson;
   areasOsm: OverpassJson;
   buildingsOsm: OverpassJson;
+  sceneryOsm: OverpassJson;
 }> {
   const fetchOptions = {
     cacheDir: options.cacheDir,
@@ -124,17 +126,28 @@ async function fetchStages(
     osmElementId(matched.element),
   );
 
-  log("Stage 2/4: roads, areas and buildings");
-  const [roadsOsm, areasOsm, buildingsOsm] = await Promise.all([
+  log("Stage 2/4: roads, areas, buildings and scenery");
+  const [roadsOsm, areasOsm, buildingsOsm, sceneryOsm] = await Promise.all([
     fetchOverpass(buildRoadsQuery(anchorCentres), fetchOptions),
     fetchOverpass(buildAreasQuery(), fetchOptions),
     fetchOverpass(
       buildBuildingsQuery(anchorCentres, landmarkElementIds),
       fetchOptions,
     ),
+    fetchOverpass(buildSceneryQuery(anchorCentres), fetchOptions),
   ]);
 
-  return { landmarkOsm, roadsOsm, areasOsm, buildingsOsm };
+  return { landmarkOsm, roadsOsm, areasOsm, buildingsOsm, sceneryOsm };
+}
+
+/** The scenery line of the report: what stands, and the fullest tile. */
+function sceneryReport(assembled: AssembledMap): string {
+  const fullest = assembled.tiles.reduce(
+    (most, tile) => Math.max(most, tile.trees?.length ?? 0),
+    0,
+  );
+  const { trees, mappedTrees, furniture } = assembled.scenery;
+  return `Scenery: ${trees} trees (${mappedTrees} mapped) and ${furniture} pieces of street furniture; the fullest tile holds ${fullest} trees`;
 }
 
 /** Serialises tiles and index/roads JSON, folding tile byte counts into the index first. */
@@ -229,11 +242,8 @@ export async function runBuild(
 ): Promise<RunBuildResult> {
   const log = options.log ?? ((line: string) => console.log(line));
   const config = options.config ?? LANDMARKS;
-  const { landmarkOsm, roadsOsm, areasOsm, buildingsOsm } = await fetchStages(
-    options,
-    config,
-    log,
-  );
+  const { landmarkOsm, roadsOsm, areasOsm, buildingsOsm, sceneryOsm } =
+    await fetchStages(options, config, log);
 
   log("Stage 3/4: assemble");
   const generatedAt = (options.now ?? (() => new Date()))().toISOString();
@@ -242,12 +252,14 @@ export async function runBuild(
     roadsOsm,
     areasOsm,
     buildingsOsm,
+    sceneryOsm,
     config,
     generatedAt,
   });
   for (const key of assembled.unattachedLandmarks) {
     log(`Landmark without building: ${key}`);
   }
+  log(sceneryReport(assembled));
 
   log("Stage 4/4: serialise and check budget");
   const { tileJson, indexJson, roadsJson, files } = serialiseAsset(assembled);
