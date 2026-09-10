@@ -146,8 +146,8 @@ function sceneryReport(assembled: AssembledMap): string {
     (most, tile) => Math.max(most, tile.trees?.length ?? 0),
     0,
   );
-  const { trees, mappedTrees, furniture } = assembled.scenery;
-  return `Scenery: ${trees} trees (${mappedTrees} mapped) and ${furniture} pieces of street furniture; the fullest tile holds ${fullest} trees`;
+  const { placedTrees, trees, mappedTrees, furniture } = assembled.scenery;
+  return `Scenery: ${trees} trees in the tiles (${mappedTrees} mapped; ${placedTrees} placed before the per-tile caps) and ${furniture} pieces of street furniture; the fullest tile holds ${fullest} trees`;
 }
 
 /** Serialises tiles and index/roads JSON, folding tile byte counts into the index first. */

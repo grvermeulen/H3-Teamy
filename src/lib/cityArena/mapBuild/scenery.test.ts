@@ -157,7 +157,17 @@ describe("placeScenery", () => {
       { point: [3000, 1000], kind: "busStop", headingDeg: 45 },
     ];
     const tiles: MapTile[] = [createEmptyTile({ x: 0, y: 0 })];
-    placeScenery(tiles, bounds, { trees, furniture, mappedTrees: 2 });
+    const counts = placeScenery(tiles, bounds, {
+      trees,
+      furniture,
+      mappedTrees: 2,
+    });
+    expect(counts).toEqual({
+      placedTrees: MAX_TREES_PER_TILE + 102,
+      trees: MAX_TREES_PER_TILE + 1,
+      mappedTrees: 2,
+      furniture: 1,
+    });
     expect(tiles.map((tile) => [tile.x, tile.y])).toEqual([
       [0, 0],
       [1, 0],

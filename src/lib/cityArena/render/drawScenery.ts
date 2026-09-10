@@ -81,8 +81,15 @@ export function paintTrees(
   chunkRect: Rect,
   props: PropSprites | undefined,
 ): void {
+  // A canopy just past the chunk's north-west edge still throws its shadow into the chunk.
+  const reach: Rect = {
+    minX: chunkRect.minX - CANOPY_SHADOW_OFFSET_M,
+    minY: chunkRect.minY - CANOPY_SHADOW_OFFSET_M,
+    maxX: chunkRect.maxX,
+    maxY: chunkRect.maxY,
+  };
   const trees = tiles.flatMap((tile) =>
-    tile.trees.filter((tree) => rectsIntersect(tree.bounds, chunkRect)),
+    tile.trees.filter((tree) => rectsIntersect(tree.bounds, reach)),
   );
   for (const tree of trees)
     fillDisc(

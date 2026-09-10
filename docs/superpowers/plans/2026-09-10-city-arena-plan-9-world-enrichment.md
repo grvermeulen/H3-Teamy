@@ -166,8 +166,10 @@ export function hullCircles(
 ```ts
 /** A tree: position in world units and a size class (0: 6 m canopy, 1: 10 m). */
 export type TileTree = [x: number, y: number, size: 0 | 1];
-/** A piece of furniture: position and kind. */
-export type TileFurniture = [x: number, y: number, kind: FurnitureKind];
+/** A piece of furniture: position, kind, and (as built) the heading in whole degrees. */
+export type TileFurniture = [x: number, y: number, kind: FurnitureKind, headingDeg: number];
+// Superseded: the three-part `[x, y, kind]` of the first draft — the build turns a piece to its
+// nearest road, so the tuple carries the heading and the decoder reads all four.
 export type FurnitureKind = "lamp" | "bench" | "busStop";
 export type MapTile = { …; trees: TileTree[]; furniture: TileFurniture[] }; // both default [] on decode
 export const MAX_TREES_PER_TILE = 4000;

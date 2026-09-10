@@ -122,6 +122,12 @@ const sceneryTile: DecodedTile = {
       size: 1,
       bounds: { minX: 495, minY: 495, maxX: 505, maxY: 505 },
     },
+    // Just past the chunk's west edge: its shadow reaches in, so it paints too.
+    {
+      point: [-3.5, 64],
+      size: 0,
+      bounds: { minX: -6.5, minY: 61, maxX: -0.5, maxY: 67 },
+    },
   ],
   furniture: [
     { point: [35, 12], kind: "bench", heading: Math.PI / 2 },
@@ -250,7 +256,7 @@ describe("paintChunk", () => {
     const label = calls.indexOf("fillText(Cunerakerk,0,0)");
     expect(church).toBeGreaterThan(-1);
     expect(bench).toBeGreaterThan(church);
-    expect(shadows).toHaveLength(2);
+    expect(shadows).toHaveLength(3);
     expect(Math.min(...shadows)).toBeGreaterThan(bench);
     expect(Math.min(...canopies)).toBeGreaterThan(Math.max(...shadows));
     expect(label).toBeGreaterThan(Math.max(...canopies));
@@ -258,7 +264,8 @@ describe("paintChunk", () => {
     expect(
       calls.some((call) => call.startsWith(`fill(${FURNITURE_FILL.lamp})`)),
     ).toBe(false);
-    expect(calls.filter((call) => call.startsWith("arc(")).length).toBe(4);
+    expect(calls.filter((call) => call.startsWith("arc(")).length).toBe(6);
+    expect(calls).toContain("arc(-2.3,65.2,3,0,6.28)");
   });
 
   it("draws the prop art over the same footprints once it has loaded", () => {
@@ -282,12 +289,12 @@ describe("paintChunk", () => {
     const images = context.calls.filter((call) =>
       call.startsWith("drawImage("),
     );
-    expect(images).toHaveLength(3);
+    expect(images).toHaveLength(4);
     expect(images[0]).toBe(`drawImage(${String(image)},-0.9,-0.3,1.8,0.6)`);
     expect(images[1]).toBe(`drawImage(${String(image)},-3,-3,6,6)`);
     expect(images[2]).toBe(`drawImage(${String(image)},-5,-5,10,10)`);
     expect(context.calls.filter((call) => call.startsWith("arc(")).length).toBe(
-      2,
+      3,
     );
   });
 

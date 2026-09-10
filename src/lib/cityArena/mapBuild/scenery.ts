@@ -49,6 +49,18 @@ export type ProjectedScenery = {
   mappedTrees: number;
 };
 
+/** What the tiles hold after the caps, for the build report. */
+export type SceneryCounts = {
+  /** Trees the scatter and the map produced, before the per-tile caps. */
+  placedTrees: number;
+  /** Trees in the tiles. */
+  trees: number;
+  /** Trees in the tiles that OpenStreetMap mapped itself. */
+  mappedTrees: number;
+  /** Pieces of furniture in the tiles. */
+  furniture: number;
+};
+
 /** What scenery keeps clear of: the roads with their widths, and the solid polygons. */
 export type SceneryObstacles = {
   roads: GridIndex<RoadSegment>;
@@ -252,12 +264,13 @@ function encodeFurniture(piece: ProjectedFurniture): TileFurniture {
  * @param tiles - The tiles from `buildTiles`; changed in place and kept in row-major order.
  * @param bounds - The region bounds, metres.
  * @param scenery - The trees and furniture, in priority order.
+ * @returns What the tiles hold after the caps, and what went in.
  */
 export function placeScenery(
   tiles: MapTile[],
   bounds: Rect,
   scenery: ProjectedScenery,
-): void {
+): SceneryCounts {
   const byKey = new Map(tiles.map((tile) => [`${tile.x}:${tile.y}`, tile]));
   const tileAt = (key: string): MapTile => {
     const existing = byKey.get(key);
@@ -272,11 +285,23 @@ export function placeScenery(
     tile.trees = [];
     tile.furniture = [];
   }
-  for (const [key, trees] of byHomeTile(scenery.trees, bounds))
-    tileAt(key).trees = trees.slice(0, MAX_TREES_PER_TILE).map(encodeTree);
-  for (const [key, pieces] of byHomeTile(scenery.furniture, bounds))
-    tileAt(key).furniture = pieces
-      .slice(0, MAX_FURNITURE_PER_TILE)
-      .map(encodeFurniture);
+  const counts: SceneryCounts = {
+    placedTrees: scenery.trees.length,
+    trees: 0,
+    mappedTrees: 0,
+    furniture: 0,
+  };
+  for (const [key, trees] of byHomeTile(scenery.trees, bounds)) {
+    const kept = trees.slice(0, MAX_TREES_PER_TILE);
+    tileAt(key).trees = kept.map(encodeTree);
+    counts.trees += kept.length;
+    counts.mappedTrees += kept.filter((tree) => tree.mapped).length;
+  }
+  for (const [key, pieces] of byHomeTile(scenery.furniture, bounds)) {
+    const kept = pieces.slice(0, MAX_FURNITURE_PER_TILE);
+    tileAt(key).furniture = kept.map(encodeFurniture);
+    counts.furniture += kept.length;
+  }
   tiles.sort((left, right) => left.y - right.y || left.x - right.x);
+  return counts;
 }

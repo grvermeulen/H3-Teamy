@@ -87,6 +87,7 @@ describe("isMapTile", () => {
     expect(isMapTile({ ...tile, trees: [[4, 8]] })).toBe(false);
     expect(isMapTile({ ...tile, trees: [[4, 8, 2]] })).toBe(false);
     expect(isMapTile({ ...tile, furniture: [[4, 8, 3, 90]] })).toBe(false);
+    expect(isMapTile({ ...tile, furniture: [[4, 8, "bin", 90]] })).toBe(false);
     expect(isMapTile({ ...tile, furniture: "lamp" })).toBe(false);
   });
 

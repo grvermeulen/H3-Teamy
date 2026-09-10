@@ -1,5 +1,12 @@
 import { z } from "zod";
-import type { MapIndex, MapRoads, MapTile, ZoneKey } from "./world/mapTypes";
+import {
+  FURNITURE_KINDS,
+  type FurnitureKind,
+  type MapIndex,
+  type MapRoads,
+  type MapTile,
+  type ZoneKey,
+} from "./world/mapTypes";
 
 const zoneKeys = ["rhenen", "wageningen", "campus", "bennekom"] as const;
 const unitPoint = z.tuple([z.number().int(), z.number().int()]);
@@ -92,7 +99,15 @@ function isTreeList(value: unknown): boolean {
   );
 }
 
-/** True for `[x, y, kind, heading]` furniture rows, or for the field's absence. */
+/** True when the value names one of the furniture kinds. */
+function isFurnitureKind(value: unknown): value is FurnitureKind {
+  return (
+    typeof value === "string" &&
+    (FURNITURE_KINDS as readonly string[]).includes(value)
+  );
+}
+
+/** True for `[x, y, kind, heading]` furniture rows of a known kind, or for the field's absence. */
 function isFurnitureList(value: unknown): boolean {
   if (value === undefined) return true;
   return (
@@ -103,7 +118,7 @@ function isFurnitureList(value: unknown): boolean {
         entry.length === 4 &&
         typeof entry[0] === "number" &&
         typeof entry[1] === "number" &&
-        typeof entry[2] === "string" &&
+        isFurnitureKind(entry[2]) &&
         typeof entry[3] === "number",
     )
   );

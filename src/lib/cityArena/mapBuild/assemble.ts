@@ -44,7 +44,7 @@ import {
   type ProjectedGround,
   type ProjectedWater,
 } from "./tiles";
-import { buildScenery, placeScenery } from "./scenery";
+import { buildScenery, placeScenery, type SceneryCounts } from "./scenery";
 import { treeBedFor } from "./vegetation";
 import {
   buildZones,
@@ -66,13 +66,6 @@ export type AssembleInput = {
   generatedAt: string;
 };
 
-/** What the scenery pass produced, for the build report. */
-export type SceneryCounts = {
-  trees: number;
-  mappedTrees: number;
-  furniture: number;
-};
-
 /** Everything the writer needs; `index.tiles[].bytes` is filled in by the writer. */
 export type AssembledMap = {
   index: MapIndex;
@@ -81,6 +74,7 @@ export type AssembledMap = {
   /** Landmark keys with no building after attachment and footprint synthesis — rendered
    * as labels only (spec §3.2). */
   unattachedLandmarks: string[];
+  /** What the tiles hold after the per-tile caps, for the build report. */
   scenery: SceneryCounts;
 };
 
@@ -385,18 +379,8 @@ export function assembleMap(input: AssembleInput): AssembledMap {
     keepNear: zoneCentres.map((zone) => zone.center),
   });
   const tiles = buildTiles(bounds, rendered, keptBuildings, ground, water);
-  placeScenery(tiles, bounds, scenery);
+  const counts = placeScenery(tiles, bounds, scenery);
 
   const index = buildIndex(input, landmarks, tiles, zones, bounds);
-  return {
-    index,
-    roads,
-    tiles,
-    unattachedLandmarks,
-    scenery: {
-      trees: scenery.trees.length,
-      mappedTrees: scenery.mappedTrees,
-      furniture: scenery.furniture.length,
-    },
-  };
+  return { index, roads, tiles, unattachedLandmarks, scenery: counts };
 }

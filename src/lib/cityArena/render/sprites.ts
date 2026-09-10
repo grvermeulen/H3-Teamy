@@ -128,7 +128,12 @@ export type PersonSprites = Partial<Record<string, PersonSprite>>;
 /** The ground textures, one per {@link GroundKind}; each stays absent until its file decodes. */
 export type GroundTextures = Partial<Record<GroundKind, SurfaceTexture>>;
 
-/** A decoded scenery prop: the art and the metre footprint it is drawn over. */
+/**
+ * A decoded scenery prop: the art, and the metre footprint the pack script packed it for. The
+ * painter draws the art over the world's own box (`TREE_CANOPY_M`, `FURNITURE_SIZE_M`), exactly
+ * as a car sprite is stretched over its kind's hull, so what you see is what you bump into; the
+ * footprint here says what the file was made for and is what `check-sprites` may compare.
+ */
 export type PropSprite = {
   image: CanvasImageSource;
   lengthMetres: number;

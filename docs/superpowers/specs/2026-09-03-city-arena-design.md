@@ -224,12 +224,15 @@ containing or nearby building render as labels only.
   `type=building` relation outlines (review finding 1) and attaching/footprinting landmark
   buildings that used to be dropped (findings 2–3) tipped the balance.
 - Polygons store their outer ring only; holes (courtyards, river islands) are dropped.
-- Budget: total ≤ 1.2 MB gzipped (shipped at 1138.6 KB) and no single tile above 256 KB
-  gzipped; the build fails otherwise (owner decision 2026-09-04: the total is a repo/CDN
+- Budget (historical v1 limits, superseded below): total ≤ 1.2 MB gzipped (shipped at
+  1138.6 KB) and no single tile above 256 KB gzipped; the build failed otherwise (owner
+  decision 2026-09-04: the total is a repo/CDN
   figure — a player only downloads the ≤ 9 tiles around them, so the per-tile cap is what
   bounds download time). See §3.1's real-build note for the constants that got the shipped
-  build under both. Raised on 2026-09-07 to 4 MB and 512 KB as runaway-build guardrails; the v2
-  build with scenery (2026-09-10) sits at 1529.2 KB total with `tile_4_2.json` the largest at
+  build under both. **Live limits:** raised on 2026-09-07 to 4 MB total and 512 KB per tile
+  (`GZIP_BUDGET_BYTES`, `TILE_GZIP_BUDGET_BYTES` in `scripts/arena/buildMap.ts`) as
+  runaway-build guardrails, which is what the build enforces today; the v2 build with scenery
+  (2026-09-10) sits at 1529.2 KB total with `tile_4_2.json` the largest at
   223.7 KB.
 - `next.config.js` `headers()` adds `Cache-Control: public, max-age=31536000, immutable`
   for `/arena/map/:path*`. Any regeneration bumps the path version (`v1` → `v2`) via a
@@ -858,18 +861,18 @@ docs/tech/arena/README.md · docs/tech/arena/TESTING.md
 
 ## 15. Risks and accepted trade-offs
 
-| Risk                                        | Mitigation                                                                                                 |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Host on a phone backgrounds or dies         | Priority election prefers desktops; 3 s silence rule; full-state snapshots make takeover cheap             |
-| Ably free-plan limits                       | Section 6.4 budget; message counters in metrics; host-only inputs channel                                  |
-| Map data size on 4G                         | Tiles streamed by proximity, immutable caching, 1.2 MB total / 256 KB per-tile gzipped build ceilings      |
-| Real streets are irregular (not a GTA grid) | Zoom tuned to ≈ 45 m across on phones; radar; street labels                                                |
-| iOS haptics                                 | Opportunistic only; universal visual/audio feedback                                                        |
-| Cheating                                    | Accepted (teammates); host clamps inputs and fire rates                                                    |
-| ODbL / trademark                            | Attribution footer, derived asset in public repo; the "GTA H3" name and artwork are an accepted owner risk |
-| Overpass availability                       | Build is manual and committed; nightly freshness check only alerts                                         |
-| Floating-point determinism                  | Replays compared exactly on V8, with tolerance elsewhere                                                   |
-| Tested bundle ≠ production bundle           | One hook module differs; real-Ably lane covers integration                                                 |
+| Risk                                        | Mitigation                                                                                                                |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Host on a phone backgrounds or dies         | Priority election prefers desktops; 3 s silence rule; full-state snapshots make takeover cheap                            |
+| Ably free-plan limits                       | Section 6.4 budget; message counters in metrics; host-only inputs channel                                                 |
+| Map data size on 4G                         | Tiles streamed by proximity, immutable caching, 4 MB total / 512 KB per-tile gzipped build ceilings (v1: 1.2 MB / 256 KB) |
+| Real streets are irregular (not a GTA grid) | Zoom tuned to ≈ 45 m across on phones; radar; street labels                                                               |
+| iOS haptics                                 | Opportunistic only; universal visual/audio feedback                                                                       |
+| Cheating                                    | Accepted (teammates); host clamps inputs and fire rates                                                                   |
+| ODbL / trademark                            | Attribution footer, derived asset in public repo; the "GTA H3" name and artwork are an accepted owner risk                |
+| Overpass availability                       | Build is manual and committed; nightly freshness check only alerts                                                        |
+| Floating-point determinism                  | Replays compared exactly on V8, with tolerance elsewhere                                                                  |
+| Tested bundle ≠ production bundle           | One hook module differs; real-Ably lane covers integration                                                                |
 
 ---
 
