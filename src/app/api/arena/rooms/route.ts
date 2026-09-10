@@ -1,13 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import * as Ably from "ably";
-import { electHost } from "../../../../lib/cityArena/net/election";
 import {
   LOBBY_CHANNEL,
   roomsFromPresence,
   type LobbyRoom,
 } from "../../../../lib/cityArena/net/lobbyPresence";
-import { roomChannelName } from "../../../../lib/cityArena/net/room";
+import {
+  presenceOf,
+  resolveRoomHost,
+} from "../../../../lib/cityArena/net/roomHost";
 import type { PresenceMember } from "../../../../lib/cityArena/net/transport";
 import {
   ARENA_LIMITS,
@@ -31,26 +33,14 @@ const CACHE_SECONDS = 5;
 /** The shape the launcher renders. */
 type RoomsResponse = { rooms: LobbyRoom[] };
 
-/** Reads one channel's presence set through Ably's REST API. */
-async function presenceOf(
-  rest: Ably.Rest,
-  channel: string,
-): Promise<PresenceMember[]> {
-  const page = await rest.channels.get(channel).presence.get();
-  return page.items.map((item) => ({
-    clientId: item.clientId,
-    data: item.data as PresenceMember["data"],
-    timestamp: item.timestamp,
-  }));
-}
-
 /**
  * Keeps only the rooms whose advertiser is really that room's elected host.
  *
  * Any member can enter lobby presence with a made-up `room`, because hosts advertise through
  * presence and the token cannot tell the two apart. This is the check that makes the list
- * trustworthy: the room channel's own presence set says who is in it, and the same election
- * every client runs says who hosts it.
+ * trustworthy: the room channel's own presence set says who is in it, and its latest snapshot
+ * says who hosts it — with the election every client runs as the fallback for a room that has
+ * not started stepping (`roomHost.ts`).
  */
 async function verifiedRooms(
   rest: Ably.Rest,
@@ -66,8 +56,8 @@ async function verifiedRooms(
   const rooms = roomsFromPresence(lobby);
   const checks = await Promise.all(
     rooms.map(async (room) => {
-      const members = await presenceOf(rest, roomChannelName(room.roomCode));
-      return electHost(members) === advertiserByCode.get(room.roomCode);
+      const { host } = await resolveRoomHost(rest, room.roomCode);
+      return host === advertiserByCode.get(room.roomCode);
     }),
   );
   return rooms.filter((_, index) => checks[index]);

@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { PresenceMember, PresenceRole } from "./transport";
 import {
+  ACTING_HOST_FRESH_MS,
   HOST_SILENCE_MS,
+  actingHost,
   createHostWatch,
   electHost,
   electPresentHost,
+  rankMembers,
 } from "./election";
 
 /** A present member with the fields the election actually reads. */
@@ -163,5 +166,76 @@ describe("electPresentHost", () => {
     const members = [mobile("c", 1), desktop("a", 2)];
     expect(electPresentHost(members, new Set())).toBe(electHost(members));
     expect(electPresentHost([], new Set())).toBeNull();
+  });
+});
+
+describe("rankMembers", () => {
+  it("is the order electHost picks from, without touching the input", () => {
+    const members = [mobile("c", 1), desktop("b", 1), desktop("a", 2)];
+    expect(rankMembers(members).map((m) => m.clientId)).toEqual([
+      "b",
+      "a",
+      "c",
+    ]);
+    expect(members[0]?.clientId).toBe("c");
+  });
+});
+
+describe("actingHost", () => {
+  const sighting = (clientId: string, timestamp: number) => ({
+    clientId,
+    timestamp,
+  });
+  const members = () => [desktop("a", 1), desktop("b", 2), mobile("c", 3)];
+
+  it("takes a lower-ranked member only while everyone above it is silent", () => {
+    expect(actingHost(members(), [sighting("b", 9_000)], 10_000)).toBe("b");
+    expect(actingHost(members(), [sighting("c", 9_000)], 10_000)).toBe("c");
+  });
+
+  it("keeps the best-ranked publisher while it is heard from, whoever else publishes", () => {
+    expect(
+      actingHost(
+        members(),
+        [sighting("b", 9_900), sighting("a", 9_000)],
+        10_000,
+      ),
+    ).toBe("a");
+    expect(
+      actingHost(
+        members(),
+        [sighting("c", 9_900), sighting("b", 9_000)],
+        10_000,
+      ),
+    ).toBe("b");
+  });
+
+  it("falls back to the election when nobody has published within the window", () => {
+    expect(
+      actingHost(members(), [sighting("b", 0)], ACTING_HOST_FRESH_MS + 1),
+    ).toBe("a");
+    expect(
+      actingHost(members(), [sighting("b", 0)], ACTING_HOST_FRESH_MS),
+    ).toBe("b");
+    expect(actingHost(members(), [], 10_000)).toBe("a");
+  });
+
+  it("ignores a publisher who is not present", () => {
+    expect(
+      actingHost([desktop("a", 1)], [sighting("gone", 9_000)], 10_000),
+    ).toBe("a");
+  });
+
+  it("has no host when nobody is present, whatever the history says", () => {
+    expect(actingHost([], [sighting("b", 9_000)], 10_000)).toBeNull();
+  });
+
+  it("takes a window of its own when one is given", () => {
+    expect(actingHost(members(), [sighting("b", 7_000)], 10_000, 2_000)).toBe(
+      "a",
+    );
+    expect(actingHost(members(), [sighting("b", 9_000)], 10_000, 2_000)).toBe(
+      "b",
+    );
   });
 });

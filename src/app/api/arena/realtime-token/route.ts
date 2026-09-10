@@ -25,7 +25,7 @@ const TOKEN_TTL_MS = 60 * 60 * 1000;
  * Withholding `publish` on the lobby is not what stops a forged advertisement — hosts advertise
  * through presence, so every member can enter presence there with a made-up `room`. What stops
  * it is `GET /api/arena/rooms`, which checks each advertised room against the room channel's own
- * presence set and drops any whose advertiser is not that room's elected host.
+ * presence set and recent snapshots, and drops any whose advertiser is not that room's acting host.
  */
 const ARENA_CAPABILITY: Record<string, Ably.capabilityOp[]> = {
   "arena:room:*": ["publish", "subscribe", "presence"],

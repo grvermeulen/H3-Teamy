@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+import * as Sentry from "@sentry/nextjs";
 import { ROOM_CAPACITY } from "@/lib/cityArena/net/room";
 import type { ConnectionState } from "@/lib/cityArena/net/transport";
 import { ATTRIBUTION_TEXT } from "./ArenaLoadingScreen";
@@ -54,6 +56,94 @@ export type ArenaLobbyProps = {
   onEnterCode: () => void;
   onLeave: () => void;
 };
+
+/** The copy button's two faces (spec §16). */
+export const COPY_LABEL = "Kopieer";
+export const COPIED_LABEL = "Gekopieerd";
+/** How long the button says the code was copied. */
+export const COPIED_FOR_MS = 2000;
+
+/** Copies the code to the clipboard and says so for a moment; absent where there is no clipboard. */
+function CopyCodeButton({ code }: { code: string }): React.JSX.Element | null {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+  if (typeof navigator === "undefined" || !navigator.clipboard) return null;
+  const copy = (): void => {
+    navigator.clipboard
+      .writeText(code)
+      .then(() => {
+        // Every copy restarts the confirmation, a second one while it still shows included.
+        setCopied(true);
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => setCopied(false), COPIED_FOR_MS);
+      })
+      .catch((error: unknown) => {
+        Sentry.captureException(error, {
+          tags: { area: "arena", kind: "lobby-copy" },
+        });
+      });
+  };
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      aria-live="polite"
+      className="arena-label border border-[var(--arena-line-strong)] px-2 py-1 text-[var(--arena-text)] transition hover:border-[var(--arena-amber)] hover:text-[var(--arena-amber)]"
+    >
+      {copied ? COPIED_LABEL : COPY_LABEL}
+    </button>
+  );
+}
+
+/**
+ * The lobby's header: the code, large enough to read across a room and copyable, the zone under
+ * it, and the crew count with the connection dot on the right.
+ */
+function LobbyHeader({
+  roomCode,
+  zone,
+  crewSize,
+  connection,
+}: Pick<ArenaLobbyProps, "roomCode" | "zone" | "connection"> & {
+  crewSize: number;
+}): React.JSX.Element {
+  return (
+    <header className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <span className="arena-label block text-[var(--arena-dim)]">
+          Lobby · code
+        </span>
+        <div className="mt-0.5 flex flex-wrap items-center gap-3">
+          <span
+            data-testid="room-code"
+            aria-label={`Code ${roomCode}`}
+            className="arena-display text-4xl leading-none tracking-[0.2em] text-[var(--arena-amber)] sm:text-5xl"
+          >
+            {roomCode}
+          </span>
+          <CopyCodeButton code={roomCode} />
+        </div>
+        <h2 className="arena-display mt-1.5 text-lg text-[var(--arena-text)] sm:truncate sm:text-xl">
+          {zoneName(zone)}
+        </h2>
+      </div>
+      <div className="shrink-0 text-right">
+        <span className="arena-label block border border-[var(--arena-line-strong)] px-2 py-1 text-[var(--arena-text)] tabular-nums">
+          {crewSize} / {ROOM_CAPACITY}
+        </span>
+        <span className="mt-1.5 block">
+          <ConnectionDot state={connection} />
+        </span>
+      </div>
+    </header>
+  );
+}
 
 /** Two digits, matching the manifest register used on the launcher. */
 function seatNumber(index: number): string {
@@ -171,24 +261,12 @@ export function ArenaLobby({
 }: ArenaLobbyProps): React.JSX.Element {
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-3 p-3">
-      <header className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <span className="arena-label block text-[var(--arena-amber)]">
-            Room {roomCode} · Lobby
-          </span>
-          <h2 className="arena-display mt-1 text-2xl text-[var(--arena-text)] sm:truncate sm:text-3xl">
-            {zoneName(zone)}
-          </h2>
-        </div>
-        <div className="shrink-0 text-right">
-          <span className="arena-label block border border-[var(--arena-line-strong)] px-2 py-1 text-[var(--arena-text)] tabular-nums">
-            {crew.length} / {ROOM_CAPACITY}
-          </span>
-          <span className="mt-1.5 block">
-            <ConnectionDot state={connection} />
-          </span>
-        </div>
-      </header>
+      <LobbyHeader
+        roomCode={roomCode}
+        zone={zone}
+        crewSize={crew.length}
+        connection={connection}
+      />
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 sm:flex-row">
         <div className="flex min-w-0 flex-1 flex-col gap-2">

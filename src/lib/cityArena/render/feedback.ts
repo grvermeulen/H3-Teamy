@@ -24,6 +24,8 @@ export type FeedbackState = {
   hitMarkerTicks: number;
   /** Heartbeat throb, 0 to 1, oscillating while health is low; 0 otherwise. */
   throb: number;
+  /** Black over the scene right after a cut, 1 fading to 0: the world changed under the camera. */
+  cutFade: number;
 };
 
 /** What one tick contributes. */
@@ -36,6 +38,8 @@ export type FeedbackFrame = {
   reducedMotion: boolean;
 };
 
+/** Ticks a cut takes to fade in from black. */
+export const CUT_FADE_TICKS = 12;
 /** Ticks the vignette takes to fade. */
 export const VIGNETTE_TICKS = 12;
 /** Shake for a bullet hit and for an explosion (spec §7). */
@@ -61,6 +65,7 @@ export const INITIAL_FEEDBACK: FeedbackState = {
   shake: 0,
   hitMarkerTicks: 0,
   throb: 0,
+  cutFade: 0,
 };
 
 /** The strongest shake this tick's events call for, or 0. */
@@ -112,7 +117,19 @@ export function stepFeedback(
       ? HIT_MARKER_TICKS
       : Math.max(0, previous.hitMarkerTicks - 1),
     throb: frame.me.health < LOW_HEALTH ? throbAt(frame.tick) : 0,
+    cutFade: Math.max(0, previous.cutFade - 1 / CUT_FADE_TICKS),
   };
+}
+
+/**
+ * The state right after a cut: black over everything, fading in from the next tick. Kept under
+ * reduced motion too — a fade is not motion, and the alternative is a hard cut.
+ *
+ * @param state - The state before the cut.
+ * @returns The same state with the fade at full.
+ */
+export function withCut(state: FeedbackState): FeedbackState {
+  return { ...state, cutFade: 1 };
 }
 
 /** The classic sine-hash factors: they only have to scatter, not to mean anything. */
@@ -187,6 +204,16 @@ function drawVignette(
   }
 }
 
+/** The colour a cut fades in from: the arena's void. */
+const CUT_COLOUR = "#07090b";
+
+/** Paints black over the whole viewport at `alpha`. */
+function drawCut(context: RasterContext, size: Viewport, alpha: number): void {
+  context.globalAlpha = alpha;
+  context.fillStyle = CUT_COLOUR;
+  context.fillRect(0, 0, size.width, size.height);
+}
+
 /** Paints the hit marker: four short white ticks around the centre. */
 function drawHitMarker(context: RasterContext, size: Viewport): void {
   const cx = size.width / 2;
@@ -223,10 +250,11 @@ export function drawFeedback(
     state.vignette * VIGNETTE_ALPHA,
     state.throb * THROB_ALPHA,
   );
-  if (red <= 0 && state.hitMarkerTicks <= 0) return;
+  if (red <= 0 && state.hitMarkerTicks <= 0 && state.cutFade <= 0) return;
   context.save();
   if (red > 0) drawVignette(context, size, red);
   context.globalAlpha = 1;
   if (state.hitMarkerTicks > 0) drawHitMarker(context, size);
+  if (state.cutFade > 0) drawCut(context, size, state.cutFade);
   context.restore();
 }

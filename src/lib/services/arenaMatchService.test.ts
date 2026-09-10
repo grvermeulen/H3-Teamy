@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Prisma } from "@prisma/client";
 
 const presenceGet = vi.fn();
+const historyGet = vi.fn();
 const channelsGet = vi.fn();
 const matchFindUnique = vi.fn();
 const matchCreate = vi.fn();
@@ -56,7 +57,15 @@ function potje(overrides: Record<string, unknown> = {}) {
 describe("recordMatch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    channelsGet.mockReturnValue({ presence: { get: presenceGet } });
+    channelsGet.mockReturnValue({
+      presence: { get: presenceGet },
+      history: historyGet,
+    });
+    vi.mocked(historyGet).mockResolvedValue({
+      hasNext: () => false,
+      next: async () => null,
+      items: [],
+    });
     // "host" entered first, so electHost picks it.
     presenceGet.mockResolvedValue({
       items: [member("host", 1), member("guest", 2)],
@@ -76,6 +85,58 @@ describe("recordMatch", () => {
       ok: false,
       reason: "not-host",
     });
+    expect(matchCreate).not.toHaveBeenCalled();
+  });
+
+  it("records a potje posted by a host that took over while the old host lingers", async () => {
+    vi.mocked(historyGet).mockResolvedValue({
+      hasNext: () => false,
+      next: async () => null,
+      items: [
+        { name: "state", clientId: "guest", timestamp: Date.now() - 500 },
+      ],
+    });
+    expect(await recordMatch(KEY, "guest", potje())).toEqual({
+      ok: true,
+      matchId: "match-1",
+      recorded: 2,
+    });
+  });
+
+  it("refuses a member who published nothing, even once the host has gone quiet", async () => {
+    vi.mocked(historyGet).mockResolvedValue({
+      hasNext: () => false,
+      next: async () => null,
+      items: [
+        { name: "state", clientId: "host", timestamp: Date.now() - 60_000 },
+      ],
+    });
+    expect(await recordMatch(KEY, "guest", potje())).toEqual({
+      ok: false,
+      reason: "not-host",
+    });
+  });
+
+  it("refuses a member publishing state beside a host that is still heard from", async () => {
+    vi.mocked(historyGet).mockResolvedValue({
+      hasNext: () => false,
+      next: async () => null,
+      items: [
+        { name: "state", clientId: "guest", timestamp: Date.now() - 100 },
+        { name: "state", clientId: "host", timestamp: Date.now() - 200 },
+      ],
+    });
+    expect(await recordMatch(KEY, "guest", potje())).toEqual({
+      ok: false,
+      reason: "not-host",
+    });
+  });
+
+  it("lets a failed Ably read surface rather than guessing a host", async () => {
+    vi.mocked(presenceGet).mockRejectedValue(new Error("ably down"));
+    await expect(recordMatch(KEY, "host", potje())).rejects.toThrow(
+      "ably down",
+    );
     expect(matchCreate).not.toHaveBeenCalled();
   });
 
@@ -245,7 +306,15 @@ describe("leaderboard", () => {
 describe("recordMatch when two hosts race", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    channelsGet.mockReturnValue({ presence: { get: presenceGet } });
+    channelsGet.mockReturnValue({
+      presence: { get: presenceGet },
+      history: historyGet,
+    });
+    vi.mocked(historyGet).mockResolvedValue({
+      hasNext: () => false,
+      next: async () => null,
+      items: [],
+    });
     presenceGet.mockResolvedValue({
       items: [member("host", 1), member("guest", 2)],
     });

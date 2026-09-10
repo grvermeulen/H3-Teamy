@@ -43,15 +43,62 @@ function priorityOf(member: PresenceMember): number {
  * @returns The host's client id, or `null` when nobody is present.
  */
 export function electHost(members: PresenceMember[]): string | null {
-  if (members.length === 0) return null;
-  const sorted = [...members].sort((first, second) => {
+  return rankMembers(members)[0]?.clientId ?? null;
+}
+
+/**
+ * Everyone present, best host first: the total order the election picks from.
+ *
+ * @param members - Everyone present, in any order.
+ * @returns A sorted copy; the input is untouched.
+ */
+export function rankMembers(members: PresenceMember[]): PresenceMember[] {
+  return [...members].sort((first, second) => {
     const byRole = priorityOf(first) - priorityOf(second);
     if (byRole !== 0) return byRole;
     const byTime = first.timestamp - second.timestamp;
     if (byTime !== 0) return byTime;
     return first.clientId < second.clientId ? -1 : 1;
   });
-  return sorted[0]?.clientId ?? null;
+}
+
+/** A snapshot this old still counts as hearing from its publisher; a migrated host publishes well within it. */
+export const ACTING_HOST_FRESH_MS = 10_000;
+
+/** Who published a snapshot, and when the server received it. */
+export type SnapshotSighting = { clientId: string; timestamp: number };
+
+/**
+ * The member actually hosting: the best-ranked present member with a fresh snapshot, else the
+ * plain election.
+ *
+ * The server has no silence watch, and an old host's presence entry outlives its tab by up to
+ * minutes; what it does have is the channel's history, and a host is someone you hear from — the
+ * rule the clients live by (spec §6.6, amended 2026-09-10). Rank still decides between
+ * publishers: a lower-ranked member is taken as host only while everyone above it is silent,
+ * which is the same condition under which the clients' silence rule re-elects, so publishing
+ * snapshots beside a living host gains nothing.
+ *
+ * @param members - Everyone present, in any order.
+ * @param sightings - The newest snapshot seen from each publisher on the room channel.
+ * @param nowMs - The clock to judge freshness by.
+ * @param freshMs - How old a snapshot may be and still count.
+ * @returns The host's client id, or `null` when nobody is present.
+ */
+export function actingHost(
+  members: PresenceMember[],
+  sightings: SnapshotSighting[],
+  nowMs: number,
+  freshMs: number = ACTING_HOST_FRESH_MS,
+): string | null {
+  const fresh = new Set(
+    sightings
+      .filter((sighting) => nowMs - sighting.timestamp <= freshMs)
+      .map((sighting) => sighting.clientId),
+  );
+  const ranked = rankMembers(members);
+  const heard = ranked.find((member) => fresh.has(member.clientId));
+  return heard?.clientId ?? ranked[0]?.clientId ?? null;
 }
 
 /** How a host watch is configured. */

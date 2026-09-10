@@ -24,6 +24,7 @@ import type { RealtimeTransport } from "@/lib/cityArena/net/transport";
 import type { ArenaWorld } from "@/lib/cityArena/sim/arena";
 import { feelTick } from "./arenaFeel";
 import type { Runtime } from "./arenaRuntime";
+import { cutTo, myPlayer } from "./arenaRuntime";
 
 /** The room this game runs in. */
 export type ArenaNetplayOptions = {
@@ -198,6 +199,9 @@ function adoptSeat(
   // State first, then netplay: myPlayer looks the seat up in whatever state is current.
   runtime.state = loop.view();
   runtime.netplay = { kind: "client", loop, playerId: seat };
+  // The seat is wherever the host put us, usually far from where we were roaming: cut, do not fly.
+  const me = myPlayer(runtime);
+  cutTo(runtime, [me.x, me.y]);
 }
 
 /**

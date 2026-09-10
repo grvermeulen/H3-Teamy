@@ -8,8 +8,10 @@
  *
  * What it *can* close, and does:
  *
- * - only the **elected host of a live room** may post, checked against Ably's presence set with
- *   the same `electHost` every client runs, so an outsider cannot post for a room at all;
+ * - only the **acting host of a live room** may post: the best-ranked present member heard from
+ *   in the room's recent snapshots, else the host the presence election every client runs names
+ *   (`net/roomHost.ts`) — so an outsider cannot post for a room at all, and a host that took over
+ *   mid-potje is not refused while the old host's presence entry lingers;
  * - only **players who were actually in that room** get a line, so a host cannot award or ruin
  *   stats for someone who never played;
  * - a potje is **idempotent** on `(roomCode, startedAt)`, so a retry after a dropped response
@@ -21,9 +23,7 @@ import * as Ably from "ably";
 import * as Sentry from "@sentry/nextjs";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
-import { electHost } from "../cityArena/net/election";
-import { roomChannelName } from "../cityArena/net/room";
-import type { PresenceMember } from "../cityArena/net/transport";
+import { resolveRoomHost } from "../cityArena/net/roomHost";
 
 /** Spec §2 step 4: a potje is only recorded when at least two people played it. */
 export const MIN_RECORDED_PLAYERS = 2;
@@ -62,22 +62,6 @@ export type RecordOutcome =
   | { ok: true; matchId: string; recorded: number }
   | { ok: false; reason: RecordFailure };
 
-/** Reads a room's presence set through Ably's REST API. */
-async function presenceOf(
-  key: string,
-  roomCode: string,
-): Promise<PresenceMember[]> {
-  const rest = new Ably.Rest({ key });
-  const page = await rest.channels
-    .get(roomChannelName(roomCode))
-    .presence.get();
-  return page.items.map((item) => ({
-    clientId: item.clientId,
-    data: item.data as PresenceMember["data"],
-    timestamp: item.timestamp,
-  }));
-}
-
 /** Clamps a reported count into the bound, so a bad payload cannot poison a leaderboard. */
 function bounded(value: number): number {
   return Math.max(0, Math.min(MAX_MATCH_COUNT, Math.round(value)));
@@ -86,7 +70,7 @@ function bounded(value: number): number {
 /**
  * Records a finished potje, if the person posting it is entitled to.
  *
- * @param key - The Ably API key, used to read the room's presence set.
+ * @param key - The Ably API key, used to read the room's presence set and history.
  * @param posterUserId - The signed-in user posting the result.
  * @param input - The potje as the host reports it.
  * @returns What happened, including the reason when nothing was recorded.
@@ -99,10 +83,12 @@ export async function recordMatch(
   if (input.results.length < MIN_RECORDED_PLAYERS)
     return { ok: false, reason: "too-few-players" };
 
-  const members = await presenceOf(key, input.roomCode);
+  const { host, members } = await resolveRoomHost(
+    new Ably.Rest({ key }),
+    input.roomCode,
+  );
   // `clientId` is the user id (spec §6.2), so presence is what says who was really in the room.
-  if (electHost(members) !== posterUserId)
-    return { ok: false, reason: "not-host" };
+  if (host !== posterUserId) return { ok: false, reason: "not-host" };
 
   const present = new Set(members.map((member) => member.clientId));
   const eligible = input.results.filter((result) => present.has(result.userId));

@@ -14,6 +14,7 @@ import {
 } from "@/lib/cityArena/net/memoryTransport";
 import { HOST_SILENCE_MS } from "@/lib/cityArena/net/election";
 import { HOST_TICK_HZ } from "@/lib/cityArena/net/hostLoop";
+import { createCamera } from "@/lib/cityArena/render/camera";
 import { INITIAL_FEEDBACK } from "@/lib/cityArena/render/feedback";
 import { emptyTally } from "@/lib/cityArena/net/scoreboard";
 import { encodeSnapshot } from "@/lib/cityArena/net/snapshotWire";
@@ -76,6 +77,8 @@ function fakeRuntime(seed: number): Runtime {
     sound: { handleEvents: vi.fn() },
     haptics: { fire: vi.fn() },
     feedback: INITIAL_FEEDBACK,
+    camera: createCamera([0, 0], 8),
+    lastTileSync: 0,
     reducedMotion: false,
     netplay: { kind: "offline", playerId: 0 },
     tally: emptyTally(),
@@ -221,6 +224,10 @@ describe("useNetplay", () => {
     expect(playersOf(joiner.state).map((player) => player.id)).toEqual(
       playersOf(host.state).map((player) => player.id),
     );
+    const me = playersOf(joiner.state).find((player) => player.id === seat);
+    expect([joiner.camera.x, joiner.camera.y]).toEqual([me?.x, me?.y]);
+    expect(joiner.feedback.cutFade).toBe(1);
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it("leaves a client roaming alone while the host has not seated it", () => {

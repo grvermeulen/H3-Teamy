@@ -432,6 +432,11 @@ the zone disc + 100 m (lobby: within 150 m of any player).
   `arena:lobby` presence.
 - Host tick exceptions: log to Sentry, skip the tick; 5 consecutive failures → stop
   publishing so the silence rule re-elects.
+- **Server side (amended 2026-09-10).** `GET /api/arena/rooms` and match recording take the
+  **acting host**: the best-ranked present member heard from within 10 s — a lower-ranked one only
+  while everyone above it is silent — read from the room channel's history through Ably REST (`net/roomHost.ts`), with the presence
+  election as the fallback for a room that has not started stepping. An old host's presence entry
+  can linger for minutes, so presence alone named the wrong host after a migration.
 
 ### 6.7 Rooms
 
@@ -524,7 +529,9 @@ accepted that trade-off (see §15).
 - **Camera:** follows the local player with 0.4 s velocity look-ahead (≤ 15 m), eased;
   zoom level chosen from viewport width so phones show ≈ 45 m across, desktops ≈ 120 m,
   and dropped one step while moving faster than 12 m/s (back at 9 m/s) — amended
-  2026-09-06 from ≈ 60 m.
+  2026-09-06 from ≈ 60 m. A seat in the host's world, a zone teleport or a lost seat **cuts** —
+  the camera snaps and the scene fades in from black over 0.4 s — rather than easing across the
+  map (amended 2026-09-10).
 - **Frame:** blit visible chunks → pickups → cars (rounded body, windows, roof stripe,
   smoke when damaged) → peds/cops/players (head + shoulders, colour ring, name) → bullets
   and muzzle flashes → pooled particles (≤ 200). HUD is React DOM updated at 10 Hz from a
@@ -858,4 +865,4 @@ opgeslagen · Geluid · Trillen · Enkele stick · Besturing · Potje verlaten �
 OpenStreetMap-bijdragers. PR 2 additions: Startpunt · Ga naar · Spel laden… · Sluiten. PR 3 additions:
 Gezondheid · Vuist · Pistool · Uzi · Shotgun · Compact · Sedan · Sportwagen · Politieauto · km/u · Je bent
 uitgeschakeld · Vrij rondlopen. PR 7 additions: Radio · Zender · Grebbe FM · Rijn FM · Cunera
-Klassiek.
+Klassiek. PR 8 additions: Kopieer · Gekopieerd.
