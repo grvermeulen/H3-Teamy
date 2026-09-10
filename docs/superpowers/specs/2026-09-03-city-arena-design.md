@@ -109,13 +109,14 @@ public repository.
 Overpass API, bbox `51.94,5.53,52.02,5.72`, converted to GeoJSON with `osm2geojson-lite`
 (dev dependency; handles multipolygon relations such as the Nederrijn).
 
-| Layer     | OSM filter                                                                                                                                                             | Notes                                                                                   |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Roads     | `highway` ∈ motorway, trunk, primary, secondary, tertiary, unclassified, residential, living_street, pedestrian (+ `_link` variants); `service` only inside zone discs | Cycle/foot paths dropped. Keep `name`, `oneway` when present                            |
-| Buildings | `building=*`, footprint area ≥ 40 m², centroid within 1.2 km of any zone centre; landmark buildings always kept                                                        | Keep `building:levels` (default 2)                                                      |
-| Water     | `natural=water` polygons (plus `landuse` ∈ reservoir, basin); waterway _lines_ are not used                                                                            | Impassable                                                                              |
-| Ground    | `landuse` ∈ grass, meadow, farmland, forest; `leisure` ∈ park, pitch; `natural` ∈ wood, scrub                                                                          | Mapped to `grass`, `field`, `forest`; `urban` is the implicit default and is not stored |
-| Landmarks | from `landmarks.config.ts` (below)                                                                                                                                     | Matching is case-insensitive substring on `name` plus tag filter                        |
+| Layer     | OSM filter                                                                                                                                                              | Notes                                                                                                                                                                |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Roads     | `highway` ∈ motorway, trunk, primary, secondary, tertiary, unclassified, residential, living_street, pedestrian (+ `_link` variants); `service` only inside zone discs  | Cycle/foot paths dropped. Keep `name`, `oneway` when present                                                                                                         |
+| Buildings | `building=*`, footprint area ≥ 40 m², centroid within 1.2 km of any zone centre; landmark buildings always kept                                                         | Keep `building:levels` (default 2)                                                                                                                                   |
+| Water     | `natural=water` polygons (plus `landuse` ∈ reservoir, basin); waterway _lines_ are not used                                                                             | Impassable                                                                                                                                                           |
+| Ground    | `landuse` ∈ grass, meadow, farmland, forest; `leisure` ∈ park, pitch; `natural` ∈ wood, scrub                                                                           | Mapped to `grass`, `field`, `forest`; `urban` is the implicit default and is not stored                                                                              |
+| Landmarks | from `landmarks.config.ts` (below)                                                                                                                                      | Matching is case-insensitive substring on `name` plus tag filter                                                                                                     |
+| Scenery   | `natural=tree` nodes, `natural=tree_row` ways, `highway=street_lamp`, `amenity=bench`, `highway=bus_stop` nodes within 1500 m of each zone centre (Plan 9b, 2026-09-10) | Trees are also scattered over forest/wood (1 per 80 m²), scrub (1 per 160 m², small) and park (1 per 400 m²) polygons; capped at 4000 trees and 1500 pieces per tile |
 
 Real-build note (gzip budget, §3.4): the shipped build uses `MIN_BUILDING_AREA_M2 = 40`,
 `BUILDING_KEEP_RADIUS_M = 1200`, and simplification tolerances of 0.5 m for buildings /
@@ -190,8 +191,15 @@ containing or nearby building render as labels only.
   brief's decision rule allows 85 % as the floor.
 - **Spawn nodes:** per zone, road-graph nodes inside the disc, ≥ 8 m from any building and
   ≥ 6 m from water.
+- **Scenery (Plan 9b, 2026-09-10):** scattered trees sit one per grid cell of the bed's area,
+  jittered by a hash of the cell (deterministic, world-anchored), a row gets a tree every 8 m;
+  every tree keeps off roads (surface + 3 m for a scattered one), buildings and water, and no two
+  stand within 3 m (mapped trees win, then the ones nearest a zone centre). Trees and furniture
+  are points stored in the one tile whose own rectangle holds them; furniture takes the heading of
+  the nearest road within 30 m. Canopies are 6 m (size 0) and 10 m (size 1); a trunk is a solid
+  0.35 m square at runtime.
 
-### 3.4 Output (`public/arena/map/v1/`)
+### 3.4 Output (`public/arena/map/v2/`; v1 until Plan 9b)
 
 - `index.json` — version, generation timestamp, origin, bounds, tile grid, zones
   (`key, name, center, radius, spawnNodes, landmarks`), landmarks
@@ -199,8 +207,10 @@ containing or nearby building render as labels only.
 - `roads.json` — road graph (nodes, edges, names). Shipped at 183.4 KB gz (13 756 nodes,
   15 101 edges) — higher than the original ≈ 100–150 KB estimate; the region's real
   drivable network is denser than assumed pre-build.
-- `tile_x_y.json` — `{ roads, buildings, ground, water }` with flat integer coordinate
-  arrays; buildings carry `levels` and optional `landmark`. The region's real bounds (a
+- `tile_x_y.json` — `{ roads, buildings, ground, water, trees, furniture }` with flat integer
+  coordinate arrays; buildings carry `levels` and optional `landmark`; `trees` are
+  `[x, y, size]` and `furniture` `[x, y, kind, headingDeg]` tuples (Plan 9b; absent in older
+  tiles, read as none). The region's real bounds (a
   ~52 km² box covering Rhenen, Wageningen, the WUR campus and Bennekom, most of it open
   countryside) tile into a 7 × 5 grid — 35 tiles, `tilesCovering` clamped to that grid
   (`tileGridSize`) so geometry outside the region never spawns extra tiles. Fringe tiles
@@ -218,7 +228,9 @@ containing or nearby building render as labels only.
   gzipped; the build fails otherwise (owner decision 2026-09-04: the total is a repo/CDN
   figure — a player only downloads the ≤ 9 tiles around them, so the per-tile cap is what
   bounds download time). See §3.1's real-build note for the constants that got the shipped
-  build under both.
+  build under both. Raised on 2026-09-07 to 4 MB and 512 KB as runaway-build guardrails; the v2
+  build with scenery (2026-09-10) sits at 1529.2 KB total with `tile_4_2.json` the largest at
+  223.7 KB.
 - `next.config.js` `headers()` adds `Cache-Control: public, max-age=31536000, immutable`
   for `/arena/map/:path*`. Any regeneration bumps the path version (`v1` → `v2`) via a
   constant in `src/lib/cityArena/constants.ts`. The service worker only caches

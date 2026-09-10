@@ -191,6 +191,14 @@ export function placeTrees(areas: GroundArea[], tileSeed: number): TileTree[];
 - [ ] **Step 3: Generate** — `generate_game_art` `mode: "texture"`: `"top-down view of a single round deciduous tree canopy, summer green, soft leaf detail, transparent background, no shadow, no trunk visible"` at two sizes (the script scales), `"top-down view of a street lamp post, small dark grey circle head"`, `"top-down view of a wooden park bench"`, `"top-down view of a small bus shelter with a glass roof"`.
 - [ ] **Step 4: Implement**, commit — `feat(arena): trees you can see and crash into`.
 
+**As built (2026-09-10, PR 9b).** Furniture tuples carry a fourth element, the heading in whole
+degrees from the nearest road within 30 m, so a bench sits along its street; the scatter is a
+world-anchored jittered grid keyed by a hash of the cell (`cellNoise`) rather than a seeded random
+walk, which makes overlapping and tile-cut polygons agree; scrub grows small trees at 1 per 160 m²;
+furniture has its own cap (`MAX_FURNITURE_PER_TILE` 1500); the priority under the caps is mapped
+first, then nearest a zone centre; the asset moved to `v2` because the tiles are served immutable;
+no timed raster test (the fake context measures nothing). The cyclists of Task 9 were not built.
+
 ### Task 9 (stretch): Fietsers
 
 - [ ] A `cycle` ped mode following roads at 5 m/s on `cycleway`/residential edges, a bike-and-rider strip, killable like a ped, fleeing off the bike. Only if 9a and 9b have merged and the owner still wants it; it is behaviour, not content.
