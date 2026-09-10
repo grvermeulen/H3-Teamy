@@ -363,8 +363,8 @@ is a leaf of the sound layer that follows the same "in a car" signal the engine 
   `public/arena/radio/CREDITS.md` after each one. The hashed names are why `next.config.js`
   serves `/arena/radio/tracks/` immutable, like the map tiles. `npm run arena:check-audio` — the
   CI step — also audits the radio (`scripts/arena/check-radio.ts`): every track has a file under
-  1.6 MiB and a credit row, the set is under 8 MiB, and no file lies in the directory that the
-  manifest does not name.
+  1.6 MiB and a credit row, the set is under 16 MiB (raised from 8 on 2026-09-10 for six
+  stations), and no file lies in the directory that the manifest does not name.
 - **Still open after Plan 7.** The listening check — `RADIO_GAIN` and `DUCK_LEVEL` are the
   knobs, `npm run arena:generate-radio <station>` regenerates a station — and the device check
   on a phone.

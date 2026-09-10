@@ -33,6 +33,39 @@
           "seconds": 120
         }
       ]
+    },
+    {
+      "id": "beuk",
+      "name": "Radio Beuk",
+      "tracks": [
+        {
+          "file": "beuk-1-d110f534.mp3",
+          "title": "Beukfeest",
+          "seconds": 120
+        }
+      ]
+    },
+    {
+      "id": "kade",
+      "name": "Kade Funk",
+      "tracks": [
+        {
+          "file": "kade-1-a3e6f884.mp3",
+          "title": "Kadeboogie",
+          "seconds": 120
+        }
+      ]
+    },
+    {
+      "id": "polder",
+      "name": "Polder FM",
+      "tracks": [
+        {
+          "file": "polder-1-53f71faf.mp3",
+          "title": "Trekkerrit",
+          "seconds": 120
+        }
+      ]
     }
   ]
 }

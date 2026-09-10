@@ -91,6 +91,39 @@ const DIAL: PlannedStation[] = [
       },
     ],
   },
+  {
+    id: "beuk",
+    name: "Radio Beuk",
+    tracks: [
+      {
+        title: "Beukfeest",
+        prompt:
+          "Dutch hardstyle track, 150 BPM, pounding reverse-bass kick, euphoric synth lead, festival mainstage energy, instrumental, no vocals",
+      },
+    ],
+  },
+  {
+    id: "kade",
+    name: "Kade Funk",
+    tracks: [
+      {
+        title: "Kadeboogie",
+        prompt:
+          "Upbeat 1970s funk disco instrumental, slap bass, wah-wah guitar, brass stabs, four-on-the-floor drums, 115 BPM, no vocals",
+      },
+    ],
+  },
+  {
+    id: "polder",
+    name: "Polder FM",
+    tracks: [
+      {
+        title: "Trekkerrit",
+        prompt:
+          "Lively country bluegrass instrumental, banjo, fiddle, acoustic guitar, upright bass, 120 BPM, sunny and driving, no vocals",
+      },
+    ],
+  },
 ];
 
 /** Asks ElevenLabs for one track and returns the MP3 bytes. */

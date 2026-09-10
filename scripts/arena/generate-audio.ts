@@ -32,22 +32,31 @@ const ENDPOINT = "https://api.elevenlabs.io/v1/sound-generation";
 const OUTPUT_FORMAT = "mp3_44100_96";
 /** How closely the model follows the prompt; higher is more literal, lower more creative. */
 const PROMPT_INFLUENCE = 0.4;
+/** For clips that must be one specific thing — a siren, a gunshot — the prompt is followed closely. */
+const LITERAL_INFLUENCE = 0.7;
 /** A pause between requests, so a run of eleven does not trip the API's own rate limit. */
 const PAUSE_MS = 1500;
 
-/** What to ask for, and how long. Loops come from the table. */
-const PROMPTS: Record<ClipName, { text: string; seconds: number }> = {
+/** What to ask for, how long, and — for clips that must be one specific thing — how literally. */
+const PROMPTS: Record<
+  ClipName,
+  { text: string; seconds: number; influence?: number }
+> = {
   pistol: {
     text: "single dry 9mm pistol gunshot, close up, short tail, no music, no voices",
     seconds: 0.7,
   },
+  // The game plays one clip per round at ten rounds a second, so a single round must be punchy
+  // on its own: the barrage is the game's, the punch is the clip's.
   uzi: {
-    text: "single submachine gun shot, snappy and mechanical, close up, short tail",
+    text: "single 9mm submachine gun round fired, loud sharp crack with a punchy low thump, close microphone, dry, very short tail, no reload, no voices",
     seconds: 0.5,
+    influence: LITERAL_INFLUENCE,
   },
   shotgun: {
-    text: "pump shotgun blast, heavy low thump, short room reverb",
-    seconds: 1.0,
+    text: "one 12-gauge pump shotgun shot fired outdoors, huge deep boom with a sharp crack, short echo off buildings, no pump action, no reload, no voices",
+    seconds: 1.2,
+    influence: LITERAL_INFLUENCE,
   },
   footstep: {
     text: "one footstep of a sneaker on asphalt, close, dry",
@@ -71,8 +80,9 @@ const PROMPTS: Record<ClipName, { text: string; seconds: number }> = {
     seconds: 2.5,
   },
   siren: {
-    text: "European police car two-tone siren, steady, seamless loop",
+    text: "Dutch police car siren, the classic European two-tone hi-lo alternating steadily about once a second, loud and clean, heard close by, seamless loop, no engine, no traffic, no voices",
     seconds: 4,
+    influence: LITERAL_INFLUENCE,
   },
   pickup: {
     text: "small bright arcade pickup chime, two quick notes rising",
@@ -104,7 +114,7 @@ async function generate(key: string, clip: ClipName): Promise<Uint8Array> {
       text: prompt.text,
       duration_seconds: prompt.seconds,
       loop: AUDIO_CLIPS[clip].loop,
-      prompt_influence: PROMPT_INFLUENCE,
+      prompt_influence: prompt.influence ?? PROMPT_INFLUENCE,
     }),
     // The key must never travel to wherever a redirect points.
     redirect: "error",

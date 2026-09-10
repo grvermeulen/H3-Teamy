@@ -40,10 +40,14 @@ const MIB = 1024 * 1024;
 /** The size caps: one track, and the whole set. */
 export type RadioLimits = { trackBytes: number; totalBytes: number };
 
-/** A track at 96 kbps weighs ~0.7 MiB a minute; the set sits in git next to a 3.8 MB map. */
+/**
+ * A track at 96 kbps weighs ~0.7 MiB a minute; the set sits in git next to a 3.8 MB map. The
+ * budget went from 8 to 16 MiB on 2026-09-10 for a dial of six stations — raise it again rather
+ * than thin the dial.
+ */
 export const RADIO_LIMITS: RadioLimits = {
   trackBytes: 1.6 * MIB,
-  totalBytes: 8 * MIB,
+  totalBytes: 16 * MIB,
 };
 
 /** Every track of every station, in dial order. */
