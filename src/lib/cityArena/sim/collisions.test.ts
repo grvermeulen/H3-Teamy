@@ -15,7 +15,7 @@ const walker: ArenaPlayerState = {
   speed: 0,
   health: 100,
   weapon: "pistol",
-  ammo: { uzi: 60, shotgun: 8 },
+  ammo: { uzi: 60, shotgun: 8, rifle: 0, bat: 0 },
   vehicleId: null,
   boardingTicksLeft: 0,
   nextShotTick: 0,

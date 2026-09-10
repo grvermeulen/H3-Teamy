@@ -28,11 +28,13 @@ const KEY_BUTTONS: Partial<Record<string, ButtonName>> = {
   KeyQ: "weaponNext",
 };
 
-/** The number keys that pick a weapon directly (spec §7). */
+/** The number keys that pick a weapon directly (spec §7; 4 and 5 for Plan 9's rifle and bat). */
 const SLOT_KEYS: Partial<Record<string, WeaponSlot>> = {
   Digit1: 1,
   Digit2: 2,
   Digit3: 3,
+  Digit4: 4,
+  Digit5: 5,
 };
 
 /** The key that switches the car radio to the next station (Plan 7). */

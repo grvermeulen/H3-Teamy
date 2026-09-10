@@ -139,6 +139,34 @@ describe("snapshot wire format", () => {
     expect(back.vehicles[0]!.kind).toBe("sedan");
   });
 
+  it("round-trips the rifle and the bat, their rounds appended past the original row", () => {
+    const base = boot();
+    const player = base.players[0]!;
+    const state: ArenaState = {
+      ...base,
+      players: [
+        {
+          ...player,
+          weapon: "rifle",
+          ammo: { uzi: 1, shotgun: 2, rifle: 7, bat: 13 },
+        },
+      ],
+      pickups: [
+        { id: 900, kind: "rifle", x: 1, y: 1, takenAtTick: null },
+        { id: 901, kind: "bat", x: 2, y: 2, takenAtTick: null },
+      ],
+    };
+    const back = decodeSnapshot(encodeSnapshot(state, 0, {}));
+    expect(back.players[0]!.weapon).toBe("rifle");
+    expect(back.players[0]!.ammo).toEqual({
+      uzi: 1,
+      shotgun: 2,
+      rifle: 7,
+      bat: 13,
+    });
+    expect(back.pickups.map((pickup) => pickup.kind)).toEqual(["rifle", "bat"]);
+  });
+
   it("round-trips the kinds added later by their appended indices", () => {
     const base = boot();
     const state: ArenaState = {

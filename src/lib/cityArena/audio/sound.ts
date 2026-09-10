@@ -115,6 +115,10 @@ function shotTone(weapon: WeaponKind): {
     return { frequency: 210, duration: 0.06, type: "square" };
   if (weapon === "fist")
     return { frequency: 90, duration: 0.04, type: "triangle" };
+  if (weapon === "bat")
+    return { frequency: 70, duration: 0.05, type: "triangle" };
+  if (weapon === "rifle")
+    return { frequency: 140, duration: 0.12, type: "sawtooth" };
   return { frequency: 180, duration: 0.08, type: "square" };
 }
 

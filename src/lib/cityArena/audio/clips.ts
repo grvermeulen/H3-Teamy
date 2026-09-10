@@ -18,7 +18,9 @@ export type ClipName =
   | "explosion"
   | "siren"
   | "pickup"
-  | "death";
+  | "death"
+  | "bat"
+  | "rifle";
 
 /** How one clip plays: its file, its level relative to the master, and whether it loops. */
 export type ClipSpec = {
@@ -45,6 +47,8 @@ export const AUDIO_CLIPS: Record<ClipName, ClipSpec> = {
   siren: { file: "siren.mp3", gain: 0.3, loop: true },
   pickup: { file: "pickup.mp3", gain: 0.4, loop: false },
   death: { file: "death.mp3", gain: 0.6, loop: false },
+  bat: { file: "bat.mp3", gain: 0.5, loop: false },
+  rifle: { file: "rifle.mp3", gain: 0.6, loop: false },
 };
 
 /** Every clip name, in table order. */

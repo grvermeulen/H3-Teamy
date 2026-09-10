@@ -11,11 +11,14 @@ import type {
   ArenaState,
   PickupKind,
   PickupState,
+  MagazineWeapon,
 } from "./types";
 import { MAX_AMMO, addAmmo } from "./weapons";
 
-/** Number of weapon pickup spots per zone. */
+/** Number of gun pickup spots per zone, rotating through the magazine guns. */
 export const WEAPON_PICKUPS_PER_ZONE = 6;
+/** Number of bat pickup spots per zone. */
+export const BAT_PICKUPS_PER_ZONE = 2;
 /** Maximum weapon pickup spots sourced from landmarks. */
 export const LANDMARK_WEAPON_PICKUPS = 4;
 /** Number of health pickup spots per zone. */
@@ -26,16 +29,18 @@ export const PICKUP_TAKE_RANGE_M = 1.2;
 export const PICKUP_RESPAWN_TICKS = 600;
 /** Health restored by a health pickup. */
 export const HEALTH_PICKUP_AMOUNT = 50;
-/** Rounds granted by one magazine pickup. */
-export const PICKUP_ROUNDS: Record<"uzi" | "shotgun", number> = {
+/** Rounds granted by one magazine pickup; a bat's are swings. */
+export const PICKUP_ROUNDS: Record<MagazineWeapon, number> = {
   uzi: 60,
   shotgun: 8,
+  rifle: 10,
+  bat: 20,
 };
 /** Minimum pickup distance from a fresh player spawn. */
 export const MIN_PICKUP_TO_PLAYER_M = 8;
 const LANDMARK_SNAP_M = 80;
 const MIN_PICKUP_SPACING_M = 15;
-const WEAPON_KINDS: PickupKind[] = ["uzi", "shotgun"];
+const WEAPON_KINDS: PickupKind[] = ["uzi", "shotgun", "rifle"];
 
 /** Graph subset required for pickup placement. */
 export type PickupGraph = Pick<RoadGraph, "nodes" | "nearestNode">;
@@ -136,6 +141,13 @@ export function placePickups(
     avoid,
     HEALTH_PICKUPS_PER_ZONE,
   );
+  // Bats come last: in a zone short of spots, health matters more than a second melee weapon.
+  const batSpots = takeSpaced(
+    nodes,
+    [...weaponSpots, ...healthSpots],
+    avoid,
+    BAT_PICKUPS_PER_ZONE,
+  );
   const weapons: PickupState[] = weaponSpots.map((point, offset) => ({
     id: firstId + offset,
     kind: WEAPON_KINDS[offset % WEAPON_KINDS.length],
@@ -150,7 +162,14 @@ export function placePickups(
     y: point[1],
     takenAtTick: null,
   }));
-  return [...weapons, ...health];
+  const bats: PickupState[] = batSpots.map((point, offset) => ({
+    id: firstId + weapons.length + health.length + offset,
+    kind: "bat",
+    x: point[0],
+    y: point[1],
+    takenAtTick: null,
+  }));
+  return [...weapons, ...health, ...bats];
 }
 
 function respawnPickup(pickup: PickupState, tick: number): PickupState {

@@ -1,4 +1,4 @@
-import type { AmmoState, WeaponKind } from "./types";
+import type { AmmoState, MagazineWeapon, WeaponKind } from "./types";
 
 /** Ticks per second of the fixed step (mirrors `SIM_STEP_S`). */
 const TICKS_PER_SECOND = 30;
@@ -59,16 +59,81 @@ export const WEAPONS: Record<WeaponKind, WeaponSpec> = {
     pellets: 5,
     magazine: 8,
   },
+  // Plan 9's two: a bat that hits like a fist and a half and wears out, and a rifle that reaches
+  // twice as far as anything else, slowly.
+  bat: {
+    label: "Knuppel",
+    damage: 30,
+    shotsPerSecond: 1.5,
+    rangeM: 1.6,
+    speedMps: 30,
+    spreadRad: 0,
+    pellets: 1,
+    magazine: 20,
+  },
+  rifle: {
+    label: "Geweer",
+    damage: 45,
+    shotsPerSecond: 0.8,
+    rangeM: 70,
+    speedMps: 160,
+    spreadRad: 0,
+    pellets: 1,
+    magazine: 10,
+  },
 };
 
-/** Cycling order of the Wapen button. */
-export const WEAPON_ORDER: WeaponKind[] = ["fist", "pistol", "uzi", "shotgun"];
+/** Cycling order of the Wapen button: the melee pair, then the guns by reach. */
+export const WEAPON_ORDER: WeaponKind[] = [
+  "fist",
+  "bat",
+  "pistol",
+  "uzi",
+  "shotgun",
+  "rifle",
+];
+
+/** The weapons that hit what they touch rather than fire a round; they get no muzzle flash. */
+const MELEE_WEAPONS: ReadonlySet<WeaponKind> = new Set(["fist", "bat"]);
+
+/**
+ * True for a weapon swung rather than fired.
+ *
+ * @param kind - The weapon.
+ * @returns Whether it is melee.
+ */
+export function isMelee(kind: WeaponKind): boolean {
+  return MELEE_WEAPONS.has(kind);
+}
+
+/** The weapons that carry rounds; the others never run out. */
+export const MAGAZINE_WEAPONS: readonly MagazineWeapon[] = [
+  "uzi",
+  "shotgun",
+  "rifle",
+  "bat",
+];
+
+/**
+ * True for a weapon that carries rounds.
+ *
+ * @param kind - The weapon.
+ * @returns Whether `kind` indexes the ammo state.
+ */
+export function isMagazineWeapon(kind: WeaponKind): kind is MagazineWeapon {
+  return (MAGAZINE_WEAPONS as readonly WeaponKind[]).includes(kind);
+}
 
 /** Ammo the player spawns with: pistol and fist only. */
-export const SPAWN_AMMO: AmmoState = { uzi: 0, shotgun: 0 };
+export const SPAWN_AMMO: AmmoState = { uzi: 0, shotgun: 0, rifle: 0, bat: 0 };
 
 /** Maximum carried rounds for each magazine weapon. */
-export const MAX_AMMO: AmmoState = { uzi: 120, shotgun: 16 };
+export const MAX_AMMO: AmmoState = {
+  uzi: 120,
+  shotgun: 16,
+  rifle: 30,
+  bat: 40,
+};
 
 /** Adds magazine ammunition without exceeding the carried-round cap. */
 export function addAmmo(
@@ -76,26 +141,18 @@ export function addAmmo(
   kind: WeaponKind,
   rounds: number,
 ): AmmoState {
-  if (kind === "uzi")
-    return { ...ammo, uzi: Math.min(MAX_AMMO.uzi, ammo.uzi + rounds) };
-  if (kind === "shotgun")
-    return {
-      ...ammo,
-      shotgun: Math.min(MAX_AMMO.shotgun, ammo.shotgun + rounds),
-    };
-  return ammo;
+  if (!isMagazineWeapon(kind)) return ammo;
+  return { ...ammo, [kind]: Math.min(MAX_AMMO[kind], ammo[kind] + rounds) };
 }
 
-/** Ticks between two shots: fist 15, pistol 12, Uzi 3, shotgun 25. */
+/** Ticks between two shots: fist 15, pistol 12, Uzi 3, shotgun 25, bat 20, rifle 38. */
 export function cooldownTicks(kind: WeaponKind): number {
   return Math.round(TICKS_PER_SECOND / WEAPONS[kind].shotsPerSecond);
 }
 
 /** Rounds left for a weapon, or `null` when it is unlimited. */
 export function ammoFor(ammo: AmmoState, kind: WeaponKind): number | null {
-  if (kind === "uzi") return ammo.uzi;
-  if (kind === "shotgun") return ammo.shotgun;
-  return null;
+  return isMagazineWeapon(kind) ? ammo[kind] : null;
 }
 
 /** True when the weapon can fire (unlimited, or rounds left). */
@@ -106,10 +163,8 @@ export function hasAmmo(ammo: AmmoState, kind: WeaponKind): boolean {
 
 /** Ammo after one shot; unlimited weapons return the same object. */
 export function consumeAmmo(ammo: AmmoState, kind: WeaponKind): AmmoState {
-  if (kind === "uzi") return { ...ammo, uzi: Math.max(0, ammo.uzi - 1) };
-  if (kind === "shotgun")
-    return { ...ammo, shotgun: Math.max(0, ammo.shotgun - 1) };
-  return ammo;
+  if (!isMagazineWeapon(kind)) return ammo;
+  return { ...ammo, [kind]: Math.max(0, ammo[kind] - 1) };
 }
 
 /** The next weapon in {@link WEAPON_ORDER} that still has ammo, wrapping around. */

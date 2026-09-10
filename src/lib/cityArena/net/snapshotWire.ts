@@ -45,9 +45,22 @@ import {
 export const MAX_SNAPSHOT_BYTES = 8192;
 
 /** Weapons in wire order; the index travels, not the name. */
-const WEAPONS: readonly WeaponKind[] = ["fist", "pistol", "uzi", "shotgun"];
+const WEAPONS: readonly WeaponKind[] = [
+  "fist",
+  "pistol",
+  "uzi",
+  "shotgun",
+  "bat",
+  "rifle",
+];
 /** Pickup kinds in wire order. */
-const PICKUP_KINDS: readonly PickupKind[] = ["uzi", "shotgun", "health"];
+const PICKUP_KINDS: readonly PickupKind[] = [
+  "uzi",
+  "shotgun",
+  "health",
+  "rifle",
+  "bat",
+];
 /** Pedestrian modes in wire order. */
 const PED_MODES: readonly PedMode[] = ["walk", "flee", "dead"];
 /** Match phases in wire order. */
@@ -177,6 +190,9 @@ function encodePlayers(state: ArenaState): number[][] {
     player.invulnerableUntilTick,
     Math.round(player.heat),
     quantise(player.driveSteer, STEER_SCALE, STEER_SCALE),
+    // Appended past the original sixteen, so an older row still decodes.
+    player.ammo.rifle,
+    player.ammo.bat,
   ]);
 }
 
@@ -274,7 +290,12 @@ function decodePlayers(rows: number[][]): SnapshotPlayer[] {
     speed: (row[4] ?? 0) / POSITION_SCALE,
     health: row[5] ?? 0,
     weapon: entryAt(WEAPONS, row[6] ?? 0),
-    ammo: { uzi: row[7] ?? 0, shotgun: row[8] ?? 0 },
+    ammo: {
+      uzi: row[7] ?? 0,
+      shotgun: row[8] ?? 0,
+      rifle: row[16] ?? 0,
+      bat: row[17] ?? 0,
+    },
     vehicleId: unpackOptional(row[9] ?? NONE),
     boardingTicksLeft: row[10] ?? 0,
     nextShotTick: row[11] ?? 0,

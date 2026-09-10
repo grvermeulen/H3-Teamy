@@ -88,7 +88,7 @@ const chaseWorld: ArenaWorld = {
 };
 const step = 1 / 30;
 const SPAWN_XS = [0, 100, 200, 300];
-const FULL_AMMO = { uzi: 60, shotgun: 8 };
+const FULL_AMMO = { uzi: 60, shotgun: 8, rifle: 0, bat: 0 };
 
 function boot(seed = 1): ArenaState {
   return createArenaState({ index, graph, seed, zone }, createRng(seed));
@@ -204,7 +204,7 @@ describe("createArenaState", () => {
       id: 0,
       health: 100,
       weapon: "pistol",
-      ammo: { uzi: 0, shotgun: 0 },
+      ammo: { uzi: 0, shotgun: 0, rifle: 0, bat: 0 },
       vehicleId: null,
       diedAtTick: null,
     });
@@ -229,7 +229,7 @@ describe("createArenaState", () => {
     expect(state.pickups.map((pickup) => pickup.kind)).toEqual([
       "uzi",
       "shotgun",
-      "uzi",
+      "rifle",
     ]);
     for (const pickup of state.pickups)
       expect(Math.abs(pickup.x - localPlayer(state).x)).toBeGreaterThanOrEqual(
@@ -590,7 +590,7 @@ describe("stepArena firing and death", () => {
     const lastShell: ArenaPlayerState = {
       ...localPlayer(state),
       weapon: "shotgun",
-      ammo: { uzi: 0, shotgun: 1 },
+      ammo: { uzi: 0, shotgun: 1, rifle: 0, bat: 0 },
     };
     const fired = run(
       { ...state, players: [lastShell] },
@@ -663,7 +663,7 @@ describe("stepArena firing and death", () => {
       diedAtTick: null,
       weapon: "pistol",
       invulnerableUntilTick: 152,
-      ammo: { uzi: 0, shotgun: 0 },
+      ammo: { uzi: 0, shotgun: 0, rifle: 0, bat: 0 },
     });
     expect(SPAWN_XS).toContain(localPlayer(alive).x);
   });

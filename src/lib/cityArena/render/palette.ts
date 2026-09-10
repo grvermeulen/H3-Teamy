@@ -153,6 +153,10 @@ export const PERSON_HEALTH = "#ef4444";
 /** Weapon pickup colours by weapon kind. */
 export const PICKUP_UZI = "#16a34a";
 export const PICKUP_SHOTGUN = "#f97316";
+/** Rifle pickup diamond. */
+export const PICKUP_RIFLE = "#0ea5e9";
+/** Bat pickup diamond. */
+export const PICKUP_BAT = "#a16207";
 /** Health pickup diamond. */
 export const PICKUP_HEALTH = "#22c55e";
 /** Health pickup cross. */

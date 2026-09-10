@@ -12,7 +12,7 @@ describe("ArenaVitals", () => {
       <ArenaVitals
         health={70}
         weapon="pistol"
-        ammo={{ uzi: 60, shotgun: 8 }}
+        ammo={{ uzi: 60, shotgun: 8, rifle: 0, bat: 0 }}
         speedMps={null}
       />,
     );
@@ -26,7 +26,7 @@ describe("ArenaVitals", () => {
       <ArenaVitals
         health={20}
         weapon="uzi"
-        ammo={{ uzi: 42, shotgun: 8 }}
+        ammo={{ uzi: 42, shotgun: 8, rifle: 0, bat: 0 }}
         speedMps={12}
       />,
     );

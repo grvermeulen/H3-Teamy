@@ -341,7 +341,7 @@ type ArenaFooterProps = { showTouch: boolean; twinStick: boolean };
 /** The hint for each control scheme (spec §7). */
 function controlsHint(showTouch: boolean, twinStick: boolean): string {
   if (!showTouch)
-    return "WASD of pijltjes lopen of sturen · muis richt en schiet · E instappen · Q, wiel of 1-2-3 wapen · R radio · Tab scorebord · Esc menu.";
+    return "WASD of pijltjes lopen of sturen · muis richt en schiet · E instappen · Q, wiel of 1-5 wapen · R radio · Tab scorebord · Esc menu.";
   return twinStick
     ? "Sleep links op het scherm om te lopen of te sturen; sleep rechts om te richten en te schieten."
     : "Sleep links op het scherm om te lopen of te sturen; rechts: Schieten, Instappen, Wapen.";

@@ -63,7 +63,8 @@ export type FreeRoamState = {
 };
 
 /** Weapons in Wapen-button cycling order (spec §5 plus the fist). */
-export type WeaponKind = "fist" | "pistol" | "uzi" | "shotgun";
+export type WeaponKind =
+  "fist" | "pistol" | "uzi" | "shotgun" | "bat" | "rifle";
 
 /** Car kinds (spec §5). */
 export type VehicleKind =
@@ -121,7 +122,9 @@ export type EffectState = {
 };
 
 /** Rounds left for the magazine weapons; pistol and fist are unlimited. */
-export type AmmoState = { uzi: number; shotgun: number };
+export type MagazineWeapon = "uzi" | "shotgun" | "rifle" | "bat";
+/** Rounds carried per magazine weapon; the bat's are swings before it breaks. */
+export type AmmoState = Record<MagazineWeapon, number>;
 
 /** The player with everything the arena adds to walking. */
 export type ArenaPlayerState = PlayerState & {
@@ -150,7 +153,7 @@ export type ArenaPlayerState = PlayerState & {
 export type HeldButtons = { enter: boolean; weaponNext: boolean };
 
 /** Kinds of pickups: magazine ammunition or health. */
-export type PickupKind = "uzi" | "shotgun" | "health";
+export type PickupKind = "uzi" | "shotgun" | "health" | "rifle" | "bat";
 
 /** A pickup spot; taken pickups wait for their respawn timer. */
 export type PickupState = {

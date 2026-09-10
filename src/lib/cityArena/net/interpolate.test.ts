@@ -16,7 +16,7 @@ function player(id: number, x: number, facing = 0): SnapshotPlayer {
     speed: 0,
     health: 100,
     weapon: "pistol",
-    ammo: { uzi: 0, shotgun: 0 },
+    ammo: { uzi: 0, shotgun: 0, rifle: 0, bat: 0 },
     vehicleId: null,
     boardingTicksLeft: 0,
     nextShotTick: 0,

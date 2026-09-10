@@ -11,17 +11,19 @@
 import type { WeaponKind, WorldInput } from "../sim/types";
 
 /** The number keys, and what they reach for. */
-export type WeaponSlot = 1 | 2 | 3;
+export type WeaponSlot = 1 | 2 | 3 | 4 | 5;
 
 /** Which weapon each slot picks; fists are what you have when the rest is empty, not a pick. */
 export const SLOT_WEAPONS: Record<WeaponSlot, WeaponKind> = {
   1: "pistol",
   2: "uzi",
   3: "shotgun",
+  4: "rifle",
+  5: "bat",
 };
 
-/** Presses a request may take before it is given up on: two laps of the four-weapon rack. */
-const MAX_PRESSES = 8;
+/** Presses a request may take before it is given up on: two laps of the six-weapon rack. */
+const MAX_PRESSES = 12;
 
 /** Turns picks and wheel notches into the `weaponNext` edges the simulation understands. */
 export type WeaponSelector = {
