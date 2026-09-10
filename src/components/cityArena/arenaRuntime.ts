@@ -90,6 +90,7 @@ import {
   drawFeedback,
   shakeOffset,
   type FeedbackState,
+  withCut,
 } from "@/lib/cityArena/render/feedback";
 import { feelTick } from "./arenaFeel";
 import {
@@ -360,6 +361,20 @@ function routeToNearestLandmark(runtime: Runtime): number | null {
   return path ? pathLength(graph, path) : null;
 }
 
+/**
+ * Snaps the camera to `point` and fades the scene in from black: the world changed under the
+ * camera — a teleport, a seat in the host's world, a lost seat — and the ease would fly it across
+ * unrastered tiles instead.
+ *
+ * @param runtime - The runtime.
+ * @param point - Where the player is now.
+ */
+export function cutTo(runtime: Runtime, point: Point): void {
+  runtime.camera = createCamera(point, runtime.camera.zoom);
+  runtime.feedback = withCut(runtime.feedback);
+  runtime.lastTileSync = 0;
+}
+
 /** Moves the player to a seeded spawn node of `zone` and remembers it as the last-visited zone. */
 export function applyTeleport(runtime: Runtime, zone: MapZone): void {
   const target = pickSpawn(zone, runtime.random);
@@ -368,8 +383,7 @@ export function applyTeleport(runtime: Runtime, zone: MapZone): void {
     target,
     runtime.session.index(),
   );
-  runtime.camera = createCamera(target, runtime.camera.zoom);
-  runtime.lastTileSync = 0;
+  cutTo(runtime, target);
   saveArenaSettings({ lastZone: zone.key });
 }
 
@@ -630,6 +644,8 @@ function recoverSeat(
     throw new Error("Arena state has no room for a player");
   runtime.state = joined.state;
   runtime.netplay = { kind: "offline", playerId };
+  const me = myPlayer(runtime);
+  cutTo(runtime, [me.x, me.y]);
 }
 
 /**

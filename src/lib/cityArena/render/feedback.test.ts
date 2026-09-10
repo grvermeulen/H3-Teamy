@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createArenaPlayer } from "../sim/roster";
 import type { ArenaEvent, ArenaPlayerState } from "../sim/types";
 import {
+  CUT_FADE_TICKS,
   HIT_MARKER_TICKS,
   INITIAL_FEEDBACK,
   LOW_HEALTH,
@@ -12,6 +13,7 @@ import {
   drawFeedback,
   shakeOffset,
   stepFeedback,
+  withCut,
   type FeedbackFrame,
   type FeedbackState,
 } from "./feedback";
@@ -50,6 +52,7 @@ describe("stepFeedback", () => {
       shake: 0,
       hitMarkerTicks: 0,
       throb: 0,
+      cutFade: 0,
     });
   });
 
@@ -182,5 +185,27 @@ describe("drawFeedback", () => {
     expect(context.calls.some((call) => call.startsWith("stroke("))).toBe(
       false,
     );
+  });
+});
+
+describe("cuts", () => {
+  it("fades in from black over twelve ticks, reduced motion included", () => {
+    const cut = withCut(settled());
+    expect(cut.cutFade).toBe(1);
+    expect(cut.health).toBe(settled().health);
+    const after = stepFeedback(cut, frame({ tick: 2, reducedMotion: true }));
+    expect(after.cutFade).toBeCloseTo(1 - 1 / CUT_FADE_TICKS);
+    expect(quiet(cut, CUT_FADE_TICKS + 1).cutFade).toBe(0);
+    expect(INITIAL_FEEDBACK.cutFade).toBe(0);
+  });
+
+  it("paints the whole viewport black while fading, and nothing once it is over", () => {
+    const context = createFakeContext();
+    drawFeedback(context, SIZE, { ...INITIAL_FEEDBACK, cutFade: 0.5 });
+    expect(context.calls).toContain("fillRect(0,0,300,200)");
+    expect(context.calls.at(-1)).toBe("restore()");
+    const over = createFakeContext();
+    drawFeedback(over, SIZE, { ...INITIAL_FEEDBACK, cutFade: 0 });
+    expect(over.calls).toEqual([]);
   });
 });
