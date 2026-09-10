@@ -17,9 +17,11 @@ import {
   spawnTraffic,
   stepDrivers,
   trafficEdgesWithin,
+  pickTrafficKind,
 } from "./traffic";
 import type { ArenaState, DriverState, PedState } from "./types";
 import { createVehicle, forwardSpeed } from "./vehicle";
+import type { RoadClass } from "../world/mapTypes";
 
 const graph = decodeRoadGraph({
   nodes: [0, 0, 400, 0, 400, 400, 0, 400, 800, 0],
@@ -144,5 +146,33 @@ describe("traffic drivers", () => {
       throttle: -1,
       steer: 0,
     });
+  });
+});
+
+describe("pickTrafficKind", () => {
+  const kindsOn = (roadClass: RoadClass): Set<string> =>
+    new Set(
+      Array.from({ length: 200 }, (_, index) =>
+        pickTrafficKind(roadClass, () => (index % 100) / 100),
+      ),
+    );
+
+  it("keeps buses to through-roads and never sends a sport car out as traffic", () => {
+    expect(kindsOn("primary").has("bus")).toBe(true);
+    expect(kindsOn("tertiary").has("bus")).toBe(true);
+    expect(kindsOn("unclassified").has("bus")).toBe(false);
+    for (const roadClass of [
+      "primary",
+      "secondary",
+      "tertiary",
+      "unclassified",
+    ] as const)
+      expect(kindsOn(roadClass).has("sport")).toBe(false);
+  });
+
+  it("sends a tractor down an unclassified road three times in ten, and nowhere else", () => {
+    expect(pickTrafficKind("unclassified", () => 0.1)).toBe("tractor");
+    expect(pickTrafficKind("unclassified", () => 0.5)).not.toBe("tractor");
+    expect(pickTrafficKind("primary", () => 0.1)).not.toBe("tractor");
   });
 });

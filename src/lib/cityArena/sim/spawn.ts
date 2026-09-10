@@ -33,8 +33,15 @@ const RESPAWN_CAR_MARGIN_M = 1;
 /** Minimum distance a respawn point keeps from any intact vehicle, so players cannot respawn on a car. */
 export const RESPAWN_CAR_CLEARANCE_M =
   CAR_BODY_RADIUS_M + PLAYER_RADIUS_M + RESPAWN_CAR_MARGIN_M;
-/** Kinds parked cars are drawn from; police cars arrive with the cops in Plan 4b. */
-export const PARKED_CAR_KINDS: VehicleKind[] = ["compact", "sedan", "sport"];
+/** Kinds parked cars are drawn from; police cars arrive with the cops, buses and tractors only drive. */
+export const PARKED_CAR_KINDS: VehicleKind[] = [
+  "compact",
+  "sedan",
+  "sport",
+  "oldtimer",
+  "van",
+  "pickup",
+];
 /** Search radius when snapping a spawn node to the road graph for its heading. */
 const ROAD_SNAP_M = 30;
 /** Candidate scores within this distance of the best count as ties for the seeded tie-break. */

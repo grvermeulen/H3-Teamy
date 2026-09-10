@@ -30,7 +30,7 @@ import type {
 } from "./types";
 
 /** Living pedestrians kept per zone. */
-export const PEDS_PER_ZONE = 25;
+export const PEDS_PER_ZONE = 35;
 /** Walking speed on the pavement. */
 export const PED_WALK_SPEED_MPS = 1.4;
 /** Speed away from gunfire and explosions. */

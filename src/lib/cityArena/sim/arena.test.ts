@@ -1,3 +1,4 @@
+import { PEDS_PER_ZONE } from "./peds";
 import {
   driverPlayer,
   localPlayer,
@@ -234,7 +235,7 @@ describe("createArenaState", () => {
       expect(Math.abs(pickup.x - localPlayer(state).x)).toBeGreaterThanOrEqual(
         8,
       );
-    expect(state.peds).toHaveLength(25);
+    expect(state.peds).toHaveLength(PEDS_PER_ZONE);
     for (const ped of state.peds) {
       expect(Math.abs(ped.y)).toBeCloseTo(4);
       expect(

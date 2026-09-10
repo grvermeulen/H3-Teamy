@@ -1,3 +1,4 @@
+import { MAX_PEDS, MAX_VEHICLES } from "../sim/limits";
 import { describe, expect, it } from "vitest";
 import { createCollisionGrid } from "../world/collisionGrid";
 import type { MapIndex, MapZone } from "../world/mapTypes";
@@ -5,7 +6,7 @@ import { decodeRoadGraph } from "../world/roadGraph";
 import { createArenaState } from "../sim/arena";
 import { createRng } from "../sim/rng";
 import { createInput, type ArenaState } from "../sim/types";
-import { createVehicle } from "../sim/vehicle";
+import { createVehicle, VEHICLE_KINDS } from "../sim/vehicle";
 import { decodeInput, encodeInput } from "./wire";
 import {
   MAX_SNAPSHOT_BYTES,
@@ -173,6 +174,33 @@ describe("snapshot wire format", () => {
       x: index * 5,
     }));
     const state: ArenaState = { ...base, players };
+    const bytes = snapshotBytes(encodeSnapshot(state, 1, {}));
+    expect(bytes).toBeLessThan(MAX_SNAPSHOT_BYTES);
+  });
+
+  it("keeps a world at every cap inside the size budget", () => {
+    const base = boot(5);
+    const vehicles = Array.from({ length: MAX_VEHICLES }, (_, index) =>
+      createVehicle(
+        1000 + index,
+        VEHICLE_KINDS[index % VEHICLE_KINDS.length]!,
+        [index * 3, -index * 2],
+        0,
+        index % 6,
+      ),
+    );
+    const ped = base.peds[0]!;
+    const peds = Array.from({ length: MAX_PEDS }, (_, index) => ({
+      ...ped,
+      id: 5000 + index,
+      x: index * 2,
+    }));
+    const players = Array.from({ length: 8 }, (_, index) => ({
+      ...base.players[0]!,
+      id: index,
+      x: index * 5,
+    }));
+    const state: ArenaState = { ...base, vehicles, peds, players };
     const bytes = snapshotBytes(encodeSnapshot(state, 1, {}));
     expect(bytes).toBeLessThan(MAX_SNAPSHOT_BYTES);
   });
