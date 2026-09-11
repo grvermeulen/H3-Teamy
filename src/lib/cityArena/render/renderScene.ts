@@ -23,6 +23,7 @@ import { drawPeople } from "./drawPeople";
 import { drawPickups } from "./drawPickups";
 import { drawVehicles } from "./drawVehicles";
 import {
+  drawOverheadChunks,
   drawVisibleChunks,
   type DrawStats,
   type WorldDrawSource,
@@ -122,7 +123,8 @@ function drawPlayerLook(
 
 /**
  * Renders one viewport: clips to its rect, translates into its local space, applies the push-in,
- * then draws world chunks → zone ring → cars → bullets → effects → player → crosshair and restores.
+ * then draws world chunks → zone ring → cars → bullets → effects → player → tree canopies →
+ * crosshair and restores.
  */
 export function renderScene(
   context: RasterContext,
@@ -167,8 +169,17 @@ export function renderScene(
   drawBullets(context, camera, size, scene.bullets);
   drawEffects(context, camera, size, scene.effects, scene.tick);
   drawPlayerLook(context, camera, size, scene);
+  const overheadRasterised = drawOverheadChunks(
+    context,
+    camera,
+    size,
+    scene.world,
+  );
   if (scene.shake) context.restore();
   if (scene.aimScreen) drawCrosshair(context, scene.aimScreen);
   context.restore();
-  return stats;
+  return {
+    missing: stats.missing,
+    rasterised: stats.rasterised || overheadRasterised,
+  };
 }

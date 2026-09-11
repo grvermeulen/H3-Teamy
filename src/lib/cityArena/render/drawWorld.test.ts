@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createCamera } from "./camera";
 import type { LandmarkLookup } from "./drawStatic";
-import { drawVisibleChunks } from "./drawWorld";
+import { CANOPY_LAYER } from "./drawScenery";
+import { drawOverheadChunks, drawVisibleChunks } from "./drawWorld";
 import { HATCH_BACKGROUND, PLACEHOLDER_FILL } from "./palette";
-import { createStaticRaster } from "./staticRaster";
+import { EMPTY_CHUNK_BYTES, createStaticRaster } from "./staticRaster";
 import { createFakeContext, createFakeTarget } from "./testing/fakeContext";
 
 const landmarks: LandmarkLookup = new Map();
@@ -16,6 +17,7 @@ describe("drawVisibleChunks", () => {
     );
     const source = {
       raster,
+      overhead: createStaticRaster(() => null),
       tiles: [],
       landmarks,
       loadedTileRects: [{ minX: -1000, minY: -1000, maxX: 1000, maxY: 1000 }],
@@ -43,7 +45,13 @@ describe("drawVisibleChunks", () => {
 
   it("hatches areas where no tile is loaded", () => {
     const raster = createStaticRaster(() => null);
-    const source = { raster, tiles: [], landmarks, loadedTileRects: [] };
+    const source = {
+      raster,
+      overhead: createStaticRaster(() => null),
+      tiles: [],
+      landmarks,
+      loadedTileRects: [],
+    };
     const context = createFakeContext();
     const stats = drawVisibleChunks(
       context,
@@ -60,7 +68,13 @@ describe("drawVisibleChunks", () => {
       createFakeTarget(width, height),
     );
     const camera = createCamera([0, 0], 4);
-    const withoutTile = { raster, tiles: [], landmarks, loadedTileRects: [] };
+    const withoutTile = {
+      raster,
+      overhead: createStaticRaster(() => null),
+      tiles: [],
+      landmarks,
+      loadedTileRects: [],
+    };
     for (let call = 0; call < 5; call++) {
       const context = createFakeContext();
       const stats = drawVisibleChunks(context, camera, viewport, withoutTile);
@@ -71,6 +85,7 @@ describe("drawVisibleChunks", () => {
 
     const withTile = {
       raster,
+      overhead: createStaticRaster(() => null),
       tiles: [],
       landmarks,
       loadedTileRects: [{ minX: -1000, minY: -1000, maxX: 1000, maxY: 1000 }],
@@ -87,7 +102,13 @@ describe("drawVisibleChunks", () => {
 
   it("clips the hatch to the chunk square so strokes cannot bleed into neighbours", () => {
     const raster = createStaticRaster(() => null);
-    const source = { raster, tiles: [], landmarks, loadedTileRects: [] };
+    const source = {
+      raster,
+      overhead: createStaticRaster(() => null),
+      tiles: [],
+      landmarks,
+      loadedTileRects: [],
+    };
     const camera = createCamera([0, 0], 4);
     const chunkSizePx = 128 * camera.zoom;
     const context = createFakeContext();
@@ -103,5 +124,52 @@ describe("drawVisibleChunks", () => {
     expect(clipRectIndex).toBeGreaterThan(saveIndex);
     expect(clipIndex).toBe(clipRectIndex + 1);
     expect(context.calls).toContain("restore()");
+  });
+});
+
+describe("drawOverheadChunks", () => {
+  it("blits only the chunks a canopy reaches into, after rasterising one per call", () => {
+    const tile = {
+      x: 0,
+      y: 0,
+      rect: { minX: 0, minY: 0, maxX: 2000, maxY: 2000 },
+      roads: [],
+      buildings: [],
+      ground: [],
+      water: [],
+      trees: [
+        {
+          point: [20, 20] as [number, number],
+          size: 1 as const,
+          bounds: { minX: 15, minY: 15, maxX: 25, maxY: 25 },
+        },
+      ],
+      furniture: [],
+    };
+    const overhead = createStaticRaster(
+      (width, height) => createFakeTarget(width, height),
+      undefined,
+      undefined,
+      CANOPY_LAYER,
+    );
+    const source = {
+      raster: createStaticRaster(() => null),
+      overhead,
+      tiles: [tile],
+      landmarks,
+      loadedTileRects: [tile.rect],
+    };
+    // The view spans the chunk with the tree and the empty one east of it.
+    const camera = createCamera([128, 64], 4);
+    const first = createFakeContext();
+    expect(drawOverheadChunks(first, camera, viewport, source)).toBe(true);
+    for (let step = 0; step < 8; step++)
+      drawOverheadChunks(createFakeContext(), camera, viewport, source);
+    const settled = createFakeContext();
+    expect(drawOverheadChunks(settled, camera, viewport, source)).toBe(false);
+    const draws = settled.calls.filter((call) => call.startsWith("drawImage("));
+    expect(draws).toHaveLength(1);
+    expect(overhead.stats().chunks).toBe(2);
+    expect(overhead.stats().bytes).toBe(256 * 256 * 4 + EMPTY_CHUNK_BYTES);
   });
 });

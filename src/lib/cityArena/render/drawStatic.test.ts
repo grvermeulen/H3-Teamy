@@ -234,7 +234,7 @@ describe("paintChunk", () => {
     ).toBe(false);
   });
 
-  it("paints furniture after the buildings and trees after that, shadows before canopies, flat without art", () => {
+  it("paints furniture after the buildings and the tree shadows after that, the canopies left to the overhead layer", () => {
     const context = createFakeContext();
     paintChunk(
       context,
@@ -249,26 +249,23 @@ describe("paintChunk", () => {
     const shadows = calls
       .map((call, index) => (call === `fill(${TREE_SHADOW})` ? index : -1))
       .filter((index) => index >= 0);
-    const canopies = [
-      calls.indexOf(`fill(${TREE_CANOPY_FILL[0]})`),
-      calls.indexOf(`fill(${TREE_CANOPY_FILL[1]})`),
-    ];
     const label = calls.indexOf("fillText(Cunerakerk,0,0)");
     expect(church).toBeGreaterThan(-1);
     expect(bench).toBeGreaterThan(church);
     expect(shadows).toHaveLength(3);
     expect(Math.min(...shadows)).toBeGreaterThan(bench);
-    expect(Math.min(...canopies)).toBeGreaterThan(Math.max(...shadows));
-    expect(label).toBeGreaterThan(Math.max(...canopies));
+    expect(label).toBeGreaterThan(Math.max(...shadows));
     expect(calls).toContain("rotate(1.57)");
+    expect(calls).not.toContain(`fill(${TREE_CANOPY_FILL[0]})`);
+    expect(calls).not.toContain(`fill(${TREE_CANOPY_FILL[1]})`);
     expect(
       calls.some((call) => call.startsWith(`fill(${FURNITURE_FILL.lamp})`)),
     ).toBe(false);
-    expect(calls.filter((call) => call.startsWith("arc(")).length).toBe(6);
+    expect(calls.filter((call) => call.startsWith("arc(")).length).toBe(3);
     expect(calls).toContain("arc(-2.3,65.2,3,0,6.28)");
   });
 
-  it("draws the prop art over the same footprints once it has loaded", () => {
+  it("draws the furniture art over its footprint once it has loaded, and no canopy", () => {
     const context = createFakeContext();
     const image = document.createElement("canvas");
     const sprites: ArenaSprites = {
@@ -289,10 +286,7 @@ describe("paintChunk", () => {
     const images = context.calls.filter((call) =>
       call.startsWith("drawImage("),
     );
-    expect(images).toHaveLength(4);
-    expect(images[0]).toBe(`drawImage(${String(image)},-0.9,-0.3,1.8,0.6)`);
-    expect(images[1]).toBe(`drawImage(${String(image)},-3,-3,6,6)`);
-    expect(images[2]).toBe(`drawImage(${String(image)},-5,-5,10,10)`);
+    expect(images).toEqual([`drawImage(${String(image)},-0.9,-0.3,1.8,0.6)`]);
     expect(context.calls.filter((call) => call.startsWith("arc(")).length).toBe(
       3,
     );

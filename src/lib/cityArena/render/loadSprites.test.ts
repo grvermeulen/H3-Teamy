@@ -86,8 +86,12 @@ function fakeFetch(body: unknown, status = 200): typeof fetch {
 
 const canvasFactory: CanvasFactory = (width, height) =>
   createFakeTarget(width, height);
-const loadImage: ImageLoader = () =>
-  Promise.resolve(document.createElement("canvas"));
+/** A decoded image wide enough for every strip the manifest names. */
+const loadImage: ImageLoader = () => {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1024;
+  return Promise.resolve(canvas);
+};
 
 describe("createSpriteStore", () => {
   beforeEach(() => {
@@ -181,6 +185,28 @@ describe("createSpriteStore", () => {
     expect(sprites.vehicles?.bus?.base).toBeDefined();
     expect(sprites.people?.player).toBe(sprites.player);
     expect(sprites.people?.ped1?.frames).toBe(8);
+  });
+
+  it("clamps a strip to the frames its file holds and reports the stale file", async () => {
+    const store = createSpriteStore({
+      canvasFactory,
+      fetchImpl: fakeFetch(manifest),
+      loadImage: (src) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = src.includes("person.png") ? 51 : 1024;
+        return Promise.resolve(canvas);
+      },
+    });
+    await store.load();
+    expect(store.current().player?.frames).toBe(1);
+    expect(store.current().people?.ped1?.frames).toBe(8);
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({
+        tags: expect.objectContaining({ kind: "sprite", step: "strip" }),
+      }),
+    );
   });
 
   it("loads the props the manifest has, with their metre footprints", async () => {

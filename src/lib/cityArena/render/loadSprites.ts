@@ -178,14 +178,42 @@ async function loadVehicles(
   return vehicles;
 }
 
+/** The width of a decoded image, or null for a source without a plain width (an SVG element). */
+function imageWidth(image: CanvasImageSource): number | null {
+  if ("naturalWidth" in image) return image.naturalWidth;
+  return "width" in image && typeof image.width === "number"
+    ? image.width
+    : null;
+}
+
+/**
+ * The frames a decoded strip really holds. A browser that cached the file before it became a
+ * walk cycle hands back the old still under the manifest's name, and drawing cells past its edge
+ * paints nothing — the circle underneath showed through whenever the player walked. The strip is
+ * clamped to what is there, so a stale file is a standing figure, and the file is reported.
+ */
+function stripFrames(image: CanvasImageSource, entry: PersonEntry): number {
+  const width = imageWidth(image);
+  if (width === null || width >= entry.pixelSize * entry.frames)
+    return entry.frames;
+  reportSpriteFailure(
+    new Error(
+      `Sprite strip ${entry.file} is ${width}px wide; ${entry.frames} frames of ${entry.pixelSize}px expected`,
+    ),
+    "strip",
+  );
+  return Math.max(1, Math.floor(width / entry.pixelSize));
+}
+
 /** Loads one character strip, or `undefined` when the file is missing. */
 async function loadPerson(
   loadImage: ImageLoader,
   entry: PersonEntry,
 ): Promise<PersonSprite | undefined> {
-  const { file, pixelSize, frames } = entry;
+  const { file, pixelSize } = entry;
   try {
-    return { image: await loadImage(file), pixelSize, frames };
+    const image = await loadImage(file);
+    return { image, pixelSize, frames: stripFrames(image, entry) };
   } catch (error: unknown) {
     reportSpriteFailure(error, "person");
     return undefined;

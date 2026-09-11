@@ -499,9 +499,13 @@ because the tiles are served immutable and a rebuilt tile needs a new path.
   78,316 (of 290,619 placed; 13 of 35 tiles sit at the cap) trees (8,266 mapped) and 388 (297 benches, 74 bus stops, 17 lamps) pieces of furniture, the fullest tile at
   4000 trees; the largest tile (`tile_4_2.json`) is 223.7 KB gzipped and the whole
   asset 1529.2 KB, under the 512 KB and 4 MB guardrails.
-- **On screen** (`render/drawScenery.ts`, called from `paintChunk` between the buildings and the
-  labels: furniture first, then every tree's shadow, then every canopy, so no canopy is darkened
-  by its neighbour's shadow). The props ship in the manifest's `props` record (`z.partialRecord`
+- **On screen** (`render/drawScenery.ts`). `paintChunk` paints the furniture and every tree's
+  shadow between the buildings and the labels; the canopies themselves are an **overhead layer**
+  — `CANOPY_LAYER`, a second `StaticRaster` on the world session (`overhead`), painted at half the
+  ground's pixels per metre with no canvas at all for a chunk without a tree — that `renderScene`
+  blits after the cars, the people and the player, so whoever walks under a tree is under it
+  (the owner's first play-test, 2026-09-11; until then the canopies sat in the ground raster and
+  players walked over them). The props ship in the manifest's `props` record (`z.partialRecord`
   over `PROP_KEYS`: `treeSmall`, `treeLarge`, `lamp`, `bench`, `busStop`), packed by the sprite
   script onto their metre boxes — a canopy at 16 px/m (96 and 160 px), furniture at 32 px/m with
   the long side along the image's x axis. A canopy is drawn turned by an angle from its own
@@ -515,3 +519,18 @@ because the tiles are served immutable and a rebuilt tile needs a new path.
   blocks nothing.
 - **Still open.** How a wood feels to drive through and whether 4000 trees per tile is the right
   cap — the owner's drive; every number is a named constant.
+
+## Play-test round 1 (2026-09-11)
+
+The owner's first drive through 9a and 9b. Fixed in one PR:
+
+- **Under the trees.** Canopies moved out of the ground raster into the overhead layer above
+  (`CANOPY_LAYER`), so players, cars and people disappear under a tree instead of walking over it.
+- **The walking circle on desktop.** `public/sw.js` served images cache-first, and the player
+  strip kept its file name when it went from a single still to an eight-frame walk cycle, so a
+  desktop that had cached the still drew nothing for frames 1–7 and the circle underneath showed
+  whenever the player moved. The worker now serves everything under `/arena/` network-first
+  (the map tiles are versioned by path and immutable, so the HTTP cache still holds them) and its
+  cache version is bumped so the old copies are dropped; and `loadSprites` clamps a strip to the
+  frames its file really holds, reporting the stale file to Sentry (`step: "strip"`), so a stale
+  strip is a standing figure rather than a circle.

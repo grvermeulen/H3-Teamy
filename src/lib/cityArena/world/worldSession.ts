@@ -1,5 +1,6 @@
 import type { Rect } from "../mapBuild/geometry";
 import type { CanvasFactory } from "../render/canvasTypes";
+import { CANOPY_LAYER } from "../render/drawScenery";
 import type { LandmarkInfo, LandmarkLookup } from "../render/drawStatic";
 import { NO_SPRITES, type ArenaSprites } from "../render/sprites";
 import { createStaticRaster, type StaticRaster } from "../render/staticRaster";
@@ -36,7 +37,10 @@ export type WorldSession = {
   index(): MapIndex;
   graph(): RoadGraph;
   collision: CollisionGrid;
+  /** The ground chunks: everything under the moving things. */
   raster: StaticRaster;
+  /** The overhead chunks: the tree canopies, drawn over the moving things. */
+  overhead: StaticRaster;
   /** Sprite art currently loaded; empty until the sprite store resolves. */
   sprites(): ArenaSprites;
   landmarks(): LandmarkLookup;
@@ -60,6 +64,7 @@ type WorldSessionState = {
   loader: MapLoader;
   collision: CollisionGrid;
   raster: StaticRaster;
+  overhead: StaticRaster;
   synced: Map<string, DecodedTile>;
   landmarks: LandmarkLookup;
   readSprites: () => ArenaSprites;
@@ -95,12 +100,14 @@ function syncResidentTiles(state: WorldSessionState): void {
     state.synced.delete(key);
     state.collision.removeTile(tile.x, tile.y);
     state.raster.invalidateRect(tile.rect);
+    state.overhead.invalidateRect(tile.rect);
   }
   for (const [key, tile] of current) {
     if (state.synced.has(key)) continue;
     state.synced.set(key, tile);
     state.collision.insertTile(tile);
     state.raster.invalidateRect(tile.rect);
+    state.overhead.invalidateRect(tile.rect);
   }
 }
 
@@ -163,6 +170,12 @@ function createWorldSessionState(
       options.rasterBudgetBytes,
       options.readSprites,
     ),
+    overhead: createStaticRaster(
+      options.canvasFactory,
+      options.rasterBudgetBytes,
+      options.readSprites,
+      CANOPY_LAYER,
+    ),
     synced: new Map<string, DecodedTile>(),
     landmarks: new Map<string, LandmarkInfo>(),
     readSprites: options.readSprites ?? (() => NO_SPRITES),
@@ -183,6 +196,7 @@ function disposeWorldSession(state: WorldSessionState): void {
   }
   state.synced.clear();
   state.raster.dispose();
+  state.overhead.dispose();
   state.loader.dispose();
 }
 
@@ -194,6 +208,7 @@ function assembleWorldSession(state: WorldSessionState): WorldSession {
     graph: () => requireReady(state.loadedGraph, "road graph"),
     collision: state.collision,
     raster: state.raster,
+    overhead: state.overhead,
     landmarks: () => state.landmarks,
     sprites: () => state.readSprites(),
     update: (centre, onProgress) => performUpdate(state, centre, onProgress),

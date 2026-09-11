@@ -274,6 +274,7 @@ function buildScene(
   return {
     world: {
       raster: session.raster,
+      overhead: session.overhead,
       tiles: session.tiles(),
       landmarks: session.landmarks(),
       loadedTileRects: session.loadedTileRects(),
