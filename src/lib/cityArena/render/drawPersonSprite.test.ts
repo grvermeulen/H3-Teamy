@@ -3,10 +3,11 @@ import {
   PERSON_SPRITE_SCALE,
   WALK_ANIMATION_MIN_SPEED_MPS,
   WALK_FRAME_TICKS,
+  drawHeldItem,
   drawPersonStrip,
   walkFrameAt,
 } from "./drawPersonSprite";
-import type { PersonSprite } from "./sprites";
+import type { PersonSprite, PropSprite } from "./sprites";
 import { createFakeContext } from "./testing/fakeContext";
 
 describe("walkFrameAt", () => {
@@ -59,5 +60,27 @@ describe("drawPersonStrip", () => {
         call.startsWith(`drawImage(${String(sprite.image)},0,0,51,51,`),
       ),
     ).toBe(true);
+  });
+});
+
+describe("drawHeldItem", () => {
+  const rifle: PropSprite = {
+    image: document.createElement("canvas"),
+    lengthMetres: 1.1,
+    widthMetres: 0.22,
+  };
+
+  it("lays the item along the facing with its grip at the right hand, scaled as the figure is", () => {
+    const context = createFakeContext();
+    // A radius of 4 px for a 0.4 m person: 10 px per metre.
+    drawHeldItem(context, rifle, 10, 20, 4, Math.PI / 2);
+    expect(context.calls).toEqual([
+      "save()",
+      "translate(10,20)",
+      "rotate(1.57)",
+      // Forward 1.5 px less 30 % of 11 px of grip, right 2.2 px less half the width.
+      `drawImage(${String(rifle.image)},-1.8,1.1,11,2.2)`,
+      "restore()",
+    ]);
   });
 });

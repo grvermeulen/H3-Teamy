@@ -23,6 +23,8 @@ const manifest = {
     field: surface("field"),
     forest: surface("forest"),
     urban: surface("urban"),
+    roofTiles: surface("roof-tiles"),
+    roofFlat: surface("roof-flat"),
   },
   vehicles: {
     sedan: {
@@ -69,6 +71,15 @@ const manifest = {
       widthMetres: 0.6,
       pixelWidth: 58,
       pixelHeight: 19,
+    },
+  },
+  items: {
+    pistol: {
+      file: "/arena/sprites/item-pistol.png",
+      lengthMetres: 0.2,
+      widthMetres: 0.14,
+      pixelWidth: 128,
+      pixelHeight: 90,
     },
   },
 };
@@ -207,6 +218,19 @@ describe("createSpriteStore", () => {
         tags: expect.objectContaining({ kind: "sprite", step: "strip" }),
       }),
     );
+  });
+
+  it("loads the items and the roof textures", async () => {
+    const store = createSpriteStore({
+      canvasFactory,
+      loadImage,
+      fetchImpl: fakeFetch(manifest),
+    });
+    await store.load();
+    expect(store.current().items?.pistol?.lengthMetres).toBe(0.2);
+    expect(store.current().items?.uzi).toBeUndefined();
+    expect(store.current().roofs?.tiles?.tileMetres).toBe(8);
+    expect(store.current().roofs?.flat).toBeDefined();
   });
 
   it("loads the props the manifest has, with their metre footprints", async () => {

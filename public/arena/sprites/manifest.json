@@ -35,6 +35,16 @@
       "file": "/arena/sprites/ground-urban.png",
       "tileMetres": 8,
       "tilePixels": 128
+    },
+    "roofTiles": {
+      "file": "/arena/sprites/roof-tiles.png",
+      "tileMetres": 8,
+      "tilePixels": 128
+    },
+    "roofFlat": {
+      "file": "/arena/sprites/roof-flat.png",
+      "tileMetres": 8,
+      "tilePixels": 128
     }
   },
   "vehicles": {
@@ -180,6 +190,50 @@
       "widthMetres": 1.5,
       "pixelWidth": 96,
       "pixelHeight": 48
+    }
+  },
+  "items": {
+    "pistol": {
+      "file": "/arena/sprites/item-pistol.png",
+      "lengthMetres": 0.2,
+      "widthMetres": 0.14,
+      "pixelWidth": 128,
+      "pixelHeight": 87
+    },
+    "uzi": {
+      "file": "/arena/sprites/item-uzi.png",
+      "lengthMetres": 0.5,
+      "widthMetres": 0.41,
+      "pixelWidth": 128,
+      "pixelHeight": 104
+    },
+    "shotgun": {
+      "file": "/arena/sprites/item-shotgun.png",
+      "lengthMetres": 1,
+      "widthMetres": 0.19,
+      "pixelWidth": 128,
+      "pixelHeight": 24
+    },
+    "rifle": {
+      "file": "/arena/sprites/item-rifle.png",
+      "lengthMetres": 1.1,
+      "widthMetres": 0.23,
+      "pixelWidth": 128,
+      "pixelHeight": 27
+    },
+    "bat": {
+      "file": "/arena/sprites/item-bat.png",
+      "lengthMetres": 0.85,
+      "widthMetres": 0.08,
+      "pixelWidth": 128,
+      "pixelHeight": 12
+    },
+    "health": {
+      "file": "/arena/sprites/item-health.png",
+      "lengthMetres": 0.4,
+      "widthMetres": 0.33,
+      "pixelWidth": 128,
+      "pixelHeight": 104
     }
   }
 }

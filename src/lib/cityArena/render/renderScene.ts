@@ -28,7 +28,14 @@ import {
   type DrawStats,
   type WorldDrawSource,
 } from "./drawWorld";
-import type { PersonSprite, PersonSprites, VehicleArt } from "./sprites";
+import {
+  itemKeyForWeapon,
+  itemSpriteFor,
+  type ItemSprites,
+  type PersonSprite,
+  type PersonSprites,
+  type VehicleArt,
+} from "./sprites";
 
 /** A rectangle of the canvas (CSS px) rendered through one camera — several of these make a split screen. */
 export type SceneViewport = {
@@ -62,6 +69,8 @@ export type Scene = {
   vehicleArt?: VehicleArt;
   /** The pedestrians' and officers' strips by look. */
   peopleSprites?: PersonSprites;
+  /** Pickup icons and the weapons in hands, absent until the art has loaded. */
+  itemSprites?: ItemSprites;
   /** Player character art, absent until it has loaded — the player falls back to the circle. */
   playerSprite?: PersonSprite;
 };
@@ -117,6 +126,9 @@ function drawPlayerLook(
       style,
       dead ? undefined : scene.playerSprite,
       scene.tick,
+      dead
+        ? undefined
+        : itemSpriteFor(scene.itemSprites, itemKeyForWeapon(player.weapon)),
     );
   }
 }
@@ -146,7 +158,14 @@ export function renderScene(
   }
   const stats = drawVisibleChunks(context, camera, size, scene.world);
   if (scene.zone) drawZoneRing(context, camera, size, scene.zone);
-  drawPickups(context, camera, size, scene.pickups, scene.tick);
+  drawPickups(
+    context,
+    camera,
+    size,
+    scene.pickups,
+    scene.tick,
+    scene.itemSprites,
+  );
   drawVehicles(
     context,
     camera,
@@ -165,6 +184,7 @@ export function renderScene(
     scene.cops,
     scene.peopleSprites,
     scene.tick,
+    scene.itemSprites,
   );
   drawBullets(context, camera, size, scene.bullets);
   drawEffects(context, camera, size, scene.effects, scene.tick);

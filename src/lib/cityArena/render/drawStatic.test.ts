@@ -292,6 +292,30 @@ describe("paintChunk", () => {
     );
   });
 
+  it("lays the roof textures along each building's longest edge, the landmark kept in its colour", () => {
+    const context = createFakeContext();
+    const texture = {
+      image: document.createElement("canvas"),
+      tileMetres: 8,
+      tilePixels: 128,
+    };
+    paintChunk(
+      context,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [tile],
+      landmarks,
+      { roofs: { tiles: texture, flat: texture } },
+    );
+    // The small two-floor block at (50, 10) is tiled, anchored at its first corner.
+    expect(context.calls).toContain("patternTransform(pattern(#0),0.0625)");
+    expect(context.calls).toContain("fill(pattern(#0))");
+    expect(context.calls).toContain(`fill(${LANDMARK_FILL.church})`);
+    expect(
+      context.calls.filter((call) => call.startsWith("createPattern(")),
+    ).toHaveLength(2);
+  });
+
   it("sets the world transform for the chunk", () => {
     const context = createFakeContext();
     paintChunk(

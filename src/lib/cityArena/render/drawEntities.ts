@@ -1,4 +1,4 @@
-import { drawPersonStrip, walkFrameAt } from "./drawPersonSprite";
+import { drawHeldItem, drawPersonStrip, walkFrameAt } from "./drawPersonSprite";
 import { isDead, isInvulnerable } from "../sim/damage";
 import { PLAYER_RADIUS_M } from "../sim/player";
 import type { ArenaPlayerState, PlayerState } from "../sim/types";
@@ -6,7 +6,7 @@ import type { MapZone } from "../world/mapTypes";
 import { zoneCentreMetres, zoneRadiusMetres } from "../world/zone";
 import { worldToScreen, type Camera, type Viewport } from "./camera";
 import type { RasterContext } from "./canvasTypes";
-import type { PersonSprite } from "./sprites";
+import type { PersonSprite, PropSprite } from "./sprites";
 import {
   PLAYER_DEAD_FILL,
   PLAYER_DEAD_RING,
@@ -98,8 +98,9 @@ function drawPlayerSprite(
 
 /**
  * Draws the local player: a filled circle and a coloured outline ring in the given style, with
- * the character sprite over it once the art has loaded. Without the sprite the circle carries a
- * facing tick instead, which is what the player read before the art existed.
+ * the character sprite over it once the art has loaded, and the weapon he holds in his hand
+ * over that. Without the sprite the circle carries a facing tick instead, which is what the
+ * player read before the art existed.
  */
 export function drawPlayer(
   context: RasterContext,
@@ -109,6 +110,7 @@ export function drawPlayer(
   style: PlayerStyle = DEFAULT_PLAYER_STYLE,
   sprite?: PersonSprite,
   tick = 0,
+  held?: PropSprite,
 ): void {
   const [x, y] = worldToScreen(camera, viewport, [player.x, player.y]);
   const radius = Math.max(MIN_PLAYER_RADIUS_PX, PLAYER_RADIUS_M * camera.zoom);
@@ -122,6 +124,7 @@ export function drawPlayer(
   context.stroke();
   if (sprite) {
     drawPlayerSprite(context, sprite, x, y, radius, player, tick);
+    if (held) drawHeldItem(context, held, x, y, radius, player.facing);
     return;
   }
   context.beginPath();

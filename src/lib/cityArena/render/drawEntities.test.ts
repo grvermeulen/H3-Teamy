@@ -125,3 +125,48 @@ describe("drawEntities", () => {
     expect(context.calls).toContain(`fill(${PLAYER_DEAD_FILL})`);
   });
 });
+
+describe("drawPlayer with a weapon", () => {
+  it("draws the weapon over the strip, along the facing, and nothing for a fist", () => {
+    const strip = {
+      image: document.createElement("canvas"),
+      pixelSize: 51,
+      frames: 8,
+    };
+    const rifle = {
+      image: document.createElement("canvas"),
+      lengthMetres: 1.1,
+      widthMetres: 0.22,
+    };
+    const armed = createFakeContext();
+    drawPlayer(
+      armed,
+      createCamera([10, 10], 8),
+      { width: 200, height: 100 },
+      createArenaPlayer([10, 10], 0),
+      undefined,
+      strip,
+      0,
+      rifle,
+    );
+    const images = armed.calls.filter((call) => call.startsWith("drawImage("));
+    expect(images).toHaveLength(2);
+    // The circle floors at 6 px for 0.4 m: 15 px per metre, so the rifle is 16.5 by 3.3 px.
+    expect(images[1]).toBe(
+      `drawImage(${String(rifle.image)},-2.7,1.65,16.5,3.3)`,
+    );
+    const bare = createFakeContext();
+    drawPlayer(
+      bare,
+      createCamera([10, 10], 8),
+      { width: 200, height: 100 },
+      createArenaPlayer([10, 10], 0),
+      undefined,
+      strip,
+      0,
+    );
+    expect(
+      bare.calls.filter((call) => call.startsWith("drawImage(")),
+    ).toHaveLength(1);
+  });
+});

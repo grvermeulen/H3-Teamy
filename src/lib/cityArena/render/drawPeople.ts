@@ -23,11 +23,14 @@ import {
   type Viewport,
 } from "./camera";
 import type { RasterContext } from "./canvasTypes";
-import { drawPersonStrip, walkFrameAt } from "./drawPersonSprite";
+import { drawHeldItem, drawPersonStrip, walkFrameAt } from "./drawPersonSprite";
 import {
+  itemSpriteFor,
   personSpriteFor,
+  type ItemSprites,
   type PersonSprite,
   type PersonSprites,
+  type PropSprite,
 } from "./sprites";
 
 /** Minimum person radius in screen pixels. */
@@ -75,12 +78,13 @@ function drawHealthCue(
   );
 }
 
-/** What one person is drawn with: the flat fills, and the strip once its art has loaded. */
+/** What one person is drawn with: the flat fills, the strip once its art has loaded, and what they hold. */
 type PersonStyle = {
   fill: string;
   ring: string;
   accent: string | null;
   sprite?: PersonSprite;
+  held?: PropSprite;
 };
 
 /**
@@ -110,6 +114,8 @@ function drawPerson(
   if (!dead && style.sprite) {
     const frame = walkFrameAt(personSpeed(person), tick, style.sprite.frames);
     drawPersonStrip(context, style.sprite, x, y, radius, person.facing, frame);
+    if (style.held)
+      drawHeldItem(context, style.held, x, y, radius, person.facing);
   } else if (!dead) {
     context.beginPath();
     context.moveTo(x, y);
@@ -152,7 +158,7 @@ export function drawPedestrian(
   );
 }
 
-/** Draws a police officer: in uniform once the art has loaded, with a blue badge accent before. */
+/** Draws a police officer: in uniform with their weapon once the art has loaded, a blue badge accent before. */
 export function drawCop(
   context: RasterContext,
   camera: Camera,
@@ -160,6 +166,7 @@ export function drawCop(
   cop: CopState,
   people?: PersonSprites,
   tick = 0,
+  items?: ItemSprites,
 ): void {
   drawPerson(
     context,
@@ -171,6 +178,7 @@ export function drawCop(
       ring: COP_ACCENT,
       accent: COP_ACCENT,
       sprite: personSpriteFor(people, COP_LOOK),
+      held: itemSpriteFor(items, cop.weapon),
     },
     tick,
   );
@@ -185,6 +193,7 @@ export function drawPeople(
   cops: CopState[],
   people?: PersonSprites,
   tick = 0,
+  items?: ItemSprites,
 ): void {
   const view = visibleRect(camera, viewport);
   const visible = (person: Person): boolean =>
@@ -196,5 +205,6 @@ export function drawPeople(
     if (visible(ped))
       drawPedestrian(context, camera, viewport, ped, people, tick);
   for (const cop of cops)
-    if (visible(cop)) drawCop(context, camera, viewport, cop, people, tick);
+    if (visible(cop))
+      drawCop(context, camera, viewport, cop, people, tick, items);
 }

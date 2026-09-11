@@ -1,5 +1,6 @@
+import { PLAYER_RADIUS_M } from "../sim/player";
 import type { RasterContext } from "./canvasTypes";
-import type { PersonSprite } from "./sprites";
+import type { PersonSprite, PropSprite } from "./sprites";
 
 /**
  * The character art faces *down* its own image: the generator drew every figure head at the top
@@ -17,6 +18,12 @@ export const PERSON_SPRITE_SCALE = 1.6;
 export const WALK_FRAME_TICKS = 4;
 /** Below this speed (m/s) a person is standing, so the strip rests on its first frame. */
 export const WALK_ANIMATION_MIN_SPEED_MPS = 0.2;
+/** Where a held item sits in the person's frame: this far forward of the centre, metres. */
+export const HAND_FORWARD_M = 0.15;
+/** And this far to the right, metres — the right hand. */
+export const HAND_RIGHT_M = 0.22;
+/** The share of an item's length that lies behind the hand: the grip or the handle. */
+const GRIP_SHARE = 0.3;
 
 /**
  * The strip cell to draw this tick for someone moving at `speedMps`. The cycle runs off the tick
@@ -73,6 +80,41 @@ export function drawPersonStrip(
     -half,
     half * 2,
     half * 2,
+  );
+  context.restore();
+}
+
+/**
+ * Draws the item a person holds — pointing where they face, its grip at their right hand — at
+ * its real size, scaled as the figure is: a pistol is a few pixels, a rifle a stick.
+ *
+ * @param context - The canvas, in screen space.
+ * @param sprite - The item's art.
+ * @param x - Screen x of the person.
+ * @param y - Screen y of the person.
+ * @param radius - The collision circle's screen radius, which sets the scale.
+ * @param facing - The person's facing, radians.
+ */
+export function drawHeldItem(
+  context: RasterContext,
+  sprite: PropSprite,
+  x: number,
+  y: number,
+  radius: number,
+  facing: number,
+): void {
+  const scale = radius / PLAYER_RADIUS_M;
+  const length = sprite.lengthMetres * scale;
+  const width = sprite.widthMetres * scale;
+  context.save();
+  context.translate(x, y);
+  context.rotate(facing);
+  context.drawImage(
+    sprite.image,
+    HAND_FORWARD_M * scale - length * GRIP_SHARE,
+    HAND_RIGHT_M * scale - width / 2,
+    length,
+    width,
   );
   context.restore();
 }

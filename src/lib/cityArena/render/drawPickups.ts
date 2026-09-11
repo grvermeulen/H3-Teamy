@@ -1,5 +1,6 @@
 import type { PickupState } from "../sim/types";
 import {
+  PICKUP_BACKDROP,
   PICKUP_BAT,
   PICKUP_HEALTH,
   PICKUP_HEALTH_CROSS,
@@ -7,6 +8,7 @@ import {
   PICKUP_SHOTGUN,
   PICKUP_UZI,
 } from "./palette";
+import type { ItemSprites, PropSprite } from "./sprites";
 import {
   visibleRect,
   worldToScreen,
@@ -19,6 +21,12 @@ import type { RasterContext } from "./canvasTypes";
 export const PICKUP_BOB_M = 0.2;
 /** Pickup diamond radius in metres. */
 export const PICKUP_RADIUS_M = 0.45;
+/** Length an item icon is drawn at on the ground, metres: an icon, not the item's real size. */
+export const PICKUP_ICON_LENGTH_M = 1;
+/** Radius of the disc behind an item icon, metres. */
+const PICKUP_BACKDROP_RADIUS_M = 0.6;
+/** How fast an item icon turns, radians per tick; a slow display turn, not the diamond's spin. */
+const ICON_TURN_PER_TICK = 0.03;
 const CULL_MARGIN_M = 5;
 
 /** Deterministic vertical bob for a pickup at a simulation tick. */
@@ -34,18 +42,56 @@ export function pickupColour(kind: PickupState["kind"]): string {
   return kind === "uzi" ? PICKUP_UZI : PICKUP_SHOTGUN;
 }
 
-/** Draws one rotating pickup diamond, with a cross for health. */
+/** The item's art, a metre long over a dark disc, turning slowly. */
+function drawItemIcon(
+  context: RasterContext,
+  sprite: PropSprite,
+  x: number,
+  y: number,
+  zoom: number,
+  turn: number,
+): void {
+  const length = PICKUP_ICON_LENGTH_M * zoom;
+  const width = (length * sprite.widthMetres) / sprite.lengthMetres;
+  context.save();
+  context.translate(x, y);
+  context.beginPath();
+  context.arc(0, 0, PICKUP_BACKDROP_RADIUS_M * zoom, 0, Math.PI * 2);
+  context.fillStyle = PICKUP_BACKDROP;
+  context.fill();
+  context.rotate(turn);
+  context.drawImage(sprite.image, -length / 2, -width / 2, length, width);
+  context.restore();
+}
+
+/**
+ * Draws one pickup: its item's art as an icon once that has loaded, else the rotating diamond
+ * it was before, with a cross for health.
+ */
 export function drawPickup(
   context: RasterContext,
   camera: Camera,
   viewport: Viewport,
   pickup: PickupState,
   tick: number,
+  items?: ItemSprites,
 ): void {
   const [x, y] = worldToScreen(camera, viewport, [
     pickup.x,
     pickup.y + pickupBob(pickup, tick),
   ]);
+  const sprite = items?.[pickup.kind];
+  if (sprite) {
+    drawItemIcon(
+      context,
+      sprite,
+      x,
+      y,
+      camera.zoom,
+      (tick + pickup.id) * ICON_TURN_PER_TICK,
+    );
+    return;
+  }
   const radius = PICKUP_RADIUS_M * camera.zoom;
   context.save();
   context.translate(x, y);
@@ -67,13 +113,14 @@ export function drawPickup(
   context.restore();
 }
 
-/** Draws untaken pickups near the camera. */
+/** Draws untaken pickups near the camera, as item icons once the art has loaded. */
 export function drawPickups(
   context: RasterContext,
   camera: Camera,
   viewport: Viewport,
   pickups: PickupState[],
   tick: number,
+  items?: ItemSprites,
 ): void {
   const view = visibleRect(camera, viewport);
   for (const pickup of pickups) {
@@ -83,6 +130,6 @@ export function drawPickups(
       pickup.x > view.maxX + CULL_MARGIN_M ||
       pickup.y < view.minY - CULL_MARGIN_M ||
       pickup.y > view.maxY + CULL_MARGIN_M;
-    if (!outside) drawPickup(context, camera, viewport, pickup, tick);
+    if (!outside) drawPickup(context, camera, viewport, pickup, tick, items);
   }
 }
