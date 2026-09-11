@@ -8,6 +8,7 @@ import { FURNITURE_SIZE_M, TREE_CANOPY_M } from "../world/mapTypes";
 import type { RasterContext } from "./canvasTypes";
 import { FURNITURE_FILL, TREE_CANOPY_FILL, TREE_SHADOW } from "./palette";
 import { TREE_PROP_KEYS, type PropSprite, type PropSprites } from "./sprites";
+import type { ChunkLayer } from "./staticRaster";
 
 /** How far a canopy's shadow falls to the south-east, metres. */
 const CANOPY_SHADOW_OFFSET_M = 1.2;
@@ -18,6 +19,11 @@ const FURNITURE_MARGIN_M = 2;
 /** Two irrationals that turn a tree's position into a turn of its canopy, so a wood does not tile. */
 const CANOPY_TURN_X = 12.9898;
 const CANOPY_TURN_Y = 78.233;
+/**
+ * Pixels per metre of the canopy layer relative to the ground's: foliage survives being drawn
+ * at half the resolution and scaled up, and the layer costs a quarter of the ground's canvas.
+ */
+export const CANOPY_RESOLUTION = 0.5;
 
 /** The turn a tree's canopy art gets, radians, from where it stands. */
 function canopyTurn(tree: DecodedTree): number {
@@ -67,19 +73,18 @@ function paintCanopy(
 }
 
 /**
- * Paints the trees touching the chunk: every shadow first, then every canopy, so no canopy is
- * darkened by its neighbour's shadow.
+ * Paints the shadows of the trees touching the chunk into the ground layer. The canopies
+ * themselves go to the overhead layer ({@link CANOPY_LAYER}), drawn over the cars and the
+ * people, so whoever walks under a tree is under it.
  *
  * @param context - The chunk's context, in world metres.
  * @param tiles - The tiles touching the chunk.
  * @param chunkRect - The chunk's rectangle, metres.
- * @param props - The loaded prop art, if any.
  */
-export function paintTrees(
+export function paintTreeShadows(
   context: RasterContext,
   tiles: DecodedTile[],
   chunkRect: Rect,
-  props: PropSprites | undefined,
 ): void {
   // A canopy just past the chunk's north-west edge still throws its shadow into the chunk.
   const reach: Rect = {
@@ -88,20 +93,67 @@ export function paintTrees(
     maxX: chunkRect.maxX,
     maxY: chunkRect.maxY,
   };
-  const trees = tiles.flatMap((tile) =>
-    tile.trees.filter((tree) => rectsIntersect(tree.bounds, reach)),
-  );
-  for (const tree of trees)
-    fillDisc(
-      context,
-      tree.point[0] + CANOPY_SHADOW_OFFSET_M,
-      tree.point[1] + CANOPY_SHADOW_OFFSET_M,
-      TREE_CANOPY_M[tree.size] / 2,
-      TREE_SHADOW,
-    );
-  for (const tree of trees)
-    paintCanopy(context, tree, props?.[TREE_PROP_KEYS[tree.size]]);
+  for (const tile of tiles)
+    for (const tree of tile.trees) {
+      if (!rectsIntersect(tree.bounds, reach)) continue;
+      fillDisc(
+        context,
+        tree.point[0] + CANOPY_SHADOW_OFFSET_M,
+        tree.point[1] + CANOPY_SHADOW_OFFSET_M,
+        TREE_CANOPY_M[tree.size] / 2,
+        TREE_SHADOW,
+      );
+    }
 }
+
+/**
+ * Paints the canopies of the trees touching the chunk: the art turned by each tree's own angle,
+ * or a flat disc without it.
+ *
+ * @param context - The chunk's context, in world metres.
+ * @param tiles - The tiles the trees may come from.
+ * @param chunkRect - The chunk's rectangle, metres.
+ * @param props - The loaded prop art, if any.
+ */
+export function paintCanopies(
+  context: RasterContext,
+  tiles: DecodedTile[],
+  chunkRect: Rect,
+  props: PropSprites | undefined,
+): void {
+  for (const tile of tiles)
+    for (const tree of tile.trees)
+      if (rectsIntersect(tree.bounds, chunkRect))
+        paintCanopy(context, tree, props?.[TREE_PROP_KEYS[tree.size]]);
+}
+
+/** True when a canopy reaches into the rectangle. */
+function hasCanopy(rect: Rect, tiles: DecodedTile[]): boolean {
+  return tiles.some((tile) =>
+    tile.trees.some((tree) => rectsIntersect(tree.bounds, rect)),
+  );
+}
+
+/**
+ * The overhead raster layer: the canopies alone, over a transparent chunk, drawn after the
+ * moving things so a player walking under a tree disappears beneath it. A chunk without a tree
+ * gets no canvas at all.
+ */
+export const CANOPY_LAYER: ChunkLayer = {
+  resolution: CANOPY_RESOLUTION,
+  covers: hasCanopy,
+  paint: (context, rect, zoom, tiles, _landmarks, sprites) => {
+    context.setTransform(
+      zoom,
+      0,
+      0,
+      zoom,
+      -rect.minX * zoom,
+      -rect.minY * zoom,
+    );
+    paintCanopies(context, tiles, rect, sprites.props);
+  },
+};
 
 /** One piece of furniture, turned to its heading: the art, or a flat shape without it. */
 function paintPiece(

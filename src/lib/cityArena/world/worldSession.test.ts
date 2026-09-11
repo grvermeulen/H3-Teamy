@@ -353,6 +353,7 @@ describe("createWorldSession with a controllable fake loader", () => {
     const insertTile = vi.spyOn(session.collision, "insertTile");
     const removeTile = vi.spyOn(session.collision, "removeTile");
     const invalidateRect = vi.spyOn(session.raster, "invalidateRect");
+    const invalidateOverhead = vi.spyOn(session.overhead, "invalidateRect");
 
     const progress = await session.update([0, 0]);
 
@@ -363,6 +364,8 @@ describe("createWorldSession with a controllable fake loader", () => {
     expect(invalidateRect).toHaveBeenCalledTimes(2);
     expect(invalidateRect).toHaveBeenNthCalledWith(1, tileA.rect);
     expect(invalidateRect).toHaveBeenNthCalledWith(2, tileB.rect);
+    expect(invalidateOverhead).toHaveBeenCalledTimes(2);
+    expect(invalidateOverhead).toHaveBeenNthCalledWith(2, tileB.rect);
     expect(session.tiles()).toHaveLength(2);
     expect(session.collision.obstacleCount()).toBe(1);
     expect(session.loadedTileRects()).toHaveLength(2);

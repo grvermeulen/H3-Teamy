@@ -1,5 +1,5 @@
 /* Service Worker: safe caching and instant updates */
-const CACHE_VERSION = "v6";
+const CACHE_VERSION = "v7";
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 
 // Only cache immutable static assets. Do NOT cache HTML (like '/') to avoid stale UIs.
@@ -9,6 +9,12 @@ const STATIC_ASSETS = ["/logo.png"];
 // chunk names are content-hashed, so a fresh fetch is answered by the HTTP cache, while `next dev`
 // reuses the same chunk URLs across edits and restarts, so a cache-first hit would serve stale code.
 const NEXT_BUILD_PREFIX = "/_next/";
+
+// The arena's sprites and audio keep their file names across deploys, so they are served
+// network-first too: cache-first kept a single-frame player strip alive on desktops after the
+// file had become an eight-frame walk cycle, and cells past its edge drew nothing. The map tiles
+// under the same prefix are versioned by path and served immutable, so the HTTP cache holds them.
+const ARENA_PREFIX = "/arena/";
 
 // Everything else with one of these destinations (e.g. the precached shell and images) stays
 // cache-first so it keeps working offline.
@@ -98,7 +104,10 @@ self.addEventListener("fetch", (event) => {
 
   if (request.method !== "GET") return;
 
-  if (url.pathname.startsWith(NEXT_BUILD_PREFIX)) {
+  if (
+    url.pathname.startsWith(NEXT_BUILD_PREFIX) ||
+    url.pathname.startsWith(ARENA_PREFIX)
+  ) {
     event.respondWith(networkFirst(event));
     return;
   }

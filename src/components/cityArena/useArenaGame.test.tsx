@@ -127,6 +127,7 @@ function createControllableSession(): {
     raster: createStaticRaster((width, height) =>
       createFakeTarget(width, height),
     ),
+    overhead: createStaticRaster(() => null),
     landmarks: () => new Map(),
     sprites: () => NO_SPRITES,
     update: vi.fn(async () => ({ loaded: 0, total: 0 })),
@@ -341,6 +342,7 @@ describe("useArenaGame", () => {
       raster: createStaticRaster((width, height) =>
         createFakeTarget(width, height),
       ),
+      overhead: createStaticRaster(() => null),
       landmarks: () => new Map(),
       sprites: () => NO_SPRITES,
       update: vi.fn(async () => ({ loaded: 0, total: 0 })),

@@ -2,9 +2,37 @@ import { rectsIntersect, type Rect } from "../mapBuild/geometry";
 import type { DecodedTile } from "../world/decode";
 import { createLru, type Lru } from "../world/lru";
 import type { ZoomLevel } from "./camera";
-import type { CanvasFactory, RasterTarget } from "./canvasTypes";
+import type { CanvasFactory, RasterContext, RasterTarget } from "./canvasTypes";
 import { paintChunk, type LandmarkLookup } from "./drawStatic";
 import { NO_SPRITES, type ArenaSprites } from "./sprites";
+
+/**
+ * What a raster layer paints into a chunk. The ground layer paints everything under the moving
+ * things; the canopy layer (`CANOPY_LAYER` in `drawScenery.ts`) paints what hangs over them, at
+ * half the ground's pixels per metre, and skips the canvas altogether for a chunk without a tree.
+ */
+export type ChunkLayer = {
+  /** Pixels per metre relative to the zoom: 1 paints at the zoom, 0.5 at half of it. */
+  resolution: number;
+  /** Whether the layer has anything at all inside `rect`; `false` costs no canvas. */
+  covers(rect: Rect, tiles: DecodedTile[]): boolean;
+  /** Paints the layer into a context that maps metres to pixels at `zoom`. */
+  paint(
+    context: RasterContext,
+    rect: Rect,
+    zoom: number,
+    tiles: DecodedTile[],
+    landmarks: LandmarkLookup,
+    sprites: ArenaSprites,
+  ): void;
+};
+
+/** The ground: every chunk with a tile behind it has something to paint. */
+export const GROUND_LAYER: ChunkLayer = {
+  resolution: 1,
+  covers: () => true,
+  paint: paintChunk,
+};
 
 /** Chunk edge length in metres. */
 export const CHUNK_METRES = 128;
@@ -28,12 +56,12 @@ export const RASTER_BUDGET_MAX_BYTES = 96 * 1024 * 1024;
 
 /** A chunk address. */
 export type ChunkCoord = { zoom: ZoomLevel; chunkX: number; chunkY: number };
-/** A rasterised chunk. */
+/** A rasterised chunk; `target` is null for a chunk its layer has nothing in, cached at no cost. */
 export type Chunk = {
   key: string;
   coord: ChunkCoord;
   rect: Rect;
-  target: RasterTarget;
+  target: RasterTarget | null;
   bytes: number;
 };
 
@@ -147,21 +175,35 @@ function createChunkStore(budgetBytes: number): ChunkStore {
   });
 }
 
-/** Rasterises one chunk via `factory`, or `null` when the factory has no 2D context. */
+/**
+ * Rasterises one chunk of `layer` via `factory`: an empty chunk with no canvas when the layer
+ * has nothing there, or `null` when the factory has no 2D context.
+ */
 function rasterizeChunk(
   factory: CanvasFactory,
   coord: ChunkCoord,
   tiles: DecodedTile[],
   landmarks: LandmarkLookup,
   sprites: ArenaSprites,
+  layer: ChunkLayer,
 ): Chunk | null {
-  const sizePx = CHUNK_METRES * coord.zoom;
+  const rect = chunkRect(coord);
+  const key = chunkKey(coord);
+  if (!layer.covers(rect, tiles))
+    return { key, coord, rect, target: null, bytes: 0 };
+  const sizePx = Math.round(CHUNK_METRES * coord.zoom * layer.resolution);
   const target = factory(sizePx, sizePx);
   if (!target) return null;
-  const rect = chunkRect(coord);
-  paintChunk(target.ctx, rect, coord.zoom, tiles, landmarks, sprites);
+  layer.paint(
+    target.ctx,
+    rect,
+    coord.zoom * layer.resolution,
+    tiles,
+    landmarks,
+    sprites,
+  );
   return {
-    key: chunkKey(coord),
+    key,
     coord,
     rect,
     target,
@@ -177,10 +219,18 @@ function ensureCachedChunk(
   tiles: DecodedTile[],
   landmarks: LandmarkLookup,
   sprites: ArenaSprites,
+  layer: ChunkLayer,
 ): Chunk | null {
   const existing = store.get(chunkKey(coord));
   if (existing) return existing;
-  const chunk = rasterizeChunk(factory, coord, tiles, landmarks, sprites);
+  const chunk = rasterizeChunk(
+    factory,
+    coord,
+    tiles,
+    landmarks,
+    sprites,
+    layer,
+  );
   if (chunk) store.set(chunk.key, chunk);
   return chunk;
 }
@@ -193,12 +243,20 @@ function rasterizeNextMissingChunk(
   tiles: DecodedTile[],
   landmarks: LandmarkLookup,
   sprites: ArenaSprites,
+  layer: ChunkLayer,
 ): boolean {
   const missing = needed.find((coord) => !store.has(chunkKey(coord)));
   if (!missing) return false;
   return (
-    ensureCachedChunk(store, factory, missing, tiles, landmarks, sprites) !==
-    null
+    ensureCachedChunk(
+      store,
+      factory,
+      missing,
+      tiles,
+      landmarks,
+      sprites,
+      layer,
+    ) !== null
   );
 }
 
@@ -211,20 +269,30 @@ function invalidateChunksTouching(store: ChunkStore, rect: Rect): void {
 }
 
 /**
- * Creates the cache; chunks are painted with {@link paintChunk} on demand. `readSprites` is read
- * per rasterisation rather than captured, so chunks painted after the sprite art arrives pick it
- * up; the caller drops the chunks painted before that with {@link StaticRaster.invalidateRect}.
+ * Creates the cache; chunks are painted by `layer` (the ground, {@link GROUND_LAYER}, unless
+ * another is given) on demand. `readSprites` is read per rasterisation rather than captured, so
+ * chunks painted after the sprite art arrives pick it up; the caller drops the chunks painted
+ * before that with {@link StaticRaster.invalidateRect}.
  */
 export function createStaticRaster(
   factory: CanvasFactory,
   budgetBytes = RASTER_BUDGET_BYTES,
   readSprites: () => ArenaSprites = () => NO_SPRITES,
+  layer: ChunkLayer = GROUND_LAYER,
 ): StaticRaster {
   const store = createChunkStore(budgetBytes);
   return {
     getChunk: (coord) => store.get(chunkKey(coord)),
     ensureChunk: (coord, tiles, landmarks) =>
-      ensureCachedChunk(store, factory, coord, tiles, landmarks, readSprites()),
+      ensureCachedChunk(
+        store,
+        factory,
+        coord,
+        tiles,
+        landmarks,
+        readSprites(),
+        layer,
+      ),
     rasterizeNext: (needed, tiles, landmarks) =>
       rasterizeNextMissingChunk(
         store,
@@ -233,6 +301,7 @@ export function createStaticRaster(
         tiles,
         landmarks,
         readSprites(),
+        layer,
       ),
     invalidateRect: (rect) => invalidateChunksTouching(store, rect),
     stats: () => ({ chunks: store.size, bytes: store.cost }),

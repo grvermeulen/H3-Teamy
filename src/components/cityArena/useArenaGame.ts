@@ -176,7 +176,9 @@ function createArenaSession(
   // Chunks rasterised before the art arrives hold flat fills, so drop them once it has: the
   // frame loop re-rasterises them one per frame, the same way it streams them in the first time.
   void sprites.load().then((loaded) => {
-    if (loaded) session.raster.invalidateRect(WHOLE_WORLD_RECT);
+    if (!loaded) return;
+    session.raster.invalidateRect(WHOLE_WORLD_RECT);
+    session.overhead.invalidateRect(WHOLE_WORLD_RECT);
   });
   return session;
 }

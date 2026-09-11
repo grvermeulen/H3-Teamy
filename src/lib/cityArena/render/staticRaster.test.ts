@@ -10,6 +10,7 @@ import {
   chunksCovering,
   createStaticRaster,
   rasterBudgetForViewport,
+  type ChunkLayer,
 } from "./staticRaster";
 import { createFakeTarget } from "./testing/fakeContext";
 
@@ -86,6 +87,39 @@ describe("createStaticRaster", () => {
     ).toBeNull();
     expect(
       raster.rasterizeNext([{ zoom: 4, chunkX: 0, chunkY: 0 }], [], landmarks),
+    ).toBe(false);
+  });
+
+  it("paints another layer at its own resolution and caches an empty chunk without a canvas", () => {
+    const painted: number[] = [];
+    const layer: ChunkLayer = {
+      resolution: 0.5,
+      covers: (rect) => rect.minX >= 0,
+      paint: (context, _rect, zoom) => {
+        painted.push(zoom);
+        context.fillRect(0, 0, 1, 1);
+      },
+    };
+    const raster = createStaticRaster(factory, undefined, undefined, layer);
+    const full = raster.ensureChunk(
+      { zoom: 8, chunkX: 0, chunkY: 0 },
+      [],
+      landmarks,
+    );
+    expect(full?.target?.width).toBe(CHUNK_METRES * 4);
+    expect(full?.bytes).toBe(CHUNK_METRES * 4 * CHUNK_METRES * 4 * 4);
+    expect(painted).toEqual([4]);
+    const empty = raster.ensureChunk(
+      { zoom: 8, chunkX: -1, chunkY: 0 },
+      [],
+      landmarks,
+    );
+    expect(empty?.target).toBeNull();
+    expect(empty?.bytes).toBe(0);
+    expect(painted).toEqual([4]);
+    expect(raster.stats()).toEqual({ chunks: 2, bytes: full?.bytes });
+    expect(
+      raster.rasterizeNext([{ zoom: 8, chunkX: -1, chunkY: 0 }], [], landmarks),
     ).toBe(false);
   });
 

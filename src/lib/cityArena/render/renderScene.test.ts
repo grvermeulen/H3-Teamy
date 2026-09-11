@@ -15,8 +15,9 @@ import {
   POLICE_LIGHT_BLUE,
 } from "./palette";
 import { renderScene, type Scene } from "./renderScene";
+import { CANOPY_LAYER } from "./drawScenery";
 import { createStaticRaster } from "./staticRaster";
-import { createFakeContext } from "./testing/fakeContext";
+import { createFakeContext, createFakeTarget } from "./testing/fakeContext";
 
 const bullet: BulletState = {
   id: 2,
@@ -37,6 +38,7 @@ function sceneWith(partial: Partial<Scene>): Scene {
   return {
     world: {
       raster: createStaticRaster(() => null),
+      overhead: createStaticRaster(() => null),
       tiles: [],
       landmarks,
       loadedTileRects: [],
@@ -173,5 +175,53 @@ describe("renderScene police lights", () => {
     expect(
       context.calls.filter((call) => call === `fill(${POLICE_LIGHT_BLUE})`),
     ).toHaveLength(1);
+  });
+});
+
+describe("renderScene canopies", () => {
+  it("draws the tree canopies after the player, so a walker under a tree is under it", () => {
+    const tile = {
+      x: 0,
+      y: 0,
+      rect: { minX: -1000, minY: -1000, maxX: 1000, maxY: 1000 },
+      roads: [],
+      buildings: [],
+      ground: [],
+      water: [],
+      trees: [
+        {
+          point: [0, 0] as [number, number],
+          size: 1 as const,
+          bounds: { minX: -5, minY: -5, maxX: 5, maxY: 5 },
+        },
+      ],
+      furniture: [],
+    };
+    const overhead = createStaticRaster(
+      (width, height) => createFakeTarget(width, height),
+      undefined,
+      undefined,
+      CANOPY_LAYER,
+    );
+    const scene = sceneWith({
+      world: {
+        raster: createStaticRaster(() => null),
+        overhead,
+        tiles: [tile],
+        landmarks: new Map(),
+        loadedTileRects: [tile.rect],
+      },
+    });
+    for (let frame = 0; frame < 12; frame++)
+      renderScene(createFakeContext(), viewport, scene);
+    const context = createFakeContext();
+    renderScene(context, viewport, scene);
+    const player = context.calls.indexOf(`fill(${PLAYER_FILL})`);
+    const canopies = context.calls
+      .map((call, index) => (call.startsWith("drawImage(") ? index : -1))
+      .filter((index) => index >= 0);
+    expect(player).toBeGreaterThan(-1);
+    expect(canopies.length).toBeGreaterThan(0);
+    expect(Math.min(...canopies)).toBeGreaterThan(player);
   });
 });
