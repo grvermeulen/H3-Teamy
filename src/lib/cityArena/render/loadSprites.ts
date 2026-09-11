@@ -9,12 +9,13 @@ import {
   parseSpriteManifest,
   type ArenaSprites,
   type GroundTextures,
+  ITEM_KEYS,
   PROP_KEYS,
   type PersonSprite,
   type PersonSprites,
   type PropKey,
   type PropSprite,
-  type PropSprites,
+  type RoofTextures,
   type SpriteManifest,
   type SurfaceTexture,
   type VehicleSprite,
@@ -251,24 +252,40 @@ async function loadProp(
   }
 }
 
-/** Loads every prop the manifest has; a prop whose file is missing stays a flat shape. */
-async function loadProps(
+/**
+ * Loads every entry of a prop-shaped record the manifest has (`props`, `items`); an entry whose
+ * file is missing stays absent, and its painter keeps the flat shape.
+ */
+async function loadPropRecord<K extends string>(
   loadImage: ImageLoader,
-  manifest: SpriteManifest,
-): Promise<PropSprites> {
-  const entries = PROP_KEYS.flatMap((key) => {
-    const entry = manifest.props[key];
+  keys: readonly K[],
+  record: Partial<Record<K, PropEntry>>,
+): Promise<Partial<Record<K, PropSprite>>> {
+  const entries = keys.flatMap((key) => {
+    const entry = record[key];
     return entry ? [{ key, entry }] : [];
   });
   const loaded = await Promise.all(
     entries.map(({ entry }) => loadProp(loadImage, entry)),
   );
-  const props: PropSprites = {};
+  const sprites: Partial<Record<K, PropSprite>> = {};
   entries.forEach(({ key }, index) => {
     const sprite = loaded[index];
-    if (sprite) props[key] = sprite;
+    if (sprite) sprites[key] = sprite;
   });
-  return props;
+  return sprites;
+}
+
+/** Loads the two roof textures; one that fails leaves its roofs on the flat fills. */
+async function loadRoofs(
+  loadImage: ImageLoader,
+  surfaces: SpriteManifest["surfaces"],
+): Promise<RoofTextures> {
+  const [tiles, flat] = await Promise.all([
+    loadSurface(loadImage, surfaces.roofTiles),
+    loadSurface(loadImage, surfaces.roofFlat),
+  ]);
+  return { tiles, flat };
 }
 
 /** Loads the four ground textures; a texture that fails leaves its kind on the flat fill. */
@@ -290,7 +307,7 @@ async function loadAll(
   options: Required<SpriteStoreOptions>,
 ): Promise<ArenaSprites> {
   const manifest = await fetchManifest(options.fetchImpl, options.manifestPath);
-  const [road, pavement, water, ground, vehicles, people, props] =
+  const [road, pavement, water, ground, vehicles, people, props, items, roofs] =
     await Promise.all([
       loadSurface(options.loadImage, manifest.surfaces.road),
       loadSurface(options.loadImage, manifest.surfaces.pavement),
@@ -298,7 +315,9 @@ async function loadAll(
       loadGround(options.loadImage, manifest.surfaces),
       loadVehicles(options.loadImage, options.canvasFactory, manifest),
       loadPeople(options.loadImage, manifest),
-      loadProps(options.loadImage, manifest),
+      loadPropRecord(options.loadImage, PROP_KEYS, manifest.props),
+      loadPropRecord(options.loadImage, ITEM_KEYS, manifest.items),
+      loadRoofs(options.loadImage, manifest.surfaces),
     ]);
   return {
     road,
@@ -310,6 +329,8 @@ async function loadAll(
     player: people.player,
     people,
     props,
+    items,
+    roofs,
   };
 }
 
@@ -319,6 +340,8 @@ function hasAnySprite(sprites: ArenaSprites): boolean {
   if (Object.values(sprites.vehicles ?? {}).some(Boolean)) return true;
   if (Object.values(sprites.people ?? {}).some(Boolean)) return true;
   if (Object.values(sprites.props ?? {}).some(Boolean)) return true;
+  if (Object.values(sprites.items ?? {}).some(Boolean)) return true;
+  if (Object.values(sprites.roofs ?? {}).some(Boolean)) return true;
   return Boolean(sprites.road ?? sprites.pavement ?? sprites.water);
 }
 

@@ -32,6 +32,7 @@ export type SpriteLimits = {
   longVehicleBytes: number;
   personBytes: number;
   propBytes: number;
+  itemBytes: number;
 };
 
 /** A 128 px tile, a car, a bus, an eight-cell strip, a 160 px canopy. */
@@ -41,6 +42,7 @@ export const SPRITE_LIMITS: SpriteLimits = {
   longVehicleBytes: 96 * KIB,
   personBytes: 48 * KIB,
   propBytes: 96 * KIB,
+  itemBytes: 32 * KIB,
 };
 
 /** Vehicles at least this long get the longer cap. */
@@ -77,7 +79,10 @@ function entriesOf(
   const props = Object.values(manifest.props)
     .filter((entry) => entry !== undefined)
     .map((entry) => ({ file: entry.file, cap: limits.propBytes }));
-  return [...surfaces, ...vehicles, ...people, ...props];
+  const items = Object.values(manifest.items)
+    .filter((entry) => entry !== undefined)
+    .map((entry) => ({ file: entry.file, cap: limits.itemBytes }));
+  return [...surfaces, ...vehicles, ...people, ...props, ...items];
 }
 
 /**

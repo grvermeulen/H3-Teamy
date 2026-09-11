@@ -21,6 +21,8 @@ const MANIFEST: SpriteManifest = {
     field: { ...SURFACE, file: "/arena/sprites/field.png" },
     forest: { ...SURFACE, file: "/arena/sprites/forest.png" },
     urban: { ...SURFACE, file: "/arena/sprites/urban.png" },
+    roofTiles: { ...SURFACE, file: "/arena/sprites/roof-tiles.png" },
+    roofFlat: { ...SURFACE, file: "/arena/sprites/roof-flat.png" },
   },
   vehicles: {
     sedan: {
@@ -57,12 +59,22 @@ const MANIFEST: SpriteManifest = {
       pixelHeight: 160,
     },
   },
+  items: {
+    bat: {
+      file: "/arena/sprites/item-bat.png",
+      lengthMetres: 0.85,
+      widthMetres: 0.08,
+      pixelWidth: 128,
+      pixelHeight: 12,
+    },
+  },
 };
 const FILES = [
   ...Object.values(MANIFEST.surfaces),
   ...Object.values(MANIFEST.vehicles),
   ...Object.values(MANIFEST.people),
   ...Object.values(MANIFEST.props),
+  ...Object.values(MANIFEST.items),
 ].flatMap((entry) => (entry ? [path.basename(entry.file)] : []));
 
 /** A credits table naming every file given. */

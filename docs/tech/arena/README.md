@@ -534,3 +534,21 @@ The owner's first drive through 9a and 9b. Fixed in one PR:
   cache version is bumped so the old copies are dropped; and `loadSprites` clamps a strip to the
   frames its file really holds, reporting the stale file to Sentry (`step: "strip"`), so a stale
   strip is a standing figure rather than a circle.
+
+And the art the owner asked for, in a PR of its own:
+
+- **Weapons you can see.** Six items rendered with SpriteCook — pistol, uzi, shotgun, rifle
+  and bat as side profiles pointing right, and a first-aid kit from above — packed by the sprite
+  script into the manifest's `items` record (a partial record over `ITEM_KEYS`, 128 px long,
+  the width from the art) and credited. A pickup on the ground draws its item's art a metre long
+  over a dark disc, turning slowly (`drawPickups`; the diamond stays the fallback), and whoever
+  holds a weapon has it in their right hand at real size, pointing where they face
+  (`drawHeldItem` in `drawPersonSprite.ts`: `HAND_FORWARD_M`, `HAND_RIGHT_M`, a grip share
+  behind the hand) — the player with `itemKeyForWeapon(player.weapon)`, officers with theirs, a
+  fist with nothing. The scene carries `itemSprites`.
+- **Roofs.** Two seamless textures, terracotta tiles and gravelled bitumen, dimmed in the pack
+  script (`brightness` 0.55 and 0.6) to sit with the night-dark palette. `render/drawRoofs.ts`
+  gives a building up to 300 m² and three floors the tiles and the rest the gravel, and lays the
+  texture along the building's longest edge, anchored at its first corner, by setting one shared
+  pattern's transform per building (`roofPatternMatrix`); landmarks keep their style colour and
+  a roof keeps its flat shade until the texture loads. `check-sprites` caps an item at 32 KB.

@@ -297,6 +297,7 @@ function buildScene(
     shake: shakeOffset(runtime.feedback, state.tick),
     vehicleArt: session.sprites(),
     peopleSprites: session.sprites().people,
+    itemSprites: session.sprites().items,
     playerSprite: session.sprites().player,
   };
 }

@@ -8,6 +8,8 @@ import {
   parseSpriteManifest,
   surfaceFill,
   hasOwnVehicleArt,
+  itemKeyForWeapon,
+  itemSpriteFor,
   vehicleSpriteFor,
   type SurfaceTexture,
   type VehicleSprite,
@@ -190,5 +192,25 @@ describe("vehicleSpriteFor by kind", () => {
     expect(vehicleSpriteFor(art, "compact", 0)).toBe(sedan.tinted[0]);
     expect(hasOwnVehicleArt(art, "compact")).toBe(false);
     expect(vehicleSpriteFor(undefined, "compact", 0)).toBeUndefined();
+  });
+});
+
+describe("itemKeyForWeapon and itemSpriteFor", () => {
+  it("names every weapon's item but the fist, and finds the art once it has loaded", () => {
+    expect(itemKeyForWeapon("fist")).toBeNull();
+    expect(itemKeyForWeapon("uzi")).toBe("uzi");
+    expect(itemKeyForWeapon("bat")).toBe("bat");
+    const uzi = {
+      image: document.createElement("canvas"),
+      lengthMetres: 0.5,
+      widthMetres: 0.4,
+    };
+    expect(itemSpriteFor({ uzi }, "uzi")).toBe(uzi);
+    expect(itemSpriteFor({ uzi }, "rifle")).toBeUndefined();
+    expect(itemSpriteFor({ uzi }, null)).toBeUndefined();
+    expect(itemSpriteFor(undefined, "uzi")).toBeUndefined();
+    const manifest = parseSpriteManifest(generatedManifest());
+    expect(manifest.items.pistol?.lengthMetres).toBe(0.2);
+    expect(manifest.surfaces.roofTiles.tileMetres).toBe(8);
   });
 });

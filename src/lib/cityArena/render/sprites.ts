@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { VehicleKind } from "../sim/types";
+import type { VehicleKind, WeaponKind } from "../sim/types";
 import { VEHICLE_KINDS } from "../sim/vehicle";
 import type { GroundKind } from "../world/mapTypes";
 import type { RasterContext } from "./canvasTypes";
@@ -53,6 +53,22 @@ export const PROP_KEYS = [
 /** A key of {@link PROP_KEYS}. */
 export type PropKey = (typeof PROP_KEYS)[number];
 
+/**
+ * The items the manifest may carry: the five pickup kinds, which are also the five weapons a
+ * hand can hold (a fist holds nothing) — so a pickup's kind and a weapon's kind are the key.
+ */
+export const ITEM_KEYS = [
+  "pistol",
+  "uzi",
+  "shotgun",
+  "rifle",
+  "bat",
+  "health",
+] as const;
+
+/** A key of {@link ITEM_KEYS}. */
+export type ItemKey = (typeof ITEM_KEYS)[number];
+
 /** The prop key of a tree, by its size class. */
 export const TREE_PROP_KEYS: readonly [PropKey, PropKey] = [
   "treeSmall",
@@ -89,10 +105,13 @@ export const SpriteManifestSchema = z.object({
     field: SurfaceEntrySchema,
     forest: SurfaceEntrySchema,
     urban: SurfaceEntrySchema,
+    roofTiles: SurfaceEntrySchema,
+    roofFlat: SurfaceEntrySchema,
   }),
   vehicles: z.partialRecord(z.enum(VEHICLE_KINDS), VehicleEntrySchema),
   people: z.record(z.string(), PersonEntrySchema),
   props: z.partialRecord(z.enum(PROP_KEYS), PropEntrySchema),
+  items: z.partialRecord(z.enum(ITEM_KEYS), PropEntrySchema),
 });
 
 /** Parsed sprite manifest, inferred from {@link SpriteManifestSchema} so the two cannot drift. */
@@ -143,6 +162,12 @@ export type PropSprite = {
 /** Scenery props by key; each stays absent until its file decodes. */
 export type PropSprites = Partial<Record<PropKey, PropSprite>>;
 
+/** Items by key — pickups on the ground, weapons in a hand; each stays absent until its file decodes. */
+export type ItemSprites = Partial<Record<ItemKey, PropSprite>>;
+
+/** The two roof textures: tiled for the small and low, flat for the big and tall. */
+export type RoofTextures = { tiles?: SurfaceTexture; flat?: SurfaceTexture };
+
 /**
  * Sprites the painters may use. Every field is optional: a missing texture is the normal state
  * before the images have loaded and after a failed load, and each painter falls back to the flat
@@ -160,6 +185,10 @@ export type ArenaSprites = {
   people?: PersonSprites;
   /** Tree canopies and street furniture, painted into the chunk rasters. */
   props?: PropSprites;
+  /** Pickup icons and the weapons in hands. */
+  items?: ItemSprites;
+  /** Roof textures, laid along each building's longest edge. */
+  roofs?: RoofTextures;
 };
 
 /** The slice of the sprites the vehicle painter reads. */
@@ -249,4 +278,28 @@ export function personSpriteFor(
   look: string,
 ): PersonSprite | undefined {
   return people?.[look];
+}
+
+/**
+ * The item a weapon is drawn with in a hand, or null for a fist.
+ *
+ * @param weapon - The weapon held.
+ * @returns The item key, or null.
+ */
+export function itemKeyForWeapon(weapon: WeaponKind): ItemKey | null {
+  return weapon === "fist" ? null : weapon;
+}
+
+/**
+ * The art for an item, or `undefined` while it has not loaded or there is no item.
+ *
+ * @param items - The loaded items.
+ * @param key - The item, or null for none.
+ * @returns The sprite, or `undefined`.
+ */
+export function itemSpriteFor(
+  items: ItemSprites | undefined,
+  key: ItemKey | null,
+): PropSprite | undefined {
+  return key === null ? undefined : items?.[key];
 }

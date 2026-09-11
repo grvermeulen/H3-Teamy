@@ -33,6 +33,10 @@ const PERSON_PX_PER_METRE = 64;
 const TREE_PX_PER_METRE = 16;
 const FURNITURE_PX_PER_METRE = 32;
 
+// Items are drawn at real size in a hand and blown up to a metre-long icon on the ground, so
+// every item ships this many pixels long, its own aspect kept: the art decides the width.
+const ITEM_PX_LONG = 128;
+
 // The generator's cut-out leaves the whole car body around 55 % opaque and only its silhouette
 // fully transparent, so the alpha channel is rebuilt: at or below ALPHA_BACKGROUND_MAX is
 // background, at or above ALPHA_BODY_MIN is solid bodywork, and the narrow band between the two
@@ -58,7 +62,17 @@ const surfaceSources = {
   field: "ground-field.png",
   forest: "ground-forest.png",
   urban: "ground-urban.png",
+  // Roofs: the painter lays a building's roof along its longest edge (render/drawRoofs.ts).
+  // gpt-image-2 renders them in daylight, so they are dimmed here to sit with the night-dark
+  // ground (palette.ts: the roof shades run from luminance 52 to 85).
+  roofTiles: { file: "roof-tiles.png", brightness: 0.55 },
+  roofFlat: { file: "roof-flat.png", brightness: 0.6 },
 };
+
+/** A surface source's file name, whether it is a bare name or a name with a brightness. */
+function surfaceFile(source) {
+  return typeof source === "string" ? source : source.file;
+}
 // Vehicles by kind, mirroring VEHICLE_SPECS in sim/vehicle.ts: each source is a nose-up cut-out
 // packed onto its own metre box at VEHICLE_PX_PER_METRE. `tint: true` ships greyscale art the
 // renderer recolours from the palette; `tint: false` keeps the art's own colours — the police
@@ -139,16 +153,28 @@ const propSources = {
     pxPerMetre: FURNITURE_PX_PER_METRE,
   },
 };
+// Items, keyed as the pickups and the weapons name them (sim/types.ts PickupKind, WeaponKind):
+// a side profile pointing right, muzzle or barrel end first, so a person's facing turns it. Real
+// lengths; the manifest's width follows from the art.
+const itemSources = {
+  pistol: { file: "item-pistol.png", lengthM: 0.2 },
+  uzi: { file: "item-uzi.png", lengthM: 0.5 },
+  shotgun: { file: "item-shotgun.png", lengthM: 1 },
+  rifle: { file: "item-rifle.png", lengthM: 1.1 },
+  bat: { file: "item-bat.png", lengthM: 0.85 },
+  health: { file: "item-health.png", lengthM: 0.4 },
+};
 
 /**
  * Exits the process if any sprite source file is missing from assets/arena/sprites/.
  */
 function assertSourcesExist() {
   const files = [
-    ...Object.values(surfaceSources),
+    ...Object.values(surfaceSources).map(surfaceFile),
     ...Object.values(vehicleSources).map((vehicle) => vehicle.file),
     ...Object.values(personSources).map((person) => person.file),
     ...Object.values(propSources).map((prop) => prop.file),
+    ...Object.values(itemSources).map((item) => item.file),
   ];
   for (const file of files) {
     const full = path.join(sourceDir, file);
@@ -167,12 +193,16 @@ function ensureOutputDirectory() {
 }
 
 /**
- * Downscales one seamless ground texture to the runtime tile size. The source is resized with
- * `fit: "fill"` so the repeat stays exactly TEXTURE_TILE_METRES wide and the edges keep lining
- * up; cropping or padding here would break the seam.
+ * Downscales one seamless ground texture to the runtime tile size, dimmed by the source's
+ * brightness when it has one. The source is resized with `fit: "fill"` so the repeat stays
+ * exactly TEXTURE_TILE_METRES wide and the edges keep lining up; cropping or padding here would
+ * break the seam.
  */
-async function packSurfaceTexture(file) {
+async function packSurfaceTexture(source) {
+  const file = surfaceFile(source);
+  const brightness = typeof source === "string" ? 1 : source.brightness;
   await sharp(path.join(sourceDir, file))
+    .modulate({ brightness })
     .resize(TEXTURE_TILE_PX, TEXTURE_TILE_PX, { fit: "fill" })
     .png()
     .toFile(path.join(outputDir, file));
@@ -273,6 +303,39 @@ async function packPropSprite(source) {
     file: `${PUBLIC_BASE_PATH}/${source.file}`,
     lengthMetres: source.lengthM,
     widthMetres: source.widthM,
+    pixelWidth,
+    pixelHeight,
+  };
+}
+
+/**
+ * Packs one item: hardened, trimmed to its artwork and laid along ITEM_PX_LONG pixels with its
+ * own aspect kept, so nothing is stretched and the manifest's width comes from the art.
+ */
+async function packItemSprite(source) {
+  const { data, info } = await sharp(path.join(sourceDir, source.file))
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  hardenAlpha(data, info.channels);
+  const bounds = alphaBounds(data, info);
+  const pixelWidth = ITEM_PX_LONG;
+  const pixelHeight = Math.max(
+    1,
+    Math.round((ITEM_PX_LONG * bounds.height) / bounds.width),
+  );
+  await sharp(data, {
+    raw: { width: info.width, height: info.height, channels: info.channels },
+  })
+    .extract(bounds)
+    .resize(pixelWidth, pixelHeight, { fit: "fill" })
+    .png()
+    .toFile(path.join(outputDir, source.file));
+  return {
+    file: `${PUBLIC_BASE_PATH}/${source.file}`,
+    lengthMetres: source.lengthM,
+    widthMetres:
+      Math.round(((source.lengthM * pixelHeight) / pixelWidth) * 100) / 100,
     pixelWidth,
     pixelHeight,
   };
@@ -408,8 +471,8 @@ async function packPersonSprite(file, frames) {
  */
 async function packSprites() {
   const surfaces = {};
-  for (const [name, file] of Object.entries(surfaceSources))
-    surfaces[name] = await packSurfaceTexture(file);
+  for (const [name, source] of Object.entries(surfaceSources))
+    surfaces[name] = await packSurfaceTexture(source);
   const vehicles = {};
   for (const [name, source] of Object.entries(vehicleSources))
     vehicles[name] = await packVehicleSprite(source);
@@ -419,7 +482,10 @@ async function packSprites() {
   const props = {};
   for (const [name, source] of Object.entries(propSources))
     props[name] = await packPropSprite(source);
-  const manifest = { version: 1, surfaces, vehicles, people, props };
+  const items = {};
+  for (const [name, source] of Object.entries(itemSources))
+    items[name] = await packItemSprite(source);
+  const manifest = { version: 1, surfaces, vehicles, people, props, items };
   fs.writeFileSync(
     path.join(outputDir, "manifest.json"),
     `${JSON.stringify(manifest, null, 2)}\n`,
@@ -446,6 +512,10 @@ function reportDone(manifest) {
   for (const [name, prop] of Object.entries(manifest.props))
     console.log(
       `${name}: ${prop.file} ${prop.pixelWidth}×${prop.pixelHeight}px for ${prop.lengthMetres}×${prop.widthMetres} m`,
+    );
+  for (const [name, item] of Object.entries(manifest.items))
+    console.log(
+      `${name}: ${item.file} ${item.pixelWidth}×${item.pixelHeight}px for ${item.lengthMetres}×${item.widthMetres} m`,
     );
   console.log(`Arena sprites written to ${outputDir}`);
 }

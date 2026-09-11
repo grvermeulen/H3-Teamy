@@ -179,6 +179,8 @@ export const PICKUP_BAT = "#a16207";
 export const PICKUP_HEALTH = "#22c55e";
 /** Health pickup cross. */
 export const PICKUP_HEALTH_CROSS = "#ffffff";
+/** The disc behind an item icon on the ground, so a black gun reads against tarmac. */
+export const PICKUP_BACKDROP = "rgba(0,0,0,0.35)";
 /** Police light bar colours. */
 export const POLICE_LIGHT_BLUE = "#2563eb";
 export const POLICE_LIGHT_RED = "#dc2626";

@@ -171,3 +171,62 @@ describe("drawPeople with art", () => {
     expect(context.calls.some((call) => call.startsWith("lineTo("))).toBe(true);
   });
 });
+
+describe("drawPeople with weapons", () => {
+  it("puts an officer's pistol in her hand once its art has loaded, and nothing in a pedestrian's", () => {
+    const strip: PersonSprite = {
+      image: document.createElement("canvas"),
+      pixelSize: 51,
+      frames: 8,
+    };
+    const pistol = {
+      image: document.createElement("canvas"),
+      lengthMetres: 0.2,
+      widthMetres: 0.14,
+    };
+    const context = createFakeContext();
+    drawPeople(
+      context,
+      camera,
+      viewport,
+      [
+        {
+          id: 1,
+          x: 0,
+          y: 0,
+          facing: 0,
+          health: 40,
+          mode: "walk",
+          modeUntilTick: 0,
+          rail: null,
+          fleeX: 0,
+          fleeY: 0,
+        },
+      ],
+      [
+        {
+          id: 2,
+          x: 1,
+          y: 0,
+          facing: 0,
+          health: 100,
+          weapon: "pistol",
+          path: [],
+          repathTick: 0,
+          nextShotTick: 0,
+          diedAtTick: null,
+        },
+      ],
+      { ped2: strip, cop: strip },
+      0,
+      { pistol },
+    );
+    const images = context.calls.filter((call) =>
+      call.startsWith("drawImage("),
+    );
+    expect(images).toHaveLength(3);
+    expect(images[2].startsWith(`drawImage(${String(pistol.image)},`)).toBe(
+      true,
+    );
+  });
+});
