@@ -41,6 +41,11 @@ export const RASTER_BUDGET_BYTES = 40 * 1024 * 1024;
 /** Bytes used per rasterised pixel (RGBA, one byte per channel). */
 const BYTES_PER_PIXEL_RGBA = 4;
 /**
+ * What a chunk its layer has nothing in costs the cache: no canvas, but an entry to keep, so a
+ * long drive across the map cannot pile up records the byte budget never sees.
+ */
+export const EMPTY_CHUNK_BYTES = 1024;
+/**
  * Headroom multiplier applied to the visible chunk working set when sizing a viewport's budget.
  * 2.5 rather than 1.5 because the speed-based camera zoom keeps two zoom levels' chunks live
  * while driving, and a chunk's bytes grow with the square of the zoom (9 MiB at 12 px/m).
@@ -56,7 +61,7 @@ export const RASTER_BUDGET_MAX_BYTES = 96 * 1024 * 1024;
 
 /** A chunk address. */
 export type ChunkCoord = { zoom: ZoomLevel; chunkX: number; chunkY: number };
-/** A rasterised chunk; `target` is null for a chunk its layer has nothing in, cached at no cost. */
+/** A rasterised chunk; `target` is null for a chunk its layer has nothing in, cached for {@link EMPTY_CHUNK_BYTES}. */
 export type Chunk = {
   key: string;
   coord: ChunkCoord;
@@ -190,7 +195,7 @@ function rasterizeChunk(
   const rect = chunkRect(coord);
   const key = chunkKey(coord);
   if (!layer.covers(rect, tiles))
-    return { key, coord, rect, target: null, bytes: 0 };
+    return { key, coord, rect, target: null, bytes: EMPTY_CHUNK_BYTES };
   const sizePx = Math.round(CHUNK_METRES * coord.zoom * layer.resolution);
   const target = factory(sizePx, sizePx);
   if (!target) return null;

@@ -4,7 +4,7 @@ import type { LandmarkLookup } from "./drawStatic";
 import { CANOPY_LAYER } from "./drawScenery";
 import { drawOverheadChunks, drawVisibleChunks } from "./drawWorld";
 import { HATCH_BACKGROUND, PLACEHOLDER_FILL } from "./palette";
-import { createStaticRaster } from "./staticRaster";
+import { EMPTY_CHUNK_BYTES, createStaticRaster } from "./staticRaster";
 import { createFakeContext, createFakeTarget } from "./testing/fakeContext";
 
 const landmarks: LandmarkLookup = new Map();
@@ -170,6 +170,6 @@ describe("drawOverheadChunks", () => {
     const draws = settled.calls.filter((call) => call.startsWith("drawImage("));
     expect(draws).toHaveLength(1);
     expect(overhead.stats().chunks).toBe(2);
-    expect(overhead.stats().bytes).toBe(256 * 256 * 4);
+    expect(overhead.stats().bytes).toBe(256 * 256 * 4 + EMPTY_CHUNK_BYTES);
   });
 });

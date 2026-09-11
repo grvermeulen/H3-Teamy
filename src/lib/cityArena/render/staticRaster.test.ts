@@ -3,6 +3,7 @@ import type { CanvasFactory } from "./canvasTypes";
 import type { LandmarkLookup } from "./drawStatic";
 import {
   CHUNK_METRES,
+  EMPTY_CHUNK_BYTES,
   RASTER_BUDGET_BYTES,
   RASTER_BUDGET_MAX_BYTES,
   chunkKey,
@@ -115,9 +116,12 @@ describe("createStaticRaster", () => {
       landmarks,
     );
     expect(empty?.target).toBeNull();
-    expect(empty?.bytes).toBe(0);
+    expect(empty?.bytes).toBe(EMPTY_CHUNK_BYTES);
     expect(painted).toEqual([4]);
-    expect(raster.stats()).toEqual({ chunks: 2, bytes: full?.bytes });
+    expect(raster.stats()).toEqual({
+      chunks: 2,
+      bytes: (full?.bytes ?? 0) + EMPTY_CHUNK_BYTES,
+    });
     expect(
       raster.rasterizeNext([{ zoom: 8, chunkX: -1, chunkY: 0 }], [], landmarks),
     ).toBe(false);
