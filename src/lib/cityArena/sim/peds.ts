@@ -128,6 +128,7 @@ export function alivePeds(peds: PedState[]): PedState[] {
 /** Pavement edges a pedestrian may spawn on, grouped by the point they are spawned around. */
 type RailPool = { centre: Point | null; edges: number[] };
 
+/** The rails to spawn on: the zone's pavements, or those near each of `around` when given. */
 function railPools(
   zone: MapZone,
   graph: RailGraph,
@@ -147,6 +148,7 @@ function railPools(
     .filter((pool) => pool.edges.length > 0);
 }
 
+/** A seeded rail from a pool: anywhere on a zone-wide pool, clipped to the disc on a player-centred one. */
 function railFromPool(
   graph: RailGraph,
   pool: RailPool,

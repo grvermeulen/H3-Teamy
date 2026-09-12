@@ -106,6 +106,7 @@ function rampParam(param: AudioParamLike, value: number, time: number): void {
   else setParam(param, value, time);
 }
 
+/** The synthesised fallback voice for a weapon, used when its clip has not landed. */
 function shotTone(weapon: WeaponKind): {
   frequency: number;
   duration: number;

@@ -282,6 +282,7 @@ export function createTrafficCar(
   };
 }
 
+/** Which way a spawned car drives an edge: with a one-way, either way otherwise. */
 function trafficDirection(
   graph: RailGraph,
   edge: number,
@@ -290,6 +291,7 @@ function trafficDirection(
   return graph.edges[edge].oneway || random() >= COIN_FLIP ? 1 : -1;
 }
 
+/** A seeded rail anywhere on one of `edges`, in the right-hand lane. */
 function trafficRail(
   graph: RailGraph,
   edges: number[],
@@ -304,6 +306,7 @@ function trafficRail(
 /** Through-road edges a car may spawn on, grouped by the point it is spawned around. */
 type TrafficPool = { centre: Point | null; edges: number[] };
 
+/** The through-roads to spawn on: the zone's, or those near each of `around` when given. */
 function trafficPools(
   zone: MapZone,
   graph: RailGraph,
@@ -323,6 +326,7 @@ function trafficPools(
     .filter((pool) => pool.edges.length > 0);
 }
 
+/** A seeded rail from a pool: anywhere on a zone-wide pool, clipped to the disc on a player-centred one. */
 function railFromPool(
   graph: RailGraph,
   pool: TrafficPool,

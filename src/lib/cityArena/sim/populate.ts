@@ -36,6 +36,7 @@ export type PopulationWorld = {
   viewRect?: Rect;
 };
 
+/** Where every player stands, dead or alive: what fresh spawns keep their distance from. */
 function playerPoints(state: ArenaState): Point[] {
   return playersOf(state).map((player) => [player.x, player.y]);
 }
@@ -54,10 +55,12 @@ function anchorPoints(state: ArenaState): Point[] {
   ]);
 }
 
+/** Where every car sits, so fresh traffic is not spawned into one. */
 function vehiclePoints(state: ArenaState): Point[] {
   return state.vehicles.map((vehicle) => [vehicle.x, vehicle.y]);
 }
 
+/** Drops the old zone's people, traffic and pickups, keeping parked cars and any car a player drives. */
 function clearPopulation(state: ArenaState): ArenaState {
   const driven = new Set(state.traffic.map((driver) => driver.vehicleId));
   // Any car with a player at the wheel survives the clear-out, not just the local player's:
@@ -74,6 +77,7 @@ function clearPopulation(state: ArenaState): ArenaState {
   return { ...state, vehicles, peds: [], cops: [], pickups: [], traffic: [] };
 }
 
+/** Appends spawned cars and their drivers, advancing the id counter. */
 function addDrivenCars(state: ArenaState, cars: DrivenCar[]): ArenaState {
   if (cars.length === 0) return state;
   return {
@@ -84,6 +88,7 @@ function addDrivenCars(state: ArenaState, cars: DrivenCar[]): ArenaState {
   };
 }
 
+/** Spawns a seeded number of ambient cars, between the zone minimum and maximum, around the players. */
 function spawnZoneTraffic(
   state: ArenaState,
   zone: MapZone,
