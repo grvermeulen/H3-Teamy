@@ -81,6 +81,18 @@ export const WEAPONS: Record<WeaponKind, WeaponSpec> = {
     pellets: 1,
     magazine: 10,
   },
+  // The tank's gun: one shell wrecks any car but a bus, every two seconds, and it never runs dry.
+  // It is not in WEAPON_ORDER — nobody carries it; the tank fires it (sim/combat.ts).
+  cannon: {
+    label: "Kanon",
+    damage: 150,
+    shotsPerSecond: 0.5,
+    rangeM: 80,
+    speedMps: 90,
+    spreadRad: 0,
+    pellets: 1,
+    magazine: null,
+  },
 };
 
 /** Cycling order of the Wapen button: the melee pair, then the guns by reach. */
@@ -145,7 +157,7 @@ export function addAmmo(
   return { ...ammo, [kind]: Math.min(MAX_AMMO[kind], ammo[kind] + rounds) };
 }
 
-/** Ticks between two shots: fist 15, pistol 12, Uzi 3, shotgun 25, bat 20, rifle 38. */
+/** Ticks between two shots: fist 15, pistol 12, Uzi 3, shotgun 25, bat 20, rifle 38, cannon 60. */
 export function cooldownTicks(kind: WeaponKind): number {
   return Math.round(TICKS_PER_SECOND / WEAPONS[kind].shotsPerSecond);
 }

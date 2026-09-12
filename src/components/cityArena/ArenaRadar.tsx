@@ -26,7 +26,7 @@ export default function ArenaRadar({
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawRadar(context, snapshot, RADAR_SIZE_PX);
   }, [snapshot]);
-  const summary = `Radar: ${snapshot.police.length} politie, ${snapshot.pickups.length} pickups`;
+  const summary = `Radar: ${snapshot.police.length} politie, ${snapshot.pickups.length} pickups, ${snapshot.tanks.length} tanks`;
   return (
     <div className="pointer-events-none absolute right-3 top-3 rounded-full">
       <canvas

@@ -18,7 +18,12 @@ import { manageCops, stepCops } from "./cops";
 import { stepPeds } from "./peds";
 import { stepPickups } from "./pickups";
 import { managePoliceCars } from "./police";
-import { chooseSpawnNode, nearestZone, spawnParkedCars } from "./spawn";
+import {
+  chooseSpawnNode,
+  nearestZone,
+  spawnParkedCars,
+  spawnTanks,
+} from "./spawn";
 import { applyWanted } from "./wanted";
 import { applyZoneRule } from "./zoneRule";
 import { EMPTY_INPUT } from "./types";
@@ -43,7 +48,7 @@ export {
 export { exitPosition, occupiedVehicle } from "./boarding";
 export { addArenaPlayer, createArenaPlayer, removeArenaPlayer } from "./roster";
 
-/** A fresh session: the player on a spawn node of `zone` (the map origin without one) and parked cars in every zone. */
+/** A fresh session: the player on a spawn node of `zone` (the map origin without one), parked cars in every zone and one tank per zone across from the spawn. */
 export function createArenaState(
   setup: ArenaSetup,
   random: () => number,
@@ -51,13 +56,21 @@ export function createArenaState(
   const spawn: Point = setup.zone
     ? chooseSpawnNode(setup.zone, [], random)
     : [0, 0];
-  const vehicles = spawnParkedCars(
+  const parked = spawnParkedCars(
     setup.index,
     setup.graph,
     random,
     [spawn],
     FIRST_ENTITY_ID,
   );
+  const tanks = spawnTanks(
+    setup.index,
+    setup.graph,
+    [spawn],
+    parked.map((car) => [car.x, car.y]),
+    FIRST_ENTITY_ID + parked.length,
+  );
+  const vehicles = [...parked, ...tanks];
   const activeZone = setup.zone ?? nearestZone(setup.index, spawn);
   const base: ArenaState = {
     tick: 0,

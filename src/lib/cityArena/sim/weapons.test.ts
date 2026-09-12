@@ -130,3 +130,19 @@ describe("the bat and the rifle", () => {
     expect(consumeAmmo(armed, "fist")).toBe(armed);
   });
 });
+
+describe("the cannon", () => {
+  it("is the tank's, never in the rack, and fires a car-wrecking shell every two seconds", () => {
+    const empty = { uzi: 0, shotgun: 0, rifle: 0, bat: 0 };
+    expect(WEAPON_ORDER).not.toContain("cannon");
+    expect(WEAPONS.cannon).toMatchObject({
+      label: "Kanon",
+      damage: 150,
+      magazine: null,
+    });
+    expect(cooldownTicks("cannon")).toBe(60);
+    expect(ammoFor(empty, "cannon")).toBeNull();
+    expect(isMelee("cannon")).toBe(false);
+    expect(nextWeapon("cannon", empty)).toBe("fist");
+  });
+});

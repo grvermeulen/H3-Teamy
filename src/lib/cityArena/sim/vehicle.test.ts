@@ -206,14 +206,15 @@ describe("stepVehicle", () => {
 });
 
 describe("vehicle kinds", () => {
-  it("lists nine kinds in wire order, the four originals first", () => {
+  it("lists ten kinds in wire order, the four originals first", () => {
     expect(VEHICLE_KINDS.slice(0, 4)).toEqual([
       "compact",
       "sedan",
       "sport",
       "police",
     ]);
-    expect(VEHICLE_KINDS).toHaveLength(9);
+    expect(VEHICLE_KINDS).toHaveLength(10);
+    expect(VEHICLE_KINDS.at(-1)).toBe("tank");
     for (const kind of VEHICLE_KINDS)
       expect(VEHICLE_SPECS[kind].label).toBeTruthy();
   });

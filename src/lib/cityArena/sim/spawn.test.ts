@@ -14,6 +14,7 @@ import {
   roadHeadingAt,
   shuffle,
   spawnParkedCars,
+  spawnTanks,
   zoneParkingSpots,
   PARKED_CAR_KINDS,
 } from "./spawn";
@@ -172,5 +173,22 @@ describe("spawning near a point", () => {
       edge: 0,
       edgeT: 0.5,
     });
+  });
+});
+
+describe("the tank", () => {
+  it("parks one per zone across from the spawn, off the parked cars and never on the spawn", () => {
+    const tanks = spawnTanks(index, graph, [[0, 0]], [[190, 0]], 900);
+    expect(tanks.map((tank) => tank.kind)).toEqual(["tank", "tank"]);
+    // 190 m holds a car and 180 m is within its 12 m spacing, so the tank takes 170 m.
+    expect(tanks[0]).toMatchObject({ id: 900, x: 170, y: 0 });
+    expect(tanks[1]).toMatchObject({ id: 901, x: 10000, y: 0 });
+    expect(spawnTanks(index, graph, [[190, 0]], [], 900)[0]).toMatchObject({
+      x: 0,
+      y: 0,
+    });
+    expect(
+      spawnTanks({ ...index, zones: [otherZone] }, graph, [[10000, 0]], [], 1),
+    ).toEqual([]);
   });
 });

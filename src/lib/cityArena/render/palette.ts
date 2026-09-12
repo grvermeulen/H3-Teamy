@@ -189,4 +189,5 @@ export const RADAR_BACKGROUND = "rgba(15,23,42,0.9)";
 export const RADAR_ROAD = "rgba(226,232,240,0.7)";
 export const RADAR_ZONE = "#60a5fa";
 export const RADAR_POLICE = "#38bdf8";
+export const RADAR_TANK = "#fbbf24";
 export const RADAR_PLAYER = "#f8fafc";

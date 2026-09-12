@@ -52,6 +52,7 @@ const WEAPONS: readonly WeaponKind[] = [
   "shotgun",
   "bat",
   "rifle",
+  "cannon",
 ];
 /** Pickup kinds in wire order. */
 const PICKUP_KINDS: readonly PickupKind[] = [

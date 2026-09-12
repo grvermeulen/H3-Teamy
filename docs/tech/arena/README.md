@@ -429,6 +429,18 @@ two new ammo counts sit past the original player row, so an older row still deco
   the nearer face, so someone clipped at the side steps aside and someone hit head-on is carried
   in front — never pushed the length of a bus. `CAR_BODY_RADIUS_M` survives only as the clearance
   the traffic AI, the spawns and the exit keep around a car.
+- **The tank** (`sim/vehicle.ts`, `sim/spawn.ts`, `sim/combat.ts`). A tenth kind, `tank`
+  (Tank): 7 × 3.4 m, 600 health, 45 t, 13 m/s flat out, never traffic and never parked at a kerb.
+  `spawnTanks` parks one per zone at session start on the spawn node farthest from the player's
+  spawn (clear of parked cars and of the spawn itself), so it has to be found; the radar marks it
+  with an amber triangle (`RadarSnapshot.tanks`). At its wheel the trigger fires the **cannon**
+  (`WEAPONS.cannon`, "Kanon": 150 damage, one shell every two seconds, 80 m, unlimited) instead
+  of what the driver carries — `triggerOf` in `sim/combat.ts` swaps the weapon and moves the
+  muzzle to the barrel's end — so one shell wrecks any car but a bus, and the HUD shows "Kanon ∞"
+  while driving it. The cannon is a `WeaponKind` that is never held: it is not in `WEAPON_ORDER`,
+  the hand-item lookup ignores it, and its shot voices the explosion clip. Its art is drawn in
+  code by `scripts/arena/draw-tank-sprite.js` (no generator, no external licence row) and packed
+  like every other vehicle.
 - **Where they appear** (`sim/spawn.ts`, `sim/traffic.ts`). `PARKED_CAR_KINDS` has six kinds;
   traffic draws from `TRAFFIC_KINDS_BY_CLASS` — buses on primary/secondary/tertiary roads,
   oldtimers on the quieter ones, never a sport car (the prize stays parked) — and

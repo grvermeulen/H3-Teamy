@@ -530,6 +530,60 @@ describe("stepArena vehicle collision damage", () => {
   });
 });
 
+describe("the tank", () => {
+  it("parks one tank in the zone, at least a spawn node away from the player", () => {
+    const state = boot();
+    const tanks = state.vehicles.filter((vehicle) => vehicle.kind === "tank");
+    expect(tanks).toHaveLength(1);
+    expect(
+      Math.hypot(
+        tanks[0].x - localPlayer(state).x,
+        tanks[0].y - localPlayer(state).y,
+      ),
+    ).toBeGreaterThanOrEqual(100);
+    expect(checkInvariants(state)).toEqual([]);
+  });
+
+  it("fires the cannon from the barrel at its wheel, free of charge, and wrecks a car with one shell", () => {
+    const state = boot();
+    const me = localPlayer(state);
+    const tank = createVehicle(500, "tank", [me.x, me.y], 0, 0);
+    const target = createVehicle(501, "compact", [me.x + 20, me.y], 0, 0);
+    const seated: ArenaState = {
+      ...state,
+      vehicles: [tank, target],
+      players: [{ ...me, vehicleId: 500, boardingTicksLeft: 0 }],
+    };
+    const fired = run(seated, createInput({ fire: true }), 1);
+    expect(fired.bullets).toHaveLength(1);
+    expect(fired.bullets[0]).toMatchObject({
+      weapon: "cannon",
+      damage: 150,
+      ignoreVehicleId: 500,
+    });
+    // The shell leaves the barrel's end, 3.5 m ahead, and flies 3 m in its first tick.
+    expect(fired.effects[0]).toMatchObject({ kind: "muzzle" });
+    expect(fired.effects[0].x).toBeCloseTo(me.x + 3.5);
+    expect(fired.bullets[0].x).toBeCloseTo(me.x + 6.5);
+    expect(fired.events).toContainEqual(
+      expect.objectContaining({ kind: "shot", weapon: "cannon" }),
+    );
+    expect(localPlayer(fired)).toMatchObject({
+      weapon: "pistol",
+      ammo: me.ammo,
+      nextShotTick: 61,
+    });
+    const hit = run(seated, createInput({ fire: true }), 12);
+    expect(hit.bullets).toHaveLength(0);
+    expect(hit.vehicles.find((vehicle) => vehicle.id === 501)?.wrecked).toBe(
+      true,
+    );
+    expect(hit.vehicles.find((vehicle) => vehicle.id === 500)?.health).toBe(
+      600,
+    );
+  });
+});
+
 describe("stepArena firing and death", () => {
   it("fires the pistol on the trigger with a 12-tick cooldown and a muzzle flash", () => {
     const fired = run(boot(), createInput({ fire: true }), 1);

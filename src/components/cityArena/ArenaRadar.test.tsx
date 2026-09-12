@@ -8,7 +8,9 @@ describe("ArenaRadar", () => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
     render(<ArenaRadar snapshot={EMPTY_RADAR_SNAPSHOT} />);
     expect(screen.getByLabelText("Radar")).toHaveAttribute("width", "90");
-    expect(screen.getByText("Radar: 0 politie, 0 pickups")).toBeInTheDocument();
+    expect(
+      screen.getByText("Radar: 0 politie, 0 pickups, 0 tanks"),
+    ).toBeInTheDocument();
     vi.restoreAllMocks();
   });
 });
