@@ -70,6 +70,14 @@ export type HostLoop = {
   /** Runs whole ticks for the elapsed time, publishing snapshots on schedule. */
   advance(elapsedMs: number): void;
   /**
+   * The part of a tick the loop has taken in but not yet stepped, 0..1.
+   *
+   * The renderer draws this far past the last tick, so the world moves at the display's rate
+   * rather than in 30 Hz jumps (`render/smoothing.ts`). It is deliberately read-only: the loop
+   * still steps whole ticks and nothing about the simulation depends on it.
+   */
+  stepFraction(): number;
+  /**
    * Sets the input for a player this process drives directly — the host's own.
    *
    * The host cannot hear itself over the `:inputs` channel: neither Ably nor the in-memory
@@ -236,6 +244,10 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
   }
 
   return {
+    stepFraction(): number {
+      const exact = (elapsedTotalMs * HOST_TICK_HZ) / 1000;
+      return Math.min(1, Math.max(0, exact - ticksRun));
+    },
     advance(elapsedMs: number): void {
       if (!running) return;
       elapsedTotalMs += elapsedMs;

@@ -36,6 +36,12 @@ import {
 } from "@/lib/cityArena/render/deathScreen";
 import { renderScene, type Scene } from "@/lib/cityArena/render/renderScene";
 import {
+  smoothAlpha,
+  smoothFrame,
+  smoothedPlayer,
+  type SmoothedFrame,
+} from "@/lib/cityArena/render/smoothing";
+import {
   createRadarRoadIndex,
   nearbyRadarRoads,
   RADAR_RANGE_M,
@@ -185,6 +191,15 @@ export type Runtime = {
    * same breath, or `myPlayer` will look for a player the local state does not hold.
    */
   netplay: Netplay;
+  /**
+   * The state one tick before `state`, which the renderer draws the world *from* while `state` is
+   * what it draws *toward* (`render/smoothing.ts`). `null` whenever there is no honest pair to
+   * blend — the first frame, and after any cut that moved the world out from under the camera.
+   *
+   * Only {@link recordStepped} and {@link cutTo} may set it, so it can never be more or less than
+   * one tick behind `state`.
+   */
+  previousState: ArenaState | null;
   camera: Camera;
   /** Zoom the viewport width asks for; the live camera may sit one step wider while driving. */
   baseZoom: ZoomLevel;
@@ -263,9 +278,53 @@ function deathPhase(runtime: Runtime, nowMs: number): DeathScreenPhase | null {
   );
 }
 
+/**
+ * Takes the state a tick produced, remembering the one it replaces so the renderer has a pose to
+ * blend from.
+ *
+ * Only a pair exactly one tick apart is worth keeping. A frame that stepped nothing — the common
+ * case, since 60 Hz frames outnumber 30 Hz ticks two to one — leaves the pair alone, which is
+ * precisely what lets the blend carry the world forward between ticks. A catch-up burst of two or
+ * more ticks drops the pair instead: replaying the whole burst over one frame would draw the world
+ * in slow motion, so it is better to land on the new state and blend again from the next tick.
+ *
+ * Narrowed to the two fields it touches, so the tick-pairing rule can be tested without booting
+ * a runtime.
+ *
+ * @param runtime - The runtime, or the slice of it holding the two states.
+ * @param next - The state the step produced.
+ */
+export function recordStepped(
+  runtime: Pick<Runtime, "state" | "previousState">,
+  next: ArenaState,
+): void {
+  const advanced = next.tick - runtime.state.tick;
+  if (advanced === 1) runtime.previousState = runtime.state;
+  else if (advanced !== 0) runtime.previousState = null;
+  runtime.state = next;
+}
+
+/**
+ * How far past the last tick this frame draws, 0..1.
+ *
+ * Alone that is the runtime's own accumulator; in a room the loop owns the clock and reports its
+ * own leftover.
+ *
+ * @param runtime - The runtime, or the slice of it holding the clock.
+ * @returns The blend factor for {@link smoothFrame}.
+ */
+export function renderAlpha(
+  runtime: Pick<Runtime, "netplay" | "accumulator">,
+): number {
+  const net = runtime.netplay;
+  if (net.kind === "offline") return smoothAlpha(runtime.accumulator);
+  return net.loop.stepFraction();
+}
+
 /** Everything the renderer draws this frame. */
 function buildScene(
   runtime: Runtime,
+  frame: SmoothedFrame,
   zone: MapZone | null,
   aimScreen: [number, number] | null,
   nowMs: number,
@@ -280,13 +339,15 @@ function buildScene(
       loadedTileRects: session.loadedTileRects(),
     },
     zone,
-    players: state.players,
+    // Positions and headings come from the blended frame; a pickup and an effect never move, and
+    // everything counted in ticks below — the flashing, the shake, the sway — stays on the tick.
+    players: frame.players,
     localPlayerId: myPlayerId(runtime),
-    peds: state.peds,
-    cops: state.cops,
+    peds: frame.peds,
+    cops: frame.cops,
     pickups: state.pickups,
-    vehicles: state.vehicles,
-    bullets: state.bullets,
+    vehicles: frame.vehicles,
+    bullets: frame.bullets,
     effects: state.effects,
     sirenVehicleIds: policeCarIds(state),
     tick: state.tick,
@@ -378,6 +439,8 @@ function routeToNearestLandmark(runtime: Runtime): number | null {
  */
 export function cutTo(runtime: Runtime, point: Point): void {
   runtime.camera = createCamera(point, runtime.camera.zoom);
+  // The world moved; blending from where the player was would draw them sliding across the map.
+  runtime.previousState = null;
   runtime.feedback = withCut(runtime.feedback);
   runtime.lastTileSync = 0;
 }
@@ -424,6 +487,7 @@ export function createRuntime(
     baseZoom,
     random,
     netplay: { kind: "offline", playerId: LOCAL_PLAYER_ID },
+    previousState: null,
     accumulator: 0,
     tally: emptyTally(),
     lastTileSync: 0,
@@ -565,9 +629,21 @@ export function nextCamera(
   };
 }
 
-/** Eases the camera after the player or their car and re-zooms it for the speed. */
-function followPlayer(runtime: Runtime, dt: number): void {
-  const player = myPlayer(runtime);
+/**
+ * Eases the camera after the player or their car and re-zooms it for the speed.
+ *
+ * It follows the *blended* pose, not the tick's: the camera eases on the real frame time, so
+ * chasing a target that only moves every other frame is what turns a 30 Hz world into a visible
+ * shudder. Velocity still comes from the simulation — the look-ahead wants the real one, and the
+ * ease smooths it anyway.
+ */
+function followPlayer(
+  runtime: Runtime,
+  frame: SmoothedFrame,
+  dt: number,
+): void {
+  const player =
+    smoothedPlayer(frame, myPlayerId(runtime)) ?? myPlayer(runtime);
   const car = occupiedVehicle(runtime.state, player);
   const velocity: Point = car
     ? [car.velocityX, car.velocityY]
@@ -683,11 +759,11 @@ function advanceNetworked(
   if (net.kind === "host") {
     net.loop.setInput(net.playerId, stepInput);
     net.loop.advance(dt * MS_PER_SECOND);
-    runtime.state = net.loop.state();
+    recordStepped(runtime, net.loop.state());
   } else {
     net.loop.setInput(stepInput);
     net.loop.advance(dt * MS_PER_SECOND);
-    runtime.state = net.loop.view();
+    recordStepped(runtime, net.loop.view());
   }
   if (!playerById(runtime.state, net.playerId)) {
     recoverSeat(runtime, net);
@@ -700,7 +776,12 @@ function advanceNetworked(
   if (debug) recordViolations(runtime);
 }
 
-/** Absorbs `dt` (slowed by the death screen's time scale) in fixed steps, then follows the player. */
+/**
+ * Absorbs `dt` (slowed by the death screen's time scale) in fixed steps.
+ *
+ * The camera is *not* moved here: it follows the blended frame, which only exists once the stepping
+ * is done — see {@link runFrame}.
+ */
 function advanceSimulation(
   runtime: Runtime,
   dt: number,
@@ -711,7 +792,6 @@ function advanceSimulation(
 ): void {
   if (runtime.netplay.kind !== "offline") {
     advanceNetworked(runtime, dt, input, debug);
-    followPlayer(runtime, dt);
     return;
   }
   runtime.accumulator += dt * (deathPhase(runtime, nowMs)?.timeScale ?? 1);
@@ -727,12 +807,15 @@ function advanceSimulation(
     if (isActive(stepInput)) runtime.sound.unlock();
     // Alone this client is the only player, so the tick carries exactly one input; in a room
     // the loops step instead, see advanceNetworked.
-    runtime.state = stepArena(
-      runtime.state,
-      new Map([[myPlayerId(runtime), stepInput]]),
-      SIM_STEP_S,
-      world,
-      runtime.random,
+    recordStepped(
+      runtime,
+      stepArena(
+        runtime.state,
+        new Map([[myPlayerId(runtime), stepInput]]),
+        SIM_STEP_S,
+        world,
+        runtime.random,
+      ),
     );
     feelTick(runtime, runtime.state);
     runtime.tally = tallyEvents(runtime.tally, runtime.state.events);
@@ -742,7 +825,6 @@ function advanceSimulation(
     steps += 1;
     if (debug) recordViolations(runtime);
   }
-  followPlayer(runtime, dt);
 }
 
 /** Seconds elapsed since the previous frame, clamped so a stall cannot cause a huge simulation step. */
@@ -877,6 +959,14 @@ function runFrame(
     options.debug,
     size,
   );
+  // Blended before the camera moves, so the car and the camera chasing it are placed for the same
+  // moment; smoothing one without the other would only make the other's jump easier to see.
+  const frame = smoothFrame(
+    runtime.previousState,
+    runtime.state,
+    renderAlpha(runtime),
+  );
+  followPlayer(runtime, frame, dt);
   if (trackDeath(runtime, timestamp))
     options.setDeath(
       runtime.diedAtMs === null ? null : { diedAtMs: runtime.diedAtMs },
@@ -889,7 +979,7 @@ function runFrame(
     canvas,
     rect,
     runtime.camera,
-    buildScene(runtime, zone, pointer, timestamp),
+    buildScene(runtime, frame, zone, pointer, timestamp),
     runtime.feedback,
   );
   const drawEnd = performance.now();

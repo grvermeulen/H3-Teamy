@@ -128,6 +128,21 @@ describe("clientLoop prediction", () => {
   });
 });
 
+describe("clientLoop step fraction", () => {
+  it("reports the part of a tick predicted time has reached but not stepped", () => {
+    const { loop } = clientOnHub();
+    const tickMs = 1000 / CLIENT_TICK_HZ;
+    // What the renderer blends by, so the local player and their car move at the display's rate
+    // rather than in 30 Hz jumps (`render/smoothing.ts`).
+    expect(loop.stepFraction()).toBe(0);
+    loop.advance(tickMs / 4);
+    expect(loop.stepFraction()).toBeCloseTo(0.25, 6);
+    loop.advance(tickMs);
+    expect(loop.state().tick).toBe(1);
+    expect(loop.stepFraction()).toBeCloseTo(0.25, 6);
+  });
+});
+
 describe("clientLoop reconciliation", () => {
   it("adopts the host's view of my player", () => {
     const { loop } = clientOnHub(4);
