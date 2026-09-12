@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect } from "vitest";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import {
@@ -14,6 +14,22 @@ const reportDescribe = runReportE2E ? describe : describe.skip;
 
 reportDescribe("Match Report Extract", () => {
   const baseUrl = process.env.TEST_API_URL || "http://localhost:3000";
+  const requiredFixtures = [
+    "tests/fixtures/Home-Match-1.JPG",
+    "tests/fixtures/Home-Match-2.JPG",
+    "tests/fixtures/Away-Match-1.JPG",
+    "tests/fixtures/home-match-1-expected.json",
+    "tests/fixtures/away-match-1-expected.json",
+  ];
+
+  beforeEach(({ skip }) => {
+    const missingFixtures = requiredFixtures.filter(
+      (fixture) => !existsSync(join(process.cwd(), fixture)),
+    );
+    if (missingFixtures.length > 0) {
+      skip(`Missing required fixtures: ${missingFixtures.join(", ")}`);
+    }
+  });
 
   describe("Home Match Extraction", () => {
     it("should extract JSON from home match image 1", async () => {

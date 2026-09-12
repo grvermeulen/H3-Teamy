@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Prisma } from "@prisma/client";
 import * as Sentry from "@sentry/nextjs";
 import { prisma } from "./db";
-import { authOptions } from "./authOptions";
+import { authOptions, normalizeAuthEnv } from "./authOptions";
 import { createPasskeyExchangeToken } from "./passkeyExchangeToken";
 import { USER_CORE_SELECT, type UserCoreRow } from "./userPrismaSelect";
+import { DbUnavailableError } from "./dbUnavailableError";
+import * as prismaConnectRetry from "./prismaConnectRetry";
 
 vi.mock("./db", () => ({
   prisma: {
@@ -14,6 +16,16 @@ vi.mock("./db", () => ({
     },
   },
 }));
+
+vi.mock("./prismaConnectRetry", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./prismaConnectRetry")>();
+  return {
+    ...actual,
+    withPgConnectRetry: vi.fn(
+      async <T>(_name: string, fn: () => Promise<T>): Promise<T> => fn(),
+    ),
+  };
+});
 
 vi.mock("bcryptjs", () => ({
   default: {
@@ -33,9 +45,44 @@ describe("Credentials authorize", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(prismaConnectRetry.withPgConnectRetry).mockImplementation(
+      async (_name, fn) => fn(),
+    );
   });
 
-  it("returns null on Prisma timeout and reports to Sentry", async () => {
+  it("returns null on transient Prisma connect timeout without reporting to Sentry", async () => {
+    const err = new Error("timeout exceeded when trying to connect");
+    vi.mocked(prisma.user.findFirst).mockRejectedValueOnce(err);
+
+    const result = await authorize?.({
+      email: "a@b.nl",
+      password: "secret",
+    });
+
+    expect(result).toBeNull();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+    expect(prisma.user.findFirst).toHaveBeenCalledWith({
+      where: { email: "a@b.nl" },
+      select: USER_CORE_SELECT,
+    });
+  });
+
+  it("returns null on DbUnavailableError without reporting to Sentry", async () => {
+    vi.mocked(prismaConnectRetry.withPgConnectRetry).mockRejectedValueOnce(
+      new DbUnavailableError(),
+    );
+
+    const result = await authorize?.({
+      email: "a@b.nl",
+      password: "secret",
+    });
+
+    expect(result).toBeNull();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+    expect(prisma.user.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("returns null on non-transient Prisma error and reports to Sentry", async () => {
     const err = new Prisma.PrismaClientKnownRequestError("timeout", {
       code: "ETIMEDOUT",
       clientVersion: "7",
@@ -83,6 +130,35 @@ describe("Credentials authorize", () => {
     });
     expect(prisma.user.findFirst).toHaveBeenCalledWith({
       where: { email: "a@b.nl" },
+      select: USER_CORE_SELECT,
+    });
+  });
+
+  it("normalizes email casing and whitespace before lookup", async () => {
+    const row: UserCoreRow = {
+      id: "u1",
+      email: "pelsarjen@gmail.com",
+      passwordHash: "$2a$10$hashed",
+      firstName: "Arjen",
+      lastName: "Pels",
+    };
+    vi.mocked(prisma.user.findFirst).mockResolvedValueOnce(row);
+
+    const bcrypt = await import("bcryptjs");
+    vi.mocked(bcrypt.default.compare).mockResolvedValueOnce(true);
+
+    const result = await authorize?.({
+      email: "  Pelsarjen@gmail.com  ",
+      password: "secret",
+    });
+
+    expect(result).toEqual({
+      id: "u1",
+      name: "Arjen Pels",
+      email: "pelsarjen@gmail.com",
+    });
+    expect(prisma.user.findFirst).toHaveBeenCalledWith({
+      where: { email: "pelsarjen@gmail.com" },
       select: USER_CORE_SELECT,
     });
   });
@@ -172,5 +248,16 @@ describe("Credentials authorize", () => {
         extra: { prismaCode: "P2002" },
       });
     });
+  });
+});
+
+describe("normalizeAuthEnv", () => {
+  it("removes whitespace accidentally stored around OAuth credentials", () => {
+    expect(normalizeAuthEnv("  oauth-client-id\n")).toBe("oauth-client-id");
+    expect(normalizeAuthEnv("oauth-secret\r\n")).toBe("oauth-secret");
+  });
+
+  it("returns an empty value when the variable is missing", () => {
+    expect(normalizeAuthEnv(undefined)).toBe("");
   });
 });

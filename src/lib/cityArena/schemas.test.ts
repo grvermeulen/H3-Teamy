@@ -1,0 +1,188 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import {
+  ArenaSettingsSchema,
+  isMapRoads,
+  isMapTile,
+  parseMapIndex,
+} from "./schemas";
+import { LANDMARK_STYLES } from "./world/mapTypes";
+
+/** The map asset the browser actually downloads, read straight from `public/`. */
+function shippedMapIndex(): unknown {
+  const path = join(
+    process.cwd(),
+    "public",
+    "arena",
+    "map",
+    "v3",
+    "index.json",
+  );
+  return JSON.parse(readFileSync(path, "utf8")) as unknown;
+}
+
+const validIndex = {
+  version: 1,
+  generatedAt: "2026-09-04T10:00:00.000Z",
+  origin: { lat: 51.98, lon: 5.625 },
+  unitsPerMetre: 4,
+  bounds: { minX: -26055, minY: -17692, maxX: 26055, maxY: 17692 },
+  tileSize: 8000,
+  tiles: [{ x: 0, y: 0, file: "tile_0_0.json", bytes: 10 }],
+  zones: [
+    {
+      key: "wageningen",
+      name: "Wageningen centrum",
+      center: [10349, 6683],
+      radius: 2000,
+      spawnNodes: [[10000, 6000]],
+      landmarks: ["grote-kerk-wageningen"],
+    },
+  ],
+  landmarks: [
+    {
+      key: "grote-kerk-wageningen",
+      name: "Grote Kerk",
+      style: "church",
+      center: [10349, 6683],
+      tile: { x: 4, y: 3 },
+    },
+  ],
+};
+
+describe("parseMapIndex", () => {
+  it("accepts a valid index", () => {
+    expect(parseMapIndex(validIndex).zones[0].key).toBe("wageningen");
+  });
+
+  it("rejects a wrong version or a malformed zone", () => {
+    expect(() => parseMapIndex({ ...validIndex, version: 2 })).toThrow();
+    expect(() =>
+      parseMapIndex({ ...validIndex, zones: [{ key: "mars" }] }),
+    ).toThrow();
+  });
+
+  it("accepts every style the renderer knows, including the brewery", () => {
+    for (const style of LANDMARK_STYLES) {
+      const index = {
+        ...validIndex,
+        landmarks: [{ ...validIndex.landmarks[0], style }],
+      };
+      expect(parseMapIndex(index).landmarks[0].style).toBe(style);
+    }
+  });
+
+  it("accepts the map asset that ships in public/", () => {
+    // A landmark style present in the asset but missing from the schema throws here instead of
+    // in the browser, where it fails the whole world boot and reads as a connection error.
+    expect(() => parseMapIndex(shippedMapIndex())).not.toThrow();
+  });
+});
+
+describe("isMapTile", () => {
+  it("guards the tile shape structurally", () => {
+    expect(
+      isMapTile({
+        x: 1,
+        y: 2,
+        roads: [],
+        buildings: [],
+        ground: [],
+        water: [],
+      }),
+    ).toBe(true);
+    expect(isMapTile({ x: 1, y: 2, roads: [] })).toBe(false);
+    expect(isMapTile(null)).toBe(false);
+  });
+
+  it("rejects non-object primitives", () => {
+    expect(isMapTile(42)).toBe(false);
+  });
+
+  it("takes trees and furniture as tuples, absent or well-formed, and nothing else", () => {
+    const tile = {
+      x: 1,
+      y: 2,
+      roads: [],
+      buildings: [],
+      ground: [],
+      water: [],
+    };
+    expect(
+      isMapTile({
+        ...tile,
+        trees: [[4, 8, 1]],
+        furniture: [[4, 8, "lamp", 90]],
+      }),
+    ).toBe(true);
+    expect(isMapTile({ ...tile, trees: [[4, 8]] })).toBe(false);
+    expect(isMapTile({ ...tile, trees: [[4, 8, 2]] })).toBe(false);
+    expect(isMapTile({ ...tile, furniture: [[4, 8, 3, 90]] })).toBe(false);
+    expect(isMapTile({ ...tile, furniture: [[4, 8, "bin", 90]] })).toBe(false);
+    expect(isMapTile({ ...tile, furniture: "lamp" })).toBe(false);
+  });
+
+  it("rejects geometry entries without numeric points arrays", () => {
+    expect(
+      isMapTile({
+        x: 1,
+        y: 2,
+        roads: [{ points: "not-an-array" }],
+        buildings: [],
+        ground: [],
+        water: [],
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("isMapRoads", () => {
+  it("guards the roads shape structurally", () => {
+    expect(
+      isMapRoads({
+        nodes: [0, 0, 4, -8],
+        edges: [0, 1, 0, -1, 0, 16],
+        classes: ["residential"],
+        names: ["Dreijenlaan"],
+      }),
+    ).toBe(true);
+  });
+
+  it("rejects a malformed payload", () => {
+    expect(
+      isMapRoads({
+        nodes: [0, 0],
+        edges: "not-an-array",
+        classes: [],
+        names: [],
+      }),
+    ).toBe(false);
+    expect(isMapRoads(null)).toBe(false);
+  });
+});
+
+describe("ArenaSettingsSchema", () => {
+  it("fills defaults and rejects unknown zones", () => {
+    expect(ArenaSettingsSchema.parse({})).toEqual({
+      lastZone: "wageningen",
+      sound: true,
+      vibrate: true,
+      twinStick: true,
+      radio: true,
+    });
+    expect(
+      ArenaSettingsSchema.safeParse({ forceLayout: "tablet" }).success,
+    ).toBe(false);
+    expect(ArenaSettingsSchema.safeParse({ lastZone: "mars" }).success).toBe(
+      false,
+    );
+  });
+
+  it("keeps the radio settings, with the station optional", () => {
+    expect(
+      ArenaSettingsSchema.parse({ radio: false, radioStation: "rijn" }),
+    ).toMatchObject({ radio: false, radioStation: "rijn" });
+    expect(ArenaSettingsSchema.parse({}).radioStation).toBeUndefined();
+  });
+});

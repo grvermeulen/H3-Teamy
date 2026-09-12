@@ -7,6 +7,11 @@ import {
 } from "../../../../lib/kv";
 import { getBadgeForAttendance } from "../../../../lib/badges";
 import { withDbRequestMetrics } from "../../../../lib/dbMetrics";
+import {
+  isDbUnavailableError,
+  jsonDatabaseUnavailable,
+} from "../../../../lib/dbUnavailableError";
+import { isTransientPostgresConnectError } from "../../../../lib/prismaConnectRetry";
 import { displayName } from "../../../../lib/userUtils";
 
 const UNKNOWN_RSVP_NAME = "Onbekende speler";
@@ -28,7 +33,12 @@ export async function GET(req: NextRequest) {
     try {
       items = await listEventRsvps(eventId);
     } catch (e: unknown) {
-      Sentry.captureException(e);
+      if (isDbUnavailableError(e)) {
+        return jsonDatabaseUnavailable();
+      }
+      if (!isTransientPostgresConnectError(e)) {
+        Sentry.captureException(e);
+      }
       const message = e instanceof Error ? e.message : String(e);
       return NextResponse.json(
         { error: "list_failed", message },

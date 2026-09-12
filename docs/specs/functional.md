@@ -12,11 +12,14 @@ This document reflects the features that exist in the code today. Planned or fut
 | Feature | Docs |
 |---|---|
 | admin | docs/tech/admin/README.md |
+| arena | docs/tech/arena/README.md |
 | auth | docs/tech/auth/README.md |
+| branding | docs/tech/branding/README.md |
 | events | docs/tech/events/README.md |
 | identity-link | docs/tech/identity-link/README.md |
 | password-reset | docs/tech/password-reset/README.md |
 | profile | docs/tech/profile/README.md |
+| pwa | docs/tech/pwa/README.md |
 | reports | docs/tech/reports/README.md |
 | rsvp | docs/tech/rsvp/README.md |
 | training | docs/tech/training/README.md |
@@ -46,10 +49,15 @@ This document reflects the features that exist in the code today. Planned or fut
 
 ## API Routes
 
+- /api/admin/features
 - /api/admin/feedback
 - /api/admin/feedback/[id]
 - /api/admin/status
 - /api/admin/users
+- /api/arena/leaderboard
+- /api/arena/matches
+- /api/arena/realtime-token
+- /api/arena/rooms
 - /api/auth/[...nextauth]
 - /api/auth/link
 - /api/auth/passkey/login-options
@@ -93,7 +101,7 @@ This document reflects the features that exist in the code today. Planned or fut
 
 ## Pages
 
-- 
+- /
 - /admin
 - /admin/feedback
 - /attendance

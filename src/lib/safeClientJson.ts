@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { isBenignTransientClientFetchError } from "./benignClientFetchErrors";
 
 function isAbortError(error: unknown): boolean {
   if (error instanceof DOMException && error.name === "AbortError") {
@@ -27,23 +28,13 @@ function isCancelledClientFetch(
 }
 
 /**
- * Browsers use different `TypeError` messages for transient fetch failures on
- * unreliable networks (offline, tab suspension, connection reset): WebKit uses
- * `"Load failed"`, Chromium uses `"Failed to fetch"`. Optional client helpers
+ * Browsers use different messages for transient fetch failures on unreliable
+ * networks (offline, tab suspension, connection reset). Optional client helpers
  * already return a safe fallback; reporting every occurrence duplicates Sentry
  * noise without indicating an application bug.
  */
 function isBenignTransientFetchTypeError(error: unknown): boolean {
-  if (error instanceof TypeError) {
-    const msg = error.message.trim();
-    if (msg === "Load failed" || msg === "Failed to fetch") {
-      return true;
-    }
-  }
-  if (error instanceof Error && error.cause !== undefined) {
-    return isBenignTransientFetchTypeError(error.cause);
-  }
-  return false;
+  return isBenignTransientClientFetchError(error);
 }
 
 /**

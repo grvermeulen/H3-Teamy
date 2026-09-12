@@ -5,8 +5,38 @@ import * as Sentry from "@sentry/nextjs";
 import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { prisma } from "./db";
+import { isDbUnavailableError } from "./dbUnavailableError";
+import {
+  isTransientPostgresConnectError,
+  withPgConnectRetry,
+} from "./prismaConnectRetry";
 import { verifyPasskeyExchangeToken } from "./passkeyExchangeToken";
 import { USER_CORE_SELECT } from "./userPrismaSelect";
+
+function reportCredentialsAuthorizeError(
+  error: unknown,
+  context: string,
+): void {
+  if (isDbUnavailableError(error) || isTransientPostgresConnectError(error)) {
+    return;
+  }
+  const code =
+    error instanceof Prisma.PrismaClientKnownRequestError
+      ? error.code
+      : undefined;
+  Sentry.captureException(error, {
+    tags: { context },
+    extra: { prismaCode: code },
+  });
+}
+
+/**
+ * Normalizes dashboard-managed auth values, which can accidentally include
+ * leading or trailing whitespace when pasted into a deployment environment.
+ */
+export function normalizeAuthEnv(value: string | undefined): string {
+  return value?.trim() ?? "";
+}
 
 /**
  * NextAuth configuration: Google + credentials, JWT sessions with user id on `session.user.id`.
@@ -14,8 +44,8 @@ import { USER_CORE_SELECT } from "./userPrismaSelect";
 export const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID || "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+      clientId: normalizeAuthEnv(process.env.GOOGLE_CLIENT_ID),
+      clientSecret: normalizeAuthEnv(process.env.GOOGLE_CLIENT_SECRET),
     }),
     Credentials({
       name: "Credentials",
@@ -32,10 +62,14 @@ export const authOptions: NextAuthOptions = {
           const userId = verifyPasskeyExchangeToken(exchange);
           if (!userId) return null;
           try {
-            const user = await prisma.user.findUnique({
-              where: { id: userId },
-              select: USER_CORE_SELECT,
-            });
+            const user = await withPgConnectRetry(
+              "credentials_authorize_passkey",
+              () =>
+                prisma.user.findUnique({
+                  where: { id: userId },
+                  select: USER_CORE_SELECT,
+                }),
+            );
             if (!user) return null;
             return {
               id: user.id,
@@ -43,26 +77,26 @@ export const authOptions: NextAuthOptions = {
               email: user.email ?? undefined,
             };
           } catch (error: unknown) {
-            const code =
-              error instanceof Prisma.PrismaClientKnownRequestError
-                ? error.code
-                : undefined;
-            Sentry.captureException(error, {
-              tags: { context: "credentials_authorize_passkey" },
-              extra: { prismaCode: code },
-            });
+            reportCredentialsAuthorizeError(
+              error,
+              "credentials_authorize_passkey",
+            );
             return null;
           }
         }
 
-        const email = (creds?.email as string) || "";
+        const email = String(creds?.email ?? "")
+          .trim()
+          .toLowerCase();
         const password = (creds?.password as string) || "";
         if (!email || !password) return null;
         try {
-          const user = await prisma.user.findFirst({
-            where: { email },
-            select: USER_CORE_SELECT,
-          });
+          const user = await withPgConnectRetry("credentials_authorize", () =>
+            prisma.user.findFirst({
+              where: { email },
+              select: USER_CORE_SELECT,
+            }),
+          );
           if (!user || !user.passwordHash) return null;
           const ok = await bcrypt.compare(password, user.passwordHash);
           if (!ok) return null;
@@ -72,20 +106,13 @@ export const authOptions: NextAuthOptions = {
             email: user.email ?? undefined,
           };
         } catch (error: unknown) {
-          const code =
-            error instanceof Prisma.PrismaClientKnownRequestError
-              ? error.code
-              : undefined;
-          Sentry.captureException(error, {
-            tags: { context: "credentials_authorize" },
-            extra: { prismaCode: code },
-          });
+          reportCredentialsAuthorizeError(error, "credentials_authorize");
           return null;
         }
       },
     }),
   ],
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: normalizeAuthEnv(process.env.NEXTAUTH_SECRET) || undefined,
   callbacks: {
     async jwt({ token, user }) {
       if (user?.id) {

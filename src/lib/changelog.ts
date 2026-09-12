@@ -24,6 +24,15 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.2.2": {
+    title: "Wat is er nieuw in 0.2.2",
+    steps: [
+      {
+        title: "Brouwerij Klein Zwitserland in GTA H3",
+        body: "Cuneralaan 42 in Rhenen is nu Brouwerij Klein Zwitserland. Loop naar de tap en druk op E (of tik op Biertje) voor een biertje. Je wordt dronken: de wereld gaat deinen en je schoten doen minder schade. Dat zakt langzaam weer weg.",
+      },
+    ],
+  },
   "0.2.1": {
     title: "Wat is er nieuw in 0.2.1",
     steps: [

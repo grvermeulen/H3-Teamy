@@ -474,6 +474,84 @@ h3 {
   max-width: 100%;
 }
 
+.admin-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: var(--space-4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.035);
+}
+.admin-tabs a {
+  min-height: var(--hit);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--muted);
+  font-weight: 600;
+  text-decoration: none;
+}
+.admin-tabs a[aria-current="page"] {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+}
+.admin-role-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.admin-role-toggle {
+  cursor: pointer;
+  padding: 8px 10px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+}
+.admin-role-toggle input {
+  margin-right: 6px;
+}
+.admin-filter-row,
+.admin-feedback-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.admin-filter-row label {
+  flex: 1;
+  min-width: 0;
+}
+.admin-tool-summary {
+  min-height: var(--hit);
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 700;
+}
+@media (max-width: 640px) {
+  .admin-user-row {
+    align-items: flex-start !important;
+    flex-direction: column;
+  }
+  .admin-role-row {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .admin-filter-row,
+  .admin-feedback-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .admin-feedback-header select {
+    width: 100%;
+  }
+}
+
 .eventTitle {
   font-weight: 600;
   overflow-wrap: anywhere;
@@ -803,26 +881,36 @@ body.modal-open .card {
   z-index: 1000;
 }
 .bottomNavLinks {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  overflow-x: auto;
-  flex-wrap: nowrap;
-  -webkit-overflow-scrolling: touch;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 2px;
 }
 .bottomNavLinks a,
 .bottomNavLinks button {
   color: var(--text);
   text-decoration: none;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 0;
   border-radius: var(--radius-md);
-  padding: 8px 12px;
-  min-height: 40px;
-  display: inline-flex;
+  padding: 4px 2px;
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  white-space: nowrap;
+  justify-content: center;
+  gap: 2px;
   font: inherit;
+}
+.bottomNavLinks a > span {
+  font-size: 22px;
+  line-height: 1;
+}
+.bottomNavLinks small {
+  font-size: 11px;
+  font-weight: 600;
 }
 .bottomNavLinks a:focus-visible,
 .bottomNavLinks button:focus-visible {
@@ -831,8 +919,8 @@ body.modal-open .card {
 }
 
 .navActive {
-  border-color: var(--accent);
   color: var(--accent) !important;
+  background: color-mix(in oklab, var(--accent) 12%, transparent) !important;
 }
 
 /* Christmas theme navigation */
@@ -945,6 +1033,33 @@ body.modal-open .card {
   }
 }
 
+/* Death screen — the wasted artwork slams in with an overshoot and settles at 1× by 0.55 s */
+@keyframes arena-wasted-slam {
+  0% {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  66% {
+    transform: scale(0.95);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Death screen under reduced motion — the wasted artwork fades in over 300 ms */
+@keyframes arena-wasted-fade {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
 /* Feedback floating action button — SVG glyph (see component) for cross-OS parity. */
 .feedbackFab {
   position: fixed;
@@ -1009,6 +1124,56 @@ body.modal-open .card {
 }
 
 /* ---------- UI primitives ---------- */
+
+/* App bar — stable drill-down navigation with an iOS-style back target. */
+.ui-app-bar {
+  display: grid;
+  grid-template-columns: var(--hit) minmax(0, 1fr) var(--hit);
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 56px;
+  margin: calc(-1 * var(--space-2)) 0 var(--space-4);
+}
+.ui-app-bar h1 {
+  min-width: 0;
+  margin: 0;
+  font-size: clamp(1.15rem, 5vw, 1.5rem);
+  line-height: 1.2;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-app-bar-back {
+  width: var(--hit);
+  height: var(--hit);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+}
+.ui-app-bar-back span {
+  font-size: 34px;
+  font-weight: 300;
+  line-height: 1;
+  transform: translateY(-1px);
+}
+.ui-app-bar-back:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+.ui-app-bar-back:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.ui-app-bar-action {
+  display: flex;
+  justify-content: flex-end;
+}
 
 /* Stack — vertical/horizontal spacing helper */
 .ui-stack {
@@ -1298,4 +1463,90 @@ select.ui-select[aria-invalid="true"] {
   pointer-events: none;
   z-index: 1099;
   transition: all 200ms ease;
+}
+
+/* GTA H3 — mission-control palette.
+ *
+ * Scoped to .arena on purpose. These are deliberately harsher than the app's own tokens
+ * (near-black asphalt, amber action, teal online) and must not leak into the rest of Teamy,
+ * so nothing here touches :root. */
+.arena {
+  --arena-void: #07090b;
+  --arena-asphalt: #0d1013;
+  --arena-panel: #12171b;
+  --arena-panel-raised: #171d22;
+  --arena-line: rgba(255, 255, 255, 0.08);
+  --arena-line-strong: rgba(255, 255, 255, 0.16);
+  --arena-text: #e6ecf0;
+  --arena-dim: #8b9aa5;
+  --arena-amber: #f5a524;
+  --arena-amber-dim: rgba(245, 165, 36, 0.14);
+  --arena-online: #2dd4a7;
+  --arena-online-dim: rgba(45, 212, 167, 0.14);
+  --arena-alert: #ff6b6b;
+  --arena-crew-1: #f5a524;
+  --arena-crew-2: #a78bfa;
+  --arena-crew-3: #4ade80;
+  --arena-crew-4: #60a5fa;
+}
+
+/* Display type for headings: condensed, heavy, wide-tracked — a briefing screen,
+   not a dashboard. Falls back through common condensed faces before sans-serif. */
+.arena-display {
+  font-family:
+    "Archivo Narrow", "Oswald", "Roboto Condensed", ui-sans-serif, system-ui,
+    sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Small uppercase status label: the "ACTIEF POTJE · 01" register. */
+.arena-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* The map-grid motif behind radar previews and the lobby backdrop. Two crossing
+   gradients rather than an image, so it costs nothing to load and scales freely. */
+.arena-grid {
+  background-image:
+    linear-gradient(rgba(45, 212, 167, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(45, 212, 167, 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* Sharp mission card with a coloured left rule. */
+.arena-card {
+  background: var(--arena-panel);
+  border: 1px solid var(--arena-line);
+  border-left: 3px solid var(--arena-line-strong);
+}
+.arena-card-active {
+  border-left-color: var(--arena-amber);
+  background: linear-gradient(
+    90deg,
+    var(--arena-amber-dim) 0%,
+    var(--arena-panel) 42%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arena-pulse {
+    animation: none;
+  }
+}
+.arena-pulse {
+  animation: arena-pulse 2.4s ease-in-out infinite;
+}
+@keyframes arena-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
 }

@@ -2,6 +2,10 @@ import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveWebAuthnExpectedOrigins } from "./webAuthnRequest";
 
+vi.mock("@sentry/nextjs", () => ({
+  captureException: vi.fn(),
+}));
+
 describe("resolveWebAuthnExpectedOrigins", () => {
   afterEach(() => {
     vi.unstubAllEnvs();

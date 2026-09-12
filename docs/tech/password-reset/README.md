@@ -12,7 +12,7 @@ Generates a short-lived token (Redis or in-memory) and emails a link to set a ne
 
 ## Environment
 
-- `ENABLE_EMAIL=true`
+- `ENABLE_EMAIL=true` (optional — auto-enables when `RESEND_API_KEY`, `EMAIL_FROM`, and `APP_URL` are set)
 - `RESEND_API_KEY`
 - `APP_URL`
 - `EMAIL_FROM` (verified sender in Resend)
@@ -24,4 +24,5 @@ Generates a short-lived token (Redis or in-memory) and emails a link to set a ne
 ## Security
 
 - Generic success response to prevent user enumeration
-- Token TTL 15m; single-use via Redis key
+- Token TTL 60m; single-use via Redis key
+- While a reset link is active for a user, further reset requests return `suppressed: true` and do not send another email (same TTL)

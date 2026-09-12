@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useRef, useState } from "react";
 import * as Sentry from "@sentry/nextjs";
 import { APP_VERSION } from "../lib/version";
+import { isBenignTransientClientFetchError } from "../lib/benignClientFetchErrors";
 import { Button, Input, Textarea } from "./ui";
 import { useSession } from "./SessionContext";
 
@@ -92,7 +93,9 @@ export default function FeedbackFab(): React.JSX.Element | null {
         setNotice(null);
       }, 1200);
     } catch (err: unknown) {
-      Sentry.captureException(err, { tags: { component: "feedback-fab" } });
+      if (!isBenignTransientClientFetchError(err)) {
+        Sentry.captureException(err, { tags: { component: "feedback-fab" } });
+      }
       setNotice("Netwerkfout. Probeer het opnieuw.");
     } finally {
       setSubmitting(false);

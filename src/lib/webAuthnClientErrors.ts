@@ -18,10 +18,7 @@ export function isBenignWebAuthnClientError(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; depth < MAX_CAUSE_DEPTH && current != null; depth++) {
     if (current instanceof DOMException) {
-      if (
-        current.name === "NotAllowedError" ||
-        current.name === "AbortError"
-      ) {
+      if (current.name === "NotAllowedError" || current.name === "AbortError") {
         return true;
       }
     }

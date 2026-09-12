@@ -15,8 +15,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
+      - name: Ensure jq
+        # jq ships with the runner image. The apt route stays as a fallback only, and without
+        # Google's Chrome apt source: its mirror intermittently serves mismatched index hashes,
+        # which used to fail this job before it read a single line of the PR.
+        run: |
+          if ! command -v jq >/dev/null; then
+            sudo rm -f /etc/apt/sources.list.d/google-chrome*
+            sudo apt-get update && sudo apt-get install -y jq
+          fi
 
       - name: Detect high-risk changes
         id: risk

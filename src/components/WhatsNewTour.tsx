@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import * as Sentry from "@sentry/nextjs";
 import type { ChangelogEntry, TourStep } from "../lib/changelog";
+import { isBenignTransientClientFetchError } from "../lib/benignClientFetchErrors";
 import { fetchJsonOr } from "../lib/safeClientJson";
 
 type Spotlight = {
@@ -92,7 +93,9 @@ export default function WhatsNewTour(): React.JSX.Element | null {
     try {
       await fetch("/api/whats-new/ack", { method: "POST" });
     } catch (err: unknown) {
-      Sentry.captureException(err, { tags: { component: "whats-new-tour" } });
+      if (!isBenignTransientClientFetchError(err)) {
+        Sentry.captureException(err, { tags: { component: "whats-new-tour" } });
+      }
     }
   }
 

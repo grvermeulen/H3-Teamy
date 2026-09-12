@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getStructuredGatewayModel } from "./gatewayModels";
 
 /**
  * Schema for the structured triage object the AI Product Manager returns for a
@@ -35,8 +36,8 @@ Be specific, terse, and actionable.`;
 export type ShapeIdeaInput = { title: string; body: string };
 
 /**
- * Calls the AI SDK through the Vercel AI Gateway with model
- * `anthropic/claude-opus-4` and returns a structured idea triage.
+ * Calls the AI SDK through the Vercel AI Gateway (structured model from
+ * {@link getStructuredGatewayModel}) and returns a structured idea triage.
  *
  * Loaded dynamically so the Braintrust-wrapped client does not pull `ai` /
  * `braintrust` into the bundle of routes that don't need it (e.g. edge).
@@ -44,7 +45,7 @@ export type ShapeIdeaInput = { title: string; body: string };
 export async function shapeIdea(input: ShapeIdeaInput): Promise<IdeaShape> {
   const { generateObject } = await import("./client");
   const { object } = await generateObject({
-    model: "anthropic/claude-opus-4",
+    model: getStructuredGatewayModel(),
     schema: IdeaShapeSchema,
     system: PM_SYSTEM_PROMPT,
     prompt: `Title: ${input.title}\n\nBody: ${input.body}`,

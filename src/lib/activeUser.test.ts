@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { getActiveUser } from "./activeUser";
 import { prisma } from "./db";
 import * as nextAuth from "next-auth";
+import * as Sentry from "@sentry/nextjs";
 
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
@@ -24,6 +25,7 @@ vi.mock("./db", () => ({
       create: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      deleteMany: vi.fn(),
     },
     rsvp: {
       count: vi.fn(),
@@ -121,5 +123,72 @@ describe("getActiveUser", () => {
         },
       }),
     );
+  });
+
+  it("silent adopt uses deleteMany so missing empty cookie user does not report to Sentry", async () => {
+    const cookieUuid = "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11";
+    const authUserId = "auth-user";
+    const cookieUserId = "cookie-user";
+
+    vi.mocked(nextAuth.getServerSession).mockResolvedValue({
+      user: { email: "trainer@example.test", id: authUserId, name: "Trainer" },
+      expires: "2099-01-01",
+    });
+
+    vi.mocked(prisma.user.findUnique).mockImplementation(({ where }) => {
+      if ("id" in where && where.id === cookieUserId) {
+        return Promise.resolve({
+          id: cookieUserId,
+          firstName: "",
+          lastName: "",
+          email: null,
+        });
+      }
+      if ("id" in where && where.id === authUserId) {
+        return Promise.resolve({
+          id: authUserId,
+          firstName: "Trainer",
+          lastName: "",
+          email: "trainer@example.test",
+        });
+      }
+      if ("email" in where) {
+        return Promise.resolve(null);
+      }
+      return Promise.resolve(null);
+    });
+
+    vi.mocked(prisma.identity.findUnique).mockImplementation(({ where }) => {
+      const key = where.provider_providerUserId;
+      if (key.provider === "email") {
+        return Promise.resolve({ userId: authUserId });
+      }
+      if (key.provider === "cookie" && key.providerUserId === cookieUuid) {
+        return Promise.resolve({ userId: cookieUserId });
+      }
+      return Promise.resolve(null);
+    });
+
+    vi.mocked(prisma.rsvp.count).mockResolvedValue(0);
+
+    const txDeleteMany = vi.fn().mockResolvedValue({ count: 0 });
+    const txUpsert = vi.fn().mockResolvedValue({});
+    vi.mocked(prisma.$transaction).mockImplementation(async (fn) => {
+      return fn({
+        identity: { upsert: txUpsert },
+        user: { deleteMany: txDeleteMany },
+      });
+    });
+
+    const req = new NextRequest("https://example.com/", {
+      headers: { cookie: `anon_id=${cookieUuid}` },
+    });
+
+    const result = await getActiveUser(req);
+    expect(result).toEqual({ userId: authUserId, needsLink: false });
+    expect(txDeleteMany).toHaveBeenCalledWith({
+      where: { id: cookieUserId },
+    });
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });
 });

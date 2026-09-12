@@ -6,7 +6,10 @@ import { canonicalEventId } from "../../../../../lib/eventId";
 function allowed(req: NextRequest): boolean {
   const configured = process.env.ADMIN_MAINT_TOKEN || "";
   if (!configured) return true; // allow if not configured
-  const token = req.nextUrl.searchParams.get("token") || req.headers.get("x-admin-token") || "";
+  const token =
+    req.nextUrl.searchParams.get("token") ||
+    req.headers.get("x-admin-token") ||
+    "";
   return token === configured;
 }
 
@@ -33,33 +36,53 @@ async function buildMappings() {
 
 export async function GET(req: NextRequest) {
   try {
-    if (!allowed(req)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    if (!allowed(req))
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
     const { map, byDay } = await buildMappings();
-    const distinct = await prisma.rsvp.findMany({ distinct: ["eventId"], select: { eventId: true, _count: true } as any } as any);
-    const plans: { oldId: string; canonicalId: string; count: number; via: string }[] = [];
+    const distinct = await prisma.rsvp.findMany({
+      distinct: ["eventId"],
+      select: { eventId: true, _count: true } as any,
+    } as any);
+    const plans: {
+      oldId: string;
+      canonicalId: string;
+      count: number;
+      via: string;
+    }[] = [];
     for (const row of distinct as any[]) {
       const oldId = row.eventId as string;
       const count = await prisma.rsvp.count({ where: { eventId: oldId } });
       if (count === 0) continue;
-      if (map.has(oldId)) { plans.push({ oldId, canonicalId: map.get(oldId)!, count, via: "uid" }); continue; }
+      if (map.has(oldId)) {
+        plans.push({ oldId, canonicalId: map.get(oldId)!, count, via: "uid" });
+        continue;
+      }
       const m = oldId.match(/^(\d{8})/);
       if (m) {
         const cands = byDay.get(m[1]) || [];
-        if (cands[0]) plans.push({ oldId, canonicalId: cands[0], count, via: "date" });
+        if (cands[0])
+          plans.push({ oldId, canonicalId: cands[0], count, via: "date" });
       }
     }
     const total = plans.reduce((s, p) => s + p.count, 0);
     return NextResponse.json({ total, plans });
   } catch (e: any) {
-    return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
+    return NextResponse.json(
+      { error: String(e?.message || e) },
+      { status: 500 },
+    );
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    if (!allowed(req)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    if (!allowed(req))
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
     const { map, byDay } = await buildMappings();
-    const distinct = await prisma.rsvp.findMany({ distinct: ["eventId"], select: { eventId: true } as any } as any);
+    const distinct = await prisma.rsvp.findMany({
+      distinct: ["eventId"],
+      select: { eventId: true } as any,
+    } as any);
     let migrated = 0;
     for (const r of distinct as any[]) {
       const oldId = r.eventId as string;
@@ -73,19 +96,28 @@ export async function POST(req: NextRequest) {
       for (const row of rows) {
         await prisma.$transaction([
           prisma.rsvp.upsert({
-            where: { userId_eventId: { userId: row.userId, eventId: canonicalId } },
-            create: { userId: row.userId, eventId: canonicalId, status: row.status },
+            where: {
+              userId_eventId: { userId: row.userId, eventId: canonicalId },
+            },
+            create: {
+              userId: row.userId,
+              eventId: canonicalId,
+              status: row.status,
+            },
             update: { status: row.status },
           }),
-          prisma.rsvp.deleteMany({ where: { userId: row.userId, eventId: oldId } }),
+          prisma.rsvp.deleteMany({
+            where: { userId: row.userId, eventId: oldId },
+          }),
         ]);
         migrated += 1;
       }
     }
     return NextResponse.json({ migrated });
   } catch (e: any) {
-    return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
+    return NextResponse.json(
+      { error: String(e?.message || e) },
+      { status: 500 },
+    );
   }
 }
-
-

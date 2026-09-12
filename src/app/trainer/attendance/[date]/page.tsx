@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { AppBar, Button, showToast } from "../../../../components/ui";
 
 type User = { id: string; name: string };
 
@@ -93,6 +94,11 @@ export default function SessionChecklist() {
         return;
       }
       setDirty(false);
+      showToast("Opkomst opgeslagen", "success");
+    } catch {
+      setSaveError(
+        "Opslaan mislukt. Controleer je verbinding en probeer opnieuw.",
+      );
     } finally {
       setSaving(false);
     }
@@ -105,7 +111,10 @@ export default function SessionChecklist() {
   if (isTrainer === false) {
     return (
       <div className="container">
-        <h1>{date}</h1>
+        <AppBar
+          title={date || "Trainingsopkomst"}
+          fallbackHref="/trainer/attendance"
+        />
         <div className="muted">Je hebt geen toegang.</div>
       </div>
     );
@@ -113,7 +122,12 @@ export default function SessionChecklist() {
   if (isTrainer === null) {
     return (
       <div className="container">
-        <div className="muted">Laden…</div>
+        <AppBar title="Trainingsopkomst" fallbackHref="/trainer/attendance" />
+        <div
+          className="card skeleton"
+          style={{ height: 72 }}
+          aria-label="Opkomst laden"
+        />
       </div>
     );
   }
@@ -121,7 +135,10 @@ export default function SessionChecklist() {
   return (
     <main>
       <div className="container">
-        <h1>Opkomst – {date}</h1>
+        <AppBar
+          title={`Opkomst – ${date}`}
+          fallbackHref="/trainer/attendance"
+        />
 
         <div className="card" style={{ position: "sticky", top: 0, zIndex: 1 }}>
           <div
@@ -133,9 +150,14 @@ export default function SessionChecklist() {
           >
             <div className="muted">Aanwezig: {present.size}</div>
             <div className="row" style={{ gap: 8 }}>
-              <button onClick={onSave} disabled={!dirty || saving}>
-                {saving ? "Opslaan…" : "Opslaan"}
-              </button>
+              <Button
+                onClick={() => void onSave()}
+                disabled={!dirty}
+                loading={saving}
+                loadingLabel="Opslaan…"
+              >
+                Opslaan
+              </Button>
             </div>
           </div>
           {saveError ? (

@@ -1,0 +1,105 @@
+import { describe, expect, it } from "vitest";
+import { clampToUnit, createInputState } from "./inputState";
+
+describe("input state", () => {
+  it("clamps vectors to unit length", () => {
+    expect(clampToUnit([3, 4])).toEqual([0.6, 0.8]);
+    expect(clampToUnit([0.3, 0])).toEqual([0.3, 0]);
+  });
+
+  it("prefers the stick while it is active, otherwise the keyboard", () => {
+    const state = createInputState();
+    state.setKeyboard([1, 1]);
+    expect(state.snapshot().move[0]).toBeCloseTo(Math.SQRT1_2);
+    state.setStick([0, -0.5]);
+    expect(state.snapshot().move).toEqual([0, -0.5]);
+    state.setStick(null);
+    expect(state.snapshot().move[1]).toBeCloseTo(Math.SQRT1_2);
+  });
+
+  it("ORs buttons from the keyboard and pointer sources and carries the aim", () => {
+    const state = createInputState();
+    expect(state.snapshot()).toEqual({
+      move: [0, 0],
+      moveIsAnalog: false,
+      aim: null,
+      fire: false,
+      enter: false,
+      weaponNext: false,
+    });
+    state.setButton("keyboard", "fire", true);
+    state.setButton("pointer", "fire", false);
+    state.setAim(1.5);
+    expect(state.snapshot()).toMatchObject({ fire: true, aim: 1.5 });
+    state.setButton("keyboard", "fire", false);
+    state.setButton("pointer", "enter", true);
+    expect(state.snapshot()).toMatchObject({ fire: false, enter: true });
+  });
+
+  it("clears keyboard movement and buttons together on blur", () => {
+    const state = createInputState();
+    state.setKeyboard([1, 0]);
+    state.setButton("keyboard", "weaponNext", true);
+    state.setButton("pointer", "fire", true);
+    state.clearKeyboard();
+    expect(state.snapshot()).toMatchObject({
+      move: [0, 0],
+      weaponNext: false,
+      fire: true,
+    });
+  });
+
+  it("keeps an on-screen button held when the mouse releases the same button", () => {
+    const state = createInputState();
+    state.setButton("buttons", "fire", true);
+    state.setButton("pointer", "fire", true);
+    state.setButton("pointer", "fire", false);
+    expect(state.snapshot().fire).toBe(true);
+    state.setButton("buttons", "fire", false);
+    expect(state.snapshot().fire).toBe(false);
+  });
+
+  it("marks movement analog by which source last moved the player, not by finger contact", () => {
+    const state = createInputState();
+    expect(state.snapshot().moveIsAnalog).toBe(false);
+    state.setKeyboard([1, 0]);
+    expect(state.snapshot().moveIsAnalog).toBe(false);
+    state.setStick([0.3, -0.4]);
+    expect(state.snapshot()).toMatchObject({
+      move: [0.3, -0.4],
+      moveIsAnalog: true,
+    });
+    state.setStick([0, 0]);
+    expect(state.snapshot().moveIsAnalog).toBe(true);
+    // Lifting the finger — the real touch-release gesture — must not bounce control back to
+    // the keyboard's digital mapping: moveIsAnalog stays true so driveStep keeps ramping the
+    // steer command toward centre instead of snapping it in the tick the finger leaves the glass.
+    state.setKeyboard([0, 0]);
+    state.setStick([0.3, -0.4]);
+    state.setStick(null);
+    expect(state.snapshot()).toMatchObject({
+      move: [0, 0],
+      moveIsAnalog: true,
+    });
+    // Only a fresh keyboard movement hands control back to the digital mapping.
+    state.setKeyboard([0, -1]);
+    expect(state.snapshot().moveIsAnalog).toBe(false);
+  });
+
+  it("hands movement to the keyboard when a key is held as the stick is released", () => {
+    const state = createInputState();
+    state.setStick([0.5, 0]);
+    state.setKeyboard([0, -1]);
+    // The keyboard moved last, so it owns both the vector and the mapping — the stick's
+    // vector must not leak through the digital path.
+    expect(state.snapshot()).toMatchObject({
+      move: [0, -1],
+      moveIsAnalog: false,
+    });
+    state.setStick(null);
+    expect(state.snapshot()).toMatchObject({
+      move: [0, -1],
+      moveIsAnalog: false,
+    });
+  });
+});

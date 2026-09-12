@@ -1,0 +1,423 @@
+/**
+ * Firing, bullets, hits and explosions. Every player on foot is a bullet target and every player in
+ * range takes the blast — the bullet layer below already excludes the shooter by owner id.
+ */
+import {
+  driverPlayer,
+  orderedPlayers,
+  playerById,
+  replacePlayer,
+} from "./players";
+import type { Point } from "../world/projection";
+import {
+  MAX_BULLETS,
+  createShots,
+  stepBullets,
+  type BulletHit,
+  type PlayerTarget,
+} from "./bullets";
+import {
+  EXPLOSION_DAMAGE,
+  LETHAL_DAMAGE,
+  damagePlayer,
+  damageVehicle,
+  inBlastRadius,
+  isDead,
+} from "./damage";
+import { addEffect } from "./effects";
+import { pushEvent } from "./events";
+import { applyEntityHit } from "./hits";
+import { aliveCops, blastCops } from "./cops";
+import { alivePeds, blastPeds } from "./peds";
+import type {
+  ArenaEvent,
+  ArenaPlayerState,
+  ArenaState,
+  BulletState,
+  EffectState,
+  HitTargetKind,
+  VehicleState,
+  WeaponKind,
+  WorldInput,
+} from "./types";
+import {
+  WEAPONS,
+  consumeAmmo,
+  cooldownTicks,
+  hasAmmo,
+  isMelee,
+} from "./weapons";
+import { exitVehicle, occupiedVehicle } from "./boarding";
+import { drunkDamageFactor } from "./beer";
+import { firesCannon, lengthOf } from "./vehicle";
+import type { ArenaWorld } from "./arenaWorld";
+
+/** What the trigger fires and from where: the tank's cannon from its muzzle at the wheel of a tank, otherwise what the player carries from where they stand. */
+type Trigger = { weapon: WeaponKind; origin: Point };
+
+/**
+ * The trigger for this tick. A tank's driver fires the cannon, whatever they hold, and the shell
+ * leaves the barrel's end so it never starts inside a car parked against the hull.
+ */
+function triggerOf(
+  state: ArenaState,
+  player: ArenaPlayerState,
+  angle: number,
+): Trigger {
+  const car = occupiedVehicle(state, player);
+  if (!car || car.wrecked || !firesCannon(car.kind))
+    return { weapon: player.weapon, origin: [player.x, player.y] };
+  const muzzle = lengthOf(car.kind) / 2;
+  return {
+    weapon: "cannon",
+    origin: [
+      player.x + Math.cos(angle) * muzzle,
+      player.y + Math.sin(angle) * muzzle,
+    ],
+  };
+}
+
+/** Ammo, weapon and cooldown after one trigger pull; an emptied magazine falls back to the pistol, and the cannon costs the tank nothing. */
+function afterShot(
+  player: ArenaPlayerState,
+  weapon: WeaponKind,
+  tick: number,
+): ArenaPlayerState {
+  if (weapon === "cannon")
+    return { ...player, nextShotTick: tick + cooldownTicks(weapon) };
+  const ammo = consumeAmmo(player.ammo, weapon);
+  return {
+    ...player,
+    ammo,
+    weapon: hasAmmo(ammo, weapon) ? weapon : "pistol",
+    nextShotTick: tick + cooldownTicks(weapon),
+  };
+}
+
+/** True when the trigger can fire this tick: alive, cooldown elapsed, ammo left and under the bullet cap. */
+function canFire(
+  state: ArenaState,
+  player: ArenaPlayerState,
+  input: WorldInput,
+  weapon: WeaponKind,
+  tick: number,
+): boolean {
+  return (
+    input.fire &&
+    !isDead(player) &&
+    tick >= player.nextShotTick &&
+    hasAmmo(player.ammo, weapon) &&
+    state.bullets.length < MAX_BULLETS
+  );
+}
+
+/** The pellets, effects list and next free id produced by one trigger pull. */
+type FireResult = {
+  shots: BulletState[];
+  effects: EffectState[];
+  nextId: number;
+};
+
+/**
+ * Creates the pellets of one trigger pull and, for anything but a melee weapon, its muzzle
+ * flash. A drunk shooter's pellets carry less damage ({@link drunkDamageFactor}).
+ */
+function fireShots(
+  state: ArenaState,
+  player: ArenaPlayerState,
+  trigger: Trigger,
+  angle: number,
+  tick: number,
+  random: () => number,
+): FireResult {
+  // canFire only checks that firing is allowed at all; a multi-pellet weapon
+  // (shotgun) can still overflow MAX_BULLETS close to the cap, so trim the
+  // surplus pellets here rather than let applyFire exceed the invariant.
+  const remainingCapacity = Math.max(0, MAX_BULLETS - state.bullets.length);
+  const shots = createShots(
+    WEAPONS[trigger.weapon],
+    trigger.weapon,
+    trigger.origin,
+    angle,
+    {
+      ownerId: player.id,
+      ignoreVehicleId: player.vehicleId,
+      firstId: state.nextId,
+    },
+    random,
+  )
+    .slice(0, remainingCapacity)
+    .map((shot) => ({
+      ...shot,
+      damage: shot.damage * drunkDamageFactor(player.drunk),
+    }));
+  const muzzleId = state.nextId + shots.length;
+  const effects = isMelee(trigger.weapon)
+    ? state.effects
+    : addEffect(state.effects, {
+        id: muzzleId,
+        kind: "muzzle",
+        x: trigger.origin[0],
+        y: trigger.origin[1],
+        angle,
+        bornTick: tick,
+      });
+  return { shots, effects, nextId: muzzleId + 1 };
+}
+
+/** Fires while the trigger is held, the cooldown has passed and there is ammo; drive-bys fire from the car and ignore it. */
+export function applyFire(
+  state: ArenaState,
+  player: ArenaPlayerState,
+  input: WorldInput,
+  tick: number,
+  random: () => number,
+): ArenaState {
+  const angle = input.aim ?? player.facing;
+  const trigger = triggerOf(state, player, angle);
+  if (!canFire(state, player, input, trigger.weapon, tick)) return state;
+  const { shots, effects, nextId } = fireShots(
+    state,
+    player,
+    trigger,
+    angle,
+    tick,
+    random,
+  );
+  const fired: ArenaState = {
+    ...state,
+    nextId,
+    bullets: [...state.bullets, ...shots],
+    effects,
+    events: pushEvent(state.events, {
+      kind: "shot",
+      weapon: trigger.weapon,
+      ownerId: player.id,
+      x: trigger.origin[0],
+      y: trigger.origin[1],
+    }),
+  };
+  return replacePlayer(fired, afterShot(player, trigger.weapon, tick));
+}
+
+/** Adds a hit event for an entity impact. */
+function withHitEvent(
+  state: ArenaState,
+  target: HitTargetKind,
+  point: Point,
+  ownerId: number,
+): ArenaState {
+  return {
+    ...state,
+    events: pushEvent(state.events, {
+      kind: "hit",
+      target,
+      ownerId,
+      x: point[0],
+      y: point[1],
+    }),
+  };
+}
+
+/** Applies one bullet hit to a pedestrian, car or player on foot. */
+function applyHit(state: ArenaState, hit: BulletHit, tick: number): ArenaState {
+  const entity = applyEntityHit(state, hit, tick);
+  if (entity) return entity;
+  if (hit.target.kind === "vehicle") {
+    const vehicleId = hit.target.vehicleId;
+    const vehicles = state.vehicles.map((vehicle) =>
+      vehicle.id === vehicleId
+        ? damageVehicle(vehicle, hit.bullet.damage)
+        : vehicle,
+    );
+    return withHitEvent(
+      { ...state, vehicles },
+      "vehicle",
+      hit.point,
+      hit.bullet.ownerId,
+    );
+  }
+  if (hit.target.kind === "player") {
+    const struck = playerById(state, hit.target.playerId);
+    if (!struck) return state;
+    const damaged = damagePlayer(struck, hit.bullet.damage, tick);
+    const hurt = withHitEvent(
+      replacePlayer(state, damaged),
+      "player",
+      hit.point,
+      hit.bullet.ownerId,
+    );
+    // The shot that finishes a player is the only place the killer is known, so the scoreboard
+    // is built from this event rather than from watching health drop to zero.
+    if (damaged.diedAtTick !== null && struck.diedAtTick === null)
+      return {
+        ...hurt,
+        events: pushEvent(hurt.events, {
+          kind: "kill",
+          victim: "player",
+          victimId: damaged.id,
+          killerId: hit.bullet.ownerId,
+          x: damaged.x,
+          y: damaged.y,
+        }),
+      };
+    return hurt;
+  }
+  return state;
+}
+
+/** Every circle a bullet can hit this tick: the players on foot and living pedestrians. */
+function bulletTargets(state: ArenaState): PlayerTarget[] {
+  const targets: PlayerTarget[] = [];
+  for (const player of orderedPlayers(state))
+    if (!isDead(player) && player.vehicleId === null)
+      targets.push({ id: player.id, x: player.x, y: player.y });
+  for (const ped of alivePeds(state.peds))
+    targets.push({ id: ped.id, x: ped.x, y: ped.y });
+  for (const cop of aliveCops(state.cops))
+    targets.push({ id: cop.id, x: cop.x, y: cop.y });
+  return targets;
+}
+
+/** Sweeps the bullets, applies their hits and spawns an impact effect per hit. */
+export function advanceBullets(
+  state: ArenaState,
+  dt: number,
+  world: ArenaWorld,
+  tick: number,
+): ArenaState {
+  const swept = stepBullets(state.bullets, dt, {
+    collision: world.collision,
+    vehicles: state.vehicles,
+    players: bulletTargets(state),
+  });
+  let next: ArenaState = { ...state, bullets: swept.bullets };
+  for (const hit of swept.hits) {
+    const struck = applyHit(next, hit, tick);
+    next = {
+      ...struck,
+      nextId: struck.nextId + 1,
+      effects: addEffect(struck.effects, {
+        id: struck.nextId,
+        kind: "impact",
+        x: hit.point[0],
+        y: hit.point[1],
+        angle: 0,
+        bornTick: tick,
+      }),
+    };
+  }
+  return next;
+}
+
+/** Blast damage to the player: lethal for the occupant, 80 inside the radius on foot. */
+function blastPlayer(
+  player: ArenaPlayerState,
+  vehicle: VehicleState,
+  tick: number,
+): ArenaPlayerState {
+  if (player.vehicleId === vehicle.id)
+    return damagePlayer(player, LETHAL_DAMAGE, tick);
+  if (player.vehicleId === null && inBlastRadius(vehicle, [player.x, player.y]))
+    return damagePlayer(player, EXPLOSION_DAMAGE, tick);
+  return player;
+}
+
+/** Something with an id and a position that an explosion can kill. */
+type BlastVictim = { id: number; x: number; y: number };
+
+/**
+ * Records one kill per victim of a blast. A wrecked car has no owner, so these carry no killer
+ * rather than being attributed to whoever last shot the car — which the simulation does not track.
+ */
+function blastKillEvents(
+  events: ArenaEvent[],
+  victim: "ped" | "cop" | "player",
+  killed: BlastVictim[],
+): ArenaEvent[] {
+  let next = events;
+  for (const dead of killed)
+    next = pushEvent(next, {
+      kind: "kill",
+      victim,
+      victimId: dead.id,
+      killerId: null,
+      x: dead.x,
+      y: dead.y,
+    });
+  return next;
+}
+
+/** Blasts every player in range, and lists the ones this blast killed. */
+function blastPlayers(
+  players: ArenaPlayerState[],
+  vehicle: VehicleState,
+  tick: number,
+): { players: ArenaPlayerState[]; killed: ArenaPlayerState[] } {
+  const blasted = players.map((player) => blastPlayer(player, vehicle, tick));
+  const killed = blasted.filter(
+    (player, position) =>
+      player.diedAtTick !== null && players[position]?.diedAtTick === null,
+  );
+  return { players: blasted, killed };
+}
+
+/** Wrecks one car that reached 0 health and applies its explosion blast. */
+function explodeVehicle(
+  state: ArenaState,
+  vehicle: VehicleState,
+  tick: number,
+): ArenaState {
+  const vehicles = state.vehicles.map((other) => {
+    if (other.id === vehicle.id)
+      return { ...other, wrecked: true, velocityX: 0, velocityY: 0 };
+    return inBlastRadius(vehicle, [other.x, other.y])
+      ? damageVehicle(other, EXPLOSION_DAMAGE)
+      : other;
+  });
+  const blast = blastPeds(state.peds, vehicle, tick);
+  const copBlast = blastCops(state.cops, vehicle, tick);
+  const playerBlast = blastPlayers(state.players, vehicle, tick);
+  let events = pushEvent(state.events, {
+    kind: "explosion",
+    x: vehicle.x,
+    y: vehicle.y,
+  });
+  events = blastKillEvents(events, "ped", blast.killed);
+  events = blastKillEvents(events, "cop", copBlast.killed);
+  events = blastKillEvents(events, "player", playerBlast.killed);
+
+  return {
+    ...state,
+    vehicles,
+    peds: blast.peds,
+    cops: copBlast.cops,
+    nextId: state.nextId + 1,
+    players: playerBlast.players,
+    events,
+    effects: addEffect(state.effects, {
+      id: state.nextId,
+      kind: "explosion",
+      x: vehicle.x,
+      y: vehicle.y,
+      angle: 0,
+      bornTick: tick,
+    }),
+  };
+}
+
+/** Explodes every car whose health reached 0 this tick and throws its occupant out. */
+export function applyExplosions(
+  state: ArenaState,
+  world: ArenaWorld,
+  tick: number,
+): ArenaState {
+  let next = state;
+  for (const vehicle of state.vehicles) {
+    if (vehicle.health > 0 || vehicle.wrecked) continue;
+    next = explodeVehicle(next, vehicle, tick);
+    const driver = driverPlayer(next, vehicle.id);
+    if (driver) next = exitVehicle(next, driver, world);
+  }
+  return next;
+}

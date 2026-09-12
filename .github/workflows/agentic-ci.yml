@@ -64,3 +64,9 @@ jobs:
 
       - name: Run Tests
         run: npx vitest run
+
+      - name: Arena audio (files and credits)
+        run: npm run arena:check-audio
+
+      - name: Arena sprites (files and credits)
+        run: npm run arena:check-sprites

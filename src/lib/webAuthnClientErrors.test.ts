@@ -3,10 +3,7 @@ import { isBenignWebAuthnClientError } from "./webAuthnClientErrors";
 
 describe("isBenignWebAuthnClientError", () => {
   it("returns true for NotAllowedError", () => {
-    const err = new DOMException(
-      "not allowed",
-      "NotAllowedError",
-    );
+    const err = new DOMException("not allowed", "NotAllowedError");
     expect(isBenignWebAuthnClientError(err)).toBe(true);
   });
 
@@ -25,10 +22,7 @@ describe("isBenignWebAuthnClientError", () => {
   });
 
   it("returns true when benign DOMException is nested as cause", () => {
-    const inner = new DOMException(
-      "timed out",
-      "NotAllowedError",
-    );
+    const inner = new DOMException("timed out", "NotAllowedError");
     const wrapped = new Error("wrap");
     wrapped.cause = inner;
     expect(isBenignWebAuthnClientError(wrapped)).toBe(true);

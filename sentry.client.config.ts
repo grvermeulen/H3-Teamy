@@ -1,5 +1,9 @@
 import * as Sentry from "@sentry/nextjs";
-import { shouldDropBrowserExtensionNoiseEvent } from "@/lib/sentryBrowserExtensionNoise";
+import {
+  BROWSER_EXTENSION_RUNTIME_SEND_MESSAGE_IGNORE_RE,
+  shouldDropBrowserExtensionNoiseEvent,
+} from "@/lib/sentryBrowserExtensionNoise";
+import { shouldDropBenignClientFetchNoiseEvent } from "@/lib/sentryBenignClientFetchNoise";
 
 /**
  * Parseert traces sample rate (0–1) uit env; default 0.1 voor productie.
@@ -16,8 +20,13 @@ function parseTracesSampleRate(): number {
 Sentry.init({
   dsn: "https://31454117718e26c4a62047b74d633fe0@o4509873010049024.ingest.de.sentry.io/4509873018634320",
 
+  ignoreErrors: [BROWSER_EXTENSION_RUNTIME_SEND_MESSAGE_IGNORE_RE],
+
   beforeSend(event, hint) {
     if (shouldDropBrowserExtensionNoiseEvent(event, hint)) {
+      return null;
+    }
+    if (shouldDropBenignClientFetchNoiseEvent(event, hint)) {
       return null;
     }
     return event;

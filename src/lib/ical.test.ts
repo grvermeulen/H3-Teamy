@@ -83,6 +83,24 @@ describe("fetchTeamEvents", () => {
     expect(events).toHaveLength(1);
     expect(events[0].title).toBe("Cached Match");
     expect(kvSetJson).not.toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it("reports to Sentry when fetch fails and no cache or DB fallback exists", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(global, "fetch").mockRejectedValue(
+      new TypeError("fetch failed", {
+        cause: new Error("certificate has expired"),
+      }),
+    );
+    vi.mocked(kvGetJson).mockResolvedValue([]);
+
+    const p = fetchTeamEvents();
+    await vi.advanceTimersByTimeAsync(5000);
+    const events = await p;
+    vi.useRealTimers();
+
+    expect(events).toHaveLength(0);
     expect(Sentry.captureException).toHaveBeenCalledWith(
       expect.any(Error),
       expect.objectContaining({
@@ -92,7 +110,7 @@ describe("fetchTeamEvents", () => {
     );
   });
 
-  it("reports to Sentry when HTTP response is not ok", async () => {
+  it("does not report to Sentry when HTTP response is not ok but cache has data", async () => {
     vi.spyOn(global, "fetch").mockResolvedValue({
       ok: false,
       status: 503,
@@ -110,13 +128,7 @@ describe("fetchTeamEvents", () => {
 
     expect(events).toHaveLength(1);
     expect(events[0].title).toBe("Cached Match");
-    expect(Sentry.captureException).toHaveBeenCalledWith(
-      expect.any(Error),
-      expect.objectContaining({
-        tags: { source: "sportlink_ical" },
-        fingerprint: ["sportlink-ical-fetch"],
-      }),
-    );
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it("merges new data with cache", async () => {

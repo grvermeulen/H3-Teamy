@@ -64,13 +64,45 @@ describe("fetchJsonOr", () => {
   });
 
   it("returns fallback without Sentry when Chromium rejects with Failed to fetch", async () => {
-    vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.spyOn(global, "fetch").mockRejectedValue(
+      new TypeError("Failed to fetch"),
+    );
     const fallback = { user: null as null };
     const result = await fetchJsonOr(
       "/api/me",
       undefined,
       fallback,
       "test-chromium-failed-fetch",
+    );
+    expect(result).toBe(fallback);
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
+  it("returns fallback without Sentry when Firefox rejects with NetworkError DOMException", async () => {
+    vi.spyOn(global, "fetch").mockRejectedValue(
+      new DOMException("A network error occurred.", "NetworkError"),
+    );
+    const fallback = { ok: false };
+    const result = await fetchJsonOr(
+      "/api/me",
+      undefined,
+      fallback,
+      "test-firefox-network-error",
+    );
+    expect(result).toBe(fallback);
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
+  it("returns fallback without Sentry when Firefox rejects with fetch resource TypeError", async () => {
+    vi.spyOn(global, "fetch").mockRejectedValue(
+      new TypeError("NetworkError when attempting to fetch resource."),
+    );
+    const fallback = { ok: false };
+    const result = await fetchJsonOr(
+      "/api/me",
+      undefined,
+      fallback,
+      "test-firefox-fetch-resource",
     );
     expect(result).toBe(fallback);
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
@@ -229,7 +261,9 @@ describe("fetchJsonIfOkOr", () => {
   });
 
   it("returns null without Sentry when Chromium rejects with Failed to fetch", async () => {
-    vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.spyOn(global, "fetch").mockRejectedValue(
+      new TypeError("Failed to fetch"),
+    );
     const result = await fetchJsonIfOkOr<{ x: number }>(
       "/api/x",
       { cache: "no-store" },

@@ -1,60 +1,106 @@
 import fs from "fs";
 import path from "path";
-import { pathToFileURL } from "url";
+import { isMainModule } from "./utils.ts";
 
-function walk(
-  dir: string,
-  filter: (p: string) => boolean,
-  acc: string[] = [],
-): string[] {
+/** Matches `api/.../route.ts|js` beneath the app directory; expects a POSIX path. */
+const API_ROUTE_FILE_PATTERN = /\/api\/.+\/route\.[tj]s$/;
+/** Matches `.../page.tsx|ts|jsx|js` beneath the app directory; expects a POSIX path. */
+const PAGE_FILE_PATTERN = /\/page\.[tj]sx?$/;
+
+/** URL paths of the API route handlers and pages found under `src/app`. */
+export interface RoutesInventory {
+  apiRoutes: string[];
+  pages: string[];
+}
+
+/**
+ * Normalises an OS-specific path to POSIX separators. `path.join` yields
+ * backslashes on Windows, which the forward-slash patterns above never match.
+ */
+export function toPosixPath(filePath: string): string {
+  return filePath.split(path.win32.sep).join(path.posix.sep);
+}
+
+/** Whether `filePath` is a Next.js API route handler (`api/.../route.ts`). */
+export function isApiRouteFile(filePath: string): boolean {
+  return API_ROUTE_FILE_PATTERN.test(toPosixPath(filePath));
+}
+
+/** Whether `filePath` is a Next.js page (`.../page.tsx`). */
+export function isPageFile(filePath: string): boolean {
+  return PAGE_FILE_PATTERN.test(toPosixPath(filePath));
+}
+
+/** Maps `<appDir>/api/foo/bar/route.ts` to `/api/foo/bar`. */
+export function toRoute(appDir: string, filePath: string): string {
+  return toAppUrl(appDir, filePath).replace(/\/route\.[tj]s$/, "");
+}
+
+/** Maps `<appDir>/foo/bar/page.tsx` to `/foo/bar`; the root page maps to `/`. */
+export function toPage(appDir: string, filePath: string): string {
+  return toAppUrl(appDir, filePath).replace(/\/page\.[tj]sx?$/, "") || "/";
+}
+
+/**
+ * Scans `appDir` recursively and returns the sorted URL paths of every API
+ * route handler and page it contains.
+ */
+export function collectRoutes(appDir: string): RoutesInventory {
+  const files = listFiles(appDir);
+  return {
+    apiRoutes: files
+      .filter(isApiRouteFile)
+      .map((file) => toRoute(appDir, file))
+      .sort(),
+    pages: files
+      .filter(isPageFile)
+      .map((file) => toPage(appDir, file))
+      .sort(),
+  };
+}
+
+/** Renders the inventory as the Markdown injected into `docs/specs/functional.md`. */
+export function renderRoutesMarkdown(inventory: RoutesInventory): string {
+  const lines: string[] = ["# Routes Inventory\n", "## API Routes\n"];
+  for (const route of inventory.apiRoutes) lines.push(`- ${route}`);
+  lines.push("\n## Pages\n");
+  for (const page of inventory.pages) lines.push(`- ${page}`);
+  return lines.join("\n");
+}
+
+function toAppUrl(appDir: string, filePath: string): string {
+  const relative = path.posix.relative(
+    toPosixPath(appDir),
+    toPosixPath(filePath),
+  );
+  return `/${relative}`;
+}
+
+function listFiles(dir: string, acc: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir)) {
     const full = path.join(dir, entry);
-    const stat = fs.statSync(full);
-    if (stat.isDirectory()) walk(full, filter, acc);
-    else if (filter(full)) acc.push(full);
+    if (fs.statSync(full).isDirectory()) listFiles(full, acc);
+    else acc.push(full);
   }
   return acc;
 }
 
-function toRoute(filePath: string): string {
-  // src/app/api/foo/bar/route.ts -> /api/foo/bar
-  const rel = filePath.split("src/app").pop() || "";
-  return rel.replace(/\\/g, "/").replace(/\/route\.[tj]s$/, "");
-}
-
-function toPage(filePath: string): string {
-  // src/app/foo/bar/page.tsx -> /foo/bar
-  const rel = filePath.split("src/app").pop() || "";
-  return rel.replace(/\\/g, "/").replace(/\/page\.[tj]sx?$/, "");
-}
-
-function main() {
+function main(): void {
   const root = process.cwd();
-  const apiFiles = walk(path.join(root, "src/app"), (p) =>
-    /\/api\/.+\/route\.[tj]s$/.test(p),
-  );
-  const pageFiles = walk(path.join(root, "src/app"), (p) =>
-    /\/page\.[tj]sx?$/.test(p),
-  );
-
-  const apiRoutes = apiFiles.map((f) => toRoute(f));
-  const pages = pageFiles.map((f) => toPage(f));
-
+  const appDir = path.join(root, "src/app");
+  const inventory = collectRoutes(appDir);
+  if (inventory.apiRoutes.length === 0 || inventory.pages.length === 0) {
+    throw new Error(
+      `No API routes or pages found under ${appDir}; refusing to write an empty inventory.`,
+    );
+  }
   const outDir = path.join(root, "docs/_generated");
   fs.mkdirSync(outDir, { recursive: true });
-  const lines: string[] = [];
-  lines.push("# Routes Inventory\n");
-  lines.push("## API Routes\n");
-  for (const r of apiRoutes.sort()) lines.push(`- ${r}`);
-  lines.push("\n## Pages\n");
-  for (const r of pages.sort()) lines.push(`- ${r}`);
-  fs.writeFileSync(path.join(outDir, "routes.md"), lines.join("\n"));
+  fs.writeFileSync(
+    path.join(outDir, "routes.md"),
+    renderRoutesMarkdown(inventory),
+  );
   console.log("Wrote docs/_generated/routes.md");
 }
 
-try {
-  const isDirect = import.meta.url === pathToFileURL(process.argv[1]).href;
-  if (isDirect) main();
-} catch {
-  // no-op
-}
+if (isMainModule(import.meta.url)) main();

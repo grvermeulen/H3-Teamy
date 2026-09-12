@@ -45,7 +45,10 @@ export async function DELETE(req: NextRequest): Promise<Response> {
     }
     const removed = await deletePasskeyForUser(userId, id);
     if (!removed) {
-      return NextResponse.json({ error: "Passkey niet gevonden" }, { status: 404 });
+      return NextResponse.json(
+        { error: "Passkey niet gevonden" },
+        { status: 404 },
+      );
     }
     return NextResponse.json({ ok: true });
   } catch (error: unknown) {

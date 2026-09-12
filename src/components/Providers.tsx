@@ -1,5 +1,6 @@
 "use client";
 
+import "../lib/ensureNextAuthUrl";
 import { SessionProvider } from "next-auth/react";
 import { SessionGate } from "./SessionContext";
 
