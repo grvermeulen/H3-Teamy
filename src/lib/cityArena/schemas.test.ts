@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   ArenaSettingsSchema,
@@ -5,6 +7,20 @@ import {
   isMapTile,
   parseMapIndex,
 } from "./schemas";
+import { LANDMARK_STYLES } from "./world/mapTypes";
+
+/** The map asset the browser actually downloads, read straight from `public/`. */
+function shippedMapIndex(): unknown {
+  const path = join(
+    process.cwd(),
+    "public",
+    "arena",
+    "map",
+    "v3",
+    "index.json",
+  );
+  return JSON.parse(readFileSync(path, "utf8")) as unknown;
+}
 
 const validIndex = {
   version: 1,
@@ -45,6 +61,22 @@ describe("parseMapIndex", () => {
     expect(() =>
       parseMapIndex({ ...validIndex, zones: [{ key: "mars" }] }),
     ).toThrow();
+  });
+
+  it("accepts every style the renderer knows, including the brewery", () => {
+    for (const style of LANDMARK_STYLES) {
+      const index = {
+        ...validIndex,
+        landmarks: [{ ...validIndex.landmarks[0], style }],
+      };
+      expect(parseMapIndex(index).landmarks[0].style).toBe(style);
+    }
+  });
+
+  it("accepts the map asset that ships in public/", () => {
+    // A landmark style present in the asset but missing from the schema throws here instead of
+    // in the browser, where it fails the whole world boot and reads as a connection error.
+    expect(() => parseMapIndex(shippedMapIndex())).not.toThrow();
   });
 });
 
