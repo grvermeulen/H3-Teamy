@@ -1,5 +1,5 @@
-import fs from "fs";
-import path from "path";
+import fs from "node:fs";
+import path from "node:path";
 import { isMainModule } from "./utils.ts";
 
 /** Matches `api/.../route.ts|js` beneath the app directory; expects a POSIX path. */

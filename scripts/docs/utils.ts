@@ -1,5 +1,8 @@
-import fs from "fs";
-import { pathToFileURL } from "url";
+// Keep the `node:` prefix on these builtins: the Vitest suite runs in the
+// jsdom environment, where a bare "url" resolves to a browser shim that has
+// no `pathToFileURL`.
+import fs from "node:fs";
+import { pathToFileURL } from "node:url";
 
 /**
  * Replaces the block between `<!-- marker -->` and `<!-- /marker -->` in
