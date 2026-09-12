@@ -7,6 +7,8 @@ import { createArenaState } from "./arena";
 import {
   PED_BODY_TICKS,
   PED_FLEE_TICKS,
+  PED_RECYCLE_DISTANCE_M,
+  PED_SPAWN_RADIUS_M,
   alivePeds,
   blastPeds,
   createPed,
@@ -14,6 +16,7 @@ import {
   pedLook,
   pedLookName,
   frightenPeds,
+  recyclePeds,
   spawnPeds,
   stepPed,
   stepPeds,
@@ -102,6 +105,48 @@ describe("pedestrian spawning and movement", () => {
     expect(alivePeds([peds[0], { ...peds[1], mode: "dead" }])).toEqual([
       peds[0],
     ]);
+  });
+
+  it("spawns around the players when asked, and recycles the ones they left behind", () => {
+    /** A 2 km residential street: 0–1000 m and 1000–2000 m. */
+    const street = decodeRoadGraph({
+      nodes: [0, 0, 4000, 0, 8000, 0],
+      edges: [0, 1, 0, -1, 0, 4000, 1, 2, 0, -1, 0, 4000],
+      classes: ["residential"],
+      names: [],
+    });
+    const wide: MapZone = { ...zone, center: [4000, 0], radius: 8000 };
+    const anchor: Point = [1000, 0];
+    const peds = spawnPeds(
+      wide,
+      street,
+      createRng(3),
+      [anchor],
+      null,
+      100,
+      20,
+      [anchor],
+    );
+    expect(peds).toHaveLength(20);
+    for (const ped of peds) {
+      const distance = Math.hypot(ped.x - anchor[0], ped.y - anchor[1]);
+      expect(distance).toBeGreaterThanOrEqual(30);
+      expect(distance).toBeLessThanOrEqual(PED_SPAWN_RADIUS_M + 5);
+    }
+    const near = walkerAt(100, 4);
+    const far = walkerAt(PED_RECYCLE_DISTANCE_M + 50, 4);
+    const body: PedState = { ...walkerAt(900, 4), mode: "dead" };
+    const onScreen = walkerAt(600, 4);
+    const view = { minX: 550, minY: -50, maxX: 650, maxY: 50 };
+    expect(recyclePeds([near, far, body, onScreen], [[0, 0]], view)).toEqual([
+      near,
+      body,
+      onScreen,
+    ]);
+    const all = [near, far];
+    expect(recyclePeds(all, [], null)).toBe(all);
+    const close = [near];
+    expect(recyclePeds(close, [[0, 0]], null)).toBe(close);
   });
 
   it("flees from nearby gunfire, then rejoins a rail", () => {
