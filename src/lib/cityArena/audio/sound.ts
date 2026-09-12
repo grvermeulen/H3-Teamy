@@ -129,7 +129,7 @@ function clipFor(event: ArenaEvent): ClipName | null {
   if (event.kind === "shot")
     return event.weapon === "fist" ? null : event.weapon;
   if (event.kind === "explosion") return "explosion";
-  if (event.kind === "pickup") return "pickup";
+  if (event.kind === "pickup" || event.kind === "beer") return "pickup";
   if (event.kind === "impact") return "impact";
   return null;
 }
@@ -268,7 +268,7 @@ export function createArenaSound(
       playTone(tone.frequency, tone.duration, tone.type, 0.22);
     } else if (event.kind === "explosion") {
       playTone(95, 0.35, "sawtooth", 0.35, 35);
-    } else if (event.kind === "pickup") {
+    } else if (event.kind === "pickup" || event.kind === "beer") {
       playTone(520, 0.08, "sine", 0.16);
       playTone(780, 0.12, "sine", 0.14);
     } else if (event.kind === "hit") {

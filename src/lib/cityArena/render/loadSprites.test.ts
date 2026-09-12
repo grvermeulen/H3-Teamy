@@ -82,6 +82,15 @@ const manifest = {
       pixelHeight: 90,
     },
   },
+  landmarks: {
+    brewery: {
+      file: "/arena/sprites/landmark-brewery.png",
+      lengthMetres: 16,
+      widthMetres: 4.5,
+      pixelWidth: 256,
+      pixelHeight: 72,
+    },
+  },
 };
 
 /** A `fetch` that answers the manifest request with `body`, or with `status` when not 200. */

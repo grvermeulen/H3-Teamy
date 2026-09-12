@@ -24,6 +24,17 @@ describe("overpass query builders", () => {
     expect(query.trim().endsWith("out skel qt;")).toBe(true);
   });
 
+  it("fetches pinned elements by id alongside the name matches, grouped by type", () => {
+    const query = buildLandmarkQuery(
+      ["Cunera"],
+      ["node/2783521256", "way/826591321", "node/7"],
+    );
+    expect(query).toContain(`nwr["name"~"Cunera",i](${OVERPASS_BBOX});`);
+    expect(query).toContain("node(id:2783521256,7);");
+    expect(query).toContain("way(id:826591321);");
+    expect(buildLandmarkQuery(["Cunera"])).not.toContain("(id:");
+  });
+
   it("builds the roads query with drivable classes and service roads around each centre", () => {
     const query = buildRoadsQuery([
       { lat: 51.96, lon: 5.57 },

@@ -119,6 +119,21 @@ describe("checkInvariants", () => {
     ).toEqual(["player 0 driveSteer 1.5 out of range or set on foot"]);
   });
 
+  it("keeps drunkenness between sober and fully drunk", () => {
+    expect(
+      checkInvariants({
+        ...healthy,
+        players: [{ ...localPlayer(healthy), drunk: 1.2 }],
+      }),
+    ).toEqual(["player 0 drunk 1.2 out of range"]);
+    expect(
+      checkInvariants({
+        ...healthy,
+        players: [{ ...localPlayer(healthy), drunk: -0.1 }],
+      }),
+    ).toEqual(["player 0 drunk -0.1 out of range"]);
+  });
+
   it("reports population caps, duplicate ids and invalid driver references", () => {
     const crowd = Array.from({ length: MAX_PEDS + 1 }, (_, index) =>
       pedAt(100 + index, index),

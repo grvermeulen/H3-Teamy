@@ -47,6 +47,7 @@ import {
   isMelee,
 } from "./weapons";
 import { exitVehicle } from "./boarding";
+import { drunkDamageFactor } from "./beer";
 import type { ArenaWorld } from "./arenaWorld";
 
 /** Ammo, weapon and cooldown after one trigger pull; an emptied magazine falls back to the pistol. */
@@ -83,7 +84,10 @@ type FireResult = {
   nextId: number;
 };
 
-/** Creates the pellets of one trigger pull and, for anything but a melee weapon, its muzzle flash. */
+/**
+ * Creates the pellets of one trigger pull and, for anything but a melee weapon, its muzzle
+ * flash. A drunk shooter's pellets carry less damage ({@link drunkDamageFactor}).
+ */
 function fireShots(
   state: ArenaState,
   player: ArenaPlayerState,
@@ -106,7 +110,12 @@ function fireShots(
       firstId: state.nextId,
     },
     random,
-  ).slice(0, remainingCapacity);
+  )
+    .slice(0, remainingCapacity)
+    .map((shot) => ({
+      ...shot,
+      damage: shot.damage * drunkDamageFactor(player.drunk),
+    }));
   const muzzleId = state.nextId + shots.length;
   const effects = isMelee(player.weapon)
     ? state.effects

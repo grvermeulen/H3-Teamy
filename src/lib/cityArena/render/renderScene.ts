@@ -64,6 +64,11 @@ export type Scene = {
   pushIn: number;
   /** Screen shake for this frame, in pixels; absent or zero draws the scene where it is. */
   shake?: { x: number; y: number };
+  /**
+   * How drunk this client's player is, 0..1: the world sways and breathes by it
+   * ({@link drunkSway}); absent or zero, or under reduced motion, draws it steady.
+   */
+  drunk?: number;
   /** Car sprite, absent until its art has loaded — cars fall back to the vector body. */
   /** The vehicle art: every kind's sprite, and the sedan's for the kinds without one. */
   vehicleArt?: VehicleArt;
@@ -84,6 +89,56 @@ function applyPushIn(
   if (pushIn === 1) return;
   context.translate(size.width / 2, size.height / 2);
   context.scale(pushIn, pushIn);
+  context.translate(-size.width / 2, -size.height / 2);
+}
+
+/** The most the world tilts when fully drunk, radians (about 4°). */
+export const DRUNK_SWAY_RAD = 0.07;
+/** The most the world breathes in and out when fully drunk, as a share of its size. */
+export const DRUNK_BREATHE = 0.04;
+/** Ticks per full sway; the breathing runs at a different period so the two never lock. */
+const SWAY_PERIOD_TICKS = 96;
+const BREATHE_PERIOD_TICKS = 150;
+
+/**
+ * The tilt and the scale the view gets this tick for a drunkenness of `drunk`: a slow roll
+ * and a slower breathing, both from the tick so two frames of one tick agree.
+ *
+ * @param drunk - This player's drunkenness, 0..1.
+ * @param tick - The tick being drawn.
+ * @returns The tilt in radians and the scale (1 = none).
+ */
+export function drunkSway(
+  drunk: number,
+  tick: number,
+): { tilt: number; scale: number } {
+  const level = Math.min(1, Math.max(0, drunk));
+  if (level === 0) return { tilt: 0, scale: 1 };
+  return {
+    tilt:
+      Math.sin((tick / SWAY_PERIOD_TICKS) * 2 * Math.PI) *
+      DRUNK_SWAY_RAD *
+      level,
+    scale:
+      1 +
+      Math.sin((tick / BREATHE_PERIOD_TICKS) * 2 * Math.PI) *
+        DRUNK_BREATHE *
+        level,
+  };
+}
+
+/** Tilts and scales the viewport around its centre by the sway. */
+function applyDrunkSway(
+  context: RasterContext,
+  size: Viewport,
+  drunk: number,
+  tick: number,
+): void {
+  const { tilt, scale } = drunkSway(drunk, tick);
+  if (tilt === 0 && scale === 1) return;
+  context.translate(size.width / 2, size.height / 2);
+  context.rotate(tilt);
+  context.scale(scale, scale);
   context.translate(-size.width / 2, -size.height / 2);
 }
 
@@ -134,9 +189,9 @@ function drawPlayerLook(
 }
 
 /**
- * Renders one viewport: clips to its rect, translates into its local space, applies the push-in,
- * then draws world chunks → zone ring → cars → bullets → effects → player → tree canopies →
- * crosshair and restores.
+ * Renders one viewport: clips to its rect, translates into its local space, applies the push-in
+ * and the drunk sway, then draws world chunks → zone ring → cars → bullets → effects → player →
+ * tree canopies → crosshair and restores.
  */
 export function renderScene(
   context: RasterContext,
@@ -151,6 +206,7 @@ export function renderScene(
   context.translate(rect.x, rect.y);
   const size = { width: rect.width, height: rect.height };
   applyPushIn(context, size, scene.pushIn);
+  applyDrunkSway(context, size, scene.drunk ?? 0, scene.tick);
   // The world shakes; the crosshair, drawn after the restore below, stays on the cursor.
   if (scene.shake) {
     context.save();

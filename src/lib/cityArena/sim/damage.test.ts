@@ -27,6 +27,7 @@ const walker: ArenaPlayerState = {
   heat: 0,
   heatTick: 0,
   outsideSinceTick: null,
+  drunk: 0,
 };
 
 describe("damage", () => {

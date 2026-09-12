@@ -6,6 +6,10 @@ import { ammoFor, weaponLabel } from "@/lib/cityArena/sim/weapons";
 
 /** Accessible name of the health bar (spec §16). */
 export const HEALTH_LABEL = "Gezondheid";
+/** Accessible name of the drunkenness meter, shown after a beer at the brewery. */
+export const DRUNK_LABEL = "Dronken";
+/** The drunkenness meter runs over this many steps. */
+const DRUNK_METER_MAX = 100;
 /** Shown instead of a count for unlimited weapons. */
 const UNLIMITED_AMMO = "∞";
 /** Health at or below which the bar turns red and pulses (spec §7: low-health throb below 25). */
@@ -21,6 +25,9 @@ const BAR_OK_CLASS =
 /** Bar classes when low: red and pulsing. */
 const BAR_LOW_CLASS =
   "animate-pulse [&::-moz-progress-bar]:bg-[#e11d48] [&::-webkit-progress-value]:bg-[#e11d48]";
+/** The drunkenness meter: amber, narrower than the health bar. */
+const DRUNK_BAR_CLASS =
+  "h-2 w-16 overflow-hidden rounded [&::-webkit-progress-bar]:bg-white/15 [&::-moz-progress-bar]:bg-[#f5c542] [&::-webkit-progress-value]:bg-[#f5c542]";
 
 /** Props for {@link ArenaVitals}. */
 export type ArenaVitalsProps = {
@@ -28,14 +35,20 @@ export type ArenaVitalsProps = {
   weapon: WeaponKind;
   ammo: AmmoState;
   speedMps: number | null;
+  /** Drunkenness 0..1; the meter shows while it is above 0. Defaults to sober. */
+  drunk?: number;
 };
 
-/** Health bar, weapon with ammo, and the speed while driving (`speedMps` is `null` on foot). */
+/**
+ * Health bar, weapon with ammo, the speed while driving (`speedMps` is `null` on foot), and the
+ * drunkenness meter after a beer.
+ */
 export default function ArenaVitals({
   health,
   weapon,
   ammo,
   speedMps,
+  drunk = 0,
 }: ArenaVitalsProps): React.JSX.Element {
   const rounds = ammoFor(ammo, weapon);
   const barClass = `${BAR_BASE_CLASS} ${health <= LOW_HEALTH ? BAR_LOW_CLASS : BAR_OK_CLASS}`;
@@ -61,6 +74,21 @@ export default function ArenaVitals({
           {Math.round(speedMps * KMH_PER_MPS)} km/u
         </span>
       )}
+      {drunk > 0 ? (
+        <span
+          data-testid="arena-drunk"
+          className="flex items-center gap-1"
+          title={DRUNK_LABEL}
+        >
+          <span aria-hidden="true">🍺</span>
+          <progress
+            aria-label={DRUNK_LABEL}
+            value={Math.round(drunk * DRUNK_METER_MAX)}
+            max={DRUNK_METER_MAX}
+            className={DRUNK_BAR_CLASS}
+          />
+        </span>
+      ) : null}
     </div>
   );
 }

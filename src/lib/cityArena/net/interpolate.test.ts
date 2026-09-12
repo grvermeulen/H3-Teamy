@@ -24,6 +24,7 @@ function player(id: number, x: number, facing = 0): SnapshotPlayer {
     invulnerableUntilTick: 0,
     heat: 0,
     driveSteer: 0,
+    drunk: 0,
   };
 }
 

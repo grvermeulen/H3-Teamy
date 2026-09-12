@@ -60,6 +60,7 @@ function patchPlayer(
     invulnerableUntilTick: row.invulnerableUntilTick,
     heat: row.heat,
     driveSteer: row.driveSteer,
+    drunk: row.drunk,
     // Not on the wire: bookkeeping the host owns but nobody renders.
     heatTick: local?.heatTick ?? 0,
     outsideSinceTick: local?.outsideSinceTick ?? null,
