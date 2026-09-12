@@ -305,6 +305,18 @@ export function recordStepped(
 }
 
 /**
+ * The slice of a runtime the blend reads: the local accumulator, or the room loop that owns the
+ * clock instead. Narrowed like `arenaFeel.ts`'s `FeelRuntime` so a test can hand over the two
+ * fields rather than a whole runtime and a whole loop.
+ */
+export type RenderClock = {
+  netplay:
+    | { kind: "offline" }
+    | { kind: "host" | "client"; loop: { stepFraction(): number } };
+  accumulator: number;
+};
+
+/**
  * How far past the last tick this frame draws, 0..1.
  *
  * Alone that is the runtime's own accumulator; in a room the loop owns the clock and reports its
@@ -313,9 +325,7 @@ export function recordStepped(
  * @param runtime - The runtime, or the slice of it holding the clock.
  * @returns The blend factor for {@link smoothFrame}.
  */
-export function renderAlpha(
-  runtime: Pick<Runtime, "netplay" | "accumulator">,
-): number {
+export function renderAlpha(runtime: RenderClock): number {
   const net = runtime.netplay;
   if (net.kind === "offline") return smoothAlpha(runtime.accumulator);
   return net.loop.stepFraction();

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { createCamera } from "@/lib/cityArena/render/camera";
-import type { HostLoop } from "@/lib/cityArena/net/hostLoop";
 import { SIM_STEP_S } from "@/lib/cityArena/sim/player";
 import type { ArenaState } from "@/lib/cityArena/sim/types";
 import {
@@ -40,7 +39,7 @@ describe("nextCamera", () => {
 
 /** A state carrying nothing but its tick, which is all the pairing rule looks at. */
 function atTick(tick: number): ArenaState {
-  return { tick } as ArenaState;
+  return { tick } as unknown as ArenaState;
 }
 
 describe("recordStepped", () => {
@@ -91,10 +90,10 @@ describe("renderAlpha", () => {
   });
 
   it("asks the loop in a room, whose clock owns the ticks", () => {
-    const loop = { stepFraction: () => 0.4 } as unknown as HostLoop;
+    // The accumulator is deliberately absurd: in a room the loop's clock is the only one that counts.
     expect(
       renderAlpha({
-        netplay: { kind: "host", loop, playerId: 2 },
+        netplay: { kind: "host", loop: { stepFraction: () => 0.4 } },
         accumulator: 999,
       }),
     ).toBe(0.4);
