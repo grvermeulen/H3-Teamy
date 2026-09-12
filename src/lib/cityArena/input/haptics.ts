@@ -101,7 +101,10 @@ function pulseFor(event: ArenaEvent, me: ArenaPlayerState): HapticPulse | null {
     if (event.victimId === me.id) return { kind: "death", strength: 1 };
     if (event.killerId === me.id) return { kind: "kill", strength: 1 };
   }
-  if (event.kind === "pickup" && event.playerId === me.id)
+  if (
+    (event.kind === "pickup" || event.kind === "beer") &&
+    event.playerId === me.id
+  )
     return { kind: "pickup", strength: 1 };
   if (event.kind === "wanted" && event.playerId === me.id && event.level > 0)
     return { kind: "wanted", strength: 1 };

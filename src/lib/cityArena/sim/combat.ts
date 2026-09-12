@@ -48,6 +48,7 @@ import {
   isMelee,
 } from "./weapons";
 import { exitVehicle, occupiedVehicle } from "./boarding";
+import { drunkDamageFactor } from "./beer";
 import { firesCannon, lengthOf } from "./vehicle";
 import type { ArenaWorld } from "./arenaWorld";
 
@@ -117,7 +118,10 @@ type FireResult = {
   nextId: number;
 };
 
-/** Creates the pellets of one trigger pull and, for anything but a melee weapon, its muzzle flash. */
+/**
+ * Creates the pellets of one trigger pull and, for anything but a melee weapon, its muzzle
+ * flash. A drunk shooter's pellets carry less damage ({@link drunkDamageFactor}).
+ */
 function fireShots(
   state: ArenaState,
   player: ArenaPlayerState,
@@ -141,7 +145,12 @@ function fireShots(
       firstId: state.nextId,
     },
     random,
-  ).slice(0, remainingCapacity);
+  )
+    .slice(0, remainingCapacity)
+    .map((shot) => ({
+      ...shot,
+      damage: shot.damage * drunkDamageFactor(player.drunk),
+    }));
   const muzzleId = state.nextId + shots.length;
   const effects = isMelee(trigger.weapon)
     ? state.effects

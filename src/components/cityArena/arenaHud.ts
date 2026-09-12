@@ -8,7 +8,8 @@ import {
 } from "@/lib/cityArena/world/zone";
 import { nearestRoadName } from "@/lib/cityArena/world/nearestRoad";
 import { currentWantedLevel } from "@/lib/cityArena/sim/wanted";
-import { occupiedVehicle } from "@/lib/cityArena/sim/arena";
+import { boardableVehicle, occupiedVehicle } from "@/lib/cityArena/sim/arena";
+import { canOrderBeer } from "@/lib/cityArena/sim/beer";
 import { firesCannon, forwardSpeed } from "@/lib/cityArena/sim/vehicle";
 import type {
   ArenaPlayerState,
@@ -38,6 +39,13 @@ export type ArenaHud = {
   soundEnabled: boolean;
   /** The station playing in the car, or `null` while the radio is silent. */
   radioStation: string | null;
+  /** How drunk the player is, 0..1; the vitals show a meter while it is above 0. */
+  drunk: number;
+  /**
+   * True while a press of the Instappen button orders a beer: on foot at the brewery's tap with
+   * no car in reach, because the same press boards a car when there is one.
+   */
+  canOrderBeer: boolean;
 };
 
 /** Computes the current pure HUD projection. */
@@ -65,6 +73,10 @@ export function computeHud(
     zoneWarning: state.zoneEnforced && zoneSecondsLeft !== null,
     soundEnabled,
     radioStation,
+    drunk: player.drunk,
+    canOrderBeer:
+      canOrderBeer(session.index(), player) &&
+      boardableVehicle(state, player) === null,
   };
 }
 
@@ -144,6 +156,13 @@ export function buildRadarSnapshot(
     zoneCentre: zone ? zoneCentreMetres(zone) : null,
     zoneRadiusM: zone ? zoneRadiusMetres(zone) : null,
   };
+}
+
+/** The prompt shown at the brewery's tap, by control scheme. */
+export function beerPromptText(showTouch: boolean): string {
+  return showTouch
+    ? "Brouwerij Klein Zwitserland: tik op Biertje voor een biertje"
+    : "Brouwerij Klein Zwitserland: druk op E voor een biertje";
 }
 
 /** Dutch countdown text for the out-of-zone warning. */

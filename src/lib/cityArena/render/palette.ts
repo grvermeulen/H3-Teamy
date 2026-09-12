@@ -77,6 +77,7 @@ export const LANDMARK_FILL: Record<LandmarkStyle, string> = {
   pool: "#2f7fb5",
   campus: "#3f8552",
   cafe: "#b8702c",
+  brewery: "#8a4b1d",
 };
 /** Canopy fill by tree size class: the flat stand-in for the tree art, a shade off the forest ground. */
 export const TREE_CANOPY_FILL: readonly [string, string] = [

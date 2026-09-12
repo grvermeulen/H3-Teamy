@@ -109,7 +109,10 @@ async function fetchStages(
 
   log("Stage 1/4: landmarks");
   const landmarkOsm = await fetchOverpass(
-    buildLandmarkQuery(config.map((landmark) => landmark.nameMatch)),
+    buildLandmarkQuery(
+      config.map((landmark) => landmark.nameMatch),
+      config.flatMap((landmark) => (landmark.osmId ? [landmark.osmId] : [])),
+    ),
     fetchOptions,
   );
   const match = matchLandmarks(landmarkOsm, config);

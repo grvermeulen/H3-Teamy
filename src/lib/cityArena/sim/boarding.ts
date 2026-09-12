@@ -17,6 +17,7 @@ import type {
 } from "./types";
 import { distanceToVehicle, localToWorld } from "./vehicle";
 import { nextWeapon } from "./weapons";
+import { orderBeer } from "./beer";
 import {
   BOARDING_TICKS,
   ENTER_RANGE_M,
@@ -46,8 +47,15 @@ export function occupiedVehicle(
   );
 }
 
-/** Instappen: board the nearest intact car whose body is within reach. */
-function enterVehicle(state: ArenaState, player: ArenaPlayerState): ArenaState {
+/**
+ * The car an Instappen press would board: the nearest intact one whose body is within reach and
+ * that nobody is already driving. The HUD reads it too, so what the button promises is what the
+ * press does — at the brewery it decides between boarding and a beer.
+ */
+export function boardableVehicle(
+  state: ArenaState,
+  player: Pick<ArenaPlayerState, "x" | "y">,
+): VehicleState | null {
   const at: Point = [player.x, player.y];
   let best: VehicleState | null = null;
   let bestDistance = ENTER_RANGE_M;
@@ -59,13 +67,17 @@ function enterVehicle(state: ArenaState, player: ArenaPlayerState): ArenaState {
       best = vehicle;
     }
   }
+  return best !== null && driverPlayer(state, best.id) === null ? best : null;
+}
+
+/** Instappen: board the car {@link boardableVehicle} found, if any. */
+function enterVehicle(state: ArenaState, player: ArenaPlayerState): ArenaState {
+  const best = boardableVehicle(state, player);
   if (!best) return state;
-  const boarded = best.id;
-  if (driverPlayer(state, boarded)) return state;
   return replacePlayer(
     {
       ...state,
-      traffic: state.traffic.filter((driver) => driver.vehicleId !== boarded),
+      traffic: state.traffic.filter((driver) => driver.vehicleId !== best.id),
     },
     {
       ...player,
@@ -111,7 +123,10 @@ export function exitVehicle(
   });
 }
 
-/** Handles the Instappen/Uitstappen edge for a living player. */
+/**
+ * Handles the Instappen/Uitstappen edge for a living player. On foot the car wins; with no car
+ * in reach the same press orders a beer when the player stands at the brewery's tap.
+ */
 export function applyEnterExit(
   state: ArenaState,
   player: ArenaPlayerState,
@@ -119,9 +134,9 @@ export function applyEnterExit(
   world: ArenaWorld,
 ): ArenaState {
   if (!pressed || isDead(player)) return state;
-  return player.vehicleId === null
-    ? enterVehicle(state, player)
-    : exitVehicle(state, player, world);
+  if (player.vehicleId !== null) return exitVehicle(state, player, world);
+  const boarded = enterVehicle(state, player);
+  return boarded === state ? orderBeer(state, player, world.index) : boarded;
 }
 
 /** Handles the Wapen edge. */

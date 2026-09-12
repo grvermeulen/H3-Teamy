@@ -37,6 +37,12 @@ const FURNITURE_PX_PER_METRE = 32;
 // every item ships this many pixels long, its own aspect kept: the art decides the width.
 const ITEM_PX_LONG = 128;
 
+// Landmark art is painted into the chunk rasters over its building, laid along the footprint's
+// longest edge (render/drawLandmarks.ts), so it ships at the textures' density. Like an item it
+// keeps its own aspect: the painter stretches the long side over the building and the art
+// decides how far the eaves and the terrace reach past the walls.
+const LANDMARK_PX_PER_METRE = 16;
+
 // The generator's cut-out leaves the whole car body around 55 % opaque and only its silhouette
 // fully transparent, so the alpha channel is rebuilt: at or below ALPHA_BACKGROUND_MAX is
 // background, at or above ALPHA_BODY_MIN is solid bodywork, and the narrow band between the two
@@ -166,6 +172,12 @@ const itemSources = {
   bat: { file: "item-bat.png", lengthM: 0.85 },
   health: { file: "item-health.png", lengthM: 0.4 },
 };
+// Landmark art by landmark style (world/mapTypes.ts LandmarkStyle): a building seen from
+// directly above, its long side along the image's x axis, on a transparent background. The
+// length is nominal — the painter fits it to each building — and sets the packed pixel size.
+const landmarkSources = {
+  brewery: { file: "landmark-brewery.png", lengthM: 16 },
+};
 
 /**
  * Exits the process if any sprite source file is missing from assets/arena/sprites/.
@@ -177,6 +189,7 @@ function assertSourcesExist() {
     ...Object.values(personSources).map((person) => person.file),
     ...Object.values(propSources).map((prop) => prop.file),
     ...Object.values(itemSources).map((item) => item.file),
+    ...Object.values(landmarkSources).map((landmark) => landmark.file),
   ];
   for (const file of files) {
     const full = path.join(sourceDir, file);
@@ -311,20 +324,21 @@ async function packPropSprite(source) {
 }
 
 /**
- * Packs one item: hardened, trimmed to its artwork and laid along ITEM_PX_LONG pixels with its
- * own aspect kept, so nothing is stretched and the manifest's width comes from the art.
+ * Packs one cut-out along `pixelLong` pixels with its own aspect kept — hardened and trimmed to
+ * its artwork, so nothing is stretched and the manifest's width comes from the art. Items and
+ * landmark art both pack this way.
  */
-async function packItemSprite(source) {
+async function packAlongLength(source, pixelLong) {
   const { data, info } = await sharp(path.join(sourceDir, source.file))
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
   hardenAlpha(data, info.channels);
   const bounds = alphaBounds(data, info);
-  const pixelWidth = ITEM_PX_LONG;
+  const pixelWidth = pixelLong;
   const pixelHeight = Math.max(
     1,
-    Math.round((ITEM_PX_LONG * bounds.height) / bounds.width),
+    Math.round((pixelLong * bounds.height) / bounds.width),
   );
   await sharp(data, {
     raw: { width: info.width, height: info.height, channels: info.channels },
@@ -341,6 +355,19 @@ async function packItemSprite(source) {
     pixelWidth,
     pixelHeight,
   };
+}
+
+/** Packs one item along ITEM_PX_LONG pixels. */
+function packItemSprite(source) {
+  return packAlongLength(source, ITEM_PX_LONG);
+}
+
+/** Packs one landmark's art at LANDMARK_PX_PER_METRE over its nominal length. */
+function packLandmarkSprite(source) {
+  return packAlongLength(
+    source,
+    Math.round(source.lengthM * LANDMARK_PX_PER_METRE),
+  );
 }
 
 /**
@@ -487,7 +514,18 @@ async function packSprites() {
   const items = {};
   for (const [name, source] of Object.entries(itemSources))
     items[name] = await packItemSprite(source);
-  const manifest = { version: 1, surfaces, vehicles, people, props, items };
+  const landmarks = {};
+  for (const [name, source] of Object.entries(landmarkSources))
+    landmarks[name] = await packLandmarkSprite(source);
+  const manifest = {
+    version: 1,
+    surfaces,
+    vehicles,
+    people,
+    props,
+    items,
+    landmarks,
+  };
   fs.writeFileSync(
     path.join(outputDir, "manifest.json"),
     `${JSON.stringify(manifest, null, 2)}\n`,
@@ -518,6 +556,10 @@ function reportDone(manifest) {
   for (const [name, item] of Object.entries(manifest.items))
     console.log(
       `${name}: ${item.file} ${item.pixelWidth}×${item.pixelHeight}px for ${item.lengthMetres}×${item.widthMetres} m`,
+    );
+  for (const [name, landmark] of Object.entries(manifest.landmarks))
+    console.log(
+      `${name}: ${landmark.file} ${landmark.pixelWidth}×${landmark.pixelHeight}px for ${landmark.lengthMetres}×${landmark.widthMetres} m`,
     );
   console.log(`Arena sprites written to ${outputDir}`);
 }

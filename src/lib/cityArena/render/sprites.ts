@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { VehicleKind, WeaponKind } from "../sim/types";
 import { VEHICLE_KINDS } from "../sim/vehicle";
-import type { GroundKind } from "../world/mapTypes";
+import type { GroundKind, LandmarkStyle } from "../world/mapTypes";
 import type { RasterContext } from "./canvasTypes";
 
 /** Manifest written by `scripts/generate-arena-sprites.js`, fetched once per session. */
@@ -69,6 +69,15 @@ export const ITEM_KEYS = [
 /** A key of {@link ITEM_KEYS}. */
 export type ItemKey = (typeof ITEM_KEYS)[number];
 
+/**
+ * The landmark styles with art of their own: a building seen from above, laid along its
+ * footprint's longest edge by `drawLandmarks.ts`. Every other style keeps its flat colour.
+ */
+export const LANDMARK_ART_KEYS = ["brewery"] as const satisfies LandmarkStyle[];
+
+/** A key of {@link LANDMARK_ART_KEYS}. */
+export type LandmarkArtKey = (typeof LANDMARK_ART_KEYS)[number];
+
 /** The prop key of a tree, by its size class. */
 export const TREE_PROP_KEYS: readonly [PropKey, PropKey] = [
   "treeSmall",
@@ -112,6 +121,7 @@ export const SpriteManifestSchema = z.object({
   people: z.record(z.string(), PersonEntrySchema),
   props: z.partialRecord(z.enum(PROP_KEYS), PropEntrySchema),
   items: z.partialRecord(z.enum(ITEM_KEYS), PropEntrySchema),
+  landmarks: z.partialRecord(z.enum(LANDMARK_ART_KEYS), PropEntrySchema),
 });
 
 /** Parsed sprite manifest, inferred from {@link SpriteManifestSchema} so the two cannot drift. */
@@ -165,6 +175,9 @@ export type PropSprites = Partial<Record<PropKey, PropSprite>>;
 /** Items by key — pickups on the ground, weapons in a hand; each stays absent until its file decodes. */
 export type ItemSprites = Partial<Record<ItemKey, PropSprite>>;
 
+/** Landmark art by style; a style without it, or whose file failed, keeps its flat colour. */
+export type LandmarkSprites = Partial<Record<LandmarkArtKey, PropSprite>>;
+
 /** The two roof textures: tiled for the small and low, flat for the big and tall. */
 export type RoofTextures = { tiles?: SurfaceTexture; flat?: SurfaceTexture };
 
@@ -189,6 +202,8 @@ export type ArenaSprites = {
   items?: ItemSprites;
   /** Roof textures, laid along each building's longest edge. */
   roofs?: RoofTextures;
+  /** Landmark buildings with art of their own, laid along their footprint. */
+  landmarks?: LandmarkSprites;
 };
 
 /** The slice of the sprites the vehicle painter reads. */
@@ -303,4 +318,24 @@ export function itemSpriteFor(
   key: ItemKey | null,
 ): PropSprite | undefined {
   return key === null ? undefined : items?.[key];
+}
+
+/** True when `style` is one of the styles that can carry art. */
+function isLandmarkArtKey(style: LandmarkStyle): style is LandmarkArtKey {
+  return (LANDMARK_ART_KEYS as readonly string[]).includes(style);
+}
+
+/**
+ * The art for a landmark style, or `undefined` for a style without any or whose file has not
+ * loaded.
+ *
+ * @param landmarks - The loaded landmark art.
+ * @param style - The landmark's style.
+ * @returns The sprite, or `undefined`.
+ */
+export function landmarkSpriteFor(
+  landmarks: LandmarkSprites | undefined,
+  style: LandmarkStyle,
+): PropSprite | undefined {
+  return isLandmarkArtKey(style) ? landmarks?.[style] : undefined;
 }

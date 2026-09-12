@@ -26,6 +26,7 @@ import {
 } from "./spawn";
 import { applyWanted } from "./wanted";
 import { applyZoneRule } from "./zoneRule";
+import { soberUp } from "./beer";
 import { EMPTY_INPUT } from "./types";
 import type { ArenaInputs, ArenaState, WorldInput } from "./types";
 import { applyEnterExit, applyWeaponSwitch, detectEdges } from "./boarding";
@@ -45,7 +46,7 @@ export {
   type ArenaSetup,
   type ArenaWorld,
 } from "./arenaWorld";
-export { exitPosition, occupiedVehicle } from "./boarding";
+export { boardableVehicle, exitPosition, occupiedVehicle } from "./boarding";
 export { addArenaPlayer, createArenaPlayer, removeArenaPlayer } from "./roster";
 
 /** A fresh session: the player on a spawn node of `zone` (the map origin without one), parked cars in every zone and one tank per zone across from the spawn. */
@@ -157,6 +158,7 @@ export function stepArena(
   next = advanceBullets(next, dt, world, tick);
   next = applyExplosions(next, world, tick);
   next = applyZoneRule(next, world.index, tick);
+  next = soberUp(next);
   next = applyWanted(next, tick);
   next = manageCops(next, world, tick, random);
   next = managePoliceCars(next, world, tick, random);

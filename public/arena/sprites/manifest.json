@@ -243,5 +243,14 @@
       "pixelWidth": 128,
       "pixelHeight": 104
     }
+  },
+  "landmarks": {
+    "brewery": {
+      "file": "/arena/sprites/landmark-brewery.png",
+      "lengthMetres": 16,
+      "widthMetres": 4.81,
+      "pixelWidth": 256,
+      "pixelHeight": 77
+    }
   }
 }

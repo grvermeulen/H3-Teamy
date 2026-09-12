@@ -44,6 +44,7 @@ export function createArenaPlayer(
     heatTick: tick,
     outsideSinceTick: null,
     driveSteer: 0,
+    drunk: 0,
     held: { enter: false, weaponNext: false },
   };
 }

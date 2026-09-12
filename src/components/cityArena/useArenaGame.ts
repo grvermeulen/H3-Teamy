@@ -107,6 +107,8 @@ const INITIAL_HUD: ArenaHud = {
   zoneWarning: false,
   soundEnabled: true,
   radioStation: null,
+  drunk: 0,
+  canOrderBeer: false,
 };
 /** Hook options. */
 export type UseArenaGameOptions = {

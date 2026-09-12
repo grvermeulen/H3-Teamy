@@ -7,8 +7,8 @@ export const ROAD_EDGE_STRIDE = 6;
 /** Keys of the four match zones. */
 export type ZoneKey = "rhenen" | "wageningen" | "campus" | "bennekom";
 
-/** Visual style a landmark building is drawn with. */
-export type LandmarkStyle = "church" | "pool" | "campus" | "cafe";
+/** Visual style a landmark building is drawn with; a `brewery` also serves beer (`sim/beer.ts`). */
+export type LandmarkStyle = "church" | "pool" | "campus" | "cafe" | "brewery";
 
 /** Drivable road classes kept from OpenStreetMap (`*_link` collapsed onto the base class). */
 export type RoadClass =

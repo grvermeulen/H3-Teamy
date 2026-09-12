@@ -74,6 +74,41 @@ describe("arena HUD projections", () => {
     ).toBeNull();
   });
 
+  it("carries drunkenness and says when a press at the brewery orders a beer", () => {
+    const brewery = {
+      key: "klein-zwitserland",
+      name: "Brouwerij Klein Zwitserland",
+      style: "brewery" as const,
+      center: [40, 0] as [number, number],
+      tile: { x: 0, y: 0 },
+    };
+    const withBrewery = { ...index, landmarks: [brewery] };
+    const current = {
+      ...state(),
+      players: [{ ...localPlayer(state()), x: 12, y: 0, drunk: 0.5 }],
+    };
+    const session = { index: () => withBrewery, tiles: () => [] };
+    expect(computeHud(session, current, localPlayer(current))).toMatchObject({
+      drunk: 0.5,
+      canOrderBeer: true,
+    });
+    const away = {
+      ...current,
+      players: [{ ...localPlayer(current), x: -12 }],
+    };
+    expect(computeHud(session, away, localPlayer(away)).canOrderBeer).toBe(
+      false,
+    );
+    // A car in reach wins the press, so the button must not promise a beer.
+    const beside = {
+      ...current,
+      vehicles: [createVehicle(3, "sedan", [13, 0], 0, 0)],
+    };
+    expect(computeHud(session, beside, localPlayer(beside)).canOrderBeer).toBe(
+      false,
+    );
+  });
+
   it("projects nearby pickups, police and zone geometry into the radar", () => {
     const current = {
       ...state(),

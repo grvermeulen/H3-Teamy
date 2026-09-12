@@ -40,6 +40,7 @@ import ArenaVitals from "./ArenaVitals";
 import ArenaSoundToggle from "./ArenaSoundToggle";
 import ArenaWanted from "./ArenaWanted";
 import ArenaZoneWarning from "./ArenaZoneWarning";
+import ArenaBeerPrompt from "./ArenaBeerPrompt";
 import DeathOverlay, { WASTED_WEBP } from "./DeathOverlay";
 import TouchStick from "./TouchStick";
 import {
@@ -212,6 +213,7 @@ function ArenaHudBar({
           weapon={hud.weapon}
           ammo={hud.ammo}
           speedMps={hud.speedMps}
+          drunk={hud.drunk}
         />
         <ArenaWanted wantedLevel={hud.wantedLevel} />
         {hud.radioStation ? (
@@ -293,6 +295,12 @@ function ArenaPlayfield({
         zoneWarning={game.hud.zoneWarning}
         secondsLeft={game.hud.zoneSecondsLeft}
       />
+      {playing ? (
+        <ArenaBeerPrompt
+          canOrderBeer={game.hud.canOrderBeer}
+          showTouch={showTouch}
+        />
+      ) : null}
       {playing && showTouch ? (
         <TouchStick stick={stick} onVector={game.setInputVector} />
       ) : null}
@@ -306,6 +314,7 @@ function ArenaPlayfield({
       {playing && showTouch ? (
         <ArenaTouchButtons
           inVehicle={game.hud.inVehicle}
+          canOrderBeer={game.hud.canOrderBeer}
           onButton={game.setButton}
           showFire={!twinStick}
           onRadio={game.nextStation}
@@ -341,7 +350,7 @@ type ArenaFooterProps = { showTouch: boolean; twinStick: boolean };
 /** The hint for each control scheme (spec §7). */
 function controlsHint(showTouch: boolean, twinStick: boolean): string {
   if (!showTouch)
-    return "WASD of pijltjes lopen of sturen · muis richt en schiet · E instappen · Q, wiel of 1-5 wapen · R radio · Tab scorebord · Esc menu.";
+    return "WASD of pijltjes lopen of sturen · muis richt en schiet · E instappen of biertje bestellen · Q, wiel of 1-5 wapen · R radio · Tab scorebord · Esc menu.";
   return twinStick
     ? "Sleep links op het scherm om te lopen of te sturen; sleep rechts om te richten en te schieten."
     : "Sleep links op het scherm om te lopen of te sturen; rechts: Schieten, Instappen, Wapen.";

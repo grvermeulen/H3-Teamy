@@ -167,6 +167,20 @@ describe("snapshot wire format", () => {
     expect(back.pickups.map((pickup) => pickup.kind)).toEqual(["rifle", "bat"]);
   });
 
+  it("round-trips drunkenness as a whole percentage past the ammo columns", () => {
+    const base = boot();
+    const state: ArenaState = {
+      ...base,
+      players: [{ ...base.players[0]!, drunk: 0.68 }],
+    };
+    const snapshot = encodeSnapshot(state, 0, {});
+    expect(snapshot.p[0]![18]).toBe(68);
+    expect(decodeSnapshot(snapshot).players[0]!.drunk).toBeCloseTo(0.68, 9);
+    // A row from a host that predates the column decodes sober.
+    const short = { ...snapshot, p: [snapshot.p[0]!.slice(0, 18)] };
+    expect(decodeSnapshot(short).players[0]!.drunk).toBe(0);
+  });
+
   it("round-trips the kinds added later by their appended indices", () => {
     const base = boot();
     const state: ArenaState = {

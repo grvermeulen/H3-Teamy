@@ -82,7 +82,17 @@ function entriesOf(
   const items = Object.values(manifest.items)
     .filter((entry) => entry !== undefined)
     .map((entry) => ({ file: entry.file, cap: limits.itemBytes }));
-  return [...surfaces, ...vehicles, ...people, ...props, ...items];
+  const landmarks = Object.values(manifest.landmarks)
+    .filter((entry) => entry !== undefined)
+    .map((entry) => ({ file: entry.file, cap: limits.propBytes }));
+  return [
+    ...surfaces,
+    ...vehicles,
+    ...people,
+    ...props,
+    ...items,
+    ...landmarks,
+  ];
 }
 
 /**
