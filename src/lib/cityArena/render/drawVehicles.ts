@@ -102,10 +102,14 @@ function drawVectorBody(
     zoom,
     WINDOW_OFFSET_M,
     0,
-    WINDOW_LENGTH_M,
+    vehicle.kind === "sport" ? 1 : WINDOW_LENGTH_M,
     WINDOW_WIDTH_M,
     CAR_WINDOW,
   );
+  if (vehicle.kind === "sport")
+    fillLocalRect(context, zoom, -1.5, 0, 0.22, 1.9, "#202833");
+  if (vehicle.kind === "police")
+    fillLocalRect(context, zoom, 0, 0, 0.9, 1.7, "#e8e4d8");
   const front = length / 2 - HEADLIGHT_SIZE_M / 2;
   const side = width / 2 - HEADLIGHT_SIZE_M / 2;
   for (const offset of [-side, side])

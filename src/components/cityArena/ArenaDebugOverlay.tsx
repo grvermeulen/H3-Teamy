@@ -1,6 +1,7 @@
 "use client";
 
 import type { MetricsSnapshot } from "@/lib/cityArena/debugMetrics";
+import { wireDiagnostics } from "@/lib/cityArena/net/wireValidation";
 import type { Camera } from "@/lib/cityArena/render/camera";
 import type { ArenaPlayerState } from "@/lib/cityArena/sim/types";
 
@@ -54,7 +55,10 @@ function debugLines({
   const route = routeMetres === null ? "—" : `${Math.round(routeMetres)} m`;
   return [
     `fps ${metrics.fps} · frame p95 ${metrics.frameP95Ms.toFixed(1)} ms`,
+    `frame p50 ${metrics.frameP50Ms.toFixed(1)} · p99 ${metrics.frameP99Ms.toFixed(1)} · max ${metrics.worstFrameMs.toFixed(1)} ms`,
+    `sessie ${metrics.sessionSeconds.toFixed(0)} s · ${metrics.sessionFps} fps · max ${metrics.sessionWorstFrameMs.toFixed(1)} ms · traag ${metrics.sessionLongFrames}`,
     `tekenen p95 ${metrics.drawP95Ms.toFixed(1)} ms · simulatie p95 ${metrics.simP95Ms.toFixed(1)} ms`,
+    `raster p95 ${metrics.rasterP95Ms.toFixed(1)} ms · ontbrekend ${metrics.missingChunks} · geweigerd ${JSON.stringify(wireDiagnostics())}`,
     `blokken ${chunks.chunks} (${chunkSizeMb} MB) · tegels ${tiles}`,
     `camera ${camera.x.toFixed(1)}, ${camera.y.toFixed(1)} · zoom ${camera.zoom}`,
     `speler ${player.x.toFixed(1)}, ${player.y.toFixed(1)} · ${player.speed.toFixed(1)} m/s`,

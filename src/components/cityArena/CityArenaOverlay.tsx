@@ -23,6 +23,7 @@ import { ConnectionBanner } from "./ConnectionBanner";
 import { HostToast } from "./HostToast";
 import { useArenaRoom, type ArenaRoom } from "./useArenaRoom";
 import type { ArenaEntry } from "./arenaEntry";
+import { arenaChannels } from "@/lib/cityArena/net/roomProtocol";
 import { isDebugEnabled } from "@/lib/cityArena/debugFlag";
 import {
   createStick,
@@ -37,7 +38,6 @@ import ArenaLoadingScreen, {
 } from "./ArenaLoadingScreen";
 import ArenaTouchButtons from "./ArenaTouchButtons";
 import ArenaVitals from "./ArenaVitals";
-import ArenaSoundToggle from "./ArenaSoundToggle";
 import ArenaWanted from "./ArenaWanted";
 import ArenaZoneWarning from "./ArenaZoneWarning";
 import ArenaBeerPrompt from "./ArenaBeerPrompt";
@@ -176,11 +176,7 @@ function ArenaZonePicker({
 /** Props for {@link ArenaHudBar}. */
 type ArenaHudBarProps = {
   hud: ArenaHud;
-  zones: MapZone[];
-  pickerDisabled: boolean;
   showLoadWarning: boolean;
-  onTeleport: (key: ZoneKey) => void;
-  onSoundChange: (enabled: boolean) => void;
   onMenu: () => void;
   onClose: () => void;
 };
@@ -188,26 +184,27 @@ type ArenaHudBarProps = {
 /** Top strip: zone/street, vitals, an optional load warning, the zone picker, the menu and the close button. */
 function ArenaHudBar({
   hud,
-  zones,
-  pickerDisabled,
   showLoadWarning,
-  onTeleport,
-  onSoundChange,
   onMenu,
   onClose,
 }: ArenaHudBarProps): React.JSX.Element {
   return (
     <div
       data-testid="arena-hud"
-      className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[#21262d] px-3 py-2 text-sm text-[#c9d1d9]"
+      className="flex h-16 shrink-0 items-center justify-between gap-1 border-b border-[#21262d] px-2 text-sm text-[#c9d1d9] sm:px-3"
     >
-      <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-        <span className="font-semibold">
-          {hud.zoneName ?? "Vrij rondlopen"}
-        </span>
-        {hud.street ? (
-          <span className="muted truncate">{hud.street}</span>
-        ) : null}
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2 text-[11px] leading-5">
+          <span className="truncate font-semibold">
+            {hud.zoneName ?? "Vrij rondlopen"}
+          </span>
+          {hud.street ? (
+            <span className="muted hidden truncate sm:inline">
+              {hud.street}
+            </span>
+          ) : null}
+          <ArenaWanted wantedLevel={hud.wantedLevel} />
+        </div>
         <ArenaVitals
           health={hud.health}
           weapon={hud.weapon}
@@ -215,31 +212,27 @@ function ArenaHudBar({
           speedMps={hud.speedMps}
           drunk={hud.drunk}
         />
-        <ArenaWanted wantedLevel={hud.wantedLevel} />
-        {hud.radioStation ? (
-          <span className="muted truncate text-xs">
-            {`Radio · ${hud.radioStation}`}
-          </span>
-        ) : null}
         {showLoadWarning ? (
-          <span className="text-xs text-[#f0b429]">
+          <span className="absolute left-2 top-16 z-10 rounded bg-black/80 px-2 text-xs text-[#f0b429]">
             {MAP_LOAD_FAILURE_TEXT}
           </span>
         ) : null}
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <ArenaSoundToggle enabled={hud.soundEnabled} onChange={onSoundChange} />
-        <ArenaZonePicker
-          zones={zones}
-          currentKey={hud.zoneKey ?? ""}
-          disabled={pickerDisabled}
-          onTeleport={onTeleport}
-        />
-        <button type="button" onClick={onMenu}>
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          className="min-h-11 min-w-11 rounded border border-[var(--arena-line)] px-2 text-xs"
+          type="button"
+          onClick={onMenu}
+        >
           {MENU_LABEL}
         </button>
-        <button type="button" onClick={onClose}>
-          Sluiten
+        <button
+          className="min-h-11 min-w-11 rounded text-xl"
+          aria-label="Sluiten"
+          type="button"
+          onClick={onClose}
+        >
+          ×
         </button>
       </div>
     </div>
@@ -363,7 +356,9 @@ function ArenaFooter({
 }: ArenaFooterProps): React.JSX.Element {
   return (
     <p className="muted mx-2 my-1 shrink-0 text-center text-xs">
-      <span>{controlsHint(showTouch, twinStick)}</span>{" "}
+      <span className="hidden sm:inline">
+        {controlsHint(showTouch, twinStick)}
+      </span>{" "}
       <span>{ATTRIBUTION_TEXT}</span>
     </p>
   );
@@ -371,11 +366,16 @@ function ArenaFooter({
 
 /** What the game needs from the room to run its loop. */
 function netplayFor(room: ArenaRoom): ArenaNetplayOptions {
+  const channels = room.ticket
+    ? arenaChannels(room.ticket.roomId, room.ticket.epoch)
+    : undefined;
   return {
     transport: room.transport,
-    ready: room.status === "ready",
+    ready: room.status === "ready" && room.connection === "connected",
     connected: room.connection === "connected",
     roomCode: room.roomCode,
+    stateChannel: channels?.state,
+    inputChannel: channels?.inputs,
     clientId: room.clientId,
     clockOffsetMs: room.clockOffsetMs,
     hostClientId: room.hostClientId,
@@ -441,7 +441,7 @@ export default function CityArenaOverlay({
       aria-modal="true"
       aria-label="GTA H3"
       tabIndex={-1}
-      className="arena arena-grid fixed inset-0 z-[3200] flex min-h-dvh flex-col touch-none select-none bg-[var(--arena-void)] pt-safe pb-safe-bottom-bar pl-safe pr-safe [-webkit-user-select:none] [-webkit-touch-callout:none]"
+      className="arena arena-grid fixed inset-0 z-[3200] flex h-dvh flex-col touch-none select-none bg-[var(--arena-void)] pt-safe pb-[env(safe-area-inset-bottom)] pl-safe pr-safe [-webkit-user-select:none] [-webkit-touch-callout:none]"
       onContextMenu={(event) => event.preventDefault()}
     >
       <ConnectionBanner state={room.connection} />
@@ -451,11 +451,7 @@ export default function CityArenaOverlay({
       />
       <ArenaHudBar
         hud={game.hud}
-        zones={game.zones}
-        pickerDisabled={game.phase !== "playing"}
         showLoadWarning={game.phase === "playing" && game.failed}
-        onTeleport={game.teleportToZone}
-        onSoundChange={game.setSound}
         onMenu={openMenu}
         onClose={onClose}
       />
@@ -482,7 +478,14 @@ export default function CityArenaOverlay({
           onChange={game.updateSettings}
           onLeave={leave}
           onClose={closeMenu}
-        />
+        >
+          <ArenaZonePicker
+            zones={game.zones}
+            currentKey={game.hud.zoneKey ?? ""}
+            disabled={game.phase !== "playing" || !!room.ticket}
+            onTeleport={game.teleportToZone}
+          />
+        </ArenaSettingsSheet>
       ) : null}
     </div>
   );

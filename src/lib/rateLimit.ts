@@ -22,8 +22,14 @@ export type RateLimitRule = {
 
 /** What the arena routes allow, per minute. */
 export const ARENA_LIMITS = {
-  /** One token per connection with an hour's TTL; a reconnect storm is a few a minute. */
+  /** Bounds identity work, even when the request has no authenticated account. */
+  preauth: { name: "arena-preauth", limit: 600, windowSec: 60 },
+  /** Shared ceiling limits address/identity churn across the deployment. */
+  global: { name: "arena-global", limit: 10000, windowSec: 60 },
+  /** One-minute tokens and room for reconnects or host epoch changes. */
   token: { name: "arena-token", limit: 20, windowSec: 60 },
+  /** Bounds durable room/member creation independently of heartbeat traffic. */
+  join: { name: "arena-join", limit: 20, windowSec: 60 },
   /** A potje lasts three minutes and the write is idempotent besides. */
   matches: { name: "arena-matches", limit: 6, windowSec: 60 },
   /** The launcher polls every ten seconds; room for tab-switching on top. */

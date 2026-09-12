@@ -133,6 +133,23 @@ describe("createStaticRaster", () => {
     raster.dispose();
     expect(raster.stats()).toEqual({ chunks: 0, bytes: 0 });
   });
+
+  it("rebuilds scaled chunks after a quality change and bounds traversal after resize", () => {
+    const raster = createStaticRaster(factory);
+    const coord = { zoom: 8, chunkX: 0, chunkY: 0 };
+    raster.ensureChunk(coord, [], landmarks);
+    const budget = 2 * 768 * 768 * 4;
+    raster.configure!(budget, 0.75);
+    expect(raster.stats().chunks).toBe(0);
+    expect(raster.ensureChunk(coord, [], landmarks)?.target.width).toBe(768);
+    for (let i = 1; i <= 100; i++)
+      raster.ensureChunk({ ...coord, chunkX: i }, [], landmarks);
+    expect(raster.stats().bytes).toBeLessThanOrEqual(budget);
+    expect(raster.stats().chunks).toBe(2);
+    raster.configure!(768 * 768 * 4, 0.75);
+    expect(raster.stats().chunks).toBe(1);
+    raster.dispose();
+  });
 });
 
 describe("rasterBudgetForViewport", () => {

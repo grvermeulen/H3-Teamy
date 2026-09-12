@@ -1,152 +1,138 @@
-/**
- * Recording a finished potje (spec §9.1, §2 step 4).
- *
- * **Trust model, stated plainly.** GTA H3 is host-authoritative peer play: there is no server
- * simulating the match, so the scores can only come from the host's browser. A determined person
- * hosting a real room can therefore post scores that did not happen. That is inherent to the
- * design, not something this service can close.
- *
- * What it *can* close, and does:
- *
- * - only the **acting host of a live room** may post: the best-ranked present member heard from
- *   in the room's recent snapshots, else the host the presence election every client runs names
- *   (`net/roomHost.ts`) — so an outsider cannot post for a room at all, and a host that took over
- *   mid-potje is not refused while the old host's presence entry lingers;
- * - only **players who were actually in that room** get a line, so a host cannot award or ruin
- *   stats for someone who never played;
- * - a potje is **idempotent** on `(roomCode, startedAt)`, so a retry after a dropped response
- *   records nothing twice;
- * - counts are bounded, so a bad payload cannot write absurd numbers into a leaderboard.
- */
-
-import * as Ably from "ably";
-import * as Sentry from "@sentry/nextjs";
-import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
-import { resolveRoomHost } from "../cityArena/net/roomHost";
+import { PostMatchSchema, type PostMatchBody } from "../schemas/arena";
+import { ROOM_RULES } from "../cityArena/net/roomProtocol";
+import {
+  ArenaRoomError,
+  lockArenaRoom,
+  requireArenaMember,
+} from "./arenaRoomService";
 
-/** Spec §2 step 4: a potje is only recorded when at least two people played it. */
-export const MIN_RECORDED_PLAYERS = 2;
-
-/**
- * The most kills or deaths one player can have in a 180 s potje.
- *
- * A sanity bound, not a rule of the game: it stops a malformed or hostile payload writing an
- * absurd number into a leaderboard, while sitting far above anything reachable in play.
- */
-export const MAX_MATCH_COUNT = 200;
-
-/** One player's line, as the host reports it. */
-export type MatchResultInput = {
-  userId: string;
-  kills: number;
-  deaths: number;
-  won: boolean;
+/** A completed casual match; solo practice completes without entering the leaderboard. */
+export type RecordOutcome = {
+  matchId: string | null;
+  recorded: number;
+  verification: "host-reported";
 };
 
-/** A finished potje, as the host reports it. */
-export type MatchInput = {
-  roomCode: string;
-  zone: string;
-  startedAt: Date;
-  endedAt: Date;
-  results: MatchResultInput[];
-};
-
-/** Why a potje was not recorded. */
-export type RecordFailure =
-  "not-host" | "too-few-players" | "no-eligible-players" | "already-recorded";
-
-/** What happened to a posted potje. */
-export type RecordOutcome =
-  | { ok: true; matchId: string; recorded: number }
-  | { ok: false; reason: RecordFailure };
-
-/** Clamps a reported count into the bound, so a bad payload cannot poison a leaderboard. */
-function bounded(value: number): number {
-  return Math.max(0, Math.min(MAX_MATCH_COUNT, Math.round(value)));
-}
-
-/**
- * Records a finished potje, if the person posting it is entitled to.
- *
- * @param key - The Ably API key, used to read the room's presence set and history.
- * @param posterUserId - The signed-in user posting the result.
- * @param input - The potje as the host reports it.
- * @returns What happened, including the reason when nothing was recorded.
- */
+/** Records one server-owned round with its original roster and server timestamps. */
 export async function recordMatch(
-  key: string,
   posterUserId: string,
-  input: MatchInput,
+  input: PostMatchBody,
+  now = new Date(),
 ): Promise<RecordOutcome> {
-  if (input.results.length < MIN_RECORDED_PLAYERS)
-    return { ok: false, reason: "too-few-players" };
-
-  const { host, members } = await resolveRoomHost(
-    new Ably.Rest({ key }),
-    input.roomCode,
-  );
-  // `clientId` is the user id (spec §6.2), so presence is what says who was really in the room.
-  if (host !== posterUserId) return { ok: false, reason: "not-host" };
-
-  const present = new Set(members.map((member) => member.clientId));
-  const eligible = input.results.filter((result) => present.has(result.userId));
-  if (eligible.length < MIN_RECORDED_PLAYERS)
-    return { ok: false, reason: "no-eligible-players" };
-
-  const existing = await prisma.arenaMatch.findUnique({
-    where: {
-      roomCode_startedAt: {
-        roomCode: input.roomCode,
-        startedAt: input.startedAt,
-      },
-    },
-    select: { id: true },
-  });
-  if (existing) return { ok: false, reason: "already-recorded" };
-
-  try {
-    const match = await prisma.arenaMatch.create({
-      data: {
-        roomCode: input.roomCode,
-        zone: input.zone,
-        startedAt: input.startedAt,
-        endedAt: input.endedAt,
-        hostUserId: posterUserId,
-        results: {
-          create: eligible.map((result) => ({
-            userId: result.userId,
-            kills: bounded(result.kills),
-            deaths: bounded(result.deaths),
-            won: result.won,
-          })),
+  const parsed = PostMatchSchema.parse(input);
+  return prisma.$transaction(async (tx) => {
+    const member = await requireArenaMember(tx, parsed.memberId, posterUserId);
+    const room = await lockArenaRoom(tx, member.roomId, now);
+    await requireArenaMember(tx, parsed.memberId, posterUserId);
+    if (
+      room.hostMemberId !== member.id ||
+      room.hostEpoch !== parsed.epoch ||
+      room.hostLeaseUntil <= now
+    ) {
+      throw new ArenaRoomError(
+        "not-host",
+        403,
+        "Alleen de huidige host kan de uitslag opsturen",
+      );
+    }
+    const round = await tx.arenaRound.findUnique({
+      where: { id: parsed.roundId },
+      include: { participants: true },
+    });
+    if (!round || round.roomId !== room.id)
+      throw new ArenaRoomError(
+        "unknown-match",
+        404,
+        "Dit potje is niet gestart",
+      );
+    if (round.completedAt) {
+      const existing = await tx.arenaMatch.findUnique({
+        where: { roundId: round.id },
+        include: { _count: { select: { results: true } } },
+      });
+      return {
+        matchId: existing?.id ?? null,
+        recorded: existing?._count.results ?? 0,
+        verification: "host-reported",
+      };
+    }
+    if (
+      now < round.finishesAt ||
+      now.getTime() > round.finishesAt.getTime() + ROOM_RULES.completionGraceMs
+    ) {
+      throw new ArenaRoomError(
+        "invalid-duration",
+        422,
+        "Het potje is nog niet afgelopen of de uitslag is verlopen",
+      );
+    }
+    const roster = new Map(
+      round.participants.map((entry) => [entry.memberId, entry.userId]),
+    );
+    if (
+      parsed.results.length !== roster.size ||
+      parsed.results.some((result) => !roster.has(result.memberId))
+    ) {
+      throw new ArenaRoomError(
+        "invalid-roster",
+        422,
+        "De uitslag moet alle deelnemers van dit potje bevatten",
+      );
+    }
+    const ranked = [...parsed.results].sort(
+      (a, b) => b.kills - a.kills || a.deaths - b.deaths,
+    );
+    const best = ranked[0]!;
+    if (
+      parsed.results.some(
+        (row) =>
+          row.won !==
+          (best.kills > 0 &&
+            row.kills === best.kills &&
+            row.deaths === best.deaths),
+      )
+    ) {
+      throw new ArenaRoomError(
+        "invalid-winner",
+        422,
+        "De winnaar klopt niet met de uitslag",
+      );
+    }
+    let matchId: string | null = null;
+    if (parsed.results.length >= 2) {
+      const match = await tx.arenaMatch.create({
+        data: {
+          roundId: round.id,
+          roomCode: room.code,
+          zone: room.zone,
+          startedAt: round.startedAt,
+          endedAt: round.finishesAt,
+          hostUserId: posterUserId,
+          verification: "host-reported",
+          results: {
+            create: parsed.results.map((result) => ({
+              userId: roster.get(result.memberId)!,
+              kills: result.kills,
+              deaths: result.deaths,
+              won: result.won,
+            })),
+          },
         },
-      },
-      select: { id: true },
+        select: { id: true },
+      });
+      matchId = match.id;
+    }
+    await tx.arenaRound.update({
+      where: { id: round.id },
+      data: { completedAt: now },
     });
-    return { ok: true, matchId: match.id, recorded: eligible.length };
-  } catch (error: unknown) {
-    // The findUnique above is a check-then-act; two hosts posting the same potje at once can
-    // both pass it and race on the unique index. Only *that* collision is "already recorded" —
-    // a duplicate userId inside the results would trip the same error code on a different index
-    // and must not be mistaken for it.
-    if (isMatchAlreadyRecorded(error))
-      return { ok: false, reason: "already-recorded" };
-    Sentry.captureException(error, {
-      tags: { area: "arena", kind: "match-record" },
-    });
-    throw error;
-  }
-}
-
-/** True for a unique-constraint violation on the potje itself, `(roomCode, startedAt)`. */
-function isMatchAlreadyRecorded(error: unknown): boolean {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
-  if (error.code !== "P2002") return false;
-  const target = (error.meta as { target?: unknown } | undefined)?.target;
-  const fields = Array.isArray(target) ? target.map(String) : [String(target)];
-  return fields.includes("roomCode") && fields.includes("startedAt");
+    return {
+      matchId,
+      recorded: matchId ? parsed.results.length : 0,
+      verification: "host-reported",
+    };
+  });
 }
 
 /** One line of the ranglijst. */

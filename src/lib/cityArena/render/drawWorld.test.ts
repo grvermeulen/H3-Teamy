@@ -37,7 +37,7 @@ describe("drawVisibleChunks", () => {
       drawVisibleChunks(createFakeContext(), camera, viewport, source);
     const later = createFakeContext();
     const stats = drawVisibleChunks(later, camera, viewport, source);
-    expect(stats).toEqual({ missing: 0, rasterised: false });
+    expect(stats).toMatchObject({ missing: 0, rasterised: false });
     expect(
       later.calls.filter((call) => call.startsWith("drawImage(")).length,
     ).toBe(4);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { isAnonCookieId } from "./lib/anonCookieId";
 
 import {
   NEXT_ROUTER_STATE_TREE_HEADER,
@@ -27,7 +28,7 @@ export function middleware(request: NextRequest): NextResponse {
 
   const cookieName = "anon_id";
   const existing = request.cookies.get(cookieName)?.value;
-  if (!existing) {
+  if (!isAnonCookieId(existing)) {
     const id = crypto.randomUUID();
     const isProd = process.env.NODE_ENV === "production";
     response.cookies.set(cookieName, id, {

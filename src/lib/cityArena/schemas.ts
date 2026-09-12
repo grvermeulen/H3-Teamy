@@ -164,6 +164,8 @@ export const ArenaSettingsSchema = z.object({
   twinStick: z.boolean().default(true),
   /** A forced layout; absent, the device decides. */
   forceLayout: z.enum(layouts).optional(),
+  /** Raster resolution and visual effects; automatic follows the viewport. */
+  quality: z.enum(["auto", "low", "high"]).default("auto"),
   /** "Radio": music in the car (Plan 7). */
   radio: z.boolean().default(true),
   /** The station tuned in, by id; absent or unknown, the first station plays. */
@@ -178,6 +180,7 @@ export type ArenaLayout = (typeof layouts)[number];
 
 /** Defaults used when nothing valid is stored. */
 export const DEFAULT_ARENA_SETTINGS: ArenaSettings = {
+  quality: "auto",
   lastZone: DEFAULT_ZONE,
   sound: true,
   vibrate: true,

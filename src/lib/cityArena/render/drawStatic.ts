@@ -36,6 +36,10 @@ import {
   type LandmarkSprites,
 } from "./sprites";
 import { planStreetLabels } from "./streetLabels";
+const streetPlans = new WeakMap<
+  DecodedTile,
+  ReturnType<typeof planStreetLabels>
+>();
 
 /** Display name and style of a landmark, keyed by landmark key (built from `index.landmarks`). */
 export type LandmarkInfo = { name: string; style: LandmarkStyle };
@@ -232,6 +236,12 @@ function paintBuildings(
     const style = building.landmark
       ? landmarks.get(building.landmark)?.style
       : undefined;
+    const depth = Math.min(4, Math.max(1, building.levels ?? 2)) * 0.7;
+    fillRing(
+      context,
+      building.ring.map(([x, y]): Point => [x + depth, y + depth]),
+      "rgba(8,13,18,0.5)",
+    );
     fillRing(
       context,
       building.ring,
@@ -241,6 +251,64 @@ function paintBuildings(
     context.lineWidth = BUILDING_STROKE_WIDTH_M;
     context.setLineDash([]);
     context.stroke();
+    context.save();
+    tracePath(context, building.ring, true);
+    context.clip();
+    const { minX, minY, maxX, maxY } = building.bounds;
+    const width = maxX - minX;
+    const height = maxY - minY;
+    context.fillStyle = "rgba(243,227,194,0.16)";
+    context.fillRect(minX, minY, width, 0.65);
+    context.fillRect(minX, minY, 0.65, height);
+    context.fillStyle = "rgba(12,21,29,0.2)";
+    context.fillRect(maxX - 0.8, minY, 0.8, height);
+    context.fillRect(minX, maxY - 0.8, width, 0.8);
+    if (width > 5 && height > 5) {
+      const [cx, cy] = polygonCentroid(building.ring);
+      if (style === "church") {
+        fillRing(
+          context,
+          [
+            [cx - 2, cy - 2],
+            [cx + 2, cy - 2],
+            [cx + 2, cy + 2],
+            [cx - 2, cy + 2],
+          ],
+          "#b2ab9b",
+        );
+        fillRing(
+          context,
+          [
+            [cx - 2, cy],
+            [cx, cy - 3.5],
+            [cx + 2, cy],
+            [cx, cy + 3.5],
+          ],
+          "#4b6670",
+        );
+        context.fillStyle = "#e5cf98";
+        context.fillRect(cx - 0.2, cy - 1, 0.4, 2);
+        context.fillRect(cx - 0.8, cy - 0.2, 1.6, 0.4);
+      } else if (style === "pool") {
+        context.fillStyle = "#528c99";
+        context.fillRect(minX + 2, minY + 2, width - 4, height - 4);
+        for (let lane = minY + 4; lane < maxY - 2; lane += 3) {
+          context.fillStyle = "#c8dacf";
+          context.fillRect(minX + 2, lane, width - 4, 0.2);
+        }
+      } else {
+        context.fillStyle = style === "cafe" ? "#d1b681" : "#354a55";
+        context.fillRect(cx - 1.4, cy - 1, 2.8, 2);
+        context.fillStyle = "rgba(224,221,199,0.45)";
+        context.fillRect(cx - 1.4, cy - 1, 2.8, 0.25);
+        if (style === "campus")
+          for (let panel = 0; panel < 3; panel++) {
+            context.fillStyle = "#315a70";
+            context.fillRect(minX + 2 + panel * 2, minY + 2, 1.5, 3);
+          }
+      }
+    }
+    context.restore();
     const sprite = style ? landmarkSpriteFor(art, style) : undefined;
     if (sprite) paintLandmarkArt(context, building, sprite);
   }
@@ -283,19 +351,22 @@ function paintLabels(
   zoom: number,
   landmarks: LandmarkLookup,
 ): void {
-  for (const road of tile.roads) {
-    for (const label of planStreetLabels(road, tile.rect)) {
-      if (insideRect(label.x, label.y, chunkRect))
-        paintText(
-          context,
-          label.text,
-          label.x,
-          label.y,
-          label.angle,
-          STREET_LABEL_PX,
-          zoom,
-        );
-    }
+  let labels = streetPlans.get(tile);
+  if (!labels) {
+    labels = tile.roads.flatMap((road) => planStreetLabels(road, tile.rect));
+    streetPlans.set(tile, labels);
+  }
+  for (const label of labels) {
+    if (insideRect(label.x, label.y, chunkRect))
+      paintText(
+        context,
+        label.text,
+        label.x,
+        label.y,
+        label.angle,
+        STREET_LABEL_PX,
+        zoom,
+      );
   }
   for (const building of tile.buildings) {
     const info = building.landmark

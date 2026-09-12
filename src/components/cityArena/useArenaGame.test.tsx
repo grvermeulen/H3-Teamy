@@ -753,9 +753,11 @@ describe("netplay", () => {
 
     // The host changes its mind: the next snapshot naming this client seats it again.
     const again = host.addMember("me");
-    host.advance(FRAME_STEP_MS);
-    hub.flush();
-    act(() => tick(3 * FRAME_STEP_MS));
+    for (let index = 3; index <= 13; index++) {
+      host.advance(FRAME_STEP_MS);
+      hub.flush();
+      act(() => tick(index * FRAME_STEP_MS));
+    }
     expect(result.current.peek()?.youId).toBe(again);
     expect(result.current.peek()?.seats.get("me")).toBe(again);
     host.stop();
@@ -788,13 +790,14 @@ describe("hidden tab", () => {
     });
   }
 
-  it("keeps stepping the world on an interval while hidden, and returns to frames when shown", async () => {
-    const { result } = await bootArenaWithCanvas({ debug: true });
+  it("does no simulation or canvas work while hidden and resumes without catching up", async () => {
+    const { result, fakeContext } = await bootArenaWithCanvas({ debug: true });
     const tick = getTick();
     act(() => tick(0));
     const framesRequested = vi.mocked(window.requestAnimationFrame).mock.calls
       .length;
     const tickBefore = window.__arena?.getState()?.tick ?? 0;
+    const paintedBefore = fakeContext.calls.length;
 
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
     // The interval clocks the world by performance.now(), the frame clock's own timeline.
@@ -803,7 +806,9 @@ describe("hidden tab", () => {
     act(() => {
       vi.advanceTimersByTime((1000 / HOST_TICK_HZ) * 6);
     });
-    expect(window.__arena?.getState()?.tick ?? 0).toBeGreaterThan(tickBefore);
+    act(() => tick(5000));
+    expect(window.__arena?.getState()?.tick ?? 0).toBe(tickBefore);
+    expect(fakeContext.calls.length).toBe(paintedBefore);
     expect(vi.mocked(window.requestAnimationFrame).mock.calls).toHaveLength(
       framesRequested,
     );
@@ -813,5 +818,19 @@ describe("hidden tab", () => {
       framesRequested + 1,
     );
     expect(result.current.phase).toBe("playing");
+    act(() => tick(6000));
+    expect(fakeContext.calls.length).toBeGreaterThan(paintedBefore);
+    expect(
+      (window.__arena?.getState()?.tick ?? 0) - tickBefore,
+    ).toBeLessThanOrEqual(2);
+  });
+
+  it("records a 500 ms frame stall separately from the simulation clamp", async () => {
+    const { result } = await bootArenaWithCanvas({ debug: true });
+    const tick = getTick();
+    act(() => tick(0));
+    act(() => tick(500));
+    expect(result.current.debugSnapshot?.metrics.frameP95Ms).toBe(500);
+    expect(result.current.debugSnapshot?.metrics.sessionWorstFrameMs).toBe(500);
   });
 });

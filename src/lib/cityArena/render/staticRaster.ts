@@ -85,6 +85,8 @@ export type StaticRaster = {
   ): boolean;
   invalidateRect(rect: Rect): void;
   stats(): { chunks: number; bytes: number };
+  /** Resizes the cache and its raster resolution on viewport or quality changes. */
+  configure?(budgetBytes: number, scale: number): void;
   dispose(): void;
 };
 
@@ -191,18 +193,21 @@ function rasterizeChunk(
   landmarks: LandmarkLookup,
   sprites: ArenaSprites,
   layer: ChunkLayer,
+  scale = 1,
 ): Chunk | null {
   const rect = chunkRect(coord);
   const key = chunkKey(coord);
   if (!layer.covers(rect, tiles))
     return { key, coord, rect, target: null, bytes: EMPTY_CHUNK_BYTES };
-  const sizePx = Math.round(CHUNK_METRES * coord.zoom * layer.resolution);
+  const sizePx = Math.round(
+    CHUNK_METRES * coord.zoom * layer.resolution * scale,
+  );
   const target = factory(sizePx, sizePx);
   if (!target) return null;
   layer.paint(
     target.ctx,
     rect,
-    coord.zoom * layer.resolution,
+    coord.zoom * layer.resolution * scale,
     tiles,
     landmarks,
     sprites,
@@ -225,6 +230,7 @@ function ensureCachedChunk(
   landmarks: LandmarkLookup,
   sprites: ArenaSprites,
   layer: ChunkLayer,
+  scale = 1,
 ): Chunk | null {
   const existing = store.get(chunkKey(coord));
   if (existing) return existing;
@@ -235,6 +241,7 @@ function ensureCachedChunk(
     landmarks,
     sprites,
     layer,
+    scale,
   );
   if (chunk) store.set(chunk.key, chunk);
   return chunk;
@@ -249,6 +256,7 @@ function rasterizeNextMissingChunk(
   landmarks: LandmarkLookup,
   sprites: ArenaSprites,
   layer: ChunkLayer,
+  scale = 1,
 ): boolean {
   const missing = needed.find((coord) => !store.has(chunkKey(coord)));
   if (!missing) return false;
@@ -261,6 +269,7 @@ function rasterizeNextMissingChunk(
       landmarks,
       sprites,
       layer,
+      scale,
     ) !== null
   );
 }
@@ -286,7 +295,15 @@ export function createStaticRaster(
   layer: ChunkLayer = GROUND_LAYER,
 ): StaticRaster {
   const store = createChunkStore(budgetBytes);
+  let scale = 1;
   return {
+    configure(budget, nextScale) {
+      if (nextScale !== scale) {
+        for (const key of store.keys()) store.delete(key);
+        scale = nextScale;
+      }
+      store.setMaxCost(budget);
+    },
     getChunk: (coord) => store.get(chunkKey(coord)),
     ensureChunk: (coord, tiles, landmarks) =>
       ensureCachedChunk(
@@ -297,6 +314,7 @@ export function createStaticRaster(
         landmarks,
         readSprites(),
         layer,
+        scale,
       ),
     rasterizeNext: (needed, tiles, landmarks) =>
       rasterizeNextMissingChunk(
@@ -307,6 +325,7 @@ export function createStaticRaster(
         landmarks,
         readSprites(),
         layer,
+        scale,
       ),
     invalidateRect: (rect) => invalidateChunksTouching(store, rect),
     stats: () => ({ chunks: store.size, bytes: store.cost }),

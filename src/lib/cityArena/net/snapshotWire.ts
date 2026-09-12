@@ -74,6 +74,11 @@ const MATCH_PHASES: readonly MatchPhase[] = [
 
 /** One full snapshot as it travels; single-letter keys keep the JSON small. */
 export type Snapshot = {
+  /** Wire protocol version; incompatible snapshots are rejected before decoding. */
+  n: 2;
+  /** Vehicle baseline tick and removals; absent on full keyframes. */
+  r?: number;
+  x?: number[];
   t: number;
   s: number;
   p: number[][];
@@ -89,6 +94,8 @@ export type Snapshot = {
    * else's, for the scorebord — from the host.
    */
   m?: [string, number][];
+  /** Retained seat history for players who left during a round. */
+  a?: [string, number][];
   /** The host's tally: `[playerId, kills, deaths]`. A client's predicted kills are not real. */
   y?: number[][];
   /**
@@ -163,6 +170,7 @@ export type SnapshotView = {
   lastInputSeqs: Record<number, number>;
   /** Client id to player id, as the host seated them. */
   seats: ReadonlyMap<string, number>;
+  accounts: ReadonlyMap<string, number>;
   /** The host's kills and deaths per player. */
   tally: Tally;
   /** Where the host says the potje is; `null` from a host that predates the field. */
@@ -172,6 +180,7 @@ export type SnapshotView = {
 /** What a host adds to a snapshot beyond the world itself. */
 export type SnapshotExtras = {
   seats: ReadonlyMap<string, number>;
+  accounts?: ReadonlyMap<string, number>;
   tally: Tally;
   match: MatchState;
 };
@@ -220,9 +229,12 @@ function encodeVehicles(state: ArenaState): number[][] {
 }
 
 /** The host's additions to a snapshot: who sits where, the tally, and where the potje is. */
-function encodeExtras(extras: SnapshotExtras): Pick<Snapshot, "m" | "y" | "f"> {
+function encodeExtras(
+  extras: SnapshotExtras,
+): Pick<Snapshot, "m" | "a" | "y" | "f"> {
   return {
     m: [...extras.seats.entries()],
+    ...(extras.accounts ? { a: [...extras.accounts.entries()] } : {}),
     y: [...extras.tally.values()].map((row) => [
       row.playerId,
       row.kills,
@@ -248,6 +260,7 @@ export function encodeSnapshot(
 ): Snapshot {
   return {
     ...(extras ? encodeExtras(extras) : {}),
+    n: 2,
     t: state.tick,
     s: Math.round(serverTimeMs),
     p: encodePlayers(state),
@@ -344,6 +357,7 @@ export function decodeSnapshot(snapshot: Snapshot): SnapshotView {
     tally.set(playerId, { playerId, kills, deaths });
   return {
     seats: new Map(snapshot.m ?? []),
+    accounts: new Map(snapshot.a ?? snapshot.m ?? []),
     tally,
     match: snapshot.f
       ? { phase: entryAt(MATCH_PHASES, snapshot.f[0]), since: snapshot.f[1] }

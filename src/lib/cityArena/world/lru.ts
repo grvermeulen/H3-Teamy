@@ -13,6 +13,7 @@ export type Lru<K, V> = {
   has(key: K): boolean;
   delete(key: K): boolean;
   keys(): K[];
+  setMaxCost(cost: number): void;
   readonly size: number;
   readonly cost: number;
 };
@@ -21,10 +22,11 @@ export type Lru<K, V> = {
 export function createLru<K, V>(options: LruOptions<K, V>): Lru<K, V> {
   const entries = new Map<K, V>();
   let cost = 0;
+  let maxCost = options.maxCost;
 
   const evictUntilFits = (): void => {
     for (const [key, value] of entries) {
-      if (cost <= options.maxCost) break;
+      if (cost <= maxCost) break;
       entries.delete(key);
       cost -= options.costOf(value);
       options.onEvict?.(key, value);
@@ -32,6 +34,10 @@ export function createLru<K, V>(options: LruOptions<K, V>): Lru<K, V> {
   };
 
   return {
+    setMaxCost(value) {
+      maxCost = value;
+      evictUntilFits();
+    },
     get(key) {
       const value = entries.get(key);
       if (value === undefined) return undefined;
