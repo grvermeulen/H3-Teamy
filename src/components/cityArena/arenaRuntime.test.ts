@@ -60,6 +60,18 @@ describe("recordStepped", () => {
     expect(runtime.previousState).toBe(before);
   });
 
+  it("keeps the pair when a client hands over a fresh object at the same tick", () => {
+    // `clientLoop.view()` builds a new state every call — it re-interpolates the remote players
+    // against server time and decays the reconcile offset — so the object changes identity twice a
+    // tick without the tick moving. Only the tick may advance the pair, never the object.
+    const runtime = { state: atTick(5), previousState: atTick(4) };
+    const pair = runtime.previousState;
+    recordStepped(runtime, atTick(5));
+    recordStepped(runtime, atTick(5));
+    expect(runtime.previousState).toBe(pair);
+    expect(runtime.state.tick).toBe(5);
+  });
+
   it("drops the pair when a catch-up burst ran several ticks at once", () => {
     // Blending across a burst would replay it in slow motion over one frame; better to land on
     // the new state and blend again from the next tick.
