@@ -21,6 +21,10 @@ import {
   type Snapshot,
 } from "@/lib/cityArena/net/snapshotWire";
 import type { RealtimeTransport } from "@/lib/cityArena/net/transport";
+import {
+  isSnapshot,
+  recordInvalidWireMessage,
+} from "@/lib/cityArena/net/wireValidation";
 import type { ArenaWorld } from "@/lib/cityArena/sim/arena";
 import { feelTick } from "./arenaFeel";
 import type { Runtime } from "./arenaRuntime";
@@ -35,7 +39,10 @@ export type ArenaNetplayOptions = {
   /** True while this client's own connection is up; a quiet host means nothing otherwise. */
   connected: boolean;
   roomCode: string | null;
-  /** This client's id — the user id — or empty before the connection reports it. */
+  /** Physical channels issued for the current server host epoch. */
+  stateChannel?: string;
+  inputChannel?: string;
+  /** Server-issued membership ID, or empty before the connection reports it. */
   clientId: string;
   /** Server time minus local time, so both ends keep time by the same clock. */
   clockOffsetMs: number;
@@ -63,6 +70,8 @@ export const WATCH_POLL_MS = 500;
 type LoopSetup = {
   transport: RealtimeTransport;
   roomCode: string;
+  stateChannel?: string;
+  inputChannel?: string;
   clientId: string;
   hostClientId: string;
   clockOffsetMs: number;
@@ -82,6 +91,7 @@ type Handover = {
   playerId: number;
   /** Who was driving what, as far as the old loop knew. */
   seats: ReadonlyMap<string, number>;
+  accounts: ReadonlyMap<string, number>;
   /** Where the potje was, or null when nothing has been heard yet. */
   match: MatchState | null;
   /** Kills and deaths so far, so a migration does not wipe the scorebord. */
@@ -111,6 +121,7 @@ function stopNetplay(runtime: Runtime, roomCode: string): Handover {
     roomCode,
     playerId: net.playerId,
     seats: net.kind === "offline" ? new Map() : net.loop.seats(),
+    accounts: net.kind === "offline" ? new Map() : net.loop.accounts(),
     match: net.kind === "offline" ? null : net.loop.match(),
     tally: net.kind === "offline" ? runtime.tally : net.loop.tally(),
   };
@@ -132,11 +143,11 @@ function syncSeats(
   memberIds: string[],
   keep: string,
 ): void {
-  for (const memberId of memberIds)
-    if (!loop.seats().has(memberId)) loop.addMember(memberId);
   for (const seated of [...loop.seats().keys()])
     if (seated !== keep && !memberIds.includes(seated))
       loop.removeMember(seated);
+  for (const memberId of memberIds)
+    if (!loop.seats().has(memberId)) loop.addMember(memberId);
   runtime.state = loop.state();
 }
 
@@ -157,23 +168,29 @@ function startHosting(
   const loop = createHostLoop({
     transport: setup.transport,
     roomCode: setup.roomCode,
+    stateChannel: setup.stateChannel,
+    inputChannel: setup.inputChannel,
     world: loopWorld(runtime),
     state: runtime.state,
     random: runtime.random,
     serverTimeMs: () => Date.now() + setup.clockOffsetMs,
     onTick: (state) => feelTick(runtime, state),
     tally: previous.tally,
+    accounts: previous.accounts,
   });
   for (const [memberId, seat] of previous.seats) loop.claim(memberId, seat);
   loop.claim(setup.clientId, previous.playerId);
   if (previous.match) loop.setMatch(previous.match);
   runtime.state = loop.state();
   runtime.netplay = { kind: "host", loop, playerId: previous.playerId };
-  const room = setup.transport.channel(roomChannelName(setup.roomCode));
+  const room = setup.transport.channel(
+    setup.stateChannel ?? roomChannelName(setup.roomCode),
+  );
   return room.subscribe("state", (message) => {
     // Another member publishing the world means the room re-elected while this tab was quiet.
     // Stepping down is what stops the match forking into two.
-    if (message.clientId !== setup.clientId) onUsurped();
+    if (message.clientId !== setup.clientId && isSnapshot(message.data))
+      onUsurped();
   });
 }
 
@@ -187,6 +204,8 @@ function adoptSeat(
   const loop = createClientLoop({
     transport: setup.transport,
     roomCode: setup.roomCode,
+    stateChannel: setup.stateChannel,
+    inputChannel: setup.inputChannel,
     world: loopWorld(runtime),
     playerId: seat,
     state: runtime.state,
@@ -217,13 +236,24 @@ function startJoining(
   setup: LoopSetup,
   watch: () => HostWatch,
 ): () => void {
-  const room = setup.transport.channel(roomChannelName(setup.roomCode));
+  const room = setup.transport.channel(
+    setup.stateChannel ?? roomChannelName(setup.roomCode),
+  );
   return room.subscribe("state", (message) => {
     if (message.clientId !== setup.hostClientId) return;
+    if (!isSnapshot(message.data)) {
+      recordInvalidWireMessage("snapshot");
+      return;
+    }
     watch().sawSnapshot();
-    if (runtime.netplay.kind !== "offline" || runtime.disposed) return;
+    if (
+      runtime.netplay.kind !== "offline" ||
+      runtime.disposed ||
+      message.data.r !== undefined
+    )
+      return;
     try {
-      const snapshot = message.data as Snapshot;
+      const snapshot = message.data;
       const seat = decodeSnapshot(snapshot).seats.get(setup.clientId);
       if (seat !== undefined) adoptSeat(runtime, setup, seat, snapshot);
     } catch (error: unknown) {
@@ -253,6 +283,8 @@ type NetplayInputs = {
   ready: boolean;
   connected: boolean;
   roomCode: string | null;
+  stateChannel?: string;
+  inputChannel?: string;
   clientId: string;
   clockOffsetMs: number;
   hostClientId: string | null;
@@ -268,6 +300,8 @@ function inputsFrom(options: ArenaNetplayOptions | undefined): NetplayInputs {
     ready: options?.ready ?? false,
     connected: options?.connected ?? false,
     roomCode: options?.roomCode ?? null,
+    stateChannel: options?.stateChannel,
+    inputChannel: options?.inputChannel,
     clientId: options?.clientId ?? "",
     clockOffsetMs: options?.clockOffsetMs ?? 0,
     hostClientId: options?.hostClientId ?? null,
@@ -323,6 +357,8 @@ export function useNetplay(
     ready,
     connected,
     roomCode,
+    stateChannel,
+    inputChannel,
     clientId,
     clockOffsetMs,
     hostClientId,
@@ -348,6 +384,8 @@ export function useNetplay(
     const setup: LoopSetup = {
       transport: live,
       roomCode,
+      stateChannel,
+      inputChannel,
       clientId,
       hostClientId,
       clockOffsetMs,
@@ -366,6 +404,8 @@ export function useNetplay(
     booted,
     ready,
     roomCode,
+    stateChannel,
+    inputChannel,
     clientId,
     clockOffsetMs,
     hostClientId,
@@ -385,6 +425,8 @@ export function useNetplay(
     booted,
     ready,
     roomCode,
+    stateChannel,
+    inputChannel,
     clientId,
     clockOffsetMs,
     hostClientId,
@@ -399,4 +441,15 @@ export function useNetplay(
     hostClientId,
     onHostLost,
   );
+
+  useEffect(() => {
+    if (!isHost || !ready || !connected || !onHostLost) return undefined;
+    const timer = setInterval(() => {
+      const net = runtimeRef.current?.netplay;
+      if (net?.kind !== "host" || net.loop.isPublishing()) return;
+      clearInterval(timer);
+      onHostLost(clientId);
+    }, WATCH_POLL_MS);
+    return () => clearInterval(timer);
+  }, [runtimeRef, isHost, ready, connected, onHostLost, clientId]);
 }

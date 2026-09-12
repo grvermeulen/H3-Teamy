@@ -60,6 +60,7 @@ export type Scene = {
   /** Cars the police are driving: their lights flash, and near this player the siren sounds. */
   sirenVehicleIds?: ReadonlySet<number>;
   tick: number;
+  reducedMotion?: boolean;
   aimScreen: [number, number] | null;
   pushIn: number;
   /** Screen shake for this frame, in pixels; absent or zero draws the scene where it is. */
@@ -164,7 +165,7 @@ function drawPlayerLook(
       Number(second.id === scene.localPlayerId),
   );
   for (const player of order) {
-    const look = playerLook(player, scene.tick);
+    const look = playerLook(player, scene.reducedMotion ? 0 : scene.tick);
     if (look === "hidden" || look === "blink") continue;
     const dead = look === "dead";
     const style = dead
@@ -221,13 +222,14 @@ export function renderScene(
     scene.pickups,
     scene.tick,
     scene.itemSprites,
+    scene.reducedMotion,
   );
   drawVehicles(
     context,
     camera,
     size,
     scene.vehicles,
-    scene.tick,
+    scene.reducedMotion ? 0 : scene.tick,
     localVehicleId(scene),
     scene.vehicleArt,
     scene.sirenVehicleIds,
@@ -245,6 +247,7 @@ export function renderScene(
   drawBullets(context, camera, size, scene.bullets);
   drawEffects(context, camera, size, scene.effects, scene.tick);
   drawPlayerLook(context, camera, size, scene);
+  const overheadStart = performance.now();
   const overheadRasterised = drawOverheadChunks(
     context,
     camera,
@@ -257,5 +260,6 @@ export function renderScene(
   return {
     missing: stats.missing,
     rasterised: stats.rasterised || overheadRasterised,
+    rasterMs: stats.rasterMs + performance.now() - overheadStart,
   };
 }

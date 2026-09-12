@@ -1,0 +1,40 @@
+{
+  "scope": "Isolated Vite fixture, real game components and committed assets; in-memory transport and framework adapters. Not a production or physical-device benchmark.",
+  "desktop": {
+    "viewport": { "width": 1280, "height": 720 },
+    "scenario": "Warm stationary solo host, Rhenen Teldersweg",
+    "debugWindowApproximate": {
+      "fps": 85,
+      "frameP95Ms": 11.9,
+      "drawP95Ms": 0.2,
+      "simP95Ms": 0.6,
+      "rasterMiB": 12.5,
+      "chunks": 2,
+      "tiles": 9,
+      "zoom": 10
+    },
+    "screenshot": "desktop.png"
+  },
+  "portrait": {
+    "viewport": { "width": 390, "height": 844, "dpr": 1 },
+    "scenario": "Fresh portrait launch, solo practice, Rhenen Rijnkade, debug disabled",
+    "hud": { "x": 0, "y": 0, "width": 390, "height": 134 },
+    "playfield": { "x": 0, "y": 134, "width": 390, "height": 594 },
+    "radar": { "x": 288, "y": 146, "width": 90, "height": 90 },
+    "playfieldHeightFraction": 0.7037914692,
+    "screenshot": "phone.png"
+  },
+  "landscape": {
+    "viewport": { "width": 844, "height": 390 },
+    "scenario": "Resized desktop-pointer viewport; does not emulate a coarse pointer or physical phone",
+    "screenshot": "landscape.png"
+  },
+  "limitations": [
+    "No physical phone",
+    "No production rendering/network profile",
+    "DPR 1 phone viewport",
+    "No GPU trace",
+    "Short warm debug sample only",
+    "Debug frame metrics clamp stalls to 100 ms"
+  ]
+}

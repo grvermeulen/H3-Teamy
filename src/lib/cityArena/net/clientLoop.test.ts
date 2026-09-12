@@ -19,6 +19,7 @@ import {
 import { emptyTally } from "./scoreboard";
 import { encodeSnapshot } from "./snapshotWire";
 import { decodeInput, type InputFrame } from "./wire";
+import { predictLocal } from "./predictLocal";
 
 const zone: MapZone = {
   key: "campus",
@@ -54,6 +55,84 @@ const world: ArenaWorld = { collision: createCollisionGrid(), index, graph };
 const ROOM = "ABC234";
 const STEP_MS = 1000 / CLIENT_TICK_HZ;
 const STEP_S = 1 / CLIENT_TICK_HZ;
+
+describe("local prediction authority boundary", () => {
+  it.each([false, true])(
+    "matches host movement for an isolated %s driving state",
+    (driving) => {
+      const initial = boot(42);
+      const car = {
+        ...initial.vehicles[0]!,
+        x: 600,
+        y: 100,
+        vx: 0,
+        vy: 0,
+        heading: 0,
+      };
+      const player = {
+        ...initial.players[0]!,
+        x: 600,
+        y: 100,
+        vehicleId: driving ? car.id : null,
+        boardingTicksLeft: 0,
+      };
+      const base = {
+        ...initial,
+        players: [player],
+        vehicles: driving ? [car] : [],
+        peds: [],
+        cops: [],
+        traffic: [],
+        pickups: [],
+        bullets: [],
+      };
+      let predicted = base,
+        actual = base;
+      const input = createInput({ move: [1, 0], aim: 0 });
+      for (let i = 0; i < 30; i++) {
+        predicted = predictLocal(
+          predicted,
+          new Map([[player.id, input]]),
+          STEP_S,
+          world,
+          createRng(i),
+        );
+        actual = stepArena(
+          actual,
+          new Map([[player.id, input]]),
+          STEP_S,
+          world,
+          createRng(i),
+        );
+        expect(predicted.players[0]!.x).toBeCloseTo(actual.players[0]!.x, 5);
+        expect(predicted.players[0]!.y).toBeCloseTo(actual.players[0]!.y, 5);
+      }
+    },
+  );
+  it("leaves combat and unrelated entities authoritative while supplying immediate shot feedback", () => {
+    const state = boot(42);
+    const events: ArenaState["events"] = [];
+    const loop = createClientLoop({
+      transport: createMemoryTransport(createMemoryHub(), "me"),
+      roomCode: ROOM,
+      world,
+      playerId: 0,
+      state,
+      random: createRng(9),
+      serverTimeMs: () => 0,
+      onTick: (next) => events.push(...next.events),
+    });
+    loop.setInput(createInput({ fire: true, aim: 0 }));
+    for (let i = 0; i < 30; i++) loop.advance(STEP_MS);
+    expect(events.filter((event) => event.kind === "shot")).toHaveLength(3);
+    expect(loop.state().players[0]!.ammo).toEqual(state.players[0]!.ammo);
+    expect(loop.state().players[0]!.health).toBe(state.players[0]!.health);
+    expect(loop.state().vehicles).toBe(state.vehicles);
+    expect(loop.state().peds).toBe(state.peds);
+    expect(loop.state().bullets).toBe(state.bullets);
+    loop.stop();
+  });
+});
 
 /** A booted state. */
 function boot(seed = 1): ArenaState {
@@ -100,6 +179,21 @@ function hostStep(
 }
 
 describe("clientLoop prediction", () => {
+  it("heartbeats idle input at 2 Hz and releases held motion immediately", () => {
+    const { hub, loop, sent } = clientOnHub();
+    for (let tick = 0; tick < 300; tick++) {
+      loop.advance(STEP_MS);
+      hub.flush();
+    }
+    expect(sent.length).toBe(20);
+    loop.setInput(createInput({ move: [1, 0], enter: true }));
+    loop.advance(STEP_MS);
+    hub.flush();
+    loop.releaseInput();
+    hub.flush();
+    expect(decodeInput(sent.at(-1)!).input.move).toEqual([0, 0]);
+    expect(decodeInput(sent.at(-1)!).input.enter).toBe(false);
+  });
   it("moves my player before any snapshot arrives", () => {
     const { loop } = clientOnHub();
     const before = playerById(loop.state(), 0)!.x;
@@ -108,15 +202,15 @@ describe("clientLoop prediction", () => {
     expect(playerById(loop.state(), 0)!.x).toBeGreaterThan(before);
   });
 
-  it("publishes one input frame per predicted tick, in sequence", () => {
+  it("predicts at 30 Hz while publishing active input at 15 Hz", () => {
     const { hub, loop, sent } = clientOnHub();
     loop.setInput(createInput({ move: [1, 0] }));
     for (let tick = 0; tick < 5; tick += 1) {
       loop.advance(STEP_MS);
       hub.flush();
     }
-    expect(sent).toHaveLength(5);
-    expect(sent.map((frame) => frame[0])).toEqual([1, 2, 3, 4, 5]);
+    expect(sent).toHaveLength(3);
+    expect(sent.map((frame) => frame[0])).toEqual([1, 3, 5]);
     expect(decodeInput(sent[0]!).input.move[0]).toBeCloseTo(1, 2);
   });
 
@@ -292,6 +386,7 @@ describe("clientLoop view", () => {
     loop.onSnapshot(encodeSnapshot(twoPlayers, 1000, { 0: 0 }));
     const later: ArenaState = {
       ...twoPlayers,
+      tick: twoPlayers.tick + 3,
       players: [twoPlayers.players[0]!, { ...twoPlayers.players[1]!, x: 10 }],
     };
     loop.onSnapshot(encodeSnapshot(later, 1100, { 0: 0 }));
@@ -341,7 +436,7 @@ describe("clientLoop error paths", () => {
     vi.clearAllMocks();
   });
 
-  it("reports an unreadable snapshot to Sentry and keeps running", () => {
+  it("drops unreadable snapshots without reporting hostile payloads to Sentry", () => {
     const hub = createMemoryHub();
     const transport = createMemoryTransport(hub, "me");
     const host = createMemoryTransport(hub, "host");
@@ -356,13 +451,7 @@ describe("clientLoop error paths", () => {
     });
     void host.channel(`arena:room:${ROOM}`).publish("state", "kapot");
     hub.flush();
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
-      expect.any(Error),
-      expect.objectContaining({
-        tags: { area: "arena", kind: "client-snapshot" },
-      }),
-    );
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
     // Still alive: a predicted tick advances it as before.
     loop.advance(STEP_MS);
     expect(loop.state().tick).toBe(1);

@@ -1,0 +1,484 @@
+{
+  "environment": {
+    "node": "v24.19.0",
+    "platform": "win32",
+    "cpus": "16"
+  },
+  "scope": "Node CPU microbenchmark; actual map, all tiles resident; 300 warmup + 1800 measured ticks; synthetic moving/firing input; no browser or transport timing",
+  "simulations": [
+    {
+      "zone": "rhenen",
+      "players": 1,
+      "ticks": 1800,
+      "simP50Ms": 0.3246999999992113,
+      "simP95Ms": 0.5005999999993946,
+      "simP99Ms": 0.8179999999993015,
+      "simMaxMs": 2.6841999999996915,
+      "snapshotMedianBytes": 5667,
+      "snapshotMaxBytes": 5678,
+      "entities": {
+        "vehicles": 129,
+        "peds": 26,
+        "cops": 0
+      }
+    },
+    {
+      "zone": "rhenen",
+      "players": 8,
+      "ticks": 1800,
+      "simP50Ms": 0.3765000000003056,
+      "simP95Ms": 0.5969999999997526,
+      "simP99Ms": 0.8553999999985535,
+      "simMaxMs": 2.3289999999997235,
+      "snapshotMedianBytes": 6181,
+      "snapshotMaxBytes": 6353,
+      "entities": {
+        "vehicles": 129,
+        "peds": 25,
+        "cops": 0
+      }
+    },
+    {
+      "zone": "wageningen",
+      "players": 1,
+      "ticks": 1800,
+      "simP50Ms": 0.27340000000003783,
+      "simP95Ms": 0.38409999999930733,
+      "simP99Ms": 0.636900000001333,
+      "simMaxMs": 1.4302000000006956,
+      "snapshotMedianBytes": 5582,
+      "snapshotMaxBytes": 5615,
+      "entities": {
+        "vehicles": 128,
+        "peds": 25,
+        "cops": 0
+      }
+    },
+    {
+      "zone": "wageningen",
+      "players": 8,
+      "ticks": 1800,
+      "simP50Ms": 0.36559999999917636,
+      "simP95Ms": 0.5504000000000815,
+      "simP99Ms": 1.118000000000393,
+      "simMaxMs": 11.610399999999572,
+      "snapshotMedianBytes": 6097,
+      "snapshotMaxBytes": 6238,
+      "entities": {
+        "vehicles": 128,
+        "peds": 26,
+        "cops": 0
+      }
+    },
+    {
+      "zone": "campus",
+      "players": 1,
+      "ticks": 1800,
+      "simP50Ms": 0.265399999998408,
+      "simP95Ms": 0.3676999999988766,
+      "simP99Ms": 0.6088999999992666,
+      "simMaxMs": 1.6767999999992753,
+      "snapshotMedianBytes": 5618,
+      "snapshotMaxBytes": 5624,
+      "entities": {
+        "vehicles": 129,
+        "peds": 25,
+        "cops": 0
+      }
+    },
+    {
+      "zone": "campus",
+      "players": 8,
+      "ticks": 1800,
+      "simP50Ms": 0.33430000000043947,
+      "simP95Ms": 0.4971000000005006,
+      "simP99Ms": 0.7797000000009575,
+      "simMaxMs": 1.4176000000006752,
+      "snapshotMedianBytes": 6169,
+      "snapshotMaxBytes": 6268,
+      "entities": {
+        "vehicles": 129,
+        "peds": 26,
+        "cops": 0
+      }
+    },
+    {
+      "zone": "bennekom",
+      "players": 1,
+      "ticks": 1800,
+      "simP50Ms": 0.2838000000010652,
+      "simP95Ms": 0.3980999999985215,
+      "simP99Ms": 0.6509000000005472,
+      "simMaxMs": 1.3980000000010477,
+      "snapshotMedianBytes": 5685,
+      "snapshotMaxBytes": 5718,
+      "entities": {
+        "vehicles": 130,
+        "peds": 25,
+        "cops": 0
+      }
+    },
+    {
+      "zone": "bennekom",
+      "players": 8,
+      "ticks": 1800,
+      "simP50Ms": 0.34130000000004657,
+      "simP95Ms": 0.5155000000013388,
+      "simP99Ms": 0.7233999999989464,
+      "simMaxMs": 10.073800000001938,
+      "snapshotMedianBytes": 6199,
+      "snapshotMaxBytes": 6339,
+      "entities": {
+        "vehicles": 130,
+        "peds": 25,
+        "cops": 0
+      }
+    }
+  ],
+  "malformedFrame": {
+    "publishing": false,
+    "tick": 0
+  },
+  "authority": {
+    "elected": "new-display",
+    "acting": "new-display"
+  },
+  "invalidMatchAccepted": true,
+  "assets": [
+    {
+      "file": "public/arena/audio/CREDITS.md",
+      "bytes": 6654,
+      "gzipBytes": 986
+    },
+    {
+      "file": "public/arena/audio/death.mp3",
+      "bytes": 18539,
+      "gzipBytes": 18104
+    },
+    {
+      "file": "public/arena/audio/engine.mp3",
+      "bytes": 48946,
+      "gzipBytes": 48064
+    },
+    {
+      "file": "public/arena/audio/explosion.mp3",
+      "bytes": 30451,
+      "gzipBytes": 30023
+    },
+    {
+      "file": "public/arena/audio/footstep.mp3",
+      "bytes": 6627,
+      "gzipBytes": 5946
+    },
+    {
+      "file": "public/arena/audio/impact.mp3",
+      "bytes": 10389,
+      "gzipBytes": 9830
+    },
+    {
+      "file": "public/arena/audio/pickup.mp3",
+      "bytes": 6627,
+      "gzipBytes": 6146
+    },
+    {
+      "file": "public/arena/audio/pistol.mp3",
+      "bytes": 9135,
+      "gzipBytes": 8561
+    },
+    {
+      "file": "public/arena/audio/shotgun.mp3",
+      "bytes": 15091,
+      "gzipBytes": 14508
+    },
+    {
+      "file": "public/arena/audio/siren.mp3",
+      "bytes": 48946,
+      "gzipBytes": 47667
+    },
+    {
+      "file": "public/arena/audio/skid.mp3",
+      "bytes": 24809,
+      "gzipBytes": 24253
+    },
+    {
+      "file": "public/arena/audio/uzi.mp3",
+      "bytes": 6627,
+      "gzipBytes": 6192
+    },
+    {
+      "file": "public/arena/map/README.md",
+      "bytes": 139,
+      "gzipBytes": 135
+    },
+    {
+      "file": "public/arena/map/v1/index.json",
+      "bytes": 18040,
+      "gzipBytes": 6872
+    },
+    {
+      "file": "public/arena/map/v1/roads.json",
+      "bytes": 513363,
+      "gzipBytes": 187944
+    },
+    {
+      "file": "public/arena/map/v1/tile_0_0.json",
+      "bytes": 97064,
+      "gzipBytes": 25749
+    },
+    {
+      "file": "public/arena/map/v1/tile_0_1.json",
+      "bytes": 36402,
+      "gzipBytes": 10620
+    },
+    {
+      "file": "public/arena/map/v1/tile_0_2.json",
+      "bytes": 29319,
+      "gzipBytes": 9147
+    },
+    {
+      "file": "public/arena/map/v1/tile_0_3.json",
+      "bytes": 50939,
+      "gzipBytes": 16283
+    },
+    {
+      "file": "public/arena/map/v1/tile_0_4.json",
+      "bytes": 11833,
+      "gzipBytes": 3736
+    },
+    {
+      "file": "public/arena/map/v1/tile_1_0.json",
+      "bytes": 59117,
+      "gzipBytes": 15040
+    },
+    {
+      "file": "public/arena/map/v1/tile_1_1.json",
+      "bytes": 24374,
+      "gzipBytes": 7290
+    },
+    {
+      "file": "public/arena/map/v1/tile_1_2.json",
+      "bytes": 82373,
+      "gzipBytes": 23272
+    },
+    {
+      "file": "public/arena/map/v1/tile_1_3.json",
+      "bytes": 438876,
+      "gzipBytes": 127851
+    },
+    {
+      "file": "public/arena/map/v1/tile_1_4.json",
+      "bytes": 23441,
+      "gzipBytes": 7277
+    },
+    {
+      "file": "public/arena/map/v1/tile_2_0.json",
+      "bytes": 29714,
+      "gzipBytes": 8796
+    },
+    {
+      "file": "public/arena/map/v1/tile_2_1.json",
+      "bytes": 18028,
+      "gzipBytes": 5403
+    },
+    {
+      "file": "public/arena/map/v1/tile_2_2.json",
+      "bytes": 28270,
+      "gzipBytes": 8913
+    },
+    {
+      "file": "public/arena/map/v1/tile_2_3.json",
+      "bytes": 52594,
+      "gzipBytes": 17139
+    },
+    {
+      "file": "public/arena/map/v1/tile_2_4.json",
+      "bytes": 17827,
+      "gzipBytes": 6131
+    },
+    {
+      "file": "public/arena/map/v1/tile_3_0.json",
+      "bytes": 38525,
+      "gzipBytes": 11430
+    },
+    {
+      "file": "public/arena/map/v1/tile_3_1.json",
+      "bytes": 32359,
+      "gzipBytes": 9822
+    },
+    {
+      "file": "public/arena/map/v1/tile_3_2.json",
+      "bytes": 37025,
+      "gzipBytes": 10936
+    },
+    {
+      "file": "public/arena/map/v1/tile_3_3.json",
+      "bytes": 23606,
+      "gzipBytes": 7546
+    },
+    {
+      "file": "public/arena/map/v1/tile_3_4.json",
+      "bytes": 17009,
+      "gzipBytes": 6194
+    },
+    {
+      "file": "public/arena/map/v1/tile_4_0.json",
+      "bytes": 243890,
+      "gzipBytes": 67013
+    },
+    {
+      "file": "public/arena/map/v1/tile_4_1.json",
+      "bytes": 298604,
+      "gzipBytes": 87137
+    },
+    {
+      "file": "public/arena/map/v1/tile_4_2.json",
+      "bytes": 681658,
+      "gzipBytes": 204543
+    },
+    {
+      "file": "public/arena/map/v1/tile_4_3.json",
+      "bytes": 155652,
+      "gzipBytes": 47857
+    },
+    {
+      "file": "public/arena/map/v1/tile_4_4.json",
+      "bytes": 10431,
+      "gzipBytes": 3676
+    },
+    {
+      "file": "public/arena/map/v1/tile_5_0.json",
+      "bytes": 185486,
+      "gzipBytes": 53450
+    },
+    {
+      "file": "public/arena/map/v1/tile_5_1.json",
+      "bytes": 289048,
+      "gzipBytes": 89623
+    },
+    {
+      "file": "public/arena/map/v1/tile_5_2.json",
+      "bytes": 106327,
+      "gzipBytes": 31854
+    },
+    {
+      "file": "public/arena/map/v1/tile_5_3.json",
+      "bytes": 39794,
+      "gzipBytes": 13155
+    },
+    {
+      "file": "public/arena/map/v1/tile_5_4.json",
+      "bytes": 5622,
+      "gzipBytes": 1851
+    },
+    {
+      "file": "public/arena/map/v1/tile_6_0.json",
+      "bytes": 29176,
+      "gzipBytes": 9239
+    },
+    {
+      "file": "public/arena/map/v1/tile_6_1.json",
+      "bytes": 21639,
+      "gzipBytes": 6928
+    },
+    {
+      "file": "public/arena/map/v1/tile_6_2.json",
+      "bytes": 26035,
+      "gzipBytes": 8497
+    },
+    {
+      "file": "public/arena/map/v1/tile_6_3.json",
+      "bytes": 17795,
+      "gzipBytes": 5885
+    },
+    {
+      "file": "public/arena/map/v1/tile_6_4.json",
+      "bytes": 5172,
+      "gzipBytes": 1665
+    },
+    {
+      "file": "public/arena/radio/CREDITS.md",
+      "bytes": 3222,
+      "gzipBytes": 808
+    },
+    {
+      "file": "public/arena/radio/tracks/beuk-1-d110f534.mp3",
+      "bytes": 1440437,
+      "gzipBytes": 1430094
+    },
+    {
+      "file": "public/arena/radio/tracks/cunera-1-decbc818.mp3",
+      "bytes": 1440437,
+      "gzipBytes": 1431326
+    },
+    {
+      "file": "public/arena/radio/tracks/grebbe-1-864f654e.mp3",
+      "bytes": 1440437,
+      "gzipBytes": 1432228
+    },
+    {
+      "file": "public/arena/radio/tracks/kade-1-a3e6f884.mp3",
+      "bytes": 1440437,
+      "gzipBytes": 1430861
+    },
+    {
+      "file": "public/arena/radio/tracks/polder-1-53f71faf.mp3",
+      "bytes": 1440437,
+      "gzipBytes": 1423358
+    },
+    {
+      "file": "public/arena/radio/tracks/rijn-1-1ae330ee.mp3",
+      "bytes": 1440437,
+      "gzipBytes": 1430747
+    },
+    {
+      "file": "public/arena/sprites/car-sedan.png",
+      "bytes": 12917,
+      "gzipBytes": 12940
+    },
+    {
+      "file": "public/arena/sprites/ground-field.png",
+      "bytes": 32669,
+      "gzipBytes": 32697
+    },
+    {
+      "file": "public/arena/sprites/ground-forest.png",
+      "bytes": 30853,
+      "gzipBytes": 30881
+    },
+    {
+      "file": "public/arena/sprites/ground-grass.png",
+      "bytes": 31202,
+      "gzipBytes": 31230
+    },
+    {
+      "file": "public/arena/sprites/ground-urban.png",
+      "bytes": 18954,
+      "gzipBytes": 18982
+    },
+    {
+      "file": "public/arena/sprites/manifest.json",
+      "bytes": 1275,
+      "gzipBytes": 327
+    },
+    {
+      "file": "public/arena/sprites/pavement-slabs.png",
+      "bytes": 23122,
+      "gzipBytes": 23150
+    },
+    {
+      "file": "public/arena/sprites/person-player.png",
+      "bytes": 27362,
+      "gzipBytes": 27390
+    },
+    {
+      "file": "public/arena/sprites/road-tarmac.png",
+      "bytes": 20774,
+      "gzipBytes": 20802
+    },
+    {
+      "file": "public/arena/sprites/water-river.png",
+      "bytes": 24826,
+      "gzipBytes": 24854
+    }
+  ]
+}

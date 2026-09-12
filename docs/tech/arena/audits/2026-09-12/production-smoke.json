@@ -1,0 +1,30 @@
+{
+  "build": "Next.js production, Node 22",
+  "verified": [
+    "0.2.2 Dutch release tour",
+    "authenticated room and Ably connection",
+    "collapse focus",
+    "reopen focus",
+    "Escape opens and closes menu",
+    "quality and control options",
+    "server-issued practice starts and reaches playing"
+  ],
+  "portrait": {
+    "canvas": {
+      "bottom": 820,
+      "height": 756,
+      "left": 0,
+      "right": 375,
+      "top": 64,
+      "width": 375,
+      "x": 0,
+      "y": 64
+    },
+    "coarse": false,
+    "viewport": {
+      "height": 844,
+      "width": 390
+    }
+  },
+  "limitations": "No physical coarse-pointer hardware or true OS background test. A displayed countdown 4 under clock offset was subsequently clamped and regression-tested."
+}

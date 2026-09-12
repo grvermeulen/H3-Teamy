@@ -263,6 +263,48 @@ describe("hostLoop failure handling", () => {
     vi.clearAllMocks();
   });
 
+  it("keeps healthy peers running through malformed frames from a seated peer", async () => {
+    const { hub, loop, published } = hostOnHub();
+    loop.addMember("hostile");
+    const healthyId = loop.addMember("healthy")!;
+    const hostile = createMemoryTransport(hub, "hostile").channel(
+      `arena:room:${ROOM}:inputs`,
+    );
+    const healthy = createMemoryTransport(hub, "healthy").channel(
+      `arena:room:${ROOM}:inputs`,
+    );
+    const before = loop
+      .state()
+      .players.find((player) => player.id === healthyId)!.x;
+    const malformed: unknown[] = [
+      null,
+      { 0: 1 },
+      "oops",
+      [],
+      [1],
+      [1, NaN, 0, -1, 0],
+      [2, 0, 0, -1, 256],
+      [3, Infinity, 0, -1, 0],
+    ];
+    for (let tick = 0; tick < 30; tick += 1) {
+      await hostile.publish("input", malformed[tick % malformed.length]);
+      await healthy.publish(
+        "input",
+        encodeInput(tick + 1, createInput({ move: [1, 0] })),
+      );
+      expect(() => hub.flush()).not.toThrow();
+      loop.advance(1000 / HOST_TICK_HZ);
+    }
+    hub.flush();
+    expect(loop.state().tick).toBe(30);
+    expect(loop.isPublishing()).toBe(true);
+    expect(
+      loop.state().players.find((player) => player.id === healthyId)!.x,
+    ).toBeGreaterThan(before);
+    expect(published.length).toBe(10);
+    expect(captureException).not.toHaveBeenCalled();
+  });
+
   it("reports a failing tick to Sentry and skips it rather than throwing", () => {
     const { hub, loop } = hostOnHub(1, flakyStep(1));
     expect(() => {

@@ -1,0 +1,104 @@
+▲ Next.js 16.3.4 (Turbopack)
+- Environments: .env.production.local, .env.local, .env
+[@sentry/nextjs] Importing `withSentryConfig` from `@sentry/nextjs` is deprecated and will stop working in v11. Import it from `@sentry/nextjs/config` instead:
+  import { withSentryConfig } from '@sentry/nextjs/config';
+✓ Running next.config.js took 1621ms
+- Experiments (use with caution):
+  · clientTraceMetadata
+
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.
+
+  To migrate automatically, run:
+  npx @next/codemod@canary middleware-to-proxy .
+
+  Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+  Creating an optimized production build ...
+[@sentry/nextjs] Importing `withSentryConfig` from `@sentry/nextjs` is deprecated and will stop working in v11. Import it from `@sentry/nextjs/config` instead:
+  import { withSentryConfig } from '@sentry/nextjs/config';
+✓ Compiled successfully in 4.8s
+  Running next.config.js provided runAfterProductionCompile ...
+✓ Completed runAfterProductionCompile in 838ms
+  Running TypeScript ...
+  Finished TypeScript in 15.8s ...
+  Collecting page data using 15 workers ...
+  Generating static pages using 15 workers (0/57) ...
+  Generating static pages using 15 workers (14/57)
+  Generating static pages using 15 workers (28/57)
+  Generating static pages using 15 workers (42/57)
+✓ Generating static pages using 15 workers (57/57) in 2.1s
+  Finalizing page optimization ...
+
+Route (app)
+┌ ƒ /
+├ ○ /_not-found
+├ ○ /admin
+├ ○ /admin/feedback
+├ ƒ /api/admin/features
+├ ƒ /api/admin/feedback
+├ ƒ /api/admin/feedback/[id]
+├ ƒ /api/admin/status
+├ ƒ /api/admin/users
+├ ƒ /api/arena/leaderboard
+├ ƒ /api/arena/matches
+├ ƒ /api/arena/realtime-token
+├ ƒ /api/arena/rooms
+├ ƒ /api/arena/session
+├ ƒ /api/auth/[...nextauth]
+├ ƒ /api/auth/link
+├ ƒ /api/auth/passkey/login-options
+├ ƒ /api/auth/passkey/login-verify
+├ ƒ /api/auth/passkey/register-options
+├ ƒ /api/auth/passkey/register-verify
+├ ƒ /api/auth/passkeys
+├ ƒ /api/auth/password/reset-confirm
+├ ƒ /api/auth/password/reset-request
+├ ƒ /api/auth/register
+├ ƒ /api/cron/idea-weekly
+├ ƒ /api/debug/attendance
+├ ƒ /api/debug/cleanup/orphans
+├ ƒ /api/debug/migrate/event-ids
+├ ƒ /api/debug/persistence
+├ ƒ /api/events
+├ ƒ /api/feedback
+├ ƒ /api/identity/adopt
+├ ƒ /api/identity/status
+├ ƒ /api/link/complete
+├ ƒ /api/link/start
+├ ƒ /api/me
+├ ƒ /api/profile
+├ ƒ /api/report
+├ ƒ /api/report/extract
+├ ƒ /api/report/generate
+├ ƒ /api/report/mvp
+├ ƒ /api/report/mvp/close
+├ ƒ /api/report/mvp/reopen
+├ ƒ /api/rsvp
+├ ƒ /api/rsvp/list
+├ ƒ /api/test-image
+├ ƒ /api/trainer/status
+├ ƒ /api/training/attendance
+├ ƒ /api/training/nudge
+├ ƒ /api/training/overview
+├ ƒ /api/training/sessions
+├ ƒ /api/users
+├ ƒ /api/whats-new
+├ ƒ /api/whats-new/ack
+├ ○ /attendance
+├ ○ /docs
+├ ○ /icon.png
+├ ƒ /login
+├ ○ /manifest.webmanifest
+├ ○ /privacy
+├ ○ /profile
+├ ƒ /report/[eventId]
+├ ○ /reset-request
+├ ƒ /reset/[token]
+├ ○ /terms
+├ ○ /trainer/attendance
+└ ƒ /trainer/attendance/[date]
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand

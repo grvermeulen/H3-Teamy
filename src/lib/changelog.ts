@@ -24,6 +24,19 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.2.3": {
+    title: "Wat is er nieuw in 0.2.3",
+    steps: [
+      {
+        title: "GTA H3: samen verder spelen",
+        body: "Potjes zijn gekoppeld aan je ingelogde account. Valt de host weg, dan kan een andere speler het potje overnemen. Uitslagen worden eenmaal opgeslagen; bij een fout kun je opnieuw proberen.",
+      },
+      {
+        title: "Meer stad op je scherm",
+        body: "Een compacter overzicht, duidelijkere voertuigen en gebouwen, en instelbare beeldkwaliteit. Klap de lobby in met ‘Stad verkennen’ en loop alvast rond.",
+      },
+    ],
+  },
   "0.2.2": {
     title: "Wat is er nieuw in 0.2.2",
     steps: [

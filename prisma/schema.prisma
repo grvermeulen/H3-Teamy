@@ -241,10 +241,83 @@ model ArenaMatch {
    * Who hosted, kept for support questions; null once that account is gone.
    */
   hostUserId String?
+  /** The server-issued lifecycle ID; historical results predate this field. */
+  roundId    String?            @unique
+  verification String           @default("host-reported")
   results    ArenaMatchResult[]
 
   @@unique([roomCode, startedAt])
   @@index([createdAt])
+}
+
+/** Durable authority for one room; public codes never serve as credentials. */
+model ArenaRoom {
+  id             String            @id @default(uuid())
+  code           String            @unique
+  zone           String
+  createdAt      DateTime          @default(now())
+  expiresAt      DateTime
+  hostMemberId   String?
+  hostEpoch      Int               @default(1)
+  hostLeaseUntil DateTime
+  members        ArenaRoomMember[]
+  rounds         ArenaRound[]
+  hostChanges    ArenaHostChange[]
+
+  @@index([expiresAt])
+}
+
+/** A session-approved seat. Disconnected members remain as participant history. */
+model ArenaRoomMember {
+  id           String    @id @default(uuid())
+  roomId       String
+  userId       String
+  joinNonce    String    @unique
+  displayName  String
+  joinedAt     DateTime  @default(now())
+  seenAt       DateTime
+  leftAt       DateTime?
+  visible      Boolean   @default(true)
+  room         ArenaRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, userId])
+  @@index([roomId, seenAt])
+}
+
+/** Server times and a retained roster establish exactly one casual match lifecycle. */
+model ArenaRound {
+  id           String                  @id @default(uuid())
+  roomId       String
+  startedAt    DateTime
+  finishesAt   DateTime
+  completedAt  DateTime?
+  room         ArenaRoom               @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  participants ArenaRoundParticipant[]
+
+  @@index([roomId, completedAt])
+}
+
+/** A player eligible for a result even after leaving the live room. */
+model ArenaRoundParticipant {
+  roundId  String
+  memberId String
+  userId   String
+  round    ArenaRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@id([roundId, memberId])
+  @@unique([roundId, userId])
+}
+
+/** Every host grant is recorded with its channel epoch for migration diagnostics. */
+model ArenaHostChange {
+  id        String    @id @default(uuid())
+  roomId    String
+  memberId  String?
+  epoch     Int
+  createdAt DateTime  @default(now())
+  room      ArenaRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, epoch])
 }
 
 /**

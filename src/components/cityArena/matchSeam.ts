@@ -69,7 +69,7 @@ export function useMatchSeam(runtimeRef: RefObject<Runtime | null>): MatchSeam {
       tally: runtime.tally,
       players: runtime.state.players,
       youId: myPlayerId(runtime),
-      seats: net.kind === "offline" ? new Map() : net.loop.seats(),
+      seats: net.kind === "offline" ? new Map() : net.loop.accounts(),
       match: net.kind === "client" ? net.loop.match() : null,
     };
   }, [runtimeRef]);

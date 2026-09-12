@@ -45,8 +45,8 @@ describe("drawEntities", () => {
     expect(
       context.calls.find((call) => call.startsWith("drawImage(")),
     ).toContain(",-9.6,-9.6,19.2,19.2");
-    // The sprite shows which way he is facing, so the vector tick is not drawn as well.
-    expect(context.calls).not.toContain("lineTo(126,50)");
+    // The direction marker remains legible over small character art.
+    expect(context.calls).toContain("lineTo(126,50)");
   });
 
   it("walks through the strip while moving and rests on the first frame when still", () => {

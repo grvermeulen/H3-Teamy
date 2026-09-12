@@ -50,3 +50,13 @@
 - **Common commands**: `npm run lint`, `npx tsc --noEmit`, `npx vitest run`, `npm run build` — Vitest counts drift over time; expect on the order of **~458** passing tests and **~18s** for a full run unless CI config changes.
 - **`postinstall`** runs `prisma generate`; it needs a valid `prisma.config.ts` but not a live database (generate uses the schema only).
 - **Docker on Cloud Agent VMs**: needs `fuse-overlayfs`, `iptables-legacy`, and daemon `"storage-driver": "fuse-overlayfs"`; the repo update script covers Node/npm only — Postgres and Docker must be started per session when needed.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

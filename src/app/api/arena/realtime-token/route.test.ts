@@ -1,173 +1,114 @@
 import { NextRequest } from "next/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const getActiveUser = vi.fn();
-const createTokenRequest = vi.fn();
-const captureException = vi.fn();
-const checkRateLimit = vi.fn();
-
-vi.mock("../../../../lib/rateLimit", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../../../lib/rateLimit")>()),
-  checkRateLimit: (...args: unknown[]) => checkRateLimit(...args),
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { roomTicket } from "@/lib/cityArena/net/roomProtocol.testFixtures";
+import { arenaChannels, ROOM_RULES } from "@/lib/cityArena/net/roomProtocol";
+const { authorize, membership, sign, limit, capture } = vi.hoisted(() => ({
+  authorize: vi.fn(),
+  membership: vi.fn(),
+  sign: vi.fn(),
+  limit: vi.fn(),
+  capture: vi.fn(),
 }));
-
-vi.mock("../../../../lib/activeUser", () => ({
-  getActiveUser: (...args: unknown[]) => getActiveUser(...args),
+vi.mock("@/lib/arenaAuth", () => ({ authorizeArenaRequest: authorize }));
+vi.mock("@/lib/services/arenaRoomService", async (original) => ({
+  ...(await original<typeof import("@/lib/services/arenaRoomService")>()),
+  authorizeArenaToken: membership,
 }));
-vi.mock("@sentry/nextjs", () => ({
-  captureException: (...args: unknown[]) => captureException(...args),
+vi.mock("@/lib/rateLimit", async (original) => ({
+  ...(await original<typeof import("@/lib/rateLimit")>()),
+  checkRateLimit: limit,
 }));
-const findUnique = vi.fn();
-vi.mock("../../../../lib/db", () => ({
-  prisma: { user: { findUnique: (...args: unknown[]) => findUnique(...args) } },
-}));
+vi.mock("@sentry/nextjs", () => ({ captureException: capture }));
 vi.mock("ably", () => ({
   Rest: class {
-    auth = {
-      createTokenRequest: (...args: unknown[]) => createTokenRequest(...args),
-    };
+    auth = { createTokenRequest: sign };
   },
 }));
+import { ArenaRoomError } from "@/lib/services/arenaRoomService";
+import { GET } from "./route";
 
-const { GET } = await import("./route");
-
-/** A well-formed token request, as Ably's SDK returns one. */
-const TOKEN_REQUEST = {
-  keyName: "app.key",
-  clientId: "user-1",
-  ttl: 3600000,
-  timestamp: 1_700_000_000_000,
-  capability: '{"arena:room:*":["publish","subscribe","presence"]}',
-  nonce: "abc123",
-  mac: "signature",
-};
-
-/** A request with no cookies, which is all the route reads directly. */
-function request(): NextRequest {
-  return new NextRequest("http://localhost/api/arena/realtime-token");
-}
-
-describe("GET /api/arena/realtime-token", () => {
+const request = () =>
+  new NextRequest(
+    "http://localhost/api/arena/realtime-token?memberId=" +
+      roomTicket().memberId,
+  );
+describe("room-scoped realtime tokens", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubEnv("ABLY_API_KEY", "app.key:secret");
-    getActiveUser.mockResolvedValue({ userId: "user-1", needsLink: false });
-    createTokenRequest.mockResolvedValue(TOKEN_REQUEST);
-    findUnique.mockResolvedValue({ firstName: "Guido" });
-    checkRateLimit.mockResolvedValue({ allowed: true });
+    vi.stubEnv("ABLY_API_KEY", "test.key:server-secret");
+    authorize.mockResolvedValue({ userId: "account", displayName: "Guido" });
+    membership.mockResolvedValue(roomTicket());
+    limit.mockResolvedValue({ allowed: true });
+    sign.mockImplementation(async (options) => ({
+      ...options,
+      capability: JSON.stringify(options.capability),
+      keyName: "test.key",
+      mac: "signature",
+      nonce: "nonce",
+      timestamp: Date.now(),
+    }));
   });
-
-  it("counts token requests per user, and refuses with a 429 over the limit", async () => {
-    await GET(request());
-    expect(checkRateLimit).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "arena-token" }),
-      "user-1",
-    );
-    checkRateLimit.mockResolvedValueOnce({ allowed: false, retryAfterSec: 30 });
-    const refused = await GET(request());
-    expect(refused.status).toBe(429);
-    expect(refused.headers.get("Retry-After")).toBe("30");
-    expect((await refused.json()).error).toMatch(/rustig/);
-    // Refused before Ably is asked for anything.
-    expect(createTokenRequest).toHaveBeenCalledTimes(1);
-  });
-
-  it("signs a token request for the signed-in user", async () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it("issues an opaque seat identity with exact epoch channels and no wildcard", async () => {
     const response = await GET(request());
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.clientId).toBe("user-1");
-    expect(body.tokenRequest.mac).toBe("signature");
-  });
-
-  it("asks Ably for the user's own clientId and the arena capability", async () => {
-    await GET(request());
-    const options = createTokenRequest.mock.calls[0]?.[0] as {
-      clientId: string;
-      ttl: number;
-      capability: Record<string, string[]>;
-    };
-    expect(options.clientId).toBe("user-1");
-    expect(options.ttl).toBe(60 * 60 * 1000);
-    expect(options.capability["arena:room:*"]).toEqual([
-      "publish",
-      "subscribe",
-      "presence",
-    ]);
-    expect(options.capability["arena:lobby"]).toEqual([
-      "subscribe",
-      "presence",
-    ]);
-  });
-
-  it("names the player by their first name from the H3 app", async () => {
-    const body = await (await GET(request())).json();
+    expect(body.clientId).toBe(roomTicket().memberId);
     expect(body.displayName).toBe("Guido");
-    expect(findUnique).toHaveBeenCalledWith({
-      where: { id: "user-1" },
-      select: { firstName: true },
-    });
+    expect(body.ticket.epoch).toBe(1);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(JSON.stringify(body)).not.toContain("server-secret");
+    const signed = sign.mock.calls[0][0];
+    expect(signed.ttl).toBe(ROOM_RULES.tokenTtlMs);
+    expect(
+      Object.keys(signed.capability).every(
+        (key) => key.startsWith("arena:v2:") && !key.includes("*"),
+      ),
+    ).toBe(true);
+    expect(membership).toHaveBeenCalledWith("account", roomTicket().memberId);
   });
-
-  it("shows only the first name, not the whole name", async () => {
-    // A crew manifest and a scorebord are read at a glance; a full name pushes the others off
-    // a phone screen. The column holds only the first name, so nothing needs trimming here.
-    findUnique.mockResolvedValue({ firstName: "Anne-Marie" });
-    expect((await (await GET(request())).json()).displayName).toBe(
-      "Anne-Marie",
+  it("withholds state publication from an ordinary player", async () => {
+    membership.mockResolvedValue(
+      roomTicket({ hostClientId: "33333333-3333-4333-8333-333333333333" }),
     );
+    await GET(request());
+    const channels = arenaChannels(roomTicket().roomId, 1);
+    expect(sign.mock.calls[0][0].capability[channels.state]).toEqual([
+      "subscribe",
+    ]);
+    expect(sign.mock.calls[0][0].capability[channels.inputs]).toEqual([
+      "publish",
+    ]);
   });
-
-  it("falls back to a label when the account has no first name", async () => {
-    for (const firstName of ["", "   ", null, undefined]) {
-      findUnique.mockResolvedValue({ firstName });
-      expect((await (await GET(request())).json()).displayName).toBe("Speler");
-    }
+  it("refuses missing sessions, membership and room identifiers before signing", async () => {
+    authorize.mockResolvedValueOnce(new Response(null, { status: 401 }));
+    expect((await GET(request())).status).toBe(401);
+    expect(
+      (await GET(new NextRequest("http://localhost/api/arena/realtime-token")))
+        .status,
+    ).toBe(400);
+    membership.mockRejectedValueOnce(
+      new ArenaRoomError("not-member", 403, "Geen deelnemer"),
+    );
+    expect((await GET(request())).status).toBe(403);
+    expect(sign).not.toHaveBeenCalled();
+    expect(capture).not.toHaveBeenCalled();
   });
-
-  it("falls back when the user row has gone", async () => {
-    findUnique.mockResolvedValue(null);
-    expect((await (await GET(request())).json()).displayName).toBe("Speler");
+  it("limits token churn before looking up membership", async () => {
+    limit.mockResolvedValue({ allowed: false, retryAfterSec: 20 });
+    const response = await GET(request());
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("20");
+    expect(membership).not.toHaveBeenCalled();
   });
-
-  it("never lets the API key reach the response", async () => {
-    const body = await (await GET(request())).text();
-    expect(body).not.toContain("secret");
-  });
-
-  it("reports a missing key to Sentry and answers in Dutch", async () => {
+  it("fails closed on missing keys, invalid signed responses and signing errors", async () => {
     vi.stubEnv("ABLY_API_KEY", "");
-    const response = await GET(request());
-    expect(response.status).toBe(503);
-    expect((await response.json()).error).toBe(
-      "Kon geen verbinding maken, probeer het later opnieuw",
-    );
-    expect(captureException).toHaveBeenCalled();
-  });
-
-  it("reports an Ably failure to Sentry and returns 502 rather than throwing", async () => {
-    createTokenRequest.mockRejectedValue(new Error("ably is down"));
-    const response = await GET(request());
-    expect(response.status).toBe(502);
-    expect(captureException).toHaveBeenCalledWith(
-      expect.any(Error),
-      expect.objectContaining({
-        tags: { area: "arena", kind: "realtime-token" },
-      }),
-    );
-  });
-
-  it("rejects a token request whose shape is not what the client expects", async () => {
-    createTokenRequest.mockResolvedValue({ keyName: "app.key" });
-    const response = await GET(request());
-    expect(response.status).toBe(502);
-    expect(captureException).toHaveBeenCalled();
-  });
-
-  it("reports an auth failure to Sentry and returns 500", async () => {
-    getActiveUser.mockRejectedValue(new Error("no session"));
-    const response = await GET(request());
-    expect(response.status).toBe(500);
-    expect(captureException).toHaveBeenCalled();
+    expect((await GET(request())).status).toBe(503);
+    vi.stubEnv("ABLY_API_KEY", "test.key:server-secret");
+    sign.mockResolvedValueOnce({});
+    expect((await GET(request())).status).toBe(502);
+    sign.mockRejectedValueOnce(new Error("signing failed"));
+    expect((await GET(request())).status).toBe(502);
+    expect(capture).toHaveBeenCalledTimes(2);
   });
 });

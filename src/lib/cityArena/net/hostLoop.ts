@@ -25,6 +25,8 @@ import { emptyTally, tallyEvents, type Tally } from "./scoreboard";
 import type { RealtimeTransport } from "./transport";
 import { decodeInput, type InputFrame } from "./wire";
 import { encodeSnapshot } from "./snapshotWire";
+import { isInputFrame, recordInvalidWireMessage } from "./wireValidation";
+import { createSnapshotEncoder } from "./snapshotDelta";
 
 /** The simulation runs at 30 Hz (spec §6.6). */
 export const HOST_TICK_HZ = 30;
@@ -43,6 +45,9 @@ const MAX_CONSECUTIVE_FAILURES = 5;
 export type HostLoopOptions = {
   transport: RealtimeTransport;
   roomCode: string;
+  /** Server-approved channels; omitted only by local simulation tests. */
+  stateChannel?: string;
+  inputChannel?: string;
   world: ArenaWorld;
   /** The state to start from: a fresh match, or the last snapshot after a migration. */
   state: ArenaState;
@@ -51,6 +56,7 @@ export type HostLoopOptions = {
    * so kills scored under the old host survive it. Defaults to empty.
    */
   tally?: Tally;
+  accounts?: ReadonlyMap<string, number>;
   random: () => number;
   /** The host's server time, which clients interpolate against. */
   serverTimeMs: () => number;
@@ -88,6 +94,8 @@ export type HostLoop = {
   tally(): Tally;
   /** Who drives which player. */
   seats(): ReadonlyMap<string, number>;
+  /** Retained account-to-player bindings for the scoreboard. */
+  accounts(): ReadonlyMap<string, number>;
   /** Clears the tally, so a rematch scores from zero. */
   resetTally(): void;
   /** Where the potje is; carried on every snapshot so clients follow the host's clock. */
@@ -131,15 +139,19 @@ type PendingInput = { seq: number; frame: InputFrame; tick: number };
  */
 export function createHostLoop(options: HostLoopOptions): HostLoop {
   const step = options.step ?? stepArena;
+  const compress = createSnapshotEncoder();
   const stepSeconds = 1 / HOST_TICK_HZ;
   const ticksPerSnapshot = HOST_TICK_HZ / SNAPSHOT_HZ;
-  const room = options.transport.channel(`arena:room:${options.roomCode}`);
+  const room = options.transport.channel(
+    options.stateChannel ?? `arena:room:${options.roomCode}`,
+  );
   const inputs = options.transport.channel(
-    `arena:room:${options.roomCode}:inputs`,
+    options.inputChannel ?? `arena:room:${options.roomCode}:inputs`,
   );
 
   /** Which player each member drives. A member with no entry is a spectator. */
   const playerByClient = new Map<string, number>();
+  const accounts = new Map(options.accounts);
   /** The newest input per player, kept until the tick that consumes it. */
   const pending = new Map<number, PendingInput>();
   /** The last sequence number applied per player, which clients reconcile against. */
@@ -147,6 +159,20 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
   /** Inputs from players this process drives itself, applied ahead of anything from the wire. */
   const local = new Map<number, WorldInput>();
   let tally: Tally = options.tally ?? emptyTally();
+  function remember(clientId: string, playerId: number): void {
+    accounts.set(clientId, playerId);
+    const next = new Map(tally);
+    if (!next.has(playerId))
+      next.set(playerId, { playerId, kills: 0, deaths: 0 });
+    if (accounts.size > 64) {
+      const old = [...accounts].find(([id]) => !playerByClient.has(id));
+      if (old) {
+        accounts.delete(old[0]);
+        next.delete(old[1]);
+      }
+    }
+    tally = next;
+  }
   // A literal rather than `lobbyMatch()`: matchPhase.ts imports HOST_TICK_HZ from this file, and
   // a value import back would evaluate it before that constant exists.
   let match: MatchState = { phase: "lobby", since: 0 };
@@ -160,14 +186,19 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
   let ticksRun = 0;
   let sinceSnapshot = 0;
   let consecutiveFailures = 0;
+  let publishFailures = 0;
   let publishing = true;
   let running = true;
 
   const unsubscribe = inputs.subscribe("input", (message) => {
     const playerId = playerByClient.get(message.clientId);
     if (playerId === undefined) return;
-    const frame = message.data as InputFrame;
-    const seq = frame[0] ?? 0;
+    const frame = message.data;
+    if (!isInputFrame(frame)) {
+      recordInvalidWireMessage("input");
+      return;
+    }
+    const seq = frame[0]!;
     const current = pending.get(playerId);
     if (current && current.seq >= seq) return;
     pending.set(playerId, { seq, frame, tick: state.tick });
@@ -212,9 +243,10 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
       consecutiveFailures = 0;
     } catch (error: unknown) {
       consecutiveFailures += 1;
-      Sentry.captureException(error, {
-        tags: { area: "arena", kind: "host-tick" },
-      });
+      if (consecutiveFailures === 1)
+        Sentry.captureException(error, {
+          tags: { area: "arena", kind: "host-tick" },
+        });
       if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) publishing = false;
     }
   }
@@ -230,16 +262,25 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
     void room
       .publish(
         "state",
-        encodeSnapshot(state, options.serverTimeMs(), lastInputSeqs, {
-          seats: playerByClient,
-          tally,
-          match,
-        }),
+        compress(
+          encodeSnapshot(state, options.serverTimeMs(), lastInputSeqs, {
+            seats: playerByClient,
+            accounts,
+            tally,
+            match,
+          }),
+        ),
       )
+      .then(() => {
+        publishFailures = 0;
+      })
       .catch((error: unknown) => {
-        Sentry.captureException(error, {
-          tags: { area: "arena", kind: "host-snapshot" },
-        });
+        publishFailures += 1;
+        if (publishFailures === 1)
+          Sentry.captureException(error, {
+            tags: { area: "arena", kind: "host-snapshot" },
+          });
+        if (publishFailures >= MAX_CONSECUTIVE_FAILURES) publishing = false;
       });
   }
 
@@ -249,7 +290,7 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
       return Math.min(1, Math.max(0, exact - ticksRun));
     },
     advance(elapsedMs: number): void {
-      if (!running) return;
+      if (!running || !publishing) return;
       elapsedTotalMs += elapsedMs;
       // Derived from the running total rather than by subtracting a step each time: 1000/30 has
       // no exact binary form, so subtracting it compounds and the loop loses roughly one tick per
@@ -276,12 +317,22 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
         options.random,
       );
       if (!joined.player) return null;
-      state = joined.state;
-      playerByClient.set(clientId, joined.player.id);
-      return joined.player.id;
+      const playerId = accounts.get(clientId) ?? joined.player.id;
+      state = {
+        ...joined.state,
+        players: joined.state.players.map((player) =>
+          player.id === joined.player!.id
+            ? { ...player, id: playerId }
+            : player,
+        ),
+      };
+      playerByClient.set(clientId, playerId);
+      remember(clientId, playerId);
+      return playerId;
     },
     claim(clientId: string, playerId: number): void {
       playerByClient.set(clientId, playerId);
+      remember(clientId, playerId);
     },
     removeMember(clientId: string): void {
       const playerId = playerByClient.get(clientId);
@@ -302,8 +353,14 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
     seats(): ReadonlyMap<string, number> {
       return playerByClient;
     },
+    accounts(): ReadonlyMap<string, number> {
+      return accounts;
+    },
     resetTally(): void {
       tally = emptyTally();
+      accounts.clear();
+      for (const [clientId, playerId] of playerByClient)
+        remember(clientId, playerId);
     },
     match(): MatchState {
       return match;

@@ -41,7 +41,25 @@ vi.mock("ably", () => ({
 const { createAblyTransport } = await import("./ablyTransport");
 
 /** A signed token request, as the route returns one. */
-const TOKEN_REQUEST = { keyName: "app.key", mac: "sig" };
+const TOKEN_REQUEST = {
+  keyName: "app.key",
+  mac: "sig",
+  timestamp: 1000,
+  capability: "{}",
+  nonce: "test",
+};
+const TICKET = {
+  roomId: "11111111-1111-4111-8111-111111111111",
+  roomCode: "ABC234",
+  zone: "campus",
+  memberId: "22222222-2222-4222-8222-222222222222",
+  hostClientId: "22222222-2222-4222-8222-222222222222",
+  epoch: 1,
+  leaseUntil: 12000,
+  serverTime: 1000,
+  members: [],
+  round: null,
+};
 
 const ANN: PresenceData = {
   name: "Ann",
@@ -99,7 +117,12 @@ describe("ablyTransport", () => {
     const fetchMock = vi.fn(
       async () =>
         new Response(
-          JSON.stringify({ tokenRequest: TOKEN_REQUEST, displayName: "Guido" }),
+          JSON.stringify({
+            tokenRequest: TOKEN_REQUEST,
+            clientId: TICKET.memberId,
+            displayName: "Guido",
+            ticket: TICKET,
+          }),
           { status: 200 },
         ),
     );

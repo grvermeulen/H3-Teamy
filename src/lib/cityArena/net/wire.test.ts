@@ -8,6 +8,7 @@ import { createRng } from "../sim/rng";
 import { createInput, type ArenaState } from "../sim/types";
 import { createVehicle, VEHICLE_KINDS } from "../sim/vehicle";
 import { decodeInput, encodeInput } from "./wire";
+import { isSnapshot } from "./wireValidation";
 import {
   MAX_SNAPSHOT_BYTES,
   decodeSnapshot,
@@ -137,6 +138,46 @@ describe("snapshot wire format", () => {
     expect(back.players[0]!.vehicleId).toBe(car.id);
     expect(back.vehicles[0]!.id).toBe(car.id);
     expect(back.vehicles[0]!.kind).toBe("sedan");
+  });
+
+  it("accepts all current vehicle and weapon kinds while rejecting invalid extended player fields", () => {
+    const base = boot();
+    const weapons = [
+      "fist",
+      "pistol",
+      "uzi",
+      "shotgun",
+      "bat",
+      "rifle",
+      "cannon",
+    ] as const;
+    const state: ArenaState = {
+      ...base,
+      players: weapons.map((weapon, id) => ({
+        ...base.players[0]!,
+        id,
+        weapon,
+        drunk: 0.68,
+      })),
+      vehicles: VEHICLE_KINDS.map((kind, id) =>
+        createVehicle(100 + id, kind, [id * 10, 0], 0, 0),
+      ),
+      pickups: (["uzi", "shotgun", "health", "rifle", "bat"] as const).map(
+        (kind, id) => ({ id: 900 + id, kind, x: id, y: 0, takenAtTick: null }),
+      ),
+    };
+    const snapshot = encodeSnapshot(state, 1000, {});
+    expect(isSnapshot(snapshot)).toBe(true);
+    for (const [column, value] of [
+      [6, 7],
+      [16, -1],
+      [17, 10001],
+      [18, 101],
+    ]) {
+      const malformed = structuredClone(snapshot);
+      malformed.p[0]![column] = value;
+      expect(isSnapshot(malformed)).toBe(false);
+    }
   });
 
   it("round-trips the rifle and the bat, their rounds appended past the original row", () => {
