@@ -97,10 +97,12 @@ export function createBrowserAudioContext(): AudioContextLike | null {
   }
 }
 
+/** Sets an audio parameter to a value at a time. */
 function setParam(param: AudioParamLike, value: number, time: number): void {
   param.setValueAtTime(value, time);
 }
 
+/** Ramps an audio parameter to a value, stepping straight to it where the context cannot ramp. */
 function rampParam(param: AudioParamLike, value: number, time: number): void {
   if (param.linearRampToValueAtTime) param.linearRampToValueAtTime(value, time);
   else setParam(param, value, time);
