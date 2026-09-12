@@ -9,6 +9,7 @@ import {
   RADAR_BACKGROUND,
   RADAR_PLAYER,
   RADAR_POLICE,
+  RADAR_TANK,
   RADAR_ROAD,
   RADAR_ZONE,
 } from "./palette";
@@ -24,6 +25,7 @@ export const EMPTY_RADAR_SNAPSHOT: RadarSnapshot = {
   roads: [],
   pickups: [],
   police: [],
+  tanks: [],
   zoneCentre: null,
   zoneRadiusM: null,
 };
@@ -34,6 +36,8 @@ export type RadarSnapshot = {
   roads: Array<readonly [Point, Point]>;
   pickups: Array<{ point: Point; kind: PickupKind }>;
   police: Array<Point>;
+  /** Tanks in range, wrecks excluded: the prize, marked so it can be found. */
+  tanks: Array<Point>;
   zoneCentre: Point | null;
   zoneRadiusM: number | null;
 };
@@ -231,6 +235,17 @@ export function drawRadar(
     const [x, y] = radarPoint(police, snapshot.player, size, RADAR_RANGE_M);
     context.beginPath();
     context.arc(x, y, 2, 0, Math.PI * 2, false);
+    context.fill();
+  }
+
+  context.fillStyle = RADAR_TANK;
+  for (const tank of snapshot.tanks) {
+    const [x, y] = radarPoint(tank, snapshot.player, size, RADAR_RANGE_M);
+    context.beginPath();
+    context.moveTo(x, y - 4);
+    context.lineTo(x + 4, y + 3);
+    context.lineTo(x - 4, y + 3);
+    context.closePath();
     context.fill();
   }
 

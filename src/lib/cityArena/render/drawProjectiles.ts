@@ -17,6 +17,8 @@ import {
 const TRACER_LENGTH_M = 0.8;
 /** Tracer line width, screen pixels. */
 const TRACER_WIDTH_PX = 2;
+/** Radius of a cannon shell, metres: a shell is a dot you can see coming, not a tracer line. */
+const SHELL_RADIUS_M = 0.3;
 /** Muzzle flash offset from the shooter along the aim, metres. */
 const MUZZLE_OFFSET_M = 0.6;
 /** Muzzle flash radius, metres. */
@@ -54,6 +56,16 @@ export function drawBullets(
     context.lineTo(x, y);
   }
   context.stroke();
+  for (const bullet of bullets)
+    if (bullet.weapon === "cannon")
+      fillCircle(
+        context,
+        camera,
+        viewport,
+        [bullet.x, bullet.y],
+        SHELL_RADIUS_M,
+        BULLET_STROKE,
+      );
 }
 
 /** A filled circle at a world point with a radius in metres. */

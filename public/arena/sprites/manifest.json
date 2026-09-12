@@ -103,6 +103,14 @@
       "pixelWidth": 70,
       "pixelHeight": 128,
       "tint": false
+    },
+    "tank": {
+      "file": "/arena/sprites/vehicle-tank.png",
+      "lengthMetres": 7,
+      "widthMetres": 3.4,
+      "pixelWidth": 109,
+      "pixelHeight": 224,
+      "tint": false
     }
   },
   "people": {

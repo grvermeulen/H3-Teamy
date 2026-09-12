@@ -19,7 +19,7 @@ import { EXPLOSION_DAMAGE, inBlastRadius } from "./damage";
 import { eventsOfKind, pushEvent } from "./events";
 import { PLAYER_RADIUS_M } from "./player";
 import { driverPlayer } from "./players";
-import { farFromAll } from "./spawn";
+import { edgesNear, farFromAll, pickEdgeTNear } from "./spawn";
 import type {
   ArenaEvent,
   ArenaState,
@@ -29,8 +29,12 @@ import type {
   VehicleState,
 } from "./types";
 
-/** Living pedestrians kept per zone. */
-export const PEDS_PER_ZONE = 35;
+/** Living pedestrians kept around the players of the active zone. */
+export const PEDS_PER_ZONE = 50;
+/** New pedestrians appear within this distance of the player they are spawned around. */
+export const PED_SPAWN_RADIUS_M = 150;
+/** A living pedestrian farther than this from every player, and off screen, is recycled. */
+export const PED_RECYCLE_DISTANCE_M = 250;
 /** Walking speed on the pavement. */
 export const PED_WALK_SPEED_MPS = 1.4;
 /** Speed away from gunfire and explosions. */
@@ -58,6 +62,7 @@ export const PED_RESPAWN_BATCH = 5;
 const EXPLOSION_FRIGHT_TICKS = 1;
 const RAIL_SNAP_M = 0.5;
 const SPAWN_ATTEMPTS = 20;
+const COIN_FLIP = 0.5;
 
 /** What the pedestrian step reads from the world. */
 export type PedWorld = {
@@ -120,7 +125,61 @@ export function alivePeds(peds: PedState[]): PedState[] {
   return peds.filter((ped) => ped.mode !== "dead");
 }
 
-/** Up to `count` seeded pedestrians on pavement rails inside the zone and outside the visible rect. */
+/** Pavement edges a pedestrian may spawn on, grouped by the point they are spawned around. */
+type RailPool = { centre: Point | null; edges: number[] };
+
+/** The rails to spawn on: the zone's pavements, or those near each of `around` when given. */
+function railPools(
+  zone: MapZone,
+  graph: RailGraph,
+  around: Point[],
+): RailPool[] {
+  const zoneEdges = pavementEdgesWithin(
+    graph,
+    zoneCentreMetres(zone),
+    zoneRadiusMetres(zone) + PED_SPAWN_MARGIN_M,
+  );
+  if (around.length === 0) return [{ centre: null, edges: zoneEdges }];
+  return around
+    .map((centre) => ({
+      centre,
+      edges: edgesNear(graph, zoneEdges, centre, PED_SPAWN_RADIUS_M),
+    }))
+    .filter((pool) => pool.edges.length > 0);
+}
+
+/** A seeded rail from a pool: anywhere on a zone-wide pool, clipped to the disc on a player-centred one. */
+function railFromPool(
+  graph: RailGraph,
+  pool: RailPool,
+  random: () => number,
+): RailPosition | null {
+  if (pool.centre === null) return randomRail(graph, pool.edges, random);
+  const near = pickEdgeTNear(
+    graph,
+    pool.edges,
+    pool.centre,
+    PED_SPAWN_RADIUS_M,
+    random,
+  );
+  if (!near) return null;
+  const direction = random() < COIN_FLIP ? -1 : 1;
+  const side = random() < COIN_FLIP ? -1 : 1;
+  // `edgeT` on a rail runs from the directed start, so a reversed rail mirrors the fraction.
+  return {
+    edge: near.edge,
+    edgeT: direction === 1 ? near.edgeT : 1 - near.edgeT,
+    direction,
+    side,
+  };
+}
+
+/**
+ * Up to `count` seeded pedestrians on pavement rails inside the zone, at least 30 m from every
+ * `avoid` point and outside the visible rect. With `around` given, each pedestrian appears within
+ * {@link PED_SPAWN_RADIUS_M} of one of those points — the players — so the crowd is where the
+ * action is rather than thinned over the whole 500 m zone disc.
+ */
 export function spawnPeds(
   zone: MapZone,
   graph: RailGraph,
@@ -129,27 +188,44 @@ export function spawnPeds(
   viewRect: Rect | null,
   firstId: number,
   count: number,
+  around: Point[] = [],
 ): PedState[] {
-  const edges = pavementEdgesWithin(
-    graph,
-    zoneCentreMetres(zone),
-    zoneRadiusMetres(zone) + PED_SPAWN_MARGIN_M,
-  );
+  const pools = railPools(zone, graph, around);
   const peds: PedState[] = [];
-  if (edges.length === 0) return peds;
+  if (pools.length === 0) return peds;
   for (let attempt = 0; attempt < count * SPAWN_ATTEMPTS; attempt++) {
     if (peds.length >= count) break;
-    const ped = createPed(
-      firstId + peds.length,
-      graph,
-      randomRail(graph, edges, random),
-    );
+    const pool =
+      pools[Math.min(pools.length - 1, Math.floor(random() * pools.length))];
+    const rail = railFromPool(graph, pool, random);
+    if (!rail) continue;
+    const ped = createPed(firstId + peds.length, graph, rail);
     const point: Point = [ped.x, ped.y];
     if (!farFromAll(point, avoid, PED_SPAWN_MIN_FROM_PLAYER_M)) continue;
     if (viewRect && pointInRect(point, viewRect)) continue;
     peds.push(ped);
   }
   return peds;
+}
+
+/**
+ * Drops living pedestrians farther than {@link PED_RECYCLE_DISTANCE_M} from every `anchor` and
+ * outside `viewRect`, so the top-up can place them near the players again. Bodies stay until
+ * they fade; nobody sees a pedestrian vanish.
+ */
+export function recyclePeds(
+  peds: PedState[],
+  anchors: Point[],
+  viewRect: Rect | null,
+): PedState[] {
+  if (anchors.length === 0) return peds;
+  const kept = peds.filter((ped) => {
+    if (ped.mode === "dead") return true;
+    const point: Point = [ped.x, ped.y];
+    if (viewRect && pointInRect(point, viewRect)) return true;
+    return !farFromAll(point, anchors, PED_RECYCLE_DISTANCE_M);
+  });
+  return kept.length === peds.length ? peds : kept;
 }
 
 /** Applies damage; at zero health the pedestrian becomes a body for 240 ticks. */

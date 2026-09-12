@@ -64,7 +64,14 @@ export type FreeRoamState = {
 
 /** Weapons in Wapen-button cycling order (spec §5 plus the fist). */
 export type WeaponKind =
-  "fist" | "pistol" | "uzi" | "shotgun" | "bat" | "rifle";
+  | "fist"
+  | "pistol"
+  | "uzi"
+  | "shotgun"
+  | "bat"
+  | "rifle"
+  /** The tank's gun; never carried, fired from the driver's seat of a tank. */
+  | "cannon";
 
 /** Car kinds (spec §5). */
 export type VehicleKind =
@@ -76,7 +83,8 @@ export type VehicleKind =
   | "pickup"
   | "bus"
   | "oldtimer"
-  | "tractor";
+  | "tractor"
+  | "tank";
 
 /** A car; `heading` in radians, velocity in world m/s, `colour` indexes the render palette. */
 export type VehicleState = {

@@ -1,3 +1,4 @@
+import { distancePointToSegment } from "../mapBuild/geometry";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import { fromUnits, type Point } from "../world/projection";
 import {
@@ -207,6 +208,50 @@ function nearestThreatDistance(point: Point, threats: Point[]): number {
 }
 
 /**
+ * One tank per zone, parked on the spawn node farthest from `avoid` (the player's spawn) that
+ * keeps {@link MIN_CAR_SPACING_M} from every car in `occupied` and
+ * {@link RESPAWN_CAR_CLEARANCE_M} from every `avoid` point — across the zone, so it has to be
+ * found, never inside a parked car and never on the player. A zone whose every node is that
+ * close gets no tank. Deterministic without the seed: the spot follows the spawn, and the spawn
+ * is what the seed chose.
+ */
+export function spawnTanks(
+  index: MapIndex,
+  graph: SpawnGraph,
+  avoid: Point[],
+  occupied: Point[],
+  firstId: number,
+): VehicleState[] {
+  const tanks: VehicleState[] = [];
+  const taken = [...occupied];
+  for (const zone of index.zones) {
+    const ranked = spawnNodesMetres(zone)
+      .map((node) => ({
+        node,
+        score: avoid.length === 0 ? 0 : nearestThreatDistance(node, avoid),
+      }))
+      .sort((left, right) => right.score - left.score);
+    const spot = ranked.find(
+      ({ node }) =>
+        farFromAll(node, taken, MIN_CAR_SPACING_M) &&
+        farFromAll(node, avoid, RESPAWN_CAR_CLEARANCE_M),
+    )?.node;
+    if (!spot) continue;
+    tanks.push(
+      createVehicle(
+        firstId + tanks.length,
+        "tank",
+        spot,
+        roadHeadingAt(graph, spot),
+        0,
+      ),
+    );
+    taken.push(spot);
+  }
+  return tanks;
+}
+
+/**
  * Spec §5 spawn choice: the node maximising the minimum distance to `threats`, ties (within
  * 1 m) broken by the seed; a seeded random node when there are no threats.
  */
@@ -256,4 +301,69 @@ export function nearestZone(index: MapIndex, point: Point): MapZone | null {
     }
   }
   return best;
+}
+
+/** The edges among `edges` whose road segment passes within `radiusM` of `centre`. */
+export function edgesNear(
+  graph: Pick<RoadGraph, "nodes" | "edges">,
+  edges: number[],
+  centre: Point,
+  radiusM: number,
+): number[] {
+  return edges.filter((index) => {
+    const edge = graph.edges[index];
+    return (
+      distancePointToSegment(
+        centre,
+        graph.nodes[edge.a],
+        graph.nodes[edge.b],
+      ) <= radiusM
+    );
+  });
+}
+
+/**
+ * A seeded fraction along `edge` that lies inside the disc of `radiusM` around `centre`, or null
+ * when the segment misses the disc. Clipping the segment to the disc first means a long road
+ * through the disc is sampled only where it passes the player, instead of anywhere along it.
+ */
+export function edgeTWithin(
+  graph: Pick<RoadGraph, "nodes" | "edges">,
+  edge: number,
+  centre: Point,
+  radiusM: number,
+  random: () => number,
+): number | null {
+  const start = graph.nodes[graph.edges[edge].a];
+  const end = graph.nodes[graph.edges[edge].b];
+  const dx = end[0] - start[0];
+  const dy = end[1] - start[1];
+  const fx = start[0] - centre[0];
+  const fy = start[1] - centre[1];
+  const a = dx * dx + dy * dy;
+  const b = 2 * (fx * dx + fy * dy);
+  const c = fx * fx + fy * fy - radiusM * radiusM;
+  if (a === 0) return c <= 0 ? 0 : null;
+  const discriminant = b * b - 4 * a * c;
+  if (discriminant < 0) return null;
+  const root = Math.sqrt(discriminant);
+  const low = Math.max(0, (-b - root) / (2 * a));
+  const high = Math.min(1, (-b + root) / (2 * a));
+  if (low > high) return null;
+  return low + random() * (high - low);
+}
+
+/** A seeded edge and fraction near `centre`: one of `edges` (all pre-filtered by {@link edgesNear}) clipped to the disc. */
+export function pickEdgeTNear(
+  graph: Pick<RoadGraph, "nodes" | "edges">,
+  edges: number[],
+  centre: Point,
+  radiusM: number,
+  random: () => number,
+): { edge: number; edgeT: number } | null {
+  if (edges.length === 0) return null;
+  const edge =
+    edges[Math.min(edges.length - 1, Math.floor(random() * edges.length))];
+  const edgeT = edgeTWithin(graph, edge, centre, radiusM, random);
+  return edgeT === null ? null : { edge, edgeT };
 }

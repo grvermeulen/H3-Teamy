@@ -60,6 +60,7 @@ describe("radar", () => {
         ],
         pickups: [{ point: [5, 0], kind: "health" }],
         police: [[-5, 0]],
+        tanks: [],
         zoneCentre: [0, 0],
         zoneRadiusM: 20,
       },

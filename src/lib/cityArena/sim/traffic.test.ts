@@ -6,6 +6,7 @@ import { createRng } from "./rng";
 import {
   TRAFFIC_MAX_SPEED_MPS,
   TRAFFIC_MIN_SPEED_MPS,
+  TRAFFIC_SPAWN_RADIUS_M,
   advanceDriver,
   createTrafficCar,
   driverTarget,
@@ -118,6 +119,34 @@ describe("traffic drivers", () => {
     expect(
       spawnTraffic(zone, graph, createRng(4), [[0, 0]], [], null, 700, 5),
     ).toEqual(cars);
+  });
+
+  it("spawns traffic around the players when asked", () => {
+    /** A 2 km tertiary road: 0–1000 m and 1000–2000 m. */
+    const road = decodeRoadGraph({
+      nodes: [0, 0, 4000, 0, 8000, 0],
+      edges: [0, 1, 0, -1, 0, 4000, 1, 2, 0, -1, 0, 4000],
+      classes: ["tertiary"],
+      names: [],
+    });
+    const wide: MapZone = { ...zone, center: [4000, 0], radius: 8000 };
+    const cars = spawnTraffic(
+      wide,
+      road,
+      createRng(6),
+      [[1000, 0]],
+      [],
+      null,
+      700,
+      6,
+      [[1000, 0]],
+    );
+    expect(cars).toHaveLength(6);
+    for (const car of cars) {
+      const distance = Math.hypot(car.vehicle.x - 1000, car.vehicle.y);
+      expect(distance).toBeGreaterThanOrEqual(30);
+      expect(distance).toBeLessThanOrEqual(TRAFFIC_SPAWN_RADIUS_M + 5);
+    }
   });
 
   it("lists obstacles and produces controls for active drivers", () => {

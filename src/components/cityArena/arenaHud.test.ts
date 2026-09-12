@@ -125,6 +125,30 @@ describe("arena HUD projections", () => {
     expect(snapshot.zoneRadiusM).toBe(1000);
   });
 
+  it("hands the tank's driver the cannon and marks living tanks on the radar", () => {
+    const base = state();
+    const me = localPlayer(base);
+    const tank = createVehicle(3, "tank", [me.x, me.y], 0, 0);
+    const wreck = {
+      ...createVehicle(4, "tank", [me.x + 20, me.y], 0, 0),
+      wrecked: true,
+    };
+    const current = {
+      ...base,
+      vehicles: [tank, wreck],
+      players: [{ ...me, vehicleId: 3 }],
+    };
+    const hud = computeHud(
+      { index: () => index, tiles: () => [] },
+      current,
+      localPlayer(current),
+    );
+    expect(hud).toMatchObject({ weapon: "cannon", inVehicle: true });
+    expect(
+      buildRadarSnapshot(current, localPlayer(current), zone).tanks,
+    ).toEqual([[me.x, me.y]]);
+  });
+
   it("keeps the radar ring on the enforced zone after population moves", () => {
     const other = {
       ...zone,

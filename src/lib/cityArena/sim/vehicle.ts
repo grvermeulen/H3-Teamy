@@ -31,6 +31,7 @@ export const VEHICLE_KINDS: readonly VehicleKind[] = [
   "bus",
   "oldtimer",
   "tractor",
+  "tank",
 ];
 
 /** Body length of the four original kinds, metres; the others carry their own. */
@@ -130,7 +131,29 @@ export const VEHICLE_SPECS: Record<VehicleKind, VehicleSpec> = {
     widthM: 2.2,
     massT: 4,
   },
+  // One per zone, parked across the map from the spawn: slow, six times a car's health, heavy
+  // enough to shove a bus, and the only kind with a gun (`firesCannon`).
+  tank: {
+    label: "Tank",
+    accelMps2: 3,
+    maxSpeedMps: 13,
+    steerRateRadS: 1.5,
+    healthMax: 600,
+    lengthM: 7,
+    widthM: 3.4,
+    massT: 45,
+  },
 };
+
+/**
+ * True for the kind whose driver fires the cannon instead of what they carry.
+ *
+ * @param kind - The vehicle kind.
+ * @returns Whether it is armed.
+ */
+export function firesCannon(kind: VehicleKind): boolean {
+  return kind === "tank";
+}
 
 /** Braking deceleration (spec §5). */
 export const BRAKE_MPS2 = 14;

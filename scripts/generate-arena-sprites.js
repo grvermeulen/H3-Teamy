@@ -107,6 +107,8 @@ const vehicleSources = {
     widthM: 2.2,
     tint: false,
   },
+  // Drawn in code by scripts/arena/draw-tank-sprite.js, so it needs no generator run.
+  tank: { file: "vehicle-tank.png", lengthM: 7, widthM: 3.4, tint: false },
 };
 // Character art: a horizontal strip of square frames, drawn facing down its own image so the
 // canvas can rotate it by the person's facing. One frame means a still character; a still

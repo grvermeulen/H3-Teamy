@@ -97,15 +97,18 @@ export function createBrowserAudioContext(): AudioContextLike | null {
   }
 }
 
+/** Sets an audio parameter to a value at a time. */
 function setParam(param: AudioParamLike, value: number, time: number): void {
   param.setValueAtTime(value, time);
 }
 
+/** Ramps an audio parameter to a value, stepping straight to it where the context cannot ramp. */
 function rampParam(param: AudioParamLike, value: number, time: number): void {
   if (param.linearRampToValueAtTime) param.linearRampToValueAtTime(value, time);
   else setParam(param, value, time);
 }
 
+/** The synthesised fallback voice for a weapon, used when its clip has not landed. */
 function shotTone(weapon: WeaponKind): {
   frequency: number;
   duration: number;
@@ -121,13 +124,18 @@ function shotTone(weapon: WeaponKind): {
     return { frequency: 70, duration: 0.05, type: "triangle" };
   if (weapon === "rifle")
     return { frequency: 140, duration: 0.12, type: "sawtooth" };
+  if (weapon === "cannon")
+    return { frequency: 55, duration: 0.3, type: "sawtooth" };
   return { frequency: 180, duration: 0.08, type: "square" };
 }
 
 /** The recorded clip for an event, or null for one that only the synthesiser voices. */
 function clipFor(event: ArenaEvent): ClipName | null {
-  if (event.kind === "shot")
-    return event.weapon === "fist" ? null : event.weapon;
+  if (event.kind === "shot") {
+    if (event.weapon === "fist") return null;
+    // The cannon has no recording of its own; the explosion clip is the bang it deserves.
+    return event.weapon === "cannon" ? "explosion" : event.weapon;
+  }
   if (event.kind === "explosion") return "explosion";
   if (event.kind === "pickup" || event.kind === "beer") return "pickup";
   if (event.kind === "impact") return "impact";

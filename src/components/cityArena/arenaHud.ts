@@ -10,7 +10,7 @@ import { nearestRoadName } from "@/lib/cityArena/world/nearestRoad";
 import { currentWantedLevel } from "@/lib/cityArena/sim/wanted";
 import { boardableVehicle, occupiedVehicle } from "@/lib/cityArena/sim/arena";
 import { canOrderBeer } from "@/lib/cityArena/sim/beer";
-import { forwardSpeed } from "@/lib/cityArena/sim/vehicle";
+import { firesCannon, forwardSpeed } from "@/lib/cityArena/sim/vehicle";
 import type {
   ArenaPlayerState,
   AmmoState,
@@ -64,7 +64,7 @@ export function computeHud(
     zoneKey: zone?.key ?? null,
     street: nearestRoadName(session.tiles(), [player.x, player.y]),
     health: player.health,
-    weapon: player.weapon,
+    weapon: car && firesCannon(car.kind) ? "cannon" : player.weapon,
     ammo: player.ammo,
     speedMps: car ? Math.abs(forwardSpeed(car)) : null,
     inVehicle: car !== null,
@@ -145,6 +145,14 @@ export function buildRadarSnapshot(
         )
         .map((cop) => [cop.x, cop.y] as [number, number]),
     ],
+    tanks: state.vehicles
+      .filter(
+        (vehicle) =>
+          firesCannon(vehicle.kind) &&
+          !vehicle.wrecked &&
+          withinRadar([vehicle.x, vehicle.y], player),
+      )
+      .map((vehicle) => [vehicle.x, vehicle.y] as [number, number]),
     zoneCentre: zone ? zoneCentreMetres(zone) : null,
     zoneRadiusM: zone ? zoneRadiusMetres(zone) : null,
   };

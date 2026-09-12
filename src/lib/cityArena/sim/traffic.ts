@@ -18,7 +18,12 @@ import {
 } from "./driver";
 import { alivePeds } from "./peds";
 import { driverPlayer, playersOf } from "./players";
-import { MIN_CAR_SPACING_M, farFromAll } from "./spawn";
+import {
+  MIN_CAR_SPACING_M,
+  edgesNear,
+  farFromAll,
+  pickEdgeTNear,
+} from "./spawn";
 import type {
   ArenaState,
   DriverState,
@@ -50,10 +55,14 @@ export const AI_ROAD_CLASSES: RoadClass[] = [
   "residential",
   "living_street",
 ];
-/** Fewest ambient cars in a populated zone; the top-up refills to this. */
-export const TRAFFIC_MIN_PER_ZONE = 10;
-/** Most ambient cars in a populated zone. */
-export const TRAFFIC_MAX_PER_ZONE = 16;
+/** Fewest ambient cars around the players of a populated zone; the top-up refills to this. */
+export const TRAFFIC_MIN_PER_ZONE = 14;
+/** Most ambient cars around the players of a populated zone. */
+export const TRAFFIC_MAX_PER_ZONE = 20;
+/** New ambient cars appear within this distance of the player they are spawned around. */
+export const TRAFFIC_SPAWN_RADIUS_M = 220;
+/** An ambient car farther than this from every player, and off screen, is recycled. */
+export const TRAFFIC_RECYCLE_DISTANCE_M = 320;
 /** Slowest ambient cruise speed. */
 export const TRAFFIC_MIN_SPEED_MPS = 8;
 /** Fastest ambient cruise speed. */
@@ -273,6 +282,16 @@ export function createTrafficCar(
   };
 }
 
+/** Which way a spawned car drives an edge: with a one-way, either way otherwise. */
+function trafficDirection(
+  graph: RailGraph,
+  edge: number,
+  random: () => number,
+): 1 | -1 {
+  return graph.edges[edge].oneway || random() >= COIN_FLIP ? 1 : -1;
+}
+
+/** A seeded rail anywhere on one of `edges`, in the right-hand lane. */
 function trafficRail(
   graph: RailGraph,
   edges: number[],
@@ -280,9 +299,56 @@ function trafficRail(
 ): RailPosition {
   const edge =
     edges[Math.min(edges.length - 1, Math.floor(random() * edges.length))];
-  const direction: 1 | -1 =
-    graph.edges[edge].oneway || random() >= COIN_FLIP ? 1 : -1;
+  const direction = trafficDirection(graph, edge, random);
   return { edge, direction, edgeT: random(), side: 1 };
+}
+
+/** Through-road edges a car may spawn on, grouped by the point it is spawned around. */
+type TrafficPool = { centre: Point | null; edges: number[] };
+
+/** The through-roads to spawn on: the zone's, or those near each of `around` when given. */
+function trafficPools(
+  zone: MapZone,
+  graph: RailGraph,
+  around: Point[],
+): TrafficPool[] {
+  const zoneEdges = trafficEdgesWithin(
+    graph,
+    zoneCentreMetres(zone),
+    zoneRadiusMetres(zone),
+  );
+  if (around.length === 0) return [{ centre: null, edges: zoneEdges }];
+  return around
+    .map((centre) => ({
+      centre,
+      edges: edgesNear(graph, zoneEdges, centre, TRAFFIC_SPAWN_RADIUS_M),
+    }))
+    .filter((pool) => pool.edges.length > 0);
+}
+
+/** A seeded rail from a pool: anywhere on a zone-wide pool, clipped to the disc on a player-centred one. */
+function railFromPool(
+  graph: RailGraph,
+  pool: TrafficPool,
+  random: () => number,
+): RailPosition | null {
+  if (pool.centre === null) return trafficRail(graph, pool.edges, random);
+  const near = pickEdgeTNear(
+    graph,
+    pool.edges,
+    pool.centre,
+    TRAFFIC_SPAWN_RADIUS_M,
+    random,
+  );
+  if (!near) return null;
+  const direction = trafficDirection(graph, near.edge, random);
+  // `edgeT` on a rail runs from the directed start, so a reversed rail mirrors the fraction.
+  return {
+    edge: near.edge,
+    edgeT: direction === 1 ? near.edgeT : 1 - near.edgeT,
+    direction,
+    side: 1,
+  };
 }
 
 /**
@@ -302,7 +368,11 @@ export function pickTrafficKind(
   return pool[Math.floor(random() * pool.length)] ?? "compact";
 }
 
-/** Spawns seeded ambient cars on through-roads, spaced from players, cars and the view. */
+/**
+ * Spawns seeded ambient cars on through-roads, spaced from players, cars and the view. With
+ * `around` given, each car appears within {@link TRAFFIC_SPAWN_RADIUS_M} of one of those points —
+ * the players — so the traffic drives where they are rather than over the whole zone.
+ */
 export function spawnTraffic(
   zone: MapZone,
   graph: RailGraph,
@@ -312,18 +382,18 @@ export function spawnTraffic(
   viewRect: Rect | null,
   firstId: number,
   count: number,
+  around: Point[] = [],
 ): DrivenCar[] {
-  const edges = trafficEdgesWithin(
-    graph,
-    zoneCentreMetres(zone),
-    zoneRadiusMetres(zone),
-  );
+  const pools = trafficPools(zone, graph, around);
   const cars: DrivenCar[] = [];
-  if (edges.length === 0) return cars;
+  if (pools.length === 0) return cars;
   const placed: Point[] = [...occupied];
   for (let attempt = 0; attempt < count * SPAWN_ATTEMPTS; attempt++) {
     if (cars.length >= count) break;
-    const rail = trafficRail(graph, edges, random);
+    const pool =
+      pools[Math.min(pools.length - 1, Math.floor(random() * pools.length))];
+    const rail = railFromPool(graph, pool, random);
+    if (!rail) continue;
     const kind = pickTrafficKind(graph.edges[rail.edge].roadClass, random);
     const colour = Math.floor(random() * VEHICLE_COLOUR_COUNT);
     const cruise =

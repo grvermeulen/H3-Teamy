@@ -37,6 +37,7 @@ import type {
   EffectState,
   HitTargetKind,
   VehicleState,
+  WeaponKind,
   WorldInput,
 } from "./types";
 import {
@@ -46,18 +47,50 @@ import {
   hasAmmo,
   isMelee,
 } from "./weapons";
-import { exitVehicle } from "./boarding";
+import { exitVehicle, occupiedVehicle } from "./boarding";
 import { drunkDamageFactor } from "./beer";
+import { firesCannon, lengthOf } from "./vehicle";
 import type { ArenaWorld } from "./arenaWorld";
 
-/** Ammo, weapon and cooldown after one trigger pull; an emptied magazine falls back to the pistol. */
-function afterShot(player: ArenaPlayerState, tick: number): ArenaPlayerState {
-  const ammo = consumeAmmo(player.ammo, player.weapon);
+/** What the trigger fires and from where: the tank's cannon from its muzzle at the wheel of a tank, otherwise what the player carries from where they stand. */
+type Trigger = { weapon: WeaponKind; origin: Point };
+
+/**
+ * The trigger for this tick. A tank's driver fires the cannon, whatever they hold, and the shell
+ * leaves the barrel's end so it never starts inside a car parked against the hull.
+ */
+function triggerOf(
+  state: ArenaState,
+  player: ArenaPlayerState,
+  angle: number,
+): Trigger {
+  const car = occupiedVehicle(state, player);
+  if (!car || car.wrecked || !firesCannon(car.kind))
+    return { weapon: player.weapon, origin: [player.x, player.y] };
+  const muzzle = lengthOf(car.kind) / 2;
+  return {
+    weapon: "cannon",
+    origin: [
+      player.x + Math.cos(angle) * muzzle,
+      player.y + Math.sin(angle) * muzzle,
+    ],
+  };
+}
+
+/** Ammo, weapon and cooldown after one trigger pull; an emptied magazine falls back to the pistol, and the cannon costs the tank nothing. */
+function afterShot(
+  player: ArenaPlayerState,
+  weapon: WeaponKind,
+  tick: number,
+): ArenaPlayerState {
+  if (weapon === "cannon")
+    return { ...player, nextShotTick: tick + cooldownTicks(weapon) };
+  const ammo = consumeAmmo(player.ammo, weapon);
   return {
     ...player,
     ammo,
-    weapon: hasAmmo(ammo, player.weapon) ? player.weapon : "pistol",
-    nextShotTick: tick + cooldownTicks(player.weapon),
+    weapon: hasAmmo(ammo, weapon) ? weapon : "pistol",
+    nextShotTick: tick + cooldownTicks(weapon),
   };
 }
 
@@ -66,13 +99,14 @@ function canFire(
   state: ArenaState,
   player: ArenaPlayerState,
   input: WorldInput,
+  weapon: WeaponKind,
   tick: number,
 ): boolean {
   return (
     input.fire &&
     !isDead(player) &&
     tick >= player.nextShotTick &&
-    hasAmmo(player.ammo, player.weapon) &&
+    hasAmmo(player.ammo, weapon) &&
     state.bullets.length < MAX_BULLETS
   );
 }
@@ -91,6 +125,7 @@ type FireResult = {
 function fireShots(
   state: ArenaState,
   player: ArenaPlayerState,
+  trigger: Trigger,
   angle: number,
   tick: number,
   random: () => number,
@@ -100,9 +135,9 @@ function fireShots(
   // surplus pellets here rather than let applyFire exceed the invariant.
   const remainingCapacity = Math.max(0, MAX_BULLETS - state.bullets.length);
   const shots = createShots(
-    WEAPONS[player.weapon],
-    player.weapon,
-    [player.x, player.y],
+    WEAPONS[trigger.weapon],
+    trigger.weapon,
+    trigger.origin,
     angle,
     {
       ownerId: player.id,
@@ -117,13 +152,13 @@ function fireShots(
       damage: shot.damage * drunkDamageFactor(player.drunk),
     }));
   const muzzleId = state.nextId + shots.length;
-  const effects = isMelee(player.weapon)
+  const effects = isMelee(trigger.weapon)
     ? state.effects
     : addEffect(state.effects, {
         id: muzzleId,
         kind: "muzzle",
-        x: player.x,
-        y: player.y,
+        x: trigger.origin[0],
+        y: trigger.origin[1],
         angle,
         bornTick: tick,
       });
@@ -138,11 +173,13 @@ export function applyFire(
   tick: number,
   random: () => number,
 ): ArenaState {
-  if (!canFire(state, player, input, tick)) return state;
   const angle = input.aim ?? player.facing;
+  const trigger = triggerOf(state, player, angle);
+  if (!canFire(state, player, input, trigger.weapon, tick)) return state;
   const { shots, effects, nextId } = fireShots(
     state,
     player,
+    trigger,
     angle,
     tick,
     random,
@@ -154,13 +191,13 @@ export function applyFire(
     effects,
     events: pushEvent(state.events, {
       kind: "shot",
-      weapon: player.weapon,
+      weapon: trigger.weapon,
       ownerId: player.id,
-      x: player.x,
-      y: player.y,
+      x: trigger.origin[0],
+      y: trigger.origin[1],
     }),
   };
-  return replacePlayer(fired, afterShot(player, tick));
+  return replacePlayer(fired, afterShot(player, trigger.weapon, tick));
 }
 
 /** Adds a hit event for an entity impact. */

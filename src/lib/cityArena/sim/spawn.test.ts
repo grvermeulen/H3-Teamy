@@ -7,10 +7,14 @@ import {
   PARKED_CARS_PER_ZONE,
   chooseSpawnNode,
   edgeParkingSpots,
+  edgeTWithin,
+  edgesNear,
+  pickEdgeTNear,
   nearestZone,
   roadHeadingAt,
   shuffle,
   spawnParkedCars,
+  spawnTanks,
   zoneParkingSpots,
   PARKED_CAR_KINDS,
 } from "./spawn";
@@ -149,5 +153,41 @@ describe("spawn", () => {
     expect(nearestZone(index, [3000, 0])?.key).toBe("campus");
     expect(nearestZone(index, [9000, 0])?.key).toBe("rhenen");
     expect(nearestZone({ ...index, zones: [] }, [0, 0])).toBeNull();
+  });
+});
+
+describe("spawning near a point", () => {
+  it("keeps the edges whose road passes within the radius", () => {
+    expect(edgesNear(graph, [0, 1, 2], [50, 0], 10)).toEqual([0]);
+    expect(edgesNear(graph, [0, 1, 2], [50, 0], 60)).toEqual([0, 1, 2]);
+    expect(edgesNear(graph, [0, 1, 2], [300, 0], 100)).toEqual([]);
+  });
+
+  it("samples only the part of an edge inside the disc", () => {
+    expect(edgeTWithin(graph, 0, [50, 0], 10, () => 0)).toBeCloseTo(0.4);
+    expect(edgeTWithin(graph, 0, [50, 0], 10, () => 1)).toBeCloseTo(0.6);
+    expect(edgeTWithin(graph, 0, [-20, 0], 30, () => 1)).toBeCloseTo(0.1);
+    expect(edgeTWithin(graph, 0, [50, 50], 10, () => 0.5)).toBeNull();
+    expect(pickEdgeTNear(graph, [], [50, 0], 10, () => 0)).toBeNull();
+    expect(pickEdgeTNear(graph, [0], [50, 0], 10, () => 0.5)).toEqual({
+      edge: 0,
+      edgeT: 0.5,
+    });
+  });
+});
+
+describe("the tank", () => {
+  it("parks one per zone across from the spawn, off the parked cars and never on the spawn", () => {
+    const tanks = spawnTanks(index, graph, [[0, 0]], [[190, 0]], 900);
+    expect(tanks.map((tank) => tank.kind)).toEqual(["tank", "tank"]);
+    expect(tanks[0]).toMatchObject({ id: 900, x: 170, y: 0 });
+    expect(tanks[1]).toMatchObject({ id: 901, x: 10000, y: 0 });
+    expect(spawnTanks(index, graph, [[190, 0]], [], 900)[0]).toMatchObject({
+      x: 0,
+      y: 0,
+    });
+    expect(
+      spawnTanks({ ...index, zones: [otherZone] }, graph, [[10000, 0]], [], 1),
+    ).toEqual([]);
   });
 });

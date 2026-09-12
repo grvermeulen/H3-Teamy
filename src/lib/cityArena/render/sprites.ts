@@ -296,13 +296,14 @@ export function personSpriteFor(
 }
 
 /**
- * The item a weapon is drawn with in a hand, or null for a fist.
+ * The item a weapon is drawn with in a hand, or null for a fist — and for the cannon, which is
+ * the tank's, not the hand's.
  *
  * @param weapon - The weapon held.
  * @returns The item key, or null.
  */
 export function itemKeyForWeapon(weapon: WeaponKind): ItemKey | null {
-  return weapon === "fist" ? null : weapon;
+  return weapon === "fist" || weapon === "cannon" ? null : weapon;
 }
 
 /**

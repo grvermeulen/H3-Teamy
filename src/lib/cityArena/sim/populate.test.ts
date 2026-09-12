@@ -3,14 +3,16 @@ import { describe, expect, it } from "vitest";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
 import { createArenaState } from "./arena";
-import { PEDS_PER_ZONE } from "./peds";
+import { PEDS_PER_ZONE, PED_RECYCLE_DISTANCE_M } from "./peds";
 import {
   applyPopulation,
   populateZone,
   populationAnchorZone,
   topUpPeds,
+  topUpTraffic,
 } from "./populate";
 import { createRng } from "./rng";
+import { TRAFFIC_RECYCLE_DISTANCE_M, TRAFFIC_SPAWN_RADIUS_M } from "./traffic";
 import type { ArenaState } from "./types";
 
 const west: MapZone = {
@@ -139,6 +141,98 @@ describe("population", () => {
       20,
     );
     expect(topUpPeds(state, west, { index, graph }, random)).toBe(state);
+  });
+
+  it("recycles pedestrians the player left behind and puts them back nearby", () => {
+    const state = createArenaState(
+      { index, graph, seed: 5, zone: west },
+      createRng(5),
+    );
+    const player = localPlayer(state);
+    const farX = player.x + PED_RECYCLE_DISTANCE_M + 100;
+    const [left, ...rest] = state.peds;
+    const wandered: ArenaState = {
+      ...state,
+      peds: [{ ...left, x: farX }, ...rest],
+    };
+    const topped = topUpPeds(wandered, west, { index, graph }, createRng(9));
+    expect(topped.peds).toHaveLength(PEDS_PER_ZONE);
+    expect(topped.peds.map((ped) => ped.id)).not.toContain(left.id);
+    expect(topped.peds.at(-1)?.id).toBe(state.nextId);
+    for (const ped of topped.peds)
+      expect(Math.hypot(ped.x - player.x, ped.y - player.y)).toBeLessThan(
+        PED_RECYCLE_DISTANCE_M,
+      );
+    const viewRect = { minX: farX - 10, minY: -10, maxX: farX + 10, maxY: 10 };
+    expect(
+      topUpPeds(wandered, west, { index, graph, viewRect }, createRng(9)),
+    ).toBe(wandered);
+  });
+
+  it("recycles ambient cars the player left behind, but not police, wrecks or occupied cars", () => {
+    /** A 200 m tertiary road, so traffic can spawn. */
+    const road = decodeRoadGraph({
+      nodes: [0, 0, 800, 0],
+      edges: [0, 1, 0, -1, 0, 800],
+      classes: ["tertiary"],
+      names: [],
+    });
+    const state = createArenaState(
+      { index, graph: road, seed: 5, zone: west },
+      createRng(5),
+    );
+    const player = localPlayer(state);
+    const [gone, wreck, patrol, taxi] = state.traffic;
+    expect(taxi).toBeDefined();
+    const farX = player.x + TRAFFIC_RECYCLE_DISTANCE_M + 100;
+    const moved = new Map([
+      [gone.vehicleId, { x: farX, wrecked: false }],
+      [wreck.vehicleId, { x: farX, wrecked: true }],
+      [patrol.vehicleId, { x: farX, wrecked: false }],
+      [taxi.vehicleId, { x: farX, wrecked: false }],
+    ]);
+    const wandered: ArenaState = {
+      ...state,
+      players: [{ ...player, vehicleId: taxi.vehicleId }],
+      vehicles: state.vehicles.map((vehicle) => ({
+        ...vehicle,
+        ...moved.get(vehicle.id),
+      })),
+      traffic: state.traffic.map((driver) =>
+        driver === patrol ? { ...driver, role: "police" } : driver,
+      ),
+    };
+    const topped = topUpTraffic(
+      wandered,
+      west,
+      { index, graph: road },
+      createRng(9),
+    );
+    const vehicleIds = topped.vehicles.map((vehicle) => vehicle.id);
+    const driverIds = topped.traffic.map((driver) => driver.vehicleId);
+    expect(vehicleIds).not.toContain(gone.vehicleId);
+    expect(driverIds).not.toContain(gone.vehicleId);
+    for (const kept of [wreck, patrol, taxi]) {
+      expect(vehicleIds).toContain(kept.vehicleId);
+      expect(driverIds).toContain(kept.vehicleId);
+    }
+    const fresh = topped.vehicles.find(
+      (vehicle) => vehicle.id === wandered.nextId,
+    );
+    expect(fresh).toBeDefined();
+    expect(Math.hypot((fresh?.x ?? 0) - player.x, fresh?.y ?? 0)).toBeLessThan(
+      TRAFFIC_SPAWN_RADIUS_M + 5,
+    );
+    const viewRect = { minX: farX - 10, minY: -10, maxX: farX + 10, maxY: 10 };
+    const seen = topUpTraffic(
+      wandered,
+      west,
+      { index, graph: road, viewRect },
+      createRng(9),
+    );
+    expect(seen.vehicles.map((vehicle) => vehicle.id)).toContain(
+      gone.vehicleId,
+    );
   });
 
   it("keeps the player's car when changing zones", () => {

@@ -108,11 +108,16 @@ The asset is a derived database of OpenStreetMap data © OpenStreetMap contribut
 
 ## Runtime (PR 4 — pedestrians, cops, pickups and audio)
 
-- Active-zone population is bounded by the simulation caps: 25 living pedestrians per zone (40
-  pedestrians including bodies), 6–10 ambient traffic cars per zone, at most 12 AI drivers, 8 cops
-  including bodies, 140 vehicles and 10 pickups. Pedestrians use pavement rails and flee nearby
-  gunfire/explosions; traffic uses the road graph and is kept outside the current camera view when
-  it spawns. Pickups are placed near landmarks and zone spawn nodes (6 weapon and 4 health pickups),
+- Active-zone population is bounded by the simulation caps: 50 living pedestrians (80 including
+  bodies), 14–20 ambient traffic cars, at most 24 AI drivers, 8 cops including bodies, 160 vehicles
+  and 18 pickups. The population is kept **around the players** rather than spread over the whole
+  500 m zone disc: pedestrians spawn within 150 m and cars within 220 m of a living player
+  (`PED_SPAWN_RADIUS_M`, `TRAFFIC_SPAWN_RADIUS_M`), and a pedestrian more than 250 m or an ambient
+  car more than 320 m from every player, off screen, is recycled (`recyclePeds`,
+  `recycleTraffic`) so the top-up — every 30 ticks for both — puts it back near them. Police cars,
+  wrecks, bodies and any car a player sits in are never recycled. Pedestrians use pavement rails
+  and flee nearby gunfire/explosions; traffic uses the road graph and is kept outside the current
+  camera view when it spawns. Pickups are placed near landmarks and zone spawn nodes (6 weapon and 4 health pickups),
   stay at least 15 m apart and respawn after 600 ticks (20 seconds). The pistol and fist are the
   initial loadout; Uzi and shotgun ammunition comes from pickups.
 - Wanted heat: a pedestrian kill adds 30, a cop kill 60, firing within 15 m of a living cop 10 and
@@ -424,13 +429,26 @@ two new ammo counts sit past the original player row, so an older row still deco
   the nearer face, so someone clipped at the side steps aside and someone hit head-on is carried
   in front — never pushed the length of a bus. `CAR_BODY_RADIUS_M` survives only as the clearance
   the traffic AI, the spawns and the exit keep around a car.
+- **The tank** (`sim/vehicle.ts`, `sim/spawn.ts`, `sim/combat.ts`). A tenth kind, `tank`
+  (Tank): 7 × 3.4 m, 600 health, 45 t, 13 m/s flat out, never traffic and never parked at a kerb.
+  `spawnTanks` parks one per zone at session start on the spawn node farthest from the player's
+  spawn (clear of parked cars and of the spawn itself), so it has to be found; the radar marks it
+  with an amber triangle (`RadarSnapshot.tanks`). At its wheel the trigger fires the **cannon**
+  (`WEAPONS.cannon`, "Kanon": 150 damage, one shell every two seconds, 80 m, unlimited) instead
+  of what the driver carries — `triggerOf` in `sim/combat.ts` swaps the weapon and moves the
+  muzzle to the barrel's end — so one shell wrecks any car but a bus, and the HUD shows "Kanon ∞"
+  while driving it. The cannon is a `WeaponKind` that is never held: it is not in `WEAPON_ORDER`,
+  the hand-item lookup ignores it, and its shot voices the explosion clip. Its art is drawn in
+  code by `scripts/arena/draw-tank-sprite.js` (no generator, no external licence row) and packed
+  like every other vehicle.
 - **Where they appear** (`sim/spawn.ts`, `sim/traffic.ts`). `PARKED_CAR_KINDS` has six kinds;
   traffic draws from `TRAFFIC_KINDS_BY_CLASS` — buses on primary/secondary/tertiary roads,
   oldtimers on the quieter ones, never a sport car (the prize stays parked) — and
   `pickTrafficKind` makes one car in three on an unclassified road a tractor (`TRACTOR_CHANCE`;
   there is no point-to-ground lookup in the simulation, so the countryside is read from the road
-  class). Ten to sixteen ambient cars and thirty-five pedestrians per zone; `MAX_TRAFFIC` 20,
-  `MAX_PEDS` 60; `net/wire.test.ts` proves a world at every cap under `MAX_SNAPSHOT_BYTES`.
+  class). Fourteen to twenty ambient cars and fifty pedestrians around the players; `MAX_TRAFFIC`
+  24, `MAX_PEDS` 80, `MAX_VEHICLES` 160; `net/wire.test.ts` proves a world at every cap under
+  `MAX_SNAPSHOT_BYTES`.
 - **Art** (`scripts/generate-arena-sprites.js`, `render/sprites.ts`, `render/loadSprites.ts`).
   `vehicleSources` is a registry per kind with the kind's metre box and a `tint` flag — greyscale
   art is tinted from `CAR_BODY_COLOURS` (ten now, `VEHICLE_COLOUR_COUNT` with it), liveried art
