@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   FURNITURE_KINDS,
+  LANDMARK_STYLES,
   type FurnitureKind,
   type MapIndex,
   type MapRoads,
@@ -49,7 +50,7 @@ export const MapIndexSchema = z.object({
     z.object({
       key: z.string(),
       name: z.string(),
-      style: z.enum(["church", "pool", "campus", "cafe"]),
+      style: z.enum(LANDMARK_STYLES),
       center: unitPoint,
       tile: z.object({ x: z.number().int(), y: z.number().int() }),
     }),

@@ -7,8 +7,22 @@ export const ROAD_EDGE_STRIDE = 6;
 /** Keys of the four match zones. */
 export type ZoneKey = "rhenen" | "wageningen" | "campus" | "bennekom";
 
+/**
+ * Every visual style a landmark building can be drawn with, and the single source of truth for
+ * them: `LandmarkStyle` is derived from this list, and `MapIndexSchema` validates `index.json`
+ * against it. Adding a style to the map asset without adding it here fails validation, which
+ * stops the whole world from booting — keep the two in step.
+ */
+export const LANDMARK_STYLES = [
+  "church",
+  "pool",
+  "campus",
+  "cafe",
+  "brewery",
+] as const;
+
 /** Visual style a landmark building is drawn with; a `brewery` also serves beer (`sim/beer.ts`). */
-export type LandmarkStyle = "church" | "pool" | "campus" | "cafe" | "brewery";
+export type LandmarkStyle = (typeof LANDMARK_STYLES)[number];
 
 /** Drivable road classes kept from OpenStreetMap (`*_link` collapsed onto the base class). */
 export type RoadClass =
