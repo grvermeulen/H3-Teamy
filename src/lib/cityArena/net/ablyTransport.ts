@@ -56,6 +56,50 @@ function toPresenceAction(
   return "enter";
 }
 
+/**
+ * Ably's code for "this channel is in the wrong state for that", which both `presence.leave()` and
+ * `detach()` throw.
+ */
+const WRONG_CHANNEL_STATE = 90001;
+
+/**
+ * The channel states in which this client holds neither a presence membership nor an attachment,
+ * so leaving and detaching have already happened.
+ *
+ * `suspended` is deliberately not one of them: Ably re-enters a suspended channel's members when it
+ * re-attaches, so a leave that failed there did not take effect and has to be reported.
+ */
+const ALREADY_GONE: readonly Ably.ChannelState[] = [
+  "initialized",
+  "detached",
+  "failed",
+];
+
+/**
+ * Runs one teardown step, treating a channel that is already gone as the step having succeeded —
+ * the player is out either way, which is the whole point of tearing down. This is contract parity
+ * rather than cleverness: the in-memory transport's `leave()` already returns quietly for a member
+ * who is not in the set, and Ably throwing instead was the divergence between the two.
+ *
+ * The state is re-read after a throw rather than only checked before the call, because Ably encodes
+ * the presence message before it looks at the state: a channel that was attached when teardown
+ * started can be detached or failed by the time the leave is attempted, which is exactly what
+ * closing the tab mid-reconnect does. Genuine failures still throw.
+ */
+async function tolerateGone(
+  channel: Ably.RealtimeChannel,
+  step: () => Promise<void>,
+): Promise<void> {
+  if (ALREADY_GONE.includes(channel.state)) return;
+  try {
+    await step();
+  } catch (error: unknown) {
+    const code = (error as Partial<Ably.ErrorInfo> | null)?.code;
+    if (code !== WRONG_CHANNEL_STATE || !ALREADY_GONE.includes(channel.state))
+      throw error;
+  }
+}
+
 /** Wraps one Ably channel in the arena's interface. */
 function wrapChannel(channel: Ably.RealtimeChannel): TransportChannel {
   return {
@@ -86,7 +130,7 @@ function wrapChannel(channel: Ably.RealtimeChannel): TransportChannel {
         await channel.presence.update(data);
       },
       async leave(): Promise<void> {
-        await channel.presence.leave();
+        await tolerateGone(channel, () => channel.presence.leave());
       },
       async get(): Promise<PresenceMember[]> {
         const members = await channel.presence.get();
@@ -108,7 +152,7 @@ function wrapChannel(channel: Ably.RealtimeChannel): TransportChannel {
       },
     },
     async detach(): Promise<void> {
-      await channel.detach();
+      await tolerateGone(channel, () => channel.detach());
     },
   };
 }

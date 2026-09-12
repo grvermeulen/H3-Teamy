@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type * as Ably from "ably";
 import type { PresenceData } from "./transport";
 
 const publish = vi.fn();
@@ -49,23 +50,38 @@ const ANN: PresenceData = {
   device: "desktop",
 };
 
+/** The mocked Ably channel, whose `state` a test moves the way a real one does. */
+let channelMock: { state: Ably.ChannelState };
+
+/** Arms the mocked Ably client, with the channel in `state`. */
+function armChannel(state: Ably.ChannelState = "attached"): void {
+  channelMock = {
+    state,
+    publish,
+    subscribe,
+    unsubscribe,
+    detach,
+    presence: {
+      enter: presenceEnter,
+      update: presenceUpdate,
+      leave: presenceLeave,
+      get: presenceGet,
+      subscribe: presenceSubscribe,
+      unsubscribe: presenceUnsubscribe,
+    },
+  };
+  channelsGet.mockReturnValue(channelMock);
+}
+
+/** A channel-state rejection as Ably raises one (code 90001). */
+function wrongStateError(message: string): Error {
+  return Object.assign(new Error(message), { code: 90001 });
+}
+
 describe("ablyTransport", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    channelsGet.mockReturnValue({
-      publish,
-      subscribe,
-      unsubscribe,
-      detach,
-      presence: {
-        enter: presenceEnter,
-        update: presenceUpdate,
-        leave: presenceLeave,
-        get: presenceGet,
-        subscribe: presenceSubscribe,
-        unsubscribe: presenceUnsubscribe,
-      },
-    });
+    armChannel();
     connectionOnce.mockResolvedValue(undefined);
     presenceGet.mockResolvedValue([]);
     time.mockResolvedValue(Date.now() + 5000);
@@ -252,5 +268,73 @@ describe("ablyTransport token errors", () => {
     );
     expect(report.mock.calls[0]?.[1]).toBeNull();
     vi.unstubAllGlobals();
+  });
+});
+
+describe("ablyTransport teardown", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    armChannel();
+    presenceLeave.mockResolvedValue(undefined);
+    detach.mockResolvedValue(undefined);
+  });
+
+  it("leaves presence and detaches while the channel is attached", async () => {
+    const channel = createAblyTransport().channel("room");
+    await channel.presence.leave();
+    await channel.detach();
+    expect(presenceLeave).toHaveBeenCalledTimes(1);
+    expect(detach).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats leaving an already detached channel as done", async () => {
+    armChannel("detached");
+    await expect(
+      createAblyTransport().channel("room").presence.leave(),
+    ).resolves.toBeUndefined();
+    expect(presenceLeave).not.toHaveBeenCalled();
+  });
+
+  it("treats tearing down a failed channel as done", async () => {
+    armChannel("failed");
+    const channel = createAblyTransport().channel("room");
+    await expect(channel.presence.leave()).resolves.toBeUndefined();
+    await expect(channel.detach()).resolves.toBeUndefined();
+    expect(presenceLeave).not.toHaveBeenCalled();
+    expect(detach).not.toHaveBeenCalled();
+  });
+
+  it("swallows a leave that loses the race with the channel detaching", async () => {
+    presenceLeave.mockImplementation(async () => {
+      channelMock.state = "detached";
+      throw wrongStateError(
+        "Unable to leave presence channel while in detached state",
+      );
+    });
+    await expect(
+      createAblyTransport().channel("room").presence.leave(),
+    ).resolves.toBeUndefined();
+    expect(presenceLeave).toHaveBeenCalledTimes(1);
+  });
+
+  it("still reports a leave refused while the channel was only suspended", async () => {
+    armChannel("suspended");
+    presenceLeave.mockRejectedValue(
+      wrongStateError(
+        "Unable to leave presence channel while in suspended state",
+      ),
+    );
+    await expect(
+      createAblyTransport().channel("room").presence.leave(),
+    ).rejects.toThrow("suspended state");
+  });
+
+  it("still reports a leave that failed for any other reason", async () => {
+    presenceLeave.mockRejectedValue(
+      Object.assign(new Error("connection closed"), { code: 80017 }),
+    );
+    await expect(
+      createAblyTransport().channel("room").presence.leave(),
+    ).rejects.toThrow("connection closed");
   });
 });
