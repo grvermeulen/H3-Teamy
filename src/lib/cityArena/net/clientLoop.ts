@@ -64,6 +64,15 @@ export type ClientLoopOptions = {
 export type ClientLoop = {
   /** Predicts forward for the elapsed time, publishing this client's input as it goes. */
   advance(elapsedMs: number): void;
+  /**
+   * The part of a tick predicted time has reached but not yet stepped, 0..1.
+   *
+   * The renderer draws this far past the last predicted tick so the local player and their car
+   * move at the display's rate instead of in 30 Hz jumps (`render/smoothing.ts`). Remote players
+   * are already smooth — {@link view} interpolates them against server time — and blending two of
+   * those poses leaves them smooth.
+   */
+  stepFraction(): number;
   /** Sets the input this client is holding; it applies from the next predicted tick. */
   setInput(input: WorldInput): void;
   /** Folds in a snapshot from the host and replays anything it had not seen. */
@@ -212,6 +221,10 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
   }
 
   return {
+    stepFraction(): number {
+      const exact = (elapsedTotalMs * CLIENT_TICK_HZ) / 1000;
+      return Math.min(1, Math.max(0, exact - ticksRun));
+    },
     advance(elapsedMs: number): void {
       if (!running) return;
       elapsedTotalMs += elapsedMs;

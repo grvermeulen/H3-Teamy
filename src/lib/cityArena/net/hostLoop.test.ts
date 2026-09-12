@@ -141,6 +141,30 @@ describe("hostLoop stepping", () => {
     expect(loop.state().tick).toBeLessThanOrEqual(MAX_CATCHUP_TICKS);
   });
 
+  it("reports the part of a tick it has taken in but not yet stepped", () => {
+    const { loop } = hostOnHub();
+    const tickMs = 1000 / HOST_TICK_HZ;
+    // The renderer draws this far past the last tick, so a world stepped at 30 Hz still moves at
+    // the display's rate (`render/smoothing.ts`).
+    expect(loop.stepFraction()).toBe(0);
+    loop.advance(tickMs / 4);
+    expect(loop.stepFraction()).toBeCloseTo(0.25, 6);
+    loop.advance(tickMs / 2);
+    expect(loop.stepFraction()).toBeCloseTo(0.75, 6);
+    // Crossing a whole tick steps it and leaves the remainder behind, never a fraction above 1.
+    loop.advance(tickMs / 2);
+    expect(loop.state().tick).toBe(1);
+    expect(loop.stepFraction()).toBeCloseTo(0.25, 6);
+  });
+
+  it("keeps the step fraction inside 0..1 even when catch-up is capped", () => {
+    const { loop } = hostOnHub();
+    loop.advance(1000 * 60);
+    const fraction = loop.stepFraction();
+    expect(fraction).toBeGreaterThanOrEqual(0);
+    expect(fraction).toBeLessThanOrEqual(1);
+  });
+
   it("holds the invariants over a hundred ticks", () => {
     const { hub, loop } = hostOnHub(3);
     const violations: string[] = [];
