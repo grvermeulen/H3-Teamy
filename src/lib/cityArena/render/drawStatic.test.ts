@@ -292,6 +292,65 @@ describe("paintChunk", () => {
     );
   });
 
+  it("lays a landmark's own art over its footprint once it has loaded, over the flat style colour", () => {
+    const image = document.createElement("canvas");
+    const brewery: DecodedTile = {
+      ...tile,
+      buildings: [
+        {
+          // A 4 × 15 m house running north–south, like Cuneralaan 42.
+          ring: [
+            [70, 10],
+            [74, 10],
+            [74, 25],
+            [70, 25],
+          ],
+          bounds: { minX: 70, minY: 10, maxX: 74, maxY: 25 },
+          levels: 2,
+          landmark: "klein-zwitserland",
+        },
+      ],
+    };
+    const lookup: LandmarkLookup = new Map([
+      [
+        "klein-zwitserland",
+        { name: "Brouwerij Klein Zwitserland", style: "brewery" },
+      ],
+    ]);
+    const flat = createFakeContext();
+    paintChunk(
+      flat,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [brewery],
+      lookup,
+    );
+    expect(flat.calls).toContain(`fill(${LANDMARK_FILL.brewery})`);
+    expect(flat.calls.some((call) => call.startsWith("drawImage("))).toBe(
+      false,
+    );
+    expect(flat.calls).toContain("fillText(Brouwerij Klein Zwitserland,0,0)");
+
+    const painted = createFakeContext();
+    paintChunk(
+      painted,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [brewery],
+      lookup,
+      {
+        landmarks: { brewery: { image, lengthMetres: 16, widthMetres: 8 } },
+      },
+    );
+    // 15 m plus the half-metre overhang each end, half as wide as it is long.
+    expect(painted.calls).toContain(`drawImage(${String(image)},-8,-4,16,8)`);
+    expect(
+      painted.calls.indexOf(`fill(${LANDMARK_FILL.brewery})`),
+    ).toBeLessThan(
+      painted.calls.findIndex((call) => call.startsWith("drawImage(")),
+    );
+  });
+
   it("lays the roof textures along each building's longest edge, the landmark kept in its colour", () => {
     const context = createFakeContext();
     const texture = {

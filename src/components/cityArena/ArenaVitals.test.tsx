@@ -1,10 +1,28 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import ArenaVitals, { HEALTH_LABEL } from "./ArenaVitals";
+import ArenaVitals, { DRUNK_LABEL, HEALTH_LABEL } from "./ArenaVitals";
 
 describe("ArenaVitals", () => {
   afterEach(() => {
     cleanup();
+  });
+
+  it("shows the drunkenness meter only after a beer", () => {
+    const ammo = { uzi: 0, shotgun: 0, rifle: 0, bat: 0 };
+    const { rerender } = render(
+      <ArenaVitals health={100} weapon="pistol" ammo={ammo} speedMps={null} />,
+    );
+    expect(screen.queryByTestId("arena-drunk")).toBeNull();
+    rerender(
+      <ArenaVitals
+        health={100}
+        weapon="pistol"
+        ammo={ammo}
+        speedMps={null}
+        drunk={0.34}
+      />,
+    );
+    expect(screen.getByLabelText(DRUNK_LABEL)).toHaveAttribute("value", "34");
   });
 
   it("shows the health bar, the weapon with unlimited ammo and no speed on foot", () => {

@@ -295,6 +295,8 @@ function buildScene(
     aimScreen: runtime.diedAtMs === null ? aimScreen : null,
     pushIn: deathPhase(runtime, nowMs)?.pushIn ?? 1,
     shake: shakeOffset(runtime.feedback, state.tick),
+    // A fade is not motion, but a swaying world is: reduced motion keeps the view steady.
+    drunk: runtime.reducedMotion ? 0 : myPlayer(runtime).drunk,
     vehicleArt: session.sprites(),
     peopleSprites: session.sprites().people,
     itemSprites: session.sprites().items,

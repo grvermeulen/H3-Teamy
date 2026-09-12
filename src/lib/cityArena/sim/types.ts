@@ -143,6 +143,12 @@ export type ArenaPlayerState = PlayerState & {
   /** Rate-limited steering command (−1..1) of the car being driven; 0 while on foot. */
   driveSteer: number;
   /**
+   * How drunk this player is, 0 (sober) to 1: every beer ordered at the brewery adds a share and
+   * it wears off a little every tick (`sim/beer.ts`). The damage this player's own shots do is
+   * scaled down by it, and the renderer sways the view.
+   */
+  drunk: number;
+  /**
    * Edge-triggered buttons this player held last tick. It lives on the player rather than on
    * the world so one player holding Enter cannot swallow another player's press.
    */
@@ -257,7 +263,9 @@ export type ArenaEvent =
       y: number;
     }
   | { kind: "wanted"; playerId: number; level: number }
-  | { kind: "zone"; playerId: number; phase: "warning" | "damage" };
+  | { kind: "zone"; playerId: number; phase: "warning" | "damage" }
+  /** A beer ordered at the brewery, for the sound and the haptics. */
+  | { kind: "beer"; playerId: number; x: number; y: number };
 
 /** Full arena simulation state: plain, JSON-serialisable data. */
 export type ArenaState = {

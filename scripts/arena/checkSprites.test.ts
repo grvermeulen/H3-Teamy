@@ -68,6 +68,15 @@ const MANIFEST: SpriteManifest = {
       pixelHeight: 12,
     },
   },
+  landmarks: {
+    brewery: {
+      file: "/arena/sprites/landmark-brewery.png",
+      lengthMetres: 16,
+      widthMetres: 4.5,
+      pixelWidth: 256,
+      pixelHeight: 72,
+    },
+  },
 };
 const FILES = [
   ...Object.values(MANIFEST.surfaces),
@@ -75,6 +84,7 @@ const FILES = [
   ...Object.values(MANIFEST.people),
   ...Object.values(MANIFEST.props),
   ...Object.values(MANIFEST.items),
+  ...Object.values(MANIFEST.landmarks),
 ].flatMap((entry) => (entry ? [path.basename(entry.file)] : []));
 
 /** A credits table naming every file given. */

@@ -133,25 +133,29 @@ grid.
 
 ### 3.2 Landmark config (`src/lib/cityArena/mapBuild/landmarks.config.ts`)
 
-| key                     | Name match        | Tag filter                                                            | Style    | Zone anchor        |
-| ----------------------- | ----------------- | --------------------------------------------------------------------- | -------- | ------------------ |
-| `cunerakerk`            | "Cunera"          | `amenity=place_of_worship` or `building=church`                       | `church` | Rhenen centrum     |
-| `gastland`              | "Feel Fit"        | `leisure` ∈ sports_centre, swimming_pool                              | `pool`   | —                  |
-| `grote-kerk-wageningen` | "Grote Kerk"      | `amenity=place_of_worship`, within 800 m of Wageningen Markt          | `church` | Wageningen centrum |
-| `onder-de-linden`       | "Onder de Linden" | `amenity` ∈ cafe, bar, pub, restaurant                                | `cafe`   | —                  |
-| `de-bongerd`            | "Bongerd"         | `leisure` ∈ sports_centre, swimming_pool; pinned to `node/3014133762` | `pool`   | —                  |
-| `wur-forum`             | "Forum"           | `amenity=university` or `building=university`                         | `campus` | WUR-campus         |
-| `wur-orion`             | "Orion"           | same                                                                  | `campus` | —                  |
-| `wur-atlas`             | "Atlas"           | same                                                                  | `campus` | —                  |
-| `oude-kerk-bennekom`    | "Alexanderkerk"   | `amenity=place_of_worship`, within 800 m of Bennekom Dorpsstraat      | `church` | Bennekom           |
-| `vrije-slag`            | "Vrije Slag"      | `leisure` ∈ swimming_pool, sports_centre                              | `pool`   | —                  |
+| key                     | Name match        | Tag filter                                                                   | Style     | Zone anchor        |
+| ----------------------- | ----------------- | ---------------------------------------------------------------------------- | --------- | ------------------ |
+| `cunerakerk`            | "Cunera"          | `amenity=place_of_worship` or `building=church`                              | `church`  | Rhenen centrum     |
+| `gastland`              | "Feel Fit"        | `leisure` ∈ sports_centre, swimming_pool                                     | `pool`    | —                  |
+| `grote-kerk-wageningen` | "Grote Kerk"      | `amenity=place_of_worship`, within 800 m of Wageningen Markt                 | `church`  | Wageningen centrum |
+| `onder-de-linden`       | "Onder de Linden" | `amenity` ∈ cafe, bar, pub, restaurant                                       | `cafe`    | —                  |
+| `de-bongerd`            | "Bongerd"         | `leisure` ∈ sports_centre, swimming_pool; pinned to `node/3014133762`        | `pool`    | —                  |
+| `wur-forum`             | "Forum"           | `amenity=university` or `building=university`                                | `campus`  | WUR-campus         |
+| `wur-orion`             | "Orion"           | same                                                                         | `campus`  | —                  |
+| `wur-atlas`             | "Atlas"           | same                                                                         | `campus`  | —                  |
+| `oude-kerk-bennekom`    | "Alexanderkerk"   | `amenity=place_of_worship`, within 800 m of Bennekom Dorpsstraat             | `church`  | Bennekom           |
+| `vrije-slag`            | "Vrije Slag"      | `leisure` ∈ swimming_pool, sports_centre                                     | `pool`    | —                  |
+| `klein-zwitserland`     | (pinned)          | `addr:street=Cuneralaan`, `addr:housenumber=42`; pinned to `node/2783521256` | `brewery` | —                  |
 
 Naming notes: OSM tags the Rhenen `gastland` complex (mid-rebuild) under its current
 operator's brand, "Feel Fit Center Rhenen" — "Gastland" is absent from its `name` tag — and
 the Bennekom church as "Oude of Sint-Alexanderkerk", not "Oude Kerk"; both name matches
 above target the distinctive substring that is actually present. `de-bongerd` is pinned by
 `osmId` because "Bongerd" also matches the WUR multi-sport complex around the pool
-(`way/826591321`, "Sports Centre de Bongerd").
+(`way/826591321`, "Sports Centre de Bongerd"). `klein-zwitserland` — Brouwerij Klein
+Zwitserland at Cuneralaan 42, Rhenen (2026-09-12) — is an address node with no `name`, so it
+is pinned by id and the landmark query fetches pinned ids alongside the name matches; the
+node lies inside the house's footprint, which attaches it. It serves beer (`sim/beer.ts`).
 
 Rules: each entry must match **exactly one** element; zero or multiple matches fail the
 build with the candidate list, resolved by adding an explicit `osmId` to the entry. Zone

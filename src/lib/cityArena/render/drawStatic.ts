@@ -7,6 +7,7 @@ import type { DecodedRoad, DecodedTile } from "../world/decode";
 import type { GroundKind, LandmarkStyle } from "../world/mapTypes";
 import type { Point } from "../world/projection";
 import type { RasterContext } from "./canvasTypes";
+import { paintLandmarkArt } from "./drawLandmarks";
 import { roofFill, roofPatterns, type RoofPatterns } from "./drawRoofs";
 import { paintFurniture, paintTreeShadows } from "./drawScenery";
 import {
@@ -28,9 +29,11 @@ import {
 } from "./palette";
 import {
   NO_SPRITES,
+  landmarkSpriteFor,
   surfaceFill,
   type ArenaSprites,
   type GroundTextures,
+  type LandmarkSprites,
 } from "./sprites";
 import { planStreetLabels } from "./streetLabels";
 
@@ -212,9 +215,9 @@ function paintCentreLines(context: RasterContext, roads: DecodedRoad[]): void {
 }
 
 /**
- * Paints buildings touching the chunk: a landmark in its style's colour, every other building
- * with its roof — tiles or gravel laid along its longest edge, the flat shade by floors until
- * that texture loads.
+ * Paints buildings touching the chunk: a landmark in its style's colour — with its style's art
+ * laid over the footprint once that has loaded — every other building with its roof: tiles or
+ * gravel laid along its longest edge, the flat shade by floors until that texture loads.
  */
 function paintBuildings(
   context: RasterContext,
@@ -222,6 +225,7 @@ function paintBuildings(
   chunkRect: Rect,
   landmarks: LandmarkLookup,
   roofs: RoofPatterns,
+  art: LandmarkSprites | undefined,
 ): void {
   for (const building of tile.buildings) {
     if (!rectsIntersect(building.bounds, chunkRect)) continue;
@@ -237,6 +241,8 @@ function paintBuildings(
     context.lineWidth = BUILDING_STROKE_WIDTH_M;
     context.setLineDash([]);
     context.stroke();
+    const sprite = style ? landmarkSpriteFor(art, style) : undefined;
+    if (sprite) paintLandmarkArt(context, building, sprite);
   }
 }
 
@@ -331,7 +337,8 @@ function tilesTouching(tiles: DecodedTile[], chunkRect: Rect): DecodedTile[] {
  * repeating texture from `sprites` when one has loaded, and falls back to its flat palette
  * colour when that texture is missing; furniture and trees draw their prop art the same way,
  * flat shapes until it lands, and a building's roof takes its texture along its longest edge.
- * Landmarks, centre lines and labels stay flat colour.
+ * Landmarks, centre lines and labels stay flat colour — except a landmark style with art of
+ * its own (the brewery), which is laid over the footprint once it has loaded.
  */
 export function paintChunk(
   context: RasterContext,
@@ -367,7 +374,14 @@ export function paintChunk(
   paintCentreLines(context, roads);
   const roofs = roofPatterns(context, sprites.roofs);
   for (const tile of touching)
-    paintBuildings(context, tile, chunkRect, landmarks, roofs);
+    paintBuildings(
+      context,
+      tile,
+      chunkRect,
+      landmarks,
+      roofs,
+      sprites.landmarks,
+    );
   paintFurniture(context, touching, chunkRect, sprites.props);
   paintTreeShadows(context, touching, chunkRect);
   for (const tile of touching)

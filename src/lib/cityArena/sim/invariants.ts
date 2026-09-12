@@ -86,6 +86,11 @@ function checkPlayer(
       (player.vehicleId !== null || player.driveSteer === 0),
     `${who} driveSteer ${player.driveSteer} out of range or set on foot`,
   );
+  check(
+    violations,
+    Number.isFinite(player.drunk) && player.drunk >= 0 && player.drunk <= 1,
+    `${who} drunk ${player.drunk} out of range`,
+  );
 }
 
 /** Car positions, health and unique ids. */

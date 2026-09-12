@@ -12,6 +12,8 @@ export const FIRE_LABEL = "Schieten";
 export const ENTER_LABEL = "Instappen";
 /** Car button label while driving (spec §16). */
 export const EXIT_LABEL = "Uitstappen";
+/** The same button at the brewery's tap, where a press orders a beer instead. */
+export const BEER_LABEL = "Biertje";
 /** Weapon button label (spec §16). */
 export const WEAPON_LABEL = "Wapen";
 /** Radio button label, shown in a car (Plan 7). */
@@ -23,6 +25,8 @@ const TOUCH_BUTTON_CLASS =
 /** Props for {@link ArenaTouchButtons}. */
 export type ArenaTouchButtonsProps = {
   inVehicle: boolean;
+  /** True at the brewery's tap: the Instappen button reads Biertje. Defaults to false. */
+  canOrderBeer?: boolean;
   onButton: (name: ButtonName, pressed: boolean) => void;
   /** False with the twin-stick layout, where the aim stick fires (spec §7). Defaults to true. */
   showFire?: boolean;
@@ -93,10 +97,16 @@ function HoldButton({
  */
 export default function ArenaTouchButtons({
   inVehicle,
+  canOrderBeer = false,
   onButton,
   showFire = true,
   onRadio,
 }: ArenaTouchButtonsProps): React.JSX.Element {
+  const enterLabel = inVehicle
+    ? EXIT_LABEL
+    : canOrderBeer
+      ? BEER_LABEL
+      : ENTER_LABEL;
   return (
     <div
       data-testid="arena-touch-buttons"
@@ -113,11 +123,7 @@ export default function ArenaTouchButtons({
         </button>
       ) : null}
       <HoldButton name="weaponNext" label={WEAPON_LABEL} onButton={onButton} />
-      <HoldButton
-        name="enter"
-        label={inVehicle ? EXIT_LABEL : ENTER_LABEL}
-        onButton={onButton}
-      />
+      <HoldButton name="enter" label={enterLabel} onButton={onButton} />
       {showFire ? (
         <HoldButton name="fire" label={FIRE_LABEL} onButton={onButton} />
       ) : null}

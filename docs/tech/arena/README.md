@@ -552,3 +552,61 @@ And the art the owner asked for, in a PR of its own:
   texture along the building's longest edge, anchored at its first corner, by setting one shared
   pattern's transform per building (`roofPatternMatrix`); landmarks keep their style colour and
   a roof keeps its flat shade until the texture loads. `check-sprites` caps an item at 32 KB.
+
+## Brouwerij Klein Zwitserland (Plan 10 — beer and drunkenness)
+
+The owner's ask of 2026-09-12: Cuneralaan 42 in Rhenen is Brouwerij Klein Zwitserland, with
+art of its own, a tap you can order beer at, drunkenness that wears off, and less damage while
+drunk.
+
+- **The landmark.** `landmarks.config.ts` gains `klein-zwitserland` in a new `LandmarkStyle`,
+  `brewery`. The address is an OSM node (`node/2783521256`) with no `name` tag, so the entry
+  is pinned by id and `buildLandmarkQuery` now fetches pinned ids alongside the name matches
+  (`node(id:…)`, `way(id:…)`); the node lies inside the house's footprint, which attaches it
+  (spec §3.2). The asset is **v3**: v2 with that house (`tile_1_3.json`, a 61 m² two-storey
+  terraced house) tagged and the landmark added to `index.json`, patched by hand because
+  Overpass was unreachable from the build machine — the next full rebuild reproduces it from
+  the config. The Rhenen zone disc ends about 22 m short of the house, so it is not in the
+  zone's landmark list: in an enforced potje a beer is a dash outside the ring, inside the
+  five-second warning if you do not dawdle.
+- **The art.** `assets/arena/sprites/landmark-brewery.png` (ElevenLabs Creative, gpt-image-2,
+  background removed; credited in `CREDITS.md`): the house from directly above — slate roof,
+  copper kettles under a skylight, a chimney with steam, a terrace with barrels at one end.
+  The pack script's `landmarkSources` packs it like an item, along a nominal 16 m at 16 px/m
+  with its own aspect, into the manifest's `landmarks` record (a partial record over
+  `LANDMARK_ART_KEYS`, keyed by style). `render/drawLandmarks.ts` lays it over the footprint:
+  `orientedBox` measures the ring along its longest edge, and the art is stretched to that
+  length plus `LANDMARK_ART_OVERHANG_M` (0.5 m) each end, as wide as its aspect says, with its
+  left (terrace) end at the north or west end of the building — the street side of this house.
+  Until the file loads the building keeps the flat `LANDMARK_FILL.brewery`, like every other
+  landmark. `check-sprites` caps it at the prop's 96 KB.
+- **The tap** (`sim/beer.ts`). Every landmark in the `brewery` style serves. Standing on foot
+  within `BEER_ORDER_RANGE_M` (10 m) of its centre, the Instappen press that finds no car in
+  reach orders a beer (`applyEnterExit` tries the car first): `drunk` on the player rises by
+  `DRUNK_PER_BEER` (0.34, so three glasses is fully drunk, capped at 1) and a `beer` event is
+  pushed, which sounds and buzzes like a pickup. `soberUp` runs every tick and brings `drunk`
+  down by `DRUNK_DECAY_PER_TICK`, `SOBER_UP_S` = 120 s from fully drunk to sober. A respawn
+  starts sober. `drunk` travels as a whole percentage in the player row's nineteenth column
+  (`snapshotWire`), appended so an older row still decodes, and `checkInvariants` keeps it in
+  0..1.
+- **The effect.** Every pellet a drunk player fires is created carrying
+  `drunkDamageFactor(drunk)` = `1 − DRUNK_DAMAGE_REDUCTION · drunk` of its weapon's damage
+  (half when fully drunk, every weapon including the fist and the bat). It is scaled in
+  `fireShots`, where the shot is made, so the weakened damage travels with the bullet and
+  sobering up mid-flight cannot make a pellet already in the air hit harder — and, because the
+  bullet's damage is what the wire carries, a client sees the same number the host does.
+  Nothing else weakens: a drunk driver still rams as hard, and a drunk cop is a sober cop,
+  since only players drink. On screen
+  `renderScene` applies `drunkSway`: a slow roll of up to `DRUNK_SWAY_RAD` (about 4°) and a
+  breathing of up to `DRUNK_BREATHE` (4 %) around the viewport centre, scaled by `drunk` and
+  derived from the tick; `prefers-reduced-motion` keeps the world steady.
+- **HUD.** `ArenaHud` carries `drunk` and `canOrderBeer`; `ArenaVitals` shows an amber
+  Dronken meter while drunk, `ArenaBeerPrompt` names the key or button at the tap, the touch
+  Instappen button reads **Biertje** there, and the desktop hint mentions the beer.
+- **Reading of the ask.** "Lower damage when you're drunk" is taken as the damage you _deal_:
+  beer is a handicap you accept for the fun of it, the way the sway is, rather than a reason to
+  drink before a fight. If the owner meant the other one — taking less damage — it is the same
+  factor applied in `damagePlayer` instead, one line.
+- **Still open.** Whether three beers to fully drunk and two minutes to sober up are the right
+  numbers, and the size of the sway on a phone — the owner's eyes; every number is a named
+  constant in `sim/beer.ts` and `render/renderScene.ts`.

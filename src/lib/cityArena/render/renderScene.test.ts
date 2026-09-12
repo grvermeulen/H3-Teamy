@@ -14,7 +14,13 @@ import {
   PLAYER_OTHER_FILL,
   POLICE_LIGHT_BLUE,
 } from "./palette";
-import { renderScene, type Scene } from "./renderScene";
+import {
+  DRUNK_BREATHE,
+  DRUNK_SWAY_RAD,
+  drunkSway,
+  renderScene,
+  type Scene,
+} from "./renderScene";
 import { CANOPY_LAYER } from "./drawScenery";
 import { createStaticRaster } from "./staticRaster";
 import { createFakeContext, createFakeTarget } from "./testing/fakeContext";
@@ -86,6 +92,27 @@ describe("renderScene", () => {
     expect(calls).toContain("scale(1.05,1.05)");
     expect(calls[calls.length - 1]).toBe("restore()");
     expect(stats.missing).toBeGreaterThan(0);
+  });
+
+  it("sways the world by drunkenness, and holds it steady sober", () => {
+    expect(drunkSway(0, 24)).toEqual({ tilt: 0, scale: 1 });
+    const full = drunkSway(1, 24);
+    expect(Math.abs(full.tilt)).toBeLessThanOrEqual(DRUNK_SWAY_RAD);
+    expect(Math.abs(full.tilt)).toBeGreaterThan(0);
+    expect(Math.abs(full.scale - 1)).toBeLessThanOrEqual(DRUNK_BREATHE);
+    expect(drunkSway(0.5, 24).tilt).toBeCloseTo(full.tilt / 2, 9);
+    expect(drunkSway(1, 24)).toEqual(full);
+    // The cars and the player turn by heading anyway; the sway is one more turn, of the world.
+    const rotations = (calls: string[]): number =>
+      calls.filter((call) => call.startsWith("rotate(")).length;
+    const sober = createFakeContext();
+    renderScene(sober, viewport, sceneWith({ tick: 24 }));
+    const drunk = createFakeContext();
+    renderScene(drunk, viewport, sceneWith({ tick: 24, drunk: 1 }));
+    expect(rotations(drunk.calls)).toBe(rotations(sober.calls) + 1);
+    expect(drunk.calls).toContain(
+      `rotate(${Math.round(full.tilt * 100) / 100})`,
+    );
   });
 
   it("draws every player, your own last and in your own colours", () => {

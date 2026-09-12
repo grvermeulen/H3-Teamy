@@ -29,6 +29,22 @@ describe("ArenaTouchButtons", () => {
     expect(onButton).toHaveBeenLastCalledWith("enter", true);
   });
 
+  it("labels the car button Biertje at the brewery's tap, and still Uitstappen in a car", () => {
+    const onButton = vi.fn();
+    const { rerender } = render(
+      <ArenaTouchButtons inVehicle={false} canOrderBeer onButton={onButton} />,
+    );
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Biertje" }), {
+      pointerId: 4,
+    });
+    expect(onButton).toHaveBeenLastCalledWith("enter", true);
+    expect(screen.queryByRole("button", { name: "Instappen" })).toBeNull();
+    rerender(<ArenaTouchButtons inVehicle canOrderBeer onButton={onButton} />);
+    expect(
+      screen.getByRole("button", { name: "Uitstappen" }),
+    ).toBeInTheDocument();
+  });
+
   it("labels the car button Uitstappen while driving", () => {
     render(<ArenaTouchButtons inVehicle onButton={vi.fn()} />);
     expect(

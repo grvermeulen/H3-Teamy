@@ -32,14 +32,35 @@ function wrapUnion(statements: string[]): string {
   return `${HEADER}\n(\n${statements.map((statement) => `  ${statement}`).join("\n")}\n);\n${OUTPUT}\n`;
 }
 
-/** Everything in the bbox whose name contains one of the given fragments (case-insensitive). */
-export function buildLandmarkQuery(nameMatches: string[]): string {
-  return wrapUnion(
-    nameMatches.map(
+/** `way/12` → `["way", 12]`; the id statements below are grouped by element type. */
+function splitElementId(elementId: string): [string, number] {
+  const [type, rawId] = elementId.split("/");
+  return [type, Number(rawId)];
+}
+
+/**
+ * Everything in the bbox whose name contains one of the given fragments (case-insensitive),
+ * plus every element pinned by id, so a landmark without a name of its own (an address node)
+ * is fetched too.
+ */
+export function buildLandmarkQuery(
+  nameMatches: string[],
+  pinnedElementIds: string[] = [],
+): string {
+  const byType = new Map<string, number[]>();
+  for (const elementId of pinnedElementIds) {
+    const [type, id] = splitElementId(elementId);
+    byType.set(type, [...(byType.get(type) ?? []), id]);
+  }
+  return wrapUnion([
+    ...nameMatches.map(
       (fragment) =>
         `nwr["name"~"${escapeRegex(fragment)}",i](${OVERPASS_BBOX});`,
     ),
-  );
+    ...[...byType.entries()].map(
+      ([type, ids]) => `${type}(id:${ids.join(",")});`,
+    ),
+  ]);
 }
 
 /** Drivable roads in the bbox plus service roads near each zone centre. */
@@ -88,8 +109,7 @@ export function buildBuildingsQuery(
   const wayIds: number[] = [];
   const relationIds: number[] = [];
   for (const elementId of extraElementIds) {
-    const [type, rawId] = elementId.split("/");
-    const id = Number(rawId);
+    const [type, id] = splitElementId(elementId);
     if (type === "way") wayIds.push(id);
     if (type === "relation") relationIds.push(id);
   }

@@ -114,7 +114,11 @@ export type SnapshotPlayer = {
   invulnerableUntilTick: number;
   heat: number;
   driveSteer: number;
+  drunk: number;
 };
+
+/** `drunk` travels as a whole percentage. */
+const DRUNK_SCALE = 100;
 
 /** A car as the snapshot carries them. */
 export type SnapshotVehicle = Pick<
@@ -193,6 +197,8 @@ function encodePlayers(state: ArenaState): number[][] {
     // Appended past the original sixteen, so an older row still decodes.
     player.ammo.rifle,
     player.ammo.bat,
+    // Appended again for the brewery (Plan 10), for the same reason.
+    Math.round(player.drunk * DRUNK_SCALE),
   ]);
 }
 
@@ -303,6 +309,7 @@ function decodePlayers(rows: number[][]): SnapshotPlayer[] {
     invulnerableUntilTick: row[13] ?? 0,
     heat: row[14] ?? 0,
     driveSteer: (row[15] ?? 0) / STEER_SCALE,
+    drunk: (row[18] ?? 0) / DRUNK_SCALE,
   }));
 }
 

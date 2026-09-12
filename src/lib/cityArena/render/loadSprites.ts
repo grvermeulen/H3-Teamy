@@ -10,6 +10,7 @@ import {
   type ArenaSprites,
   type GroundTextures,
   ITEM_KEYS,
+  LANDMARK_ART_KEYS,
   PROP_KEYS,
   type PersonSprite,
   type PersonSprites,
@@ -307,18 +308,29 @@ async function loadAll(
   options: Required<SpriteStoreOptions>,
 ): Promise<ArenaSprites> {
   const manifest = await fetchManifest(options.fetchImpl, options.manifestPath);
-  const [road, pavement, water, ground, vehicles, people, props, items, roofs] =
-    await Promise.all([
-      loadSurface(options.loadImage, manifest.surfaces.road),
-      loadSurface(options.loadImage, manifest.surfaces.pavement),
-      loadSurface(options.loadImage, manifest.surfaces.water),
-      loadGround(options.loadImage, manifest.surfaces),
-      loadVehicles(options.loadImage, options.canvasFactory, manifest),
-      loadPeople(options.loadImage, manifest),
-      loadPropRecord(options.loadImage, PROP_KEYS, manifest.props),
-      loadPropRecord(options.loadImage, ITEM_KEYS, manifest.items),
-      loadRoofs(options.loadImage, manifest.surfaces),
-    ]);
+  const [
+    road,
+    pavement,
+    water,
+    ground,
+    vehicles,
+    people,
+    props,
+    items,
+    roofs,
+    landmarks,
+  ] = await Promise.all([
+    loadSurface(options.loadImage, manifest.surfaces.road),
+    loadSurface(options.loadImage, manifest.surfaces.pavement),
+    loadSurface(options.loadImage, manifest.surfaces.water),
+    loadGround(options.loadImage, manifest.surfaces),
+    loadVehicles(options.loadImage, options.canvasFactory, manifest),
+    loadPeople(options.loadImage, manifest),
+    loadPropRecord(options.loadImage, PROP_KEYS, manifest.props),
+    loadPropRecord(options.loadImage, ITEM_KEYS, manifest.items),
+    loadRoofs(options.loadImage, manifest.surfaces),
+    loadPropRecord(options.loadImage, LANDMARK_ART_KEYS, manifest.landmarks),
+  ]);
   return {
     road,
     pavement,
@@ -331,6 +343,7 @@ async function loadAll(
     props,
     items,
     roofs,
+    landmarks,
   };
 }
 
@@ -342,6 +355,7 @@ function hasAnySprite(sprites: ArenaSprites): boolean {
   if (Object.values(sprites.props ?? {}).some(Boolean)) return true;
   if (Object.values(sprites.items ?? {}).some(Boolean)) return true;
   if (Object.values(sprites.roofs ?? {}).some(Boolean)) return true;
+  if (Object.values(sprites.landmarks ?? {}).some(Boolean)) return true;
   return Boolean(sprites.road ?? sprites.pavement ?? sprites.water);
 }
 
