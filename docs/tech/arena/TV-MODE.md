@@ -1,6 +1,24 @@
-# GTA H3 — tv-modus (0.3.0)
+# GTA H3 — tv-modus
 
 ## Gebruik
+
+Sinds 0.3.1 staat **Cast naar tv** bovenaan het spelmenu, zowel tijdens oefenen als
+tijdens een potje. De knop opent een handleiding binnen hetzelfde menu; de kamer en
+het canvas blijven actief. De apparaatkeuze herkent iPhone/iPad (ook iPadOS met een
+desktop-user-agent), Android en computer en kan handmatig worden aangepast.
+Escape gaat eerst terug naar het menu; **Verder spelen** sluit de uitleg.
+
+Op iPhone toont de uitleg het pictogram van **Synchrone weergave** en legt uit
+waarom de AirPlay-uitvoerkeuze bij muziek alleen gamegeluid deelt. Schermspiegeling
+start de speler zelf via iOS, Android of Chrome; de webgame kan de native
+apparaatkiezer voor schermspiegeling niet openen.
+De webgame tekent op een canvas; de AirPlay-API voor HTML-media start geen
+schermspiegeling van dat canvas. De Google Cast Web Sender SDK ondersteunt iOS Chrome
+niet en een eigen game-ontvanger vraagt aparte registratie/integratie.
+
+Bronnen: [Apple-schermspiegeling](https://support.apple.com/nl-nl/102661),
+[AirPlay voor webmedia](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/AirPlayGuide/OptingInorOutofAirPlay/OptingInorOutofAirPlay.html),
+[Google Cast Web Sender](https://developers.google.com/cast/docs/web_sender).
 
 Open `/arena/scherm` op een tv of een laptop aan HDMI. Dit scherm hoeft niet in te loggen.
 Open een nieuwe kamer, of verbind met een bestaande code. Spelers scannen de QR-code,
