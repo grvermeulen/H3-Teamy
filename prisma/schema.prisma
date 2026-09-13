@@ -271,7 +271,10 @@ model ArenaRoom {
 model ArenaRoomMember {
   id           String    @id @default(uuid())
   roomId       String
-  userId       String
+  userId       String?
+  role         String    @default("player")
+  device       String    @default("desktop")
+  displayKeyHash String?
   joinNonce    String    @unique
   displayName  String
   joinedAt     DateTime  @default(now())
@@ -282,6 +285,7 @@ model ArenaRoomMember {
 
   @@index([roomId, userId])
   @@index([roomId, seenAt])
+  @@index([displayKeyHash])
 }
 
 /** Server times and a retained roster establish exactly one casual match lifecycle. */

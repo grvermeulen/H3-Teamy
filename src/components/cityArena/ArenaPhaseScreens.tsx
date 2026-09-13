@@ -5,13 +5,14 @@ import { rankScoreboard, type ScoreLine } from "@/lib/cityArena/net/scoreboard";
 import { ArenaCountdown } from "./ArenaCountdown";
 import { ArenaLobby, type CrewMember } from "./ArenaLobby";
 import { ArenaScoreboard, LIVE_TITLE } from "./ArenaScoreboard";
-import type { ArenaGame } from "./useArenaGame";
+import type { MatchSeam } from "./matchSeam";
+import { ArenaRoomQr } from "./ArenaRoomQr";
 import type { ArenaRoom } from "./useArenaRoom";
 import { useMatchClock } from "./useMatchClock";
 
 /** Props for {@link ArenaPhaseScreens}. */
 export type ArenaPhaseScreensProps = {
-  game: ArenaGame;
+  game: MatchSeam;
   room: ArenaRoom & { leave: () => void };
   onClose: () => void;
   /** True while Tab is held: the scorebord as it stands, over the running match (spec §7). */
@@ -23,7 +24,7 @@ const LIVE_SCOREBOARD_MS = 500;
 
 /** The scorebord as it stands right now, re-read twice a second for as long as it is shown. */
 function useLiveScoreboard(
-  game: ArenaGame,
+  game: MatchSeam,
   active: boolean,
 ): { lines: ScoreLine[]; accounts: ReadonlyMap<number, string> } {
   const [, setBeat] = useState(0);
@@ -139,7 +140,9 @@ export function ArenaPhaseScreens({
           ref={lobbyButton}
           onClick={toggleExploring}
         >
-          {room.roomCode ?? "Verbinden…"} · {room.crew.length}/8 · Lobby openen
+          {room.roomCode ?? "Verbinden…"} ·{" "}
+          {room.crew.filter((member) => member.role !== "display").length}/8 ·
+          Lobby openen
         </button>
       </div>
     );
@@ -171,6 +174,7 @@ export function ArenaPhaseScreens({
           onEnterCode={onClose}
           onLeave={leave}
         />
+        {room.roomCode ? <ArenaRoomQr code={room.roomCode} /> : null}
       </div>
     );
   // Before the countdown: Tab during the count still shows the board, as `inPlay` promises.
@@ -206,6 +210,16 @@ export function ArenaPhaseScreens({
           onRetry={clock.retryResult}
         />
       </div>
+    );
+  if (clock.phase === "playing" && clock.secondsLeft !== null)
+    return (
+      <p
+        aria-label="Resterende speeltijd"
+        className="pointer-events-none absolute right-3 top-[calc(4.5rem+env(safe-area-inset-top))] z-10 rounded bg-black/80 px-3 py-2 text-sm text-[var(--arena-amber)] tabular-nums"
+      >
+        {Math.floor(clock.secondsLeft / 60)}:
+        {String(clock.secondsLeft % 60).padStart(2, "0")}
+      </p>
     );
   return null;
 }

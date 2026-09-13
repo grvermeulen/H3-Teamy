@@ -2,6 +2,8 @@ import { randomInt, randomUUID } from "node:crypto";
 import { Prisma, type ArenaRoom, type ArenaRoomMember } from "@prisma/client";
 import { prisma } from "../db";
 import type { ArenaUser } from "../arenaAuth";
+import type { ArenaDisplayIdentity } from "../arenaDisplayIdentity";
+import { arenaHostPriority, ticketRole } from "../cityArena/net/roles";
 import { ROOM_CODE_ALPHABET } from "../cityArena/net/room";
 import {
   ArenaZoneSchema,
@@ -9,6 +11,7 @@ import {
   arenaChannels,
   type ArenaRoomCommand,
   type ArenaRoomTicket,
+  type ArenaRole,
 } from "../cityArena/net/roomProtocol";
 import type { LobbyRoom } from "../cityArena/net/lobbyPresence";
 
@@ -25,6 +28,40 @@ export class ArenaRoomError extends Error {
 }
 
 type Transaction = Prisma.TransactionClient;
+/** Either a verified account ID or an anonymous screen credential. */
+export type ArenaMemberOwner = string | ArenaDisplayIdentity;
+/** Only account actors may create simulation seats. */
+export type ArenaActor =
+  ArenaUser | (ArenaDisplayIdentity & { userId: null; displayName: string });
+
+function ownerWhere(
+  owner: ArenaMemberOwner,
+): { userId: string } | { displayKeyHash: string; userId: null } {
+  return typeof owner === "string"
+    ? { userId: owner }
+    : { userId: null, displayKeyHash: owner.displayKeyHash };
+}
+
+function actorOwner(actor: ArenaActor): ArenaMemberOwner {
+  return actor.userId === null ? actor : actor.userId;
+}
+
+function ownsMember(member: ArenaRoomMember, owner: ArenaMemberOwner): boolean {
+  return typeof owner === "string"
+    ? member.userId === owner && member.role !== "display"
+    : member.userId === null &&
+        member.role === "display" &&
+        member.displayKeyHash === owner.displayKeyHash;
+}
+
+function playerMembers(
+  members: ArenaRoomMember[],
+): (ArenaRoomMember & { userId: string })[] {
+  return members.filter(
+    (entry): entry is ArenaRoomMember & { userId: string } =>
+      entry.role !== "display" && entry.userId !== null,
+  );
+}
 
 /** Locks a room so capacity, host grants and match transitions cannot race. */
 export async function lockArenaRoom(
@@ -43,12 +80,12 @@ export async function lockArenaRoom(
 export async function requireArenaMember(
   tx: Transaction,
   memberId: string,
-  userId: string,
+  owner: ArenaMemberOwner,
 ): Promise<ArenaRoomMember> {
   const member = await tx.arenaRoomMember.findUnique({
     where: { id: memberId },
   });
-  if (!member || member.userId !== userId || member.leftAt !== null) {
+  if (!member || !ownsMember(member, owner) || member.leftAt !== null) {
     throw new ArenaRoomError(
       "not-member",
       403,
@@ -70,7 +107,7 @@ async function liveMembers(
       seenAt: { gt: new Date(now.getTime() - ROOM_RULES.memberTtlMs) },
     },
     orderBy: [{ joinedAt: "asc" }, { id: "asc" }],
-    take: ROOM_RULES.capacity,
+    take: ROOM_RULES.capacity + ROOM_RULES.displayCapacity,
   });
 }
 
@@ -81,10 +118,20 @@ async function maintainHost(
   renewingMember?: string,
 ): Promise<ArenaRoom> {
   const members = await liveMembers(tx, room.id, now);
+  const eligible = members
+    .filter(
+      (member) =>
+        member.visible &&
+        arenaHostPriority(member) > 0 &&
+        member.seenAt.getTime() > now.getTime() - ROOM_RULES.hostLeaseMs,
+    )
+    .sort(
+      (first, second) => arenaHostPriority(second) - arenaHostPriority(first),
+    );
   const current = members.find(
     (member) => member.id === room.hostMemberId && member.visible,
   );
-  if (current && room.hostLeaseUntil > now) {
+  if (current && arenaHostPriority(current) > 0 && room.hostLeaseUntil > now) {
     if (current.id !== renewingMember) return room;
     return tx.arenaRoom.update({
       where: { id: room.id },
@@ -93,11 +140,7 @@ async function maintainHost(
       },
     });
   }
-  const next = members.find(
-    (member) =>
-      member.visible &&
-      member.seenAt.getTime() > now.getTime() - ROOM_RULES.hostLeaseMs,
-  );
+  const next = eligible[0];
   if (!next && !room.hostMemberId) return room;
   const updated = await tx.arenaRoom.update({
     where: { id: room.id },
@@ -141,6 +184,8 @@ async function ticketFor(
       clientId: member.id,
       name: member.displayName,
       joinedAt: member.joinedAt.getTime(),
+      role: member.role as ArenaRole,
+      device: member.device === "mobile" ? "mobile" : "desktop",
     })),
     round: round
       ? {
@@ -179,8 +224,16 @@ async function resumeMember(
   if (member.seenAt.getTime() > now.getTime() - ROOM_RULES.memberTtlMs) return;
   const present = await liveMembers(tx, member.roomId, now);
   if (
-    present.length >= ROOM_RULES.capacity ||
-    present.some((entry) => entry.userId === member.userId)
+    (member.role === "display"
+      ? present.filter((entry) => entry.role === "display").length >=
+        ROOM_RULES.displayCapacity
+      : playerMembers(present).length >= ROOM_RULES.capacity) ||
+    present.some((entry) =>
+      ownsMember(
+        entry,
+        member.userId ?? { displayKeyHash: member.displayKeyHash! },
+      ),
+    )
   ) {
     throw new ArenaRoomError(
       "room-full",
@@ -190,7 +243,9 @@ async function resumeMember(
   }
   const elsewhere = await tx.arenaRoomMember.count({
     where: {
-      userId: member.userId,
+      ...ownerWhere(
+        member.userId ?? { displayKeyHash: member.displayKeyHash! },
+      ),
       leftAt: null,
       seenAt: { gt: new Date(now.getTime() - ROOM_RULES.memberTtlMs) },
       room: { expiresAt: { gt: now } },
@@ -202,6 +257,7 @@ async function resumeMember(
       409,
       "Sluit eerst een ander potje",
     );
+  if (member.userId === null) return;
   const round = await activeRound(tx, member.roomId, now);
   if (!round) return;
   const roster = await tx.arenaRoundParticipant.findMany({
@@ -226,24 +282,27 @@ async function resumeMember(
 
 async function join(
   tx: Transaction,
-  user: ArenaUser,
+  user: ArenaActor,
   command: Extract<ArenaRoomCommand, { action: "create" | "join" }>,
   now: Date,
 ): Promise<ArenaRoomTicket> {
   // A per-account lock bounds concurrent room creation and makes request retries idempotent.
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`arena:${user.userId}`}))`;
+  const owner = actorOwner(user);
+  const ownerKey = typeof owner === "string" ? owner : owner.displayKeyHash;
+  const role = user.userId === null ? "display" : (command.role ?? "player");
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`arena:${ownerKey}`}))`;
   const previous = await tx.arenaRoomMember.findUnique({
     where: { joinNonce: command.joinNonce },
   });
   if (previous) {
-    if (previous.userId !== user.userId || previous.leftAt)
+    if (!ownsMember(previous, owner) || previous.leftAt)
       throw new ArenaRoomError(
         "not-member",
         403,
         "Deze deelname is niet meer geldig",
       );
     const room = await lockArenaRoom(tx, previous.roomId, now);
-    const fresh = await requireArenaMember(tx, previous.id, user.userId);
+    const fresh = await requireArenaMember(tx, previous.id, owner);
     if (
       (command.action === "join" && room.code !== command.roomCode) ||
       (command.action === "create" && room.zone !== command.zone)
@@ -264,7 +323,7 @@ async function join(
   }
   const count = await tx.arenaRoomMember.count({
     where: {
-      userId: user.userId,
+      ...ownerWhere(owner),
       leftAt: null,
       seenAt: { gt: new Date(now.getTime() - ROOM_RULES.memberTtlMs) },
       room: { expiresAt: { gt: now } },
@@ -294,12 +353,17 @@ async function join(
         code,
         zone: command.zone,
         expiresAt: new Date(now.getTime() + ROOM_RULES.roomTtlMs),
-        hostMemberId: memberId,
+        hostMemberId:
+          role === "controller" || role === "display" ? null : memberId,
         hostLeaseUntil: new Date(now.getTime() + ROOM_RULES.hostLeaseMs),
       },
     });
     await tx.arenaHostChange.create({
-      data: { roomId: room.id, memberId, epoch: room.hostEpoch },
+      data: {
+        roomId: room.id,
+        memberId: room.hostMemberId,
+        epoch: room.hostEpoch,
+      },
     });
   } else {
     const found = await tx.arenaRoom.findUnique({
@@ -320,17 +384,22 @@ async function join(
         404,
         "Dit potje bestaat niet meer",
       );
-    if (members.some((member) => member.userId === user.userId))
+    if (members.some((member) => ownsMember(member, owner)))
       throw new ArenaRoomError(
         "already-joined",
         409,
         "Je speelt al mee in een ander tabblad",
       );
-    if (members.length >= ROOM_RULES.capacity)
+    if (
+      role === "display"
+        ? members.filter((member) => member.role === "display").length >=
+          ROOM_RULES.displayCapacity
+        : playerMembers(members).length >= ROOM_RULES.capacity
+    )
       throw new ArenaRoomError("room-full", 409, "Potje is vol");
   }
   const round = await activeRound(tx, room.id, now);
-  if (round) {
+  if (round && user.userId !== null) {
     const roster = await tx.arenaRoundParticipant.findMany({
       where: { roundId: round.id },
     });
@@ -343,6 +412,8 @@ async function join(
           seenAt: now,
           visible: true,
           joinNonce: command.joinNonce,
+          role,
+          device: command.device ?? "desktop",
         },
       });
       return ticketFor(
@@ -368,6 +439,10 @@ async function join(
       id: memberId,
       roomId: room.id,
       userId: user.userId,
+      role,
+      device: command.device ?? "desktop",
+      displayKeyHash: user.userId === null ? user.displayKeyHash : null,
+      visible: role !== "display",
       joinNonce: command.joinNonce,
       displayName: user.displayName.slice(0, 40),
       seenAt: now,
@@ -378,18 +453,20 @@ async function join(
 
 /** Executes a validated room operation under PostgreSQL locks; cache fallback never grants authority. */
 export async function commandArenaRoom(
-  user: ArenaUser,
+  user: ArenaActor,
   command: ArenaRoomCommand,
   now = new Date(),
 ): Promise<ArenaRoomTicket | null> {
   return prisma.$transaction(async (tx) => {
     if (command.action === "create" || command.action === "join")
       return join(tx, user, command, now);
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`arena:${user.userId}`}))`;
-    const member = await requireArenaMember(tx, command.memberId, user.userId);
+    const owner = actorOwner(user);
+    const ownerKey = typeof owner === "string" ? owner : owner.displayKeyHash;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`arena:${ownerKey}`}))`;
+    const member = await requireArenaMember(tx, command.memberId, owner);
     let room = await lockArenaRoom(tx, member.roomId, now);
     // Recheck after acquiring the room lock: a concurrent leave may have won.
-    const fresh = await requireArenaMember(tx, member.id, user.userId);
+    const fresh = await requireArenaMember(tx, member.id, owner);
     if (command.action === "leave") {
       await tx.arenaRoomMember.update({
         where: { id: member.id },
@@ -421,7 +498,13 @@ export async function commandArenaRoom(
     }
     const existing = await activeRound(tx, room.id, now);
     if (!existing) {
-      const members = await liveMembers(tx, room.id, now);
+      const members = playerMembers(await liveMembers(tx, room.id, now));
+      if (members.length === 0)
+        throw new ArenaRoomError(
+          "no-players",
+          409,
+          "Laat eerst een speler aansluiten",
+        );
       const startedAt = new Date(now.getTime() + ROOM_RULES.countdownMs);
       await tx.arenaRound.create({
         data: {
@@ -443,14 +526,14 @@ export async function commandArenaRoom(
 
 /** Resolves current membership before issuing a short-lived, operation-specific Ably token. */
 export async function authorizeArenaToken(
-  userId: string,
+  owner: ArenaMemberOwner,
   memberId: string,
   now = new Date(),
 ): Promise<ArenaRoomTicket> {
   return prisma.$transaction(async (tx) => {
-    const member = await requireArenaMember(tx, memberId, userId);
+    const member = await requireArenaMember(tx, memberId, owner);
     let room = await lockArenaRoom(tx, member.roomId, now);
-    const fresh = await requireArenaMember(tx, memberId, userId);
+    const fresh = await requireArenaMember(tx, memberId, owner);
     if (fresh.seenAt.getTime() <= now.getTime() - ROOM_RULES.memberTtlMs)
       throw new ArenaRoomError(
         "membership-expired",
@@ -468,10 +551,19 @@ export function arenaTokenCapability(
 ): Record<string, ("publish" | "subscribe" | "presence")[]> {
   const channels = arenaChannels(ticket.roomId, ticket.epoch);
   const isHost = ticket.hostClientId === ticket.memberId;
+  const isDisplay = ticketRole(ticket) === "display";
   return {
     [channels.presence]: ["subscribe", "presence"],
     [channels.state]: isHost ? ["publish", "subscribe"] : ["subscribe"],
-    [channels.inputs]: isHost ? ["publish", "subscribe"] : ["publish"],
+    ...(isDisplay
+      ? isHost
+        ? { [channels.inputs]: ["subscribe" as const] }
+        : {}
+      : {
+          [channels.inputs]: isHost
+            ? ["publish" as const, "subscribe" as const]
+            : ["publish" as const],
+        }),
   };
 }
 
@@ -491,7 +583,7 @@ export async function listArenaRooms(now = new Date()): Promise<LobbyRoom[]> {
           leftAt: null,
           seenAt: { gt: new Date(now.getTime() - ROOM_RULES.memberTtlMs) },
         },
-        take: ROOM_RULES.capacity,
+        take: ROOM_RULES.capacity + ROOM_RULES.displayCapacity,
       },
       rounds: { where: { completedAt: null }, take: 1 },
     },
@@ -504,7 +596,7 @@ export async function listArenaRooms(now = new Date()): Promise<LobbyRoom[]> {
         roomCode: room.code,
         zone: ArenaZoneSchema.parse(room.zone),
         hostName: host.displayName,
-        players: room.members.length,
+        players: playerMembers(room.members).length,
         phase: room.rounds.length ? ("playing" as const) : ("lobby" as const),
       },
     ];

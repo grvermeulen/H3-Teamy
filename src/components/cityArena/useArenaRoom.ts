@@ -9,6 +9,7 @@ import {
 import {
   ArenaRequestError,
   sendArenaRoomCommand,
+  sendArenaDisplayCommand,
   type ArenaRoomClient,
 } from "@/lib/cityArena/net/roomClient";
 import {
@@ -48,6 +49,8 @@ export type UseArenaRoomOptions = {
   fallbackZone: ZoneKey;
   createTransport?: (options?: AblyTransportOptions) => RealtimeTransport;
   roomClient?: ArenaRoomClient;
+  /** Screens become eligible only after their world/last host snapshot has loaded. */
+  canHost?: boolean;
 };
 
 function reportFailure(error: unknown): void {
@@ -72,9 +75,23 @@ export function useArenaRoom(
   const leaveRef = useRef<(() => void) | null>(null);
   const startRef = useRef<(() => Promise<ArenaRoomTicket>) | null>(null);
   const unwillingUntilRef = useRef(0);
+  const canHostRef = useRef(options.canHost ?? true);
+  useEffect(() => {
+    canHostRef.current = options.canHost ?? true;
+    pulseRef.current?.();
+  }, [options.canHost]);
 
   useEffect(() => {
-    const send = options.roomClient ?? sendArenaRoomCommand;
+    const role = options.entry.role ?? "player";
+    const display = role === "display";
+    const device: "mobile" | "desktop" = window.matchMedia("(pointer: coarse)")
+      .matches
+      ? "mobile"
+      : "desktop";
+    const mode = { role: display ? undefined : role, device };
+    const send =
+      options.roomClient ??
+      (display ? sendArenaDisplayCommand : sendArenaRoomCommand);
     let disposed = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let busy = false;
@@ -122,6 +139,7 @@ export function useArenaRoom(
           memberId: ticketRef.current.memberId,
           visible:
             wireConnected &&
+            canHostRef.current &&
             document.visibilityState !== "hidden" &&
             Date.now() >= unwillingUntilRef.current,
         });
@@ -190,8 +208,13 @@ export function useArenaRoom(
     const connect = async (): Promise<void> => {
       const first = await send(
         options.entry.kind === "join"
-          ? { action: "join", roomCode: options.entry.roomCode, joinNonce }
-          : { action: "create", zone: initialZone, joinNonce },
+          ? {
+              action: "join",
+              roomCode: options.entry.roomCode,
+              joinNonce,
+              ...mode,
+            }
+          : { action: "create", zone: initialZone, joinNonce, ...mode },
       );
       if (!first) throw new Error("Missing room ticket");
       if (disposed) {
@@ -201,7 +224,9 @@ export function useArenaRoom(
       ticketRef.current = first;
       const transport = (options.createTransport ?? createAblyTransport)({
         authUrl:
-          "/api/arena/realtime-token?memberId=" +
+          (display
+            ? "/api/arena/display-token?memberId="
+            : "/api/arena/realtime-token?memberId=") +
           encodeURIComponent(first.memberId),
       });
       transportRef.current = transport;
@@ -225,10 +250,8 @@ export function useArenaRoom(
         .presence.enter({
           name: identity.displayName,
           colour: "#f5a524",
-          role: "player",
-          device: window.matchMedia("(pointer: coarse)").matches
-            ? "mobile"
-            : "desktop",
+          role: role === "hybrid" ? "display" : role,
+          device,
         });
       if (disposed) return;
       setConnection("connected");
@@ -298,6 +321,7 @@ export function useArenaRoom(
         seat,
         isHost: member.clientId === hostClientId,
         isYou: member.clientId === ticket.memberId,
+        role: member.role ?? "player",
       })) ?? [],
   };
 }

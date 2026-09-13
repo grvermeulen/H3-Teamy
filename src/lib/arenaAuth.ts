@@ -13,10 +13,10 @@ import {
 /** A multiplayer identity resolved exclusively from a verified session. */
 export type ArenaUser = { userId: string; displayName: string };
 
-/** Enforces pre-auth limits and resolves an existing account without consulting guest cookies. */
-export async function authorizeArenaRequest(
+/** Enforces shared pre-auth limits and rejects cross-origin arena mutations. */
+export async function guardArenaRequest(
   req: NextRequest,
-): Promise<ArenaUser | Response> {
+): Promise<Response | null> {
   const addressLimit = await checkRateLimit(
     ARENA_LIMITS.preauth,
     clientAddress(req),
@@ -37,6 +37,15 @@ export async function authorizeArenaRequest(
     );
   }
 
+  return null;
+}
+
+/** Resolves an existing account exclusively from the verified NextAuth session. */
+export async function authorizeArenaRequest(
+  req: NextRequest,
+): Promise<ArenaUser | Response> {
+  const rejected = await guardArenaRequest(req);
+  if (rejected) return rejected;
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json(

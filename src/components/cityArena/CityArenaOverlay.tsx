@@ -24,6 +24,7 @@ import { HostToast } from "./HostToast";
 import { useArenaRoom, type ArenaRoom } from "./useArenaRoom";
 import type { ArenaEntry } from "./arenaEntry";
 import { arenaChannels } from "@/lib/cityArena/net/roomProtocol";
+import { useArenaWakeLock } from "./useArenaWakeLock";
 import { isDebugEnabled } from "@/lib/cityArena/debugFlag";
 import {
   createStick,
@@ -261,6 +262,7 @@ type ArenaPlayfieldProps = {
   stick: StickController;
   aimStick: StickController;
   tip: { shown: boolean; dismiss: () => void };
+  sharedScreen?: boolean;
 };
 
 /** Canvas plus the loading, error, stick, buttons, death and debug layers drawn on top of it. */
@@ -273,6 +275,7 @@ function ArenaPlayfield({
   stick,
   aimStick,
   tip,
+  sharedScreen = false,
 }: ArenaPlayfieldProps): React.JSX.Element {
   const playing = game.phase === "playing";
   const twinStick = game.settings.twinStick;
@@ -324,7 +327,7 @@ function ArenaPlayfield({
         />
       ) : null}
       {game.phase === "error" ? <ArenaErrorMessage /> : null}
-      {playing && game.death ? (
+      {playing && game.death && !sharedScreen ? (
         <DeathOverlay
           diedAtMs={game.death.diedAtMs}
           reducedMotion={reducedMotion}
@@ -380,7 +383,9 @@ function netplayFor(room: ArenaRoom): ArenaNetplayOptions {
     clockOffsetMs: room.clockOffsetMs,
     hostClientId: room.hostClientId,
     isHost: room.isHost,
-    memberIds: room.crew.map((member) => member.clientId),
+    memberIds: room.crew
+      .filter((member) => member.role !== "display")
+      .map((member) => member.clientId),
     onHostLost: room.reportHostLost,
   };
 }
@@ -402,6 +407,7 @@ export default function CityArenaOverlay({
 }: CityArenaOverlayProps): ReactPortal | null {
   const fallbackZone = ZONE_OPTIONS[0]!.key;
   const room = useArenaRoom({ entry, fallbackZone });
+  useArenaWakeLock();
   const zone = room.zone;
   const dialogRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -418,6 +424,13 @@ export default function CityArenaOverlay({
     reducedMotion,
     netplay: netplayFor(room),
     keys: { onScoreboard: setScoreboardHeld, suspended: menuOpen },
+    sharedScreen:
+      entry.role === "hybrid"
+        ? room.crew.filter(
+            (member) =>
+              member.role === "controller" || member.role === "hybrid",
+          )
+        : undefined,
   });
   const showTouch = useShowTouchControls(game.settings.forceLayout);
   const tip = useTouchTip(showTouch && game.phase === "playing");
@@ -464,6 +477,7 @@ export default function CityArenaOverlay({
         stick={stick}
         aimStick={aimStick}
         tip={tip}
+        sharedScreen={entry.role === "hybrid"}
       />
       <ArenaFooter showTouch={showTouch} twinStick={game.settings.twinStick} />
       <ArenaPhaseScreens

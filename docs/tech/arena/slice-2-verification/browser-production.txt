@@ -1,0 +1,7 @@
+
+> h3-teamy@0.3.0 test:arena:tv
+> node e2e/arena/tv.browser.cjs && node e2e/arena/hybrid.browser.cjs
+
+TV room created
+PASS: TV + two authenticated phones, city rendering, movement, second-screen takeover, no phone map assets, no browser errors
+PASS: mirrored hybrid + controller, shared canvas, simulated gamepad movement and disconnect

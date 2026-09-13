@@ -26,15 +26,22 @@ export type ArenaRoomClient = (
 export async function sendArenaRoomCommand(
   command: ArenaRoomCommand,
   keepalive = false,
+  display = false,
 ): Promise<ArenaRoomTicket | null> {
-  const response = await fetch("/api/arena/session", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(command),
-    credentials: "same-origin",
-    cache: "no-store",
-    keepalive,
-  });
+  const response = await fetch(
+    display ? "/api/arena/display-token" : "/api/arena/session",
+    {
+      method:
+        display && command.action !== "create" && command.action !== "join"
+          ? "PATCH"
+          : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(command),
+      credentials: "same-origin",
+      cache: "no-store",
+      keepalive,
+    },
+  );
   const body: unknown = await response.json();
   if (!response.ok) {
     const error = body as { error?: unknown; reason?: unknown };
@@ -49,3 +56,7 @@ export async function sendArenaRoomCommand(
   const ticket = (body as { ticket: unknown }).ticket;
   return ticket === null ? null : ArenaRoomTicketSchema.parse(ticket);
 }
+
+/** Uses anonymous screen credentials rather than the signed-in player's session. */
+export const sendArenaDisplayCommand: ArenaRoomClient = (command, keepalive) =>
+  sendArenaRoomCommand(command, keepalive, true);

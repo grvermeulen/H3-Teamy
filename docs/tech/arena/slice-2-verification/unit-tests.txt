@@ -1,0 +1,14 @@
+
+ RUN  v5.0.0 C:/Users/Guido/Projects/H3-Teamy
+
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+
+ Test Files  246 passed | 4 skipped (250)
+      Tests  1728 passed | 28 skipped (1756)
+   Start at  01:50:11
+   Duration  39.10s (environment 76%, setup 14%, import 4%, tests 3%, transform 2%, worker 1%)
+
+Environment  jsdom was created 250 times · 390.83s total, 76% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments

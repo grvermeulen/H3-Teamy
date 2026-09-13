@@ -8,6 +8,10 @@ documented as their PRs land. Design: `docs/superpowers/specs/2026-09-03-city-ar
 
 ## Current multiplayer authority and audit (0.2.3)
 
+For TV mode in **0.3.0**, see [TV mode, roles, API and migration](TV-MODE.md) and
+[slice 2 verification](slice-2-verification/README.md). This adds room-scoped anonymous
+displays beside the account-only player model described below.
+
 Multiplayer requires a verified NextAuth session for an existing account. PostgreSQL stores room
 membership, host leases, epochs, rounds and participant history; Ably presence and client cookies
 do not grant authority. The room API serializes joins (eight seats), heartbeat and host takeover.

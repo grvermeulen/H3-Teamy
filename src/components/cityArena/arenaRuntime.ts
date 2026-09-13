@@ -36,6 +36,12 @@ import {
   type DeathScreenPhase,
 } from "@/lib/cityArena/render/deathScreen";
 import { renderScene, type Scene } from "@/lib/cityArena/render/renderScene";
+import { renderSplitScreen } from "@/lib/cityArena/render/renderSplitScreen";
+import {
+  updateSplitScreen,
+  type SplitScreen,
+} from "@/lib/cityArena/render/splitScreen";
+import { readArenaGamepad } from "@/lib/cityArena/input/gamepad";
 import type { DrawStats } from "@/lib/cityArena/render/drawWorld";
 import { rasterBudgetForViewport } from "@/lib/cityArena/render/staticRaster";
 import { CANOPY_RESOLUTION } from "@/lib/cityArena/render/drawScenery";
@@ -236,6 +242,9 @@ export type Runtime = {
   feedback: FeedbackState;
   radarRoadIndex: RadarRoadIndex;
   disposed: boolean;
+  sharedScreen?: { clientId: string; name: string }[];
+  split?: SplitScreen;
+  inputSuspended?: boolean;
 };
 
 /**
@@ -380,6 +389,8 @@ function paintCanvas(
   scene: Scene,
   feedback: FeedbackState,
   renderScale: number,
+  split?: SplitScreen,
+  names?: ReadonlyMap<number, string>,
 ): DrawStats {
   const dpr = Math.min(renderScale === 1 ? 2 : 1, window.devicePixelRatio || 1);
   const targetWidth = Math.round(rect.width * dpr);
@@ -392,11 +403,16 @@ function paintCanvas(
   if (!ctx) return { missing: 0, rasterised: false, rasterMs: 0 };
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, rect.width, rect.height);
-  const stats = renderScene(
-    ctx,
-    { rect: { x: 0, y: 0, width: rect.width, height: rect.height }, camera },
-    scene,
-  );
+  const stats = split
+    ? renderSplitScreen(ctx, split, scene, names)
+    : renderScene(
+        ctx,
+        {
+          rect: { x: 0, y: 0, width: rect.width, height: rect.height },
+          camera,
+        },
+        scene,
+      );
   // Over the scene and outside its transform: the vignette must not shake with the world.
   drawFeedback(ctx, { width: rect.width, height: rect.height }, feedback);
   return stats;
@@ -878,12 +894,19 @@ function startTileSync(runtime: Runtime, options: FrameLoopOptions): void {
   if (!canApplyRuntimeUpdate(runtime)) return;
   runtime.tileSyncPending = true;
   const player = myPlayer(runtime);
-  runtime.session
-    .update([player.x, player.y])
+  const positions =
+    runtime.netplay.kind === "host" || runtime.sharedScreen
+      ? runtime.state.players
+      : [player];
+  Promise.all(
+    positions.map((position) =>
+      runtime.session.update([position.x, position.y]),
+    ),
+  )
     .then(
-      (progress) => {
+      (results) => {
         if (!canApplyRuntimeUpdate(runtime)) return;
-        options.setProgress(progress);
+        options.setProgress(results[0] ?? { loaded: 0, total: 0 });
         options.setFailed(runtime.session.hasFailures());
       },
       (error: unknown) => reportArenaError(error, "tile-sync"),
@@ -973,13 +996,31 @@ function runFrame(
   );
   const pointer = options.pointerRef.current?.position() ?? null;
   const player = myPlayer(runtime);
+  const ownView = runtime.split?.views.find((view) =>
+    view.ids.includes(player.id),
+  );
+  const aimPoint =
+    pointer && ownView
+      ? [
+          ownView.camera.x +
+            (pointer[0] - ownView.rect.x - ownView.rect.width / 2) /
+              ownView.zoom,
+          ownView.camera.y +
+            (pointer[1] - ownView.rect.y - ownView.rect.height / 2) /
+              ownView.zoom,
+        ]
+      : null;
   options.inputRef.current.setAim(
-    aimAngle(runtime.camera, size, [player.x, player.y], pointer),
+    aimPoint
+      ? Math.atan2(aimPoint[1]! - player.y, aimPoint[0]! - player.x)
+      : aimAngle(runtime.camera, size, [player.x, player.y], pointer),
   );
   advanceSimulation(
     runtime,
     dt,
-    options.inputRef.current.snapshot(),
+    runtime.inputSuspended
+      ? EMPTY_INPUT
+      : readArenaGamepad(options.inputRef.current.snapshot()),
     timestamp,
     options.debug,
     size,
@@ -997,6 +1038,26 @@ function runFrame(
       runtime.diedAtMs === null ? null : { diedAtMs: runtime.diedAtMs },
     );
   const drawStart = performance.now();
+  const names = new Map<number, string>();
+  if (runtime.sharedScreen) {
+    const net = runtime.netplay;
+    const seats =
+      net.kind === "offline" ? new Map<string, number>() : net.loop.seats();
+    for (const member of runtime.sharedScreen) {
+      const id = seats.get(member.clientId);
+      if (id !== undefined) names.set(id, member.name);
+    }
+    const tracked = frame.players.filter(
+      (candidate) => names.has(candidate.id) || candidate.id === player.id,
+    );
+    runtime.split = updateSplitScreen(
+      runtime.split ?? { views: [], dividerOpacity: 0 },
+      tracked,
+      size,
+      dt,
+      runtime.reducedMotion,
+    );
+  } else runtime.split = undefined;
   const zone = runtime.state.zoneKey
     ? findZoneByKey(runtime.session.index(), runtime.state.zoneKey)
     : null;
@@ -1007,6 +1068,8 @@ function runFrame(
     buildScene(runtime, frame, zone, pointer, timestamp),
     runtime.feedback,
     runtime.renderScale,
+    runtime.split,
+    names,
   );
   const drawEnd = performance.now();
   options.metricsRef.current.record({

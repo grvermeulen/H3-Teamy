@@ -11,6 +11,34 @@ const landmarks: LandmarkLookup = new Map();
 const viewport = { width: 256, height: 128 };
 
 describe("drawVisibleChunks", () => {
+  it("keeps ground and overhead work queued when another viewport consumed the frame budget", () => {
+    const makeRaster = () =>
+      createStaticRaster((width, height) => createFakeTarget(width, height));
+    const source = {
+      raster: makeRaster(),
+      overhead: makeRaster(),
+      tiles: [],
+      landmarks,
+      loadedTileRects: [{ minX: -1000, minY: -1000, maxX: 1000, maxY: 1000 }],
+      rasterBudgetMs: 0,
+    };
+    const camera = createCamera([0, 0], 4);
+    expect(
+      drawVisibleChunks(createFakeContext(), camera, viewport, source)
+        .rasterised,
+    ).toBe(false);
+    expect(
+      drawOverheadChunks(createFakeContext(), camera, viewport, source),
+    ).toBe(false);
+    expect(source.raster.stats().chunks).toBe(0);
+    expect(source.overhead.stats().chunks).toBe(0);
+    expect(
+      drawVisibleChunks(createFakeContext(), camera, viewport, {
+        ...source,
+        rasterBudgetMs: 4,
+      }).rasterised,
+    ).toBe(true);
+  });
   it("rasterises one chunk per call, blits ready chunks and draws placeholders for the rest", () => {
     const raster = createStaticRaster((width, height) =>
       createFakeTarget(width, height),

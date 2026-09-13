@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import * as Sentry from "@sentry/nextjs";
 import { ROOM_CAPACITY } from "@/lib/cityArena/net/room";
 import type { ConnectionState } from "@/lib/cityArena/net/transport";
+import type { ArenaRole } from "@/lib/cityArena/net/roomProtocol";
 import { ATTRIBUTION_TEXT } from "./ArenaLoadingScreen";
 import { ConnectionDot } from "./ConnectionBanner";
 import { zoneName, zoneSector } from "./launcher/MissionCard";
@@ -17,6 +18,7 @@ export type CrewMember = {
   isHost: boolean;
   /** True for the player looking at this screen; they are labelled "JIJ". */
   isYou: boolean;
+  role?: ArenaRole;
 };
 
 /**
@@ -172,7 +174,16 @@ function CrewTile({
         {member.isYou ? "Jij" : member.name}
       </span>
       <span className="mt-0.5 block text-[10px] uppercase tracking-wider text-[var(--arena-dim)]">
-        {member.isHost ? "Host" : "Online"}
+        <span>
+          {member.role === "display"
+            ? "Scherm"
+            : member.role === "controller"
+              ? "Controller"
+              : member.role === "hybrid"
+                ? "Scherm + controller"
+                : "Speler"}
+        </span>{" "}
+        · <span>{member.isHost ? "Host" : "Online"}</span>
       </span>
     </li>
   );
@@ -203,6 +214,12 @@ function HostAction({
   crewSize: number;
   onStart: () => void;
 }): React.JSX.Element {
+  if (crewSize === 0)
+    return (
+      <p className="text-sm text-[var(--arena-dim)]">
+        Laat eerst een speler aansluiten via de QR-code.
+      </p>
+    );
   // Alone in the lobby the button reads "Oefenen": a solo potje is never recorded (the host
   // only posts a result with two or more players), so the label says what will happen.
   const alone = crewSize <= 1;
@@ -264,7 +281,7 @@ export function ArenaLobby({
       <LobbyHeader
         roomCode={roomCode}
         zone={zone}
-        crewSize={crew.length}
+        crewSize={crew.filter((member) => member.role !== "display").length}
         connection={connection}
       />
 
@@ -307,7 +324,11 @@ export function ArenaLobby({
             Potje verlaten
           </button>
         </div>
-        <HostAction isHost={isHost} crewSize={crew.length} onStart={onStart} />
+        <HostAction
+          isHost={isHost}
+          crewSize={crew.filter((member) => member.role !== "display").length}
+          onStart={onStart}
+        />
       </footer>
       <p className="text-[10px] text-[var(--arena-dim)]">{ATTRIBUTION_TEXT}</p>
     </section>

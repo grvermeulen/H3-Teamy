@@ -5,6 +5,7 @@ import {
   ArenaRoomError,
   lockArenaRoom,
   requireArenaMember,
+  type ArenaMemberOwner,
 } from "./arenaRoomService";
 
 /** A completed casual match; solo practice completes without entering the leaderboard. */
@@ -16,7 +17,7 @@ export type RecordOutcome = {
 
 /** Records one server-owned round with its original roster and server timestamps. */
 export async function recordMatch(
-  posterUserId: string,
+  posterUserId: ArenaMemberOwner,
   input: PostMatchBody,
   now = new Date(),
 ): Promise<RecordOutcome> {
@@ -108,7 +109,7 @@ export async function recordMatch(
           zone: room.zone,
           startedAt: round.startedAt,
           endedAt: round.finishesAt,
-          hostUserId: posterUserId,
+          hostUserId: typeof posterUserId === "string" ? posterUserId : null,
           verification: "host-reported",
           results: {
             create: parsed.results.map((result) => ({

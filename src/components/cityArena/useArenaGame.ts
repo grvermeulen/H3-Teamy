@@ -32,9 +32,7 @@ import {
   EMPTY_RADAR_SNAPSHOT,
   type RadarSnapshot,
 } from "@/lib/cityArena/render/radar";
-import { createDomCanvasFactory } from "@/lib/cityArena/render/canvasTypes";
-import { createSpriteStore } from "@/lib/cityArena/render/loadSprites";
-import { WHOLE_WORLD_RECT } from "@/lib/cityArena/render/staticRaster";
+import { createBrowserArenaSession } from "@/lib/cityArena/world/browserSession";
 import { rasterBudgetForViewport } from "@/lib/cityArena/render/staticRaster";
 import { PLAYER_MAX_HEALTH, damagePlayer } from "@/lib/cityArena/sim/damage";
 import { addHeat } from "@/lib/cityArena/sim/wanted";
@@ -44,20 +42,14 @@ import {
   installArenaHooks,
   type ArenaTestHooks,
 } from "@/lib/cityArena/test/hooks";
-import {
-  createMapLoader,
-  type LoadProgress,
-} from "@/lib/cityArena/world/mapLoader";
+import { type LoadProgress } from "@/lib/cityArena/world/mapLoader";
 import type {
   MapIndex,
   MapZone,
   ZoneKey,
 } from "@/lib/cityArena/world/mapTypes";
 import type { Point } from "@/lib/cityArena/world/projection";
-import {
-  createWorldSession,
-  type WorldSession,
-} from "@/lib/cityArena/world/worldSession";
+import { type WorldSession } from "@/lib/cityArena/world/worldSession";
 import { findZoneByKey } from "@/lib/cityArena/world/zone";
 import type { ArenaSettings } from "@/lib/cityArena/schemas";
 import { loadArenaSettings, saveArenaSettings } from "@/lib/cityArena/storage";
@@ -120,6 +112,8 @@ export type UseArenaGameOptions = {
   netplay?: ArenaNetplayOptions;
   /** What the keyboard says beyond movement, and whether a menu owns it right now. */
   keys?: ArenaKeyOptions;
+  /** Controller members followed by the mirrored composite renderer. */
+  sharedScreen?: { clientId: string; name: string }[];
 };
 
 /** The overlay's side of the keyboard (spec §7). */
@@ -166,23 +160,7 @@ function createArenaSession(
   onFailed: () => void,
   rasterBudgetBytes: number | undefined,
 ): WorldSession {
-  const loader = createMapLoader({ onError: onFailed });
-  const canvasFactory = createDomCanvasFactory();
-  const sprites = createSpriteStore({ canvasFactory });
-  const session = createWorldSession({
-    loader,
-    canvasFactory,
-    rasterBudgetBytes,
-    readSprites: () => sprites.current(),
-  });
-  // Chunks rasterised before the art arrives hold flat fills, so drop them once it has: the
-  // frame loop re-rasterises them one per frame, the same way it streams them in the first time.
-  void sprites.load().then((loaded) => {
-    if (!loaded) return;
-    session.raster.invalidateRect(WHOLE_WORLD_RECT);
-    session.overhead.invalidateRect(WHOLE_WORLD_RECT);
-  });
-  return session;
+  return createBrowserArenaSession(onFailed, rasterBudgetBytes, true);
 }
 
 /** Raster budget sized to the canvas's current layout box, or `undefined` before it has one. */
@@ -652,6 +630,7 @@ export function useArenaGame({
   reducedMotion = false,
   netplay,
   keys,
+  sharedScreen,
 }: UseArenaGameOptions): ArenaGame {
   const [settings, setSettings] = useState<ArenaSettings>(() =>
     loadArenaSettings(),
@@ -714,6 +693,13 @@ export function useArenaGame({
     setDebugSnapshot,
   });
   useNetplay(runtimeRef, phase === "playing", netplay);
+  useEffect(() => {
+    const runtime = runtimeRef.current;
+    if (!runtime) return;
+    runtime.sharedScreen = sharedScreen;
+    runtime.inputSuspended = keys?.suspended ?? false;
+    if (runtime.inputSuspended) inputRef.current.clearAll();
+  }, [sharedScreen, keys?.suspended, phase, runtimeRef, inputRef]);
   const seam = useMatchSeam(runtimeRef);
   const teleportToZone = useTeleport(runtimeRef, setHud);
   const updateSettings = useCallback(

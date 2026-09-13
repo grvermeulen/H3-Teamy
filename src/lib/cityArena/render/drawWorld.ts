@@ -111,7 +111,12 @@ export function drawVisibleChunks(
   );
   const rasterStart = performance.now();
   let rasterised = false;
-  const maxChunks = source.rasterBudgetMs === undefined ? 1 : 4;
+  const maxChunks =
+    source.rasterBudgetMs === undefined
+      ? 1
+      : source.rasterBudgetMs <= 0
+        ? 0
+        : 4;
   for (let count = 0; count < maxChunks; count += 1) {
     if (
       count > 0 &&
@@ -163,11 +168,14 @@ export function drawOverheadChunks(
   source: WorldDrawSource,
 ): boolean {
   const needed = chunksCovering(visibleRect(camera, viewport), camera.zoom);
-  const rasterised = source.overhead.rasterizeNext(
-    needed.filter((coord) => chunkHasTile(coord, source.loadedTileRects)),
-    source.tiles,
-    source.landmarks,
-  );
+  const rasterised =
+    source.rasterBudgetMs === 0
+      ? false
+      : source.overhead.rasterizeNext(
+          needed.filter((coord) => chunkHasTile(coord, source.loadedTileRects)),
+          source.tiles,
+          source.landmarks,
+        );
   const sizePx = CHUNK_METRES * camera.zoom;
   for (const coord of needed) {
     const chunk = source.overhead.getChunk(coord);

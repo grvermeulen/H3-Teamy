@@ -248,12 +248,13 @@ export function renderScene(
   drawEffects(context, camera, size, scene.effects, scene.tick);
   drawPlayerLook(context, camera, size, scene);
   const overheadStart = performance.now();
-  const overheadRasterised = drawOverheadChunks(
-    context,
-    camera,
-    size,
-    scene.world,
-  );
+  const overheadRasterised = drawOverheadChunks(context, camera, size, {
+    ...scene.world,
+    rasterBudgetMs:
+      scene.world.rasterBudgetMs === undefined
+        ? undefined
+        : Math.max(0, scene.world.rasterBudgetMs - stats.rasterMs),
+  });
   if (scene.shake) context.restore();
   if (scene.aimScreen) drawCrosshair(context, scene.aimScreen);
   context.restore();

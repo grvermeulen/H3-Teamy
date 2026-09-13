@@ -164,6 +164,20 @@ export default function CityArenaLauncher(): React.JSX.Element {
             onLeaderboard={() => setShowLeaderboard((open) => !open)}
           />
         ) : null}
+        <div className="mt-3 flex flex-wrap gap-3 text-sm">
+          <Link
+            className="min-h-11 py-2 underline text-[var(--arena-amber)]"
+            href="/arena/spelen"
+          >
+            Spelen met de tv / controller
+          </Link>
+          <Link
+            className="min-h-11 py-2 underline text-[var(--arena-dim)]"
+            href="/arena/scherm"
+          >
+            Tv-scherm openen
+          </Link>
+        </div>
         <p className="mt-3 text-[10px] text-[var(--arena-dim)]">
           {ATTRIBUTION_TEXT}
         </p>

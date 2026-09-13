@@ -1,6 +1,6 @@
 {
   "name": "h3-teamy",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "private": true,
   "engines": {
     "node": "22"
@@ -42,6 +42,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e:post-merge": "playwright test e2e/post-merge",
     "test:e2e:preview": "playwright test e2e/post-merge",
+    "test:arena:tv": "node e2e/arena/tv.browser.cjs && node e2e/arena/hybrid.browser.cjs",
     "eval": "braintrust eval evals",
     "arena:build-sprites": "node scripts/generate-arena-sprites.js"
   },

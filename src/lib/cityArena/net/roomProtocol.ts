@@ -11,6 +11,7 @@ export const ROOM_RULES = {
   matchMs: 180_000,
   completionGraceMs: 5 * 60 * 1000,
   capacity: 8,
+  displayCapacity: 2,
 } as const;
 
 /** Codes are locators; membership and host authority are checked separately. */
@@ -25,14 +26,23 @@ export const ArenaZoneSchema = z.enum([
   "bennekom",
 ]);
 const member = { memberId: z.uuid() };
+/** A controller has input but no world; a hybrid renders the TV view and plays. */
+export const ArenaPlayRoleSchema = z.enum(["player", "controller", "hybrid"]);
+/** Server-approved participation mode. */
+export type ArenaRole = z.infer<typeof ArenaPlayRoleSchema> | "display";
+const mode = {
+  role: ArenaPlayRoleSchema.optional(),
+  device: z.enum(["mobile", "desktop"]).optional(),
+};
 
-/** Every room mutation is scoped to a verified account on the server. */
+/** Every mutation is scoped to a verified account or a cookie-owned display on the server. */
 export const ArenaRoomCommandSchema = z.discriminatedUnion("action", [
   z
     .object({
       action: z.literal("create"),
       zone: ArenaZoneSchema,
       joinNonce: z.uuid(),
+      ...mode,
     })
     .strict(),
   z
@@ -40,6 +50,7 @@ export const ArenaRoomCommandSchema = z.discriminatedUnion("action", [
       action: z.literal("join"),
       roomCode: ArenaRoomCodeSchema,
       joinNonce: z.uuid(),
+      ...mode,
     })
     .strict(),
   z
@@ -74,9 +85,11 @@ export const ArenaRoomTicketSchema = z.object({
         clientId: z.uuid(),
         name: z.string().max(40),
         joinedAt: z.number(),
+        role: z.enum(["player", "controller", "hybrid", "display"]).optional(),
+        device: z.enum(["mobile", "desktop"]).optional(),
       }),
     )
-    .max(8),
+    .max(ROOM_RULES.capacity + ROOM_RULES.displayCapacity),
   round: z
     .object({
       id: z.uuid(),

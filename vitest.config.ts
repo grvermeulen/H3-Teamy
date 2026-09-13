@@ -12,6 +12,7 @@ export default defineConfig({
       "node_modules/**",
       "ecc-reference/**",
       ".next/**",
+      ".cache/**",
       "e2e/**",
       "evals/**",
       "**/.opencode/**",

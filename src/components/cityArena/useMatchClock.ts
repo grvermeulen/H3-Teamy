@@ -18,7 +18,8 @@ import {
   type MatchState,
 } from "@/lib/cityArena/net/matchPhase";
 import { rankScoreboard, type ScoreLine } from "@/lib/cityArena/net/scoreboard";
-import type { ArenaGame } from "./useArenaGame";
+import type { MatchSeam } from "./matchSeam";
+import { ticketRole } from "@/lib/cityArena/net/roles";
 import { ArenaRequestError } from "@/lib/cityArena/net/roomClient";
 import {
   ROOM_RULES,
@@ -101,16 +102,21 @@ async function postResult(
       won: line.isWinner,
     }))
     .filter((row): row is { memberId: string } & typeof row => !!row.memberId);
-  const response = await fetch(MATCHES_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      roundId: ticket.round.id,
-      memberId: ticket.memberId,
-      epoch: ticket.epoch,
-      results,
-    }),
-  });
+  const response = await fetch(
+    ticketRole(ticket) === "display"
+      ? "/api/arena/display-matches"
+      : MATCHES_URL,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        roundId: ticket.round.id,
+        memberId: ticket.memberId,
+        epoch: ticket.epoch,
+        results,
+      }),
+    },
+  );
   if (!response.ok) {
     const body: unknown = await response.json();
     const message = (body as { error?: unknown }).error;
@@ -145,7 +151,7 @@ type ClockRefs = {
 /**
  * Derives multiplayer phases from server deadlines, retaining the scoreboard until results are saved.
  */
-function pollClock(game: ArenaGame, refs: ClockRefs, set: ClockSetters): void {
+function pollClock(game: MatchSeam, refs: ClockRefs, set: ClockSetters): void {
   const peek = game.peek();
   if (!peek) return;
   const current = refs.match.current;
@@ -214,7 +220,7 @@ function pollClock(game: ArenaGame, refs: ClockRefs, set: ClockSetters): void {
  * @returns The clock, and the two actions that move it.
  */
 export function useMatchClock(
-  game: ArenaGame,
+  game: MatchSeam,
   recording: MatchRecording,
 ): MatchClock {
   const [match, setMatch] = useState<MatchState>(lobbyMatch);
