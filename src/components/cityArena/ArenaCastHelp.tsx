@@ -8,12 +8,19 @@ import {
   type ArenaCastDevice,
 } from "@/lib/cityArena/castHelp";
 
+interface ArenaCastIconProps {
+  mirror?: boolean;
+}
+
+interface ArenaCastHelpProps {
+  onBack: () => void;
+  onResume: () => void;
+}
+
 /** Cast or screen-mirroring symbol; its adjacent text supplies the accessible label. */
 export function ArenaCastIcon({
   mirror = false,
-}: {
-  mirror?: boolean;
-}): React.JSX.Element {
+}: ArenaCastIconProps): React.JSX.Element {
   return (
     <svg
       aria-hidden="true"
@@ -42,10 +49,7 @@ export function ArenaCastIcon({
 export function ArenaCastHelp({
   onBack,
   onResume,
-}: {
-  onBack: () => void;
-  onResume: () => void;
-}): React.JSX.Element {
+}: ArenaCastHelpProps): React.JSX.Element {
   const [device, setDevice] = useState<ArenaCastDevice>("iphone");
   useEffect(() => setDevice(arenaCastDevice(navigator)), []);
   const help = ARENA_CAST_HELP[device];
