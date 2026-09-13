@@ -45,8 +45,9 @@ describe("drawEntities", () => {
     expect(
       context.calls.find((call) => call.startsWith("drawImage(")),
     ).toContain(",-9.6,-9.6,19.2,19.2");
-    // The direction marker remains legible over small character art.
-    expect(context.calls).toContain("lineTo(126,50)");
+    expect(context.calls.some((call) => call.startsWith("lineTo("))).toBe(
+      false,
+    );
   });
 
   it("walks through the strip while moving and rests on the first frame when still", () => {

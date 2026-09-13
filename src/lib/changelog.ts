@@ -24,6 +24,19 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.3.1": {
+    title: "GTA H3: hulp bij casten",
+    steps: [
+      {
+        title: "Cast naar tv vanuit je spelmenu",
+        body: "Open tijdens oefenen of spelen het Menu en kies Cast naar tv. Je krijgt stappen voor schermspiegeling op iPhone, Android of computer, met uitleg voor beeld én geluid. Je potje blijft open.",
+      },
+      {
+        title: "Rustiger spelbeeld",
+        body: "De rode richtingspijl vóór je personage is verwijderd.",
+      },
+    ],
+  },
   "0.3.0": {
     title: "GTA H3 op de tv",
     steps: [

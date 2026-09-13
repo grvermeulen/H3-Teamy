@@ -1,12 +1,13 @@
 "use client";
 
-import { useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   RADIO_STATIONS,
   stationById,
 } from "@/lib/cityArena/audio/radio/stations";
 import type { ArenaLayout, ArenaSettings } from "@/lib/cityArena/schemas";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
+import { ArenaCastHelp, ArenaCastIcon } from "./ArenaCastHelp";
 
 /** Props for {@link ArenaSettingsSheet}. */
 export type ArenaSettingsSheetProps = {
@@ -102,102 +103,129 @@ export function ArenaSettingsSheet({
   children,
 }: ArenaSettingsSheetProps): React.JSX.Element {
   const sheetRef = useRef<HTMLDivElement>(null);
-  useDialogFocusTrap(sheetRef, onClose);
+  const castButtonRef = useRef<HTMLButtonElement>(null);
+  const [castOpen, setCastOpen] = useState(false);
+  const backToMenu = useCallback(() => setCastOpen(false), []);
+  useDialogFocusTrap(sheetRef, castOpen ? backToMenu : onClose);
+  useEffect(() => {
+    if (castOpen) sheetRef.current?.focus();
+    else castButtonRef.current?.focus();
+  }, [castOpen]);
   return (
     <div className="absolute inset-0 z-20 flex items-end justify-center bg-[rgba(7,9,11,0.7)] p-3 sm:items-center">
       <div
         ref={sheetRef}
         role="dialog"
         aria-modal="true"
-        aria-label={MENU_LABEL}
+        aria-label={castOpen ? "Cast naar tv" : MENU_LABEL}
         tabIndex={-1}
         className="arena-card max-h-[85dvh] w-full max-w-sm overflow-y-auto p-4"
       >
         <h2 className="arena-display mb-2 text-2xl text-[var(--arena-text)]">
-          {MENU_LABEL}
+          {castOpen ? "Cast naar tv" : MENU_LABEL}
         </h2>
-        <SettingSwitch
-          label={SOUND_LABEL}
-          checked={settings.sound}
-          onChange={(sound) => onChange({ sound })}
-        />
-        <SettingSwitch
-          label={VIBRATE_LABEL}
-          checked={settings.vibrate}
-          onChange={(vibrate) => onChange({ vibrate })}
-        />
-        <SettingSwitch
-          label={RADIO_LABEL}
-          checked={settings.radio}
-          onChange={(radio) => onChange({ radio })}
-        />
-        {RADIO_STATIONS.length > 0 ? (
-          <StationSelect settings={settings} onChange={onChange} />
-        ) : null}
-        <label className="flex min-h-[44px] items-center justify-between gap-4 py-2 text-sm">
-          <span>Beeldkwaliteit</span>
-          <select
-            aria-label="Beeldkwaliteit"
-            className="min-h-11 rounded border border-[var(--arena-line)] bg-[var(--arena-panel)] px-2"
-            value={settings.quality}
-            onChange={(event) =>
-              onChange({
-                quality: event.target.value as ArenaSettings["quality"],
-              })
-            }
-          >
-            <option value="auto">Automatisch</option>
-            <option value="low">Zuinig</option>
-            <option value="high">Hoog</option>
-          </select>
-        </label>
-        <p className="arena-label mt-3 text-[var(--arena-dim)]">
-          {CONTROLS_LABEL}
-        </p>
-        <SettingSwitch
-          label={SINGLE_STICK_LABEL}
-          checked={!settings.twinStick}
-          onChange={(single) => onChange({ twinStick: !single })}
-        />
-        <label className="flex min-h-[44px] items-center justify-between gap-4 py-2 text-sm text-[var(--arena-text)]">
-          <span>{LAYOUT_LABEL}</span>
-          <select
-            aria-label={LAYOUT_LABEL}
-            className="rounded border border-[var(--arena-line-strong)] bg-[var(--arena-panel)] px-2 py-1 text-sm text-[var(--arena-text)]"
-            value={settings.forceLayout ?? "auto"}
-            onChange={(event) =>
-              onChange({
-                forceLayout:
-                  event.target.value === "auto"
-                    ? undefined
-                    : (event.target.value as ArenaLayout),
-              })
-            }
-          >
-            {LAYOUT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {children}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={onLeave}
-            className="arena-label border border-transparent px-3 py-2.5 text-[var(--arena-dim)] transition hover:text-[var(--arena-alert)]"
-          >
-            {LEAVE_LABEL}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="arena-label bg-[var(--arena-amber)] px-5 py-3 text-[var(--arena-void)] transition hover:brightness-110 active:scale-[0.99]"
-          >
-            {RESUME_LABEL}
-          </button>
-        </div>
+        {castOpen ? (
+          <ArenaCastHelp onBack={backToMenu} onResume={onClose} />
+        ) : (
+          <>
+            <button
+              ref={castButtonRef}
+              type="button"
+              onClick={() => setCastOpen(true)}
+              className="mb-3 flex min-h-14 w-full items-center gap-3 rounded border border-[var(--arena-amber)] px-3 py-2 text-left text-[var(--arena-amber)]"
+            >
+              <ArenaCastIcon />
+              <span>
+                <span className="block font-semibold">Cast naar tv</span>
+                <span className="block text-xs text-[var(--arena-dim)]">
+                  Uitleg voor beeld én geluid
+                </span>
+              </span>
+            </button>
+            <SettingSwitch
+              label={SOUND_LABEL}
+              checked={settings.sound}
+              onChange={(sound) => onChange({ sound })}
+            />
+            <SettingSwitch
+              label={VIBRATE_LABEL}
+              checked={settings.vibrate}
+              onChange={(vibrate) => onChange({ vibrate })}
+            />
+            <SettingSwitch
+              label={RADIO_LABEL}
+              checked={settings.radio}
+              onChange={(radio) => onChange({ radio })}
+            />
+            {RADIO_STATIONS.length > 0 ? (
+              <StationSelect settings={settings} onChange={onChange} />
+            ) : null}
+            <label className="flex min-h-[44px] items-center justify-between gap-4 py-2 text-sm">
+              <span>Beeldkwaliteit</span>
+              <select
+                aria-label="Beeldkwaliteit"
+                className="min-h-11 rounded border border-[var(--arena-line)] bg-[var(--arena-panel)] px-2"
+                value={settings.quality}
+                onChange={(event) =>
+                  onChange({
+                    quality: event.target.value as ArenaSettings["quality"],
+                  })
+                }
+              >
+                <option value="auto">Automatisch</option>
+                <option value="low">Zuinig</option>
+                <option value="high">Hoog</option>
+              </select>
+            </label>
+            <p className="arena-label mt-3 text-[var(--arena-dim)]">
+              {CONTROLS_LABEL}
+            </p>
+            <SettingSwitch
+              label={SINGLE_STICK_LABEL}
+              checked={!settings.twinStick}
+              onChange={(single) => onChange({ twinStick: !single })}
+            />
+            <label className="flex min-h-[44px] items-center justify-between gap-4 py-2 text-sm text-[var(--arena-text)]">
+              <span>{LAYOUT_LABEL}</span>
+              <select
+                aria-label={LAYOUT_LABEL}
+                className="rounded border border-[var(--arena-line-strong)] bg-[var(--arena-panel)] px-2 py-1 text-sm text-[var(--arena-text)]"
+                value={settings.forceLayout ?? "auto"}
+                onChange={(event) =>
+                  onChange({
+                    forceLayout:
+                      event.target.value === "auto"
+                        ? undefined
+                        : (event.target.value as ArenaLayout),
+                  })
+                }
+              >
+                {LAYOUT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {children}
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={onLeave}
+                className="arena-label border border-transparent px-3 py-2.5 text-[var(--arena-dim)] transition hover:text-[var(--arena-alert)]"
+              >
+                {LEAVE_LABEL}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="arena-label bg-[var(--arena-amber)] px-5 py-3 text-[var(--arena-void)] transition hover:brightness-110 active:scale-[0.99]"
+              >
+                {RESUME_LABEL}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

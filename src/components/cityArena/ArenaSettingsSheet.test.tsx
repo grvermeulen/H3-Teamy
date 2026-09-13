@@ -115,4 +115,49 @@ describe("ArenaSettingsSheet", () => {
     fireEvent.keyDown(document, { key: "Escape", code: "Escape" });
     expect(handlers.onClose).toHaveBeenCalledTimes(2);
   });
+
+  it("opens mirroring help without changing settings or leaving the game", () => {
+    const handlers = renderSheet();
+    fireEvent.click(screen.getByRole("button", { name: /Cast naar tv/ }));
+    expect(screen.getByRole("dialog", { name: "Cast naar tv" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "iPhone / iPad" }));
+    expect(screen.getByText("Synchrone weergave")).toBeInTheDocument();
+    expect(screen.getByText(/Alleen geluid\?/)).toHaveTextContent("muziek");
+    expect(
+      screen.getByRole("link", { name: /Uitleg met afbeeldingen/ }),
+    ).toHaveAttribute("href", "https://support.apple.com/nl-nl/102661");
+    expect(handlers.onLeave).not.toHaveBeenCalled();
+    expect(handlers.onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Verder spelen" }));
+    expect(handlers.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets players select Android or Chrome casting instructions", () => {
+    renderSheet();
+    fireEvent.click(screen.getByRole("button", { name: /Cast naar tv/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Android" }));
+    expect(screen.getByRole("button", { name: "Android" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByText(/Open Google Home/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Computer" }));
+    expect(screen.getByText(/Tabblad casten/)).toBeInTheDocument();
+    expect(screen.queryByText(/Open Google Home/)).not.toBeInTheDocument();
+  });
+
+  it("returns focus to the cast button and uses Escape to return before closing the menu", () => {
+    const handlers = renderSheet();
+    const open = (): void =>
+      fireEvent.click(screen.getByRole("button", { name: /Cast naar tv/ }));
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Terug naar menu" }));
+    expect(screen.getByRole("button", { name: /Cast naar tv/ })).toHaveFocus();
+    open();
+    fireEvent.keyDown(document, { key: "Escape", code: "Escape" });
+    expect(screen.getByRole("dialog", { name: "Menu" })).toBeInTheDocument();
+    expect(handlers.onClose).not.toHaveBeenCalled();
+    fireEvent.keyDown(document, { key: "Escape", code: "Escape" });
+    expect(handlers.onClose).toHaveBeenCalledTimes(1);
+  });
 });

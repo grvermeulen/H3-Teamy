@@ -200,6 +200,13 @@ describe("CityArenaOverlay", () => {
       { timeout: 3000 },
     );
     fireEvent.click(screen.getByRole("button", { name: "Menu", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: /Cast naar tv/ }));
+    expect(
+      screen.getByRole("dialog", { name: "Cast naar tv" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("GTA H3 speelveld")).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Terug naar menu" }));
     expect(screen.getByLabelText("Ga naar")).toHaveValue("wageningen");
     expect(
       screen.getAllByText("Kaart © OpenStreetMap-bijdragers").length,
