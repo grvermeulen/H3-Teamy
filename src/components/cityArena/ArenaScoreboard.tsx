@@ -15,6 +15,9 @@ export type ArenaScoreboardProps = {
   /** The host's way back to the lobby; absent for everyone else, who follow the host's clock. */
   onRematch?: () => void;
   onLeave: () => void;
+  saving?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
 };
 
 /** Two digits, matching the manifest register used elsewhere. */
@@ -83,6 +86,9 @@ export function ArenaScoreboard({
   title = FINAL_TITLE,
   onRematch,
   onLeave,
+  saving = false,
+  error,
+  onRetry,
 }: ArenaScoreboardProps): React.JSX.Element {
   const nobodyScored = lines.every((line) => line.kills === 0);
   return (
@@ -100,6 +106,30 @@ export function ArenaScoreboard({
           {secondsLeft}s
         </span>
       </header>
+      <p className="text-xs text-[var(--arena-dim)]">
+        Uitslag gemeld door de host · niet onafhankelijk gecontroleerd
+      </p>
+      {saving ? (
+        <p role="status" className="text-xs text-[var(--arena-dim)]">
+          Uitslag opslaan…
+        </p>
+      ) : null}
+      {error ? (
+        <div
+          role="alert"
+          className="border border-[var(--arena-alert)] p-3 text-sm text-[var(--arena-text)]"
+        >
+          <p>{error}</p>
+          <button
+            type="button"
+            onClick={onRetry}
+            disabled={saving}
+            className="mt-2 min-h-11 border border-[var(--arena-line-strong)] px-3"
+          >
+            Opnieuw opslaan
+          </button>
+        </div>
+      ) : null}
 
       <ul className="flex flex-col gap-1.5">
         {lines.map((line, index) => (

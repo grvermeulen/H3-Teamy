@@ -170,6 +170,7 @@ describe("ArenaSettingsSchema", () => {
       vibrate: true,
       twinStick: true,
       radio: true,
+      quality: "auto",
     });
     expect(
       ArenaSettingsSchema.safeParse({ forceLayout: "tablet" }).success,

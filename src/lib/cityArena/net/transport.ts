@@ -5,6 +5,8 @@
  * which, so the host loop, the client loop and election are all testable with no network at all.
  */
 
+import type { ArenaRoomTicket } from "./roomProtocol";
+
 /** How a member is taking part, which also sets their host priority (spec §6.6). */
 export type PresenceRole = "player" | "controller" | "display";
 
@@ -99,6 +101,8 @@ export type TransportIdentity = {
 export type RealtimeTransport = {
   /** Connects and reports who this client is and how far its clock sits from the server's. */
   connect(): Promise<TransportIdentity>;
+  /** Renews capabilities before changing the room's host epoch. */
+  refreshAuth?(): Promise<ArenaRoomTicket | undefined>;
   /** The named channel, created on first use and shared afterwards. */
   channel(name: string): TransportChannel;
   /** Watches the connection state; returns the function that stops watching. */

@@ -1,0 +1,179 @@
+{
+  "environment": {
+    "node": "v22.23.2",
+    "platform": "win32",
+    "cpuTiming": "Paired measurement within this run; baseline audit used Node 24. No browser GPU or physical device benchmark.",
+    "map": "all production tiles loaded"
+  },
+  "scenarios": [
+    {
+      "zone": "rhenen",
+      "players": 8,
+      "measuredSeconds": 60,
+      "hostStepMs": {
+        "p50": 0.3769000000002052,
+        "p95": 0.7445999999999913,
+        "p99": 0.9846999999999753,
+        "max": 1.848700000000008
+      },
+      "previousWholeWorldReplayMs": {
+        "p50": 0.36410000000000764,
+        "p95": 0.7084000000002106,
+        "p99": 0.9230000000000018,
+        "max": 1.6045999999998912
+      },
+      "localPredictionMs": {
+        "p50": 0.004999999999654392,
+        "p95": 0.011500000000069122,
+        "p99": 0.016499999999950887,
+        "max": 0.3451000000000022
+      },
+      "fullSnapshotBytes": {
+        "p50": 6187,
+        "p95": 6268,
+        "p99": 6296,
+        "max": 6359
+      },
+      "reducedSnapshotBytes": {
+        "p50": 1836,
+        "p95": 6207,
+        "p99": 6272,
+        "max": 6296
+      },
+      "totalFull": 3694805,
+      "totalReduced": 1354019,
+      "bandwidthReductionPercent": 63.35343813814261
+    },
+    {
+      "zone": "wageningen",
+      "players": 8,
+      "measuredSeconds": 60,
+      "hostStepMs": {
+        "p50": 0.4654000000000451,
+        "p95": 0.8283999999998741,
+        "p99": 1.1023999999997613,
+        "max": 2.6991000000002714
+      },
+      "previousWholeWorldReplayMs": {
+        "p50": 0.4355999999997948,
+        "p95": 0.835700000000088,
+        "p99": 1.095299999999952,
+        "max": 2.098700000000008
+      },
+      "localPredictionMs": {
+        "p50": 0.007599999999911233,
+        "p95": 0.01569999999992433,
+        "p99": 0.02139999999963038,
+        "max": 0.08599999999978536
+      },
+      "fullSnapshotBytes": {
+        "p50": 6103,
+        "p95": 6209,
+        "p99": 6243,
+        "max": 6244
+      },
+      "reducedSnapshotBytes": {
+        "p50": 1886,
+        "p95": 6132,
+        "p99": 6207,
+        "max": 6244
+      },
+      "totalFull": 3650214,
+      "totalReduced": 1371109,
+      "bandwidthReductionPercent": 62.43757215330389
+    },
+    {
+      "zone": "campus",
+      "players": 8,
+      "measuredSeconds": 60,
+      "hostStepMs": {
+        "p50": 0.4877999999998792,
+        "p95": 0.8514000000004671,
+        "p99": 1.1147000000000844,
+        "max": 1.5945999999994456
+      },
+      "previousWholeWorldReplayMs": {
+        "p50": 0.4643000000005486,
+        "p95": 0.8765999999995984,
+        "p99": 1.0801000000001295,
+        "max": 1.6683000000002721
+      },
+      "localPredictionMs": {
+        "p50": 0.0052999999998064595,
+        "p95": 0.008400000000619912,
+        "p99": 0.011000000000422006,
+        "max": 0.4378999999998996
+      },
+      "fullSnapshotBytes": {
+        "p50": 6175,
+        "p95": 6249,
+        "p99": 6272,
+        "max": 6274
+      },
+      "reducedSnapshotBytes": {
+        "p50": 1972,
+        "p95": 6206,
+        "p99": 6249,
+        "max": 6274
+      },
+      "totalFull": 3685561,
+      "totalReduced": 1409157,
+      "bandwidthReductionPercent": 61.76546799795201
+    },
+    {
+      "zone": "bennekom",
+      "players": 8,
+      "measuredSeconds": 60,
+      "hostStepMs": {
+        "p50": 0.475800000000163,
+        "p95": 0.8336999999992258,
+        "p99": 1.0758000000005268,
+        "max": 1.5197000000007392
+      },
+      "previousWholeWorldReplayMs": {
+        "p50": 0.46640000000115833,
+        "p95": 0.880299999998897,
+        "p99": 1.1228000000000975,
+        "max": 1.6810000000004948
+      },
+      "localPredictionMs": {
+        "p50": 0.006000000001222361,
+        "p95": 0.01190000000042346,
+        "p99": 0.016799999999420834,
+        "max": 0.40459999999984575
+      },
+      "fullSnapshotBytes": {
+        "p50": 6205,
+        "p95": 6303,
+        "p99": 6321,
+        "max": 6345
+      },
+      "reducedSnapshotBytes": {
+        "p50": 1986,
+        "p95": 6230,
+        "p99": 6303,
+        "max": 6328
+      },
+      "totalFull": 3713599,
+      "totalReduced": 1431034,
+      "bandwidthReductionPercent": 61.4650370166515
+    }
+  ],
+  "stress": {
+    "seconds": 300,
+    "players": 8,
+    "dropRate": 0.1,
+    "latencyMs": [33, 167],
+    "elapsedWallSeconds": 7.045450300000001,
+    "inputCount": 26040,
+    "activeInputsPerClientHz": 15,
+    "idleInputsPerClientHz": 2,
+    "maxQueuedMessages": 23,
+    "finalPositionErrorsMetres": [
+      0.02777660050911621, 0.03537076496655, 0.01171230107745024,
+      0.05568946214604306, 0.03237583949076411, 0.048186607049758454,
+      0.03842493128843325
+    ],
+    "hostPublishing": true
+  }
+}

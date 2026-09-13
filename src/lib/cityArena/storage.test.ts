@@ -28,6 +28,7 @@ describe("arena settings storage", () => {
       vibrate: true,
       twinStick: true,
       radio: true,
+      quality: "auto",
     });
   });
 
@@ -41,6 +42,7 @@ describe("arena settings storage", () => {
       vibrate: true,
       twinStick: true,
       radio: true,
+      quality: "auto",
     });
     expect(loadArenaSettings().lastZone).toBe("rhenen");
   });
@@ -53,6 +55,7 @@ describe("arena settings storage", () => {
       vibrate: true,
       twinStick: true,
       radio: true,
+      quality: "auto",
     });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(Error),
@@ -73,6 +76,7 @@ describe("arena settings storage", () => {
       vibrate: true,
       twinStick: true,
       radio: true,
+      quality: "auto",
     });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(Error),
@@ -113,6 +117,7 @@ describe("arena settings storage", () => {
       vibrate: true,
       twinStick: true,
       radio: true,
+      quality: "auto",
     });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
   });

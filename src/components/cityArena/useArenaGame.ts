@@ -232,6 +232,7 @@ async function bootSession(
     },
   );
   runtime.hapticsEnabled = settingsRef.current.vibrate;
+  runtime.quality = settingsRef.current.quality;
   runtimeRef.current = runtime;
   return {
     index,
@@ -638,6 +639,7 @@ function applySettings(runtime: Runtime | null, settings: ArenaSettings): void {
   runtime.sound.setEnabled(settings.sound);
   if (settings.sound) runtime.sound.unlock();
   runtime.hapticsEnabled = settings.vibrate;
+  runtime.quality = settings.quality;
   runtime.sound.radio?.setEnabled(settings.radio);
   runtime.sound.radio?.tune(settings.radioStation ?? "");
 }

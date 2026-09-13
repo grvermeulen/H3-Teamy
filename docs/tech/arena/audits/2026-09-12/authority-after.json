@@ -1,0 +1,185 @@
+{
+  "numTotalTestSuites": 4,
+  "numPassedTestSuites": 4,
+  "numFailedTestSuites": 0,
+  "numPendingTestSuites": 0,
+  "numTotalTests": 12,
+  "numPassedTests": 12,
+  "numFailedTests": 0,
+  "numPendingTests": 0,
+  "numTodoTests": 0,
+  "snapshot": {
+    "added": 0,
+    "failure": false,
+    "filesAdded": 0,
+    "filesRemoved": 0,
+    "filesRemovedList": [],
+    "filesUnmatched": 0,
+    "filesUpdated": 0,
+    "matched": 0,
+    "total": 0,
+    "unchecked": 0,
+    "uncheckedKeysByFile": [],
+    "unmatched": 0,
+    "updated": 0,
+    "didUpdate": false
+  },
+  "startTime": 1789250969844,
+  "success": true,
+  "testResults": [
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "arena routes with the actual auth helper and PostgreSQL service"
+          ],
+          "fullName": "arena routes with the actual auth helper and PostgreSQL service rejects a forged account cookie on every multiplayer write/token route",
+          "status": "passed",
+          "title": "rejects a forged account cookie on every multiplayer write/token route",
+          "duration": 28.366899999999987,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": [
+            "arena routes with the actual auth helper and PostgreSQL service"
+          ],
+          "fullName": "arena routes with the actual auth helper and PostgreSQL service creates a seat for the session account and signs only its exact channels",
+          "status": "passed",
+          "title": "creates a seat for the session account and signs only its exact channels",
+          "duration": 55.67809999999997,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        }
+      ],
+      "startTime": 1789250972065,
+      "endTime": 1789250972148.678,
+      "status": "passed",
+      "message": "",
+      "name": "C:/Users/Guido/Projects/H3-Teamy/e2e/arena/api.integration.test.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["PostgreSQL arena authority"],
+          "fullName": "PostgreSQL arena authority serializes simultaneous joins and rejects the ninth player",
+          "status": "passed",
+          "title": "serializes simultaneous joins and rejects the ninth player",
+          "duration": 361.8414999999999,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["PostgreSQL arena authority"],
+          "fullName": "PostgreSQL arena authority does not let another account use a known membership identifier",
+          "status": "passed",
+          "title": "does not let another account use a known membership identifier",
+          "duration": 10.324800000000096,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["PostgreSQL arena authority"],
+          "fullName": "PostgreSQL arena authority grants exact channels and only the host may publish state",
+          "status": "passed",
+          "title": "grants exact channels and only the host may publish state",
+          "duration": 14.567099999999982,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["PostgreSQL arena authority"],
+          "fullName": "PostgreSQL arena authority migrates an expired host lease and refuses the stale epoch",
+          "status": "passed",
+          "title": "migrates an expired host lease and refuses the stale epoch",
+          "duration": 21.099699999999984,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["PostgreSQL arena authority"],
+          "fullName": "PostgreSQL arena authority releases a hidden host to a visible member and preserves the round",
+          "status": "passed",
+          "title": "releases a hidden host to a visible member and preserves the round",
+          "duration": 40.79359999999997,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["PostgreSQL arena authority"],
+          "fullName": "PostgreSQL arena authority retries create and start without duplicating rooms or rounds",
+          "status": "passed",
+          "title": "retries create and start without duplicating rooms or rounds",
+          "duration": 37.7962,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["PostgreSQL arena authority"],
+          "fullName": "PostgreSQL arena authority reuses a returning round participant's identity with a new join nonce",
+          "status": "passed",
+          "title": "reuses a returning round participant's identity with a new join nonce",
+          "duration": 25.950999999999794,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["PostgreSQL arena authority"],
+          "fullName": "PostgreSQL arena authority refuses an expired membership retry when its place has been filled",
+          "status": "passed",
+          "title": "refuses an expired membership retry when its place has been filled",
+          "duration": 55.88290000000006,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["PostgreSQL arena authority"],
+          "fullName": "PostgreSQL arena authority accepts one result after the server duration, including a departed participant",
+          "status": "passed",
+          "title": "accepts one result after the server duration, including a departed participant",
+          "duration": 125.67620000000011,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["PostgreSQL arena authority"],
+          "fullName": "PostgreSQL arena authority completes solo practice without recording leaderboard scores",
+          "status": "passed",
+          "title": "completes solo practice without recording leaderboard scores",
+          "duration": 25.97129999999993,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        }
+      ],
+      "startTime": 1789250970738,
+      "endTime": 1789250971457.9712,
+      "status": "passed",
+      "message": "",
+      "name": "C:/Users/Guido/Projects/H3-Teamy/e2e/arena/authority.integration.test.ts"
+    }
+  ]
+}

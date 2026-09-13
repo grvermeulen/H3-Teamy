@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { createArenaPlayer } from "@/lib/cityArena/sim/arena";
 import ArenaDebugOverlay from "./ArenaDebugOverlay";
+import { createFrameMetrics } from "@/lib/cityArena/debugMetrics";
 
 describe("ArenaDebugOverlay", () => {
   afterEach(() => {
@@ -12,6 +13,7 @@ describe("ArenaDebugOverlay", () => {
     render(
       <ArenaDebugOverlay
         metrics={{
+          ...createFrameMetrics().snapshot(),
           fps: 58,
           frameP95Ms: 19.2,
           drawP95Ms: 5.1,

@@ -125,7 +125,6 @@ export function drawPlayer(
   if (sprite) {
     drawPlayerSprite(context, sprite, x, y, radius, player, tick);
     if (held) drawHeldItem(context, held, x, y, radius, player.facing);
-    return;
   }
   context.beginPath();
   context.moveTo(x, y);
@@ -134,6 +133,19 @@ export function drawPlayer(
     y + Math.sin(player.facing) * (radius + FACING_TICK_PX),
   );
   context.stroke();
+  if (style === DEFAULT_PLAYER_STYLE) {
+    context.save();
+    context.translate(x, y);
+    context.rotate(player.facing);
+    context.beginPath();
+    context.moveTo(radius + 7, 0);
+    context.lineTo(radius + 2, -3);
+    context.lineTo(radius + 2, 3);
+    context.closePath();
+    context.fillStyle = style.ring;
+    context.fill();
+    context.restore();
+  }
 }
 
 /** Draws the dashed boundary ring of a match zone. */

@@ -1,0 +1,5 @@
+
+C:\Users\Guido\Projects\H3-Teamy\src\components\cityArena\useArenaRoom.ts
+  303:39  warning  The ref value 'codeRef.current' will likely have changed by the time this effect cleanup function runs. If this ref points to a node rendered by React, copy 'codeRef.current' to a variable inside the effect, and use that variable in the cleanup function  react-hooks/exhaustive-deps
+
+✖ 1 problem (0 errors, 1 warning)

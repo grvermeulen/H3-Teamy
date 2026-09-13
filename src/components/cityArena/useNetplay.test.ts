@@ -179,6 +179,16 @@ function seatedPair() {
 }
 
 describe("useNetplay", () => {
+  it("releases its own host lease when its loop has stopped publishing", () => {
+    vi.useFakeTimers();
+    const runtime = fakeRuntime(1);
+    const options = member(createMemoryHub(), "host", { isHost: true });
+    renderNetplay(runtime, options);
+    if (runtime.netplay.kind !== "host") throw new Error("not hosting");
+    vi.spyOn(runtime.netplay.loop, "isPublishing").mockReturnValue(false);
+    act(() => vi.advanceTimersByTime(WATCH_POLL_MS * 3));
+    expect(options.onHostLost).toHaveBeenCalledExactlyOnceWith("host");
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -314,7 +324,7 @@ describe("useNetplay", () => {
       .publish(
         "state",
         encodeSnapshot(
-          joiner.state,
+          { ...joiner.state, tick: joiner.state.tick + 3 },
           0,
           {},
           {
@@ -343,7 +353,7 @@ describe("useNetplay", () => {
     expect(joiner.netplay.loop.match()).toEqual(match);
   });
 
-  it("reports a snapshot it cannot read and keeps roaming alone", () => {
+  it("drops an unreadable snapshot and keeps roaming without Sentry noise", () => {
     const hub = createMemoryHub();
     const stranger = fakeRuntime(2);
     renderNetplay(
@@ -355,11 +365,7 @@ describe("useNetplay", () => {
       .publish("state", {});
     hub.flush();
     expect(stranger.netplay.kind).toBe("offline");
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
-      expect.any(Error),
-      { tags: { area: "arena", kind: "client-seat" } },
-    );
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });
 
   it("takes snapshots only from the elected host, however well an impostor seats it", () => {

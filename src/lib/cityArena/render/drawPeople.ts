@@ -117,6 +117,33 @@ function drawPerson(
     if (style.held)
       drawHeldItem(context, style.held, x, y, radius, person.facing);
   } else if (!dead) {
+    context.save();
+    context.translate(x, y);
+    context.rotate(person.facing);
+    context.fillStyle = style.fill;
+    context.fillRect(-radius * 0.7, -radius * 1.05, radius * 1.1, radius * 2.1);
+    context.fillStyle = style.accent
+      ? "#d9d8c5"
+      : ["#c99f7d", "#aa795b", "#dfb692"][person.id % 3]!;
+    context.beginPath();
+    context.arc(radius * 0.45, 0, radius * 0.52, 0, Math.PI * 2, false);
+    context.fill();
+    if (style.accent) {
+      context.fillStyle = "#2b445b";
+      context.fillRect(
+        radius * 0.35,
+        -radius * 0.6,
+        radius * 0.35,
+        radius * 1.2,
+      );
+      context.strokeStyle = style.accent;
+      context.beginPath();
+      context.moveTo(-radius, -radius * 1.6);
+      context.lineTo(0, -radius * 2.3);
+      context.lineTo(radius, -radius * 1.6);
+      context.stroke();
+    }
+    context.restore();
     context.beginPath();
     context.moveTo(x, y);
     context.lineTo(

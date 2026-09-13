@@ -11,6 +11,7 @@
 - /api/arena/matches
 - /api/arena/realtime-token
 - /api/arena/rooms
+- /api/arena/session
 - /api/auth/[...nextauth]
 - /api/auth/link
 - /api/auth/passkey/login-options

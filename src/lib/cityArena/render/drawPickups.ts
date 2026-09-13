@@ -75,10 +75,11 @@ export function drawPickup(
   pickup: PickupState,
   tick: number,
   items?: ItemSprites,
+  reducedMotion = false,
 ): void {
   const [x, y] = worldToScreen(camera, viewport, [
     pickup.x,
-    pickup.y + pickupBob(pickup, tick),
+    pickup.y + (reducedMotion ? 0 : pickupBob(pickup, tick)),
   ]);
   const sprite = items?.[pickup.kind];
   if (sprite) {
@@ -88,14 +89,13 @@ export function drawPickup(
       x,
       y,
       camera.zoom,
-      (tick + pickup.id) * ICON_TURN_PER_TICK,
+      reducedMotion ? 0 : (tick + pickup.id) * ICON_TURN_PER_TICK,
     );
     return;
   }
-  const radius = PICKUP_RADIUS_M * camera.zoom;
+  const radius = Math.max(5, PICKUP_RADIUS_M * camera.zoom);
   context.save();
   context.translate(x, y);
-  context.rotate((tick + pickup.id) * 0.08);
   context.beginPath();
   context.moveTo(0, -radius);
   context.lineTo(radius, 0);
@@ -104,11 +104,25 @@ export function drawPickup(
   context.closePath();
   context.fillStyle = pickupColour(pickup.kind);
   context.fill();
+  context.strokeStyle = "#151d23";
+  context.lineWidth = 1.5;
+  context.stroke();
   if (pickup.kind === "health") {
     const cross = radius * 0.55;
     context.fillStyle = PICKUP_HEALTH_CROSS;
     context.fillRect(-cross / 3, -cross, (cross * 2) / 3, cross * 2);
     context.fillRect(-cross, -cross / 3, cross * 2, (cross * 2) / 3);
+  } else {
+    context.strokeStyle = "#17212a";
+    context.lineWidth = 1.5;
+    context.beginPath();
+    const bars = pickup.kind === "uzi" ? 3 : 2;
+    for (let bar = 0; bar < bars; bar++) {
+      const offset = (bar - (bars - 1) / 2) * 2;
+      context.moveTo(offset, -radius * 0.5);
+      context.lineTo(offset, radius * 0.5);
+    }
+    context.stroke();
   }
   context.restore();
 }
@@ -121,6 +135,7 @@ export function drawPickups(
   pickups: PickupState[],
   tick: number,
   items?: ItemSprites,
+  reducedMotion = false,
 ): void {
   const view = visibleRect(camera, viewport);
   for (const pickup of pickups) {
@@ -130,6 +145,7 @@ export function drawPickups(
       pickup.x > view.maxX + CULL_MARGIN_M ||
       pickup.y < view.minY - CULL_MARGIN_M ||
       pickup.y > view.maxY + CULL_MARGIN_M;
-    if (!outside) drawPickup(context, camera, viewport, pickup, tick, items);
+    if (!outside)
+      drawPickup(context, camera, viewport, pickup, tick, items, reducedMotion);
   }
 }

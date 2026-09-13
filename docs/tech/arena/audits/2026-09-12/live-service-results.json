@@ -1,0 +1,23 @@
+{
+  "environment": "Node 22 peer + real NextAuth HTTP + real Ably + isolated PostgreSQL; browser hosts initial room",
+  "elapsedSeconds": 206.955,
+  "snapshots": 316,
+  "receivedBytes": 634436,
+  "statePublishDenied": true,
+  "crossMemberStatus": 403,
+  "invalidSent": true,
+  "changes": [
+    {
+      "elapsedMs": 1,
+      "epoch": 3,
+      "role": "client"
+    },
+    {
+      "elapsedMs": 42459,
+      "epoch": 4,
+      "role": "host"
+    }
+  ],
+  "completed": "61d24bd0-9792-4157-82da-0260d0a7622d",
+  "errors": []
+}

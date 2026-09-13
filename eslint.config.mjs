@@ -4,6 +4,7 @@ const config = [
   {
     ignores: [
       "coverage/**",
+      ".cache/**",
       ".next/**",
       "node_modules/**",
       ".cursor/**",

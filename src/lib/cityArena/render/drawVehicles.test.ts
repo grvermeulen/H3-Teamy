@@ -80,7 +80,7 @@ describe("drawVehicles", () => {
     );
     expect(
       context.calls.filter((call) => call.startsWith("fillRect")).length,
-    ).toBe(6);
+    ).toBe(7);
     const wreckContext = createFakeContext();
     drawVehicle(
       wreckContext,
@@ -117,7 +117,10 @@ describe("drawVehicles", () => {
       true,
     );
     expect(context.calls.filter((call) => call.startsWith("fillRect"))).toEqual(
-      ["fillRect(11.2,-3,5.6,2)", "fillRect(11.2,1,5.6,2)"],
+      expect.arrayContaining([
+        "fillRect(11.2,-3,5.6,2)",
+        "fillRect(11.2,1,5.6,2)",
+      ]),
     );
   });
 

@@ -19,13 +19,16 @@ import {
 } from "@/lib/cityArena/net/matchPhase";
 import { rankScoreboard, type ScoreLine } from "@/lib/cityArena/net/scoreboard";
 import type { ArenaGame } from "./useArenaGame";
+import { ArenaRequestError } from "@/lib/cityArena/net/roomClient";
+import {
+  ROOM_RULES,
+  type ArenaRoomTicket,
+} from "@/lib/cityArena/net/roomProtocol";
 
 /**
  * How often the clock reads the simulation.
  *
- * The machine is driven by the tick, not by this interval — polling faster than the eye needs
- * would re-render the overlay for nothing, and polling cannot miss a transition because each poll
- * asks the machine where it should be for the current tick rather than counting elapsed polls.
+ * Multiplayer uses server-issued wall-clock deadlines; offline play uses simulation ticks.
  */
 const POLL_MS = 100;
 
@@ -37,10 +40,18 @@ export type MatchRecording = {
   roomCode: string | null;
   zone: string;
   isHost: boolean;
+  ticket?: ArenaRoomTicket | null;
+  clockOffsetMs?: number;
+  startRound?: () => Promise<ArenaRoomTicket>;
 };
 
 /** Player id → client id, at one moment. */
 type Accounts = ReadonlyMap<number, string>;
+type PendingResult = {
+  lines: ScoreLine[];
+  accounts: Accounts;
+  ticket: ArenaRoomTicket;
+};
 
 /** What the overlay needs to draw the phase it is in. */
 export type MatchClock = {
@@ -54,9 +65,12 @@ export type MatchClock = {
   /** Who held which player when the potje ended, so a scorebord row can be named. */
   accounts: Accounts;
   /** Starts the countdown; the host's start button. */
-  start: () => void;
+  start: () => Promise<void>;
   /** Returns the room to its lobby without waiting out the scorebord. */
   backToLobby: () => void;
+  saving: boolean;
+  error: string | null;
+  retryResult: () => void;
 };
 
 /**
@@ -70,45 +84,42 @@ function accountsFrom(seats: ReadonlyMap<string, number>): Accounts {
 }
 
 /**
- * Posts a finished potje, if this client is the host and there was more than one player.
- *
- * Failures are swallowed after reporting: a scorebord a player is reading must not turn into an
- * error because a write failed, and the server refuses politely when the potje is not ours to
- * post or has already been recorded.
+ * Posts a server-issued round as its current host; the caller retains failed results for retry.
  */
 async function postResult(
   lines: ScoreLine[],
   recording: MatchRecording,
-  startedAt: Date | null,
   accounts: Accounts,
 ): Promise<void> {
-  if (!recording.isHost || !recording.roomCode || !startedAt) return;
+  const ticket = recording.ticket;
+  if (!recording.isHost || !ticket?.round) return;
   const results = lines
     .map((line) => ({
-      userId: accounts.get(line.playerId),
+      memberId: accounts.get(line.playerId),
       kills: line.kills,
       deaths: line.deaths,
       won: line.isWinner,
     }))
-    .filter((row): row is { userId: string } & typeof row => !!row.userId);
-  // Spec §2 step 4: only a potje that more than one person played is worth recording.
-  if (results.length < 2) return;
-  try {
-    await fetch(MATCHES_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        roomCode: recording.roomCode,
-        zone: recording.zone,
-        startedAt: startedAt.toISOString(),
-        endedAt: new Date().toISOString(),
-        results,
-      }),
-    });
-  } catch (error: unknown) {
-    Sentry.captureException(error, {
-      tags: { area: "arena", kind: "match-post" },
-    });
+    .filter((row): row is { memberId: string } & typeof row => !!row.memberId);
+  const response = await fetch(MATCHES_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      roundId: ticket.round.id,
+      memberId: ticket.memberId,
+      epoch: ticket.epoch,
+      results,
+    }),
+  });
+  if (!response.ok) {
+    const body: unknown = await response.json();
+    const message = (body as { error?: unknown }).error;
+    throw new ArenaRequestError(
+      typeof message === "string"
+        ? message
+        : "De uitslag kon niet worden opgeslagen",
+      response.status,
+    );
   }
 }
 
@@ -119,31 +130,69 @@ type ClockSetters = {
   setScoreboard: (lines: ScoreLine[]) => void;
   setAccounts: (accounts: Accounts) => void;
   setMatch: (match: MatchState) => void;
+  submit: (lines: ScoreLine[], accounts: Accounts) => void;
+  resume: () => void;
 };
 
 /** What a reading needs to remember between polls. */
 type ClockRefs = {
   match: RefObject<MatchState>;
   recording: RefObject<MatchRecording>;
-  startedAt: RefObject<Date | null>;
+  dismissedRound: RefObject<string | null>;
+  pending: RefObject<PendingResult | null>;
 };
 
 /**
- * One reading of the simulation: moves the clock on when the tick says so.
- *
- * A client follows the host's clock from the snapshot; the host, and a player alone, step their
- * own. Either way the phase comes from the tick, not from counting polls, so a poll can be late
- * without the clock drifting — and two people can never disagree about whether play started.
+ * Derives multiplayer phases from server deadlines, retaining the scoreboard until results are saved.
  */
 function pollClock(game: ArenaGame, refs: ClockRefs, set: ClockSetters): void {
   const peek = game.peek();
   if (!peek) return;
   const current = refs.match.current;
-  const next = peek.match ?? stepMatch(current, peek.tick);
-  set.setCountdown(countdownNumber(next, peek.tick));
-  set.setLeft(secondsLeft(next, peek.tick));
-  if (next.phase === current.phase && next.since === current.since) return;
-  if (next.phase === "playing") refs.startedAt.current = new Date();
+  const recording = refs.recording.current;
+  const round = recording.ticket?.round;
+  let next = peek.match ?? stepMatch(current, peek.tick);
+  if (round) {
+    const now = Date.now() + (recording.clockOffsetMs ?? 0);
+    const phase =
+      refs.dismissedRound.current === round.id
+        ? "lobby"
+        : now < round.startedAt
+          ? "countdown"
+          : now < round.finishesAt
+            ? "playing"
+            : now < round.finishesAt + 10_000 ||
+                !round.completedAt ||
+                refs.pending.current
+              ? "scoreboard"
+              : "lobby";
+    next = {
+      phase,
+      since: phase === current.phase ? current.since : peek.tick,
+    };
+    set.setCountdown(
+      phase === "countdown"
+        ? Math.min(
+            ROOM_RULES.countdownMs / 1000,
+            Math.max(1, Math.ceil((round.startedAt - now) / 1000)),
+          )
+        : null,
+    );
+    set.setLeft(
+      phase === "playing"
+        ? Math.max(0, Math.ceil((round.finishesAt - now) / 1000))
+        : phase === "scoreboard"
+          ? Math.max(0, Math.ceil((round.finishesAt + 10_000 - now) / 1000))
+          : null,
+    );
+  } else {
+    set.setCountdown(countdownNumber(next, peek.tick));
+    set.setLeft(secondsLeft(next, peek.tick));
+  }
+  if (next.phase === current.phase && next.since === current.since) {
+    if (next.phase === "scoreboard") set.resume();
+    return;
+  }
   // The scorebord is read at the moment play ends, so a kill landing during the scorebord
   // itself cannot change a result players are already looking at.
   if (next.phase === "scoreboard") {
@@ -151,12 +200,7 @@ function pollClock(game: ArenaGame, refs: ClockRefs, set: ClockSetters): void {
     const accounts = accountsFrom(peek.seats);
     set.setScoreboard(lines);
     set.setAccounts(accounts);
-    void postResult(
-      lines,
-      refs.recording.current,
-      refs.startedAt.current,
-      accounts,
-    );
+    set.submit(lines, accounts);
   }
   set.setMatch(next);
   game.setMatch(next);
@@ -178,21 +222,101 @@ export function useMatchClock(
   const [left, setLeft] = useState<number | null>(null);
   const [scoreboard, setScoreboard] = useState<ScoreLine[]>([]);
   const [accounts, setAccounts] = useState<Accounts>(new Map());
-  const startedAtRef = useRef<Date | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const pendingRef = useRef<PendingResult | null>(null);
+  const attemptedRef = useRef<string | null>(null);
+  const dismissedRoundRef = useRef<string | null>(null);
+  const savingRef = useRef(false);
+  const startingRef = useRef(false);
+  const startedTicketRef = useRef<ArenaRoomTicket | null>(null);
   const recordingRef = useRef(recording);
   const matchRef = useRef(match);
   // Mirrored in an effect rather than during render: React 19 forbids writing a ref while
   // rendering, and the interval below only needs the value on its next tick anyway.
   useEffect(() => {
     matchRef.current = match;
-    recordingRef.current = recording;
+    recordingRef.current = {
+      ...recording,
+      ticket: recording.ticket?.round
+        ? recording.ticket
+        : (startedTicketRef.current ?? recording.ticket),
+    };
   }, [match, recording]);
+
+  const submit = useCallback(
+    (lines: ScoreLine[], postedAccounts: Accounts): void => {
+      const current = recordingRef.current;
+      const ticket = current.ticket;
+      if (!ticket?.round || savingRef.current) return;
+      if (ticket.round.completedAt) {
+        pendingRef.current = null;
+        setError(null);
+        return;
+      }
+      pendingRef.current ??= { lines, accounts: postedAccounts, ticket };
+      const pending = pendingRef.current;
+      if (
+        ticket.round.id !== pending.ticket.round?.id ||
+        ticket.roomId !== pending.ticket.roomId
+      )
+        return;
+      const attempt = `${ticket.round.id}:${ticket.epoch}`;
+      if (!current.isHost || attemptedRef.current === attempt) return;
+      // Allow for sub-second clock offset uncertainty before asking the server to complete.
+      if (
+        Date.now() + (current.clockOffsetMs ?? 0) <
+        ticket.round.finishesAt + 500
+      )
+        return;
+      attemptedRef.current = attempt;
+      savingRef.current = true;
+      setSaving(true);
+      setError(null);
+      void postResult(
+        pending.lines,
+        { ...current, ticket: { ...ticket, round: pending.ticket.round } },
+        pending.accounts,
+      )
+        .then(() => {
+          pendingRef.current = null;
+        })
+        .catch((caught: unknown) => {
+          if (!(caught instanceof ArenaRequestError && caught.status < 500))
+            Sentry.captureException(caught, {
+              tags: { area: "arena", kind: "match-post" },
+            });
+          setError(
+            caught instanceof Error
+              ? caught.message
+              : "De uitslag kon niet worden opgeslagen",
+          );
+        })
+        .finally(() => {
+          savingRef.current = false;
+          setSaving(false);
+        });
+    },
+    [],
+  );
+  const retryResult = useCallback((): void => {
+    const pending = pendingRef.current;
+    if (pending) {
+      attemptedRef.current = null;
+      submit(pending.lines, pending.accounts);
+    }
+  }, [submit]);
+  const resumeResult = useCallback((): void => {
+    const pending = pendingRef.current;
+    if (pending) submit(pending.lines, pending.accounts);
+  }, [submit]);
 
   useEffect(() => {
     const refs: ClockRefs = {
       match: matchRef,
       recording: recordingRef,
-      startedAt: startedAtRef,
+      dismissedRound: dismissedRoundRef,
+      pending: pendingRef,
     };
     const set: ClockSetters = {
       setCountdown,
@@ -200,20 +324,48 @@ export function useMatchClock(
       setScoreboard,
       setAccounts,
       setMatch,
+      submit,
+      resume: resumeResult,
     };
-    const timer = setInterval(() => pollClock(game, refs, set), POLL_MS);
+    const timer = setInterval(() => {
+      if (!document.hidden) pollClock(game, refs, set);
+    }, POLL_MS);
     return () => clearInterval(timer);
-  }, [game]);
+  }, [game, submit, resumeResult]);
 
-  const start = useCallback(() => {
+  const start = useCallback(async () => {
+    if (startingRef.current || savingRef.current || pendingRef.current) return;
+    startingRef.current = true;
+    try {
+      if (recordingRef.current.startRound) {
+        const ticket = await recordingRef.current.startRound();
+        startedTicketRef.current = ticket;
+        recordingRef.current = { ...recordingRef.current, ticket };
+      }
+    } catch (caught: unknown) {
+      if (!(caught instanceof ArenaRequestError && caught.status < 500))
+        Sentry.captureException(caught, {
+          tags: { area: "arena", kind: "match-start" },
+        });
+      setError(
+        caught instanceof Error ? caught.message : "Het potje kon niet starten",
+      );
+      startingRef.current = false;
+      return;
+    }
+    setError(null);
+    dismissedRoundRef.current = null;
     // A fresh potje scores from zero; without this a rematch would inherit the last one's kills.
     game.resetTally();
     const next = beginCountdown(game.peek()?.tick ?? 0);
     setMatch(next);
     game.setMatch(next);
+    startingRef.current = false;
   }, [game]);
 
   const backToLobby = useCallback(() => {
+    if (savingRef.current || pendingRef.current) return;
+    dismissedRoundRef.current = recordingRef.current.ticket?.round?.id ?? null;
     const next = lobbyMatch();
     setMatch(next);
     setScoreboard([]);
@@ -229,5 +381,8 @@ export function useMatchClock(
     accounts,
     start,
     backToLobby,
+    saving,
+    error,
+    retryResult,
   };
 }

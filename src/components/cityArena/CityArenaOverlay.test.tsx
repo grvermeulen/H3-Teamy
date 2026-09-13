@@ -120,6 +120,7 @@ vi.mock("./useArenaRoom", () => {
     crew: [{ clientId: "me", seat: 0, name: "Jij", isHost: true, isYou: true }],
     hostClientId: "me",
     isHost: true,
+    ticket: null,
     failure: null,
     reportHostLost: vi.fn(),
     leave: vi.fn(),
@@ -198,6 +199,7 @@ describe("CityArenaOverlay", () => {
         expect(screen.getByTestId("arena-hud")).toHaveTextContent("Hoogstraat"),
       { timeout: 3000 },
     );
+    fireEvent.click(screen.getByRole("button", { name: "Menu", exact: true }));
     expect(screen.getByLabelText("Ga naar")).toHaveValue("wageningen");
     expect(
       screen.getAllByText("Kaart © OpenStreetMap-bijdragers").length,
@@ -209,7 +211,8 @@ describe("CityArenaOverlay", () => {
       expect(screen.getByTestId("arena-hud")).toHaveTextContent("WUR-campus"),
     );
     expect(screen.getByLabelText("Ga naar")).toHaveValue("campus");
-    // Escape opens the menu (spec §7); leaving the potje from it is what closes the overlay.
+    fireEvent.click(screen.getByRole("button", { name: "Verder spelen" }));
+    // Escape opens the menu; leaving the potje from it closes the overlay.
     await act(async () => {
       fireEvent.keyDown(document, { code: "Escape", key: "Escape" });
     });
@@ -234,6 +237,7 @@ describe("CityArenaOverlay", () => {
 
   it("disables the zone picker until the world finishes booting, then lets it teleport", async () => {
     renderOverlay(vi.fn());
+    fireEvent.click(screen.getByRole("button", { name: "Menu", exact: true }));
     expect(screen.getByLabelText("Ga naar")).toBeDisabled();
 
     await waitFor(() =>
@@ -322,6 +326,7 @@ describe("CityArenaOverlay", () => {
     );
     expect(screen.getByLabelText("Radar")).toBeInTheDocument();
     expect(screen.getByText(/R radio · Tab scorebord/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Menu", exact: true }));
     expect(screen.getByLabelText("Geluid")).toBeChecked();
     fireEvent.click(screen.getByLabelText("Geluid"));
     expect(screen.getByLabelText("Geluid")).not.toBeChecked();

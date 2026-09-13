@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { rankScoreboard, type ScoreLine } from "@/lib/cityArena/net/scoreboard";
 import { ArenaCountdown } from "./ArenaCountdown";
 import { ArenaLobby, type CrewMember } from "./ArenaLobby";
@@ -91,10 +91,36 @@ export function ArenaPhaseScreens({
 }: ArenaPhaseScreensProps): React.JSX.Element | null {
   const { zone } = room;
   const recording = useMemo(
-    () => ({ roomCode: room.roomCode, zone, isHost: room.isHost }),
-    [room.roomCode, room.isHost, zone],
+    () => ({
+      roomCode: room.roomCode,
+      zone,
+      isHost: room.isHost,
+      ticket: room.ticket,
+      startRound: room.startRound,
+      clockOffsetMs: room.clockOffsetMs,
+    }),
+    [
+      room.roomCode,
+      room.isHost,
+      zone,
+      room.ticket,
+      room.startRound,
+      room.clockOffsetMs,
+    ],
   );
   const clock = useMatchClock(game, recording);
+  const [exploring, setExploring] = useState(false);
+  const exploreButton = useRef<HTMLButtonElement>(null);
+  const lobbyButton = useRef<HTMLButtonElement>(null);
+  const changedExploring = useRef(false);
+  useEffect(() => {
+    if (!changedExploring.current) return;
+    (exploring ? lobbyButton : exploreButton).current?.focus();
+  }, [exploring]);
+  const toggleExploring = (): void => {
+    changedExploring.current = true;
+    setExploring((value) => !value);
+  };
   const crewNames = useScoreboardNames(room.crew, clock.accounts);
   const inPlay = clock.phase === "countdown" || clock.phase === "playing";
   const live = useLiveScoreboard(game, showScoreboard && inPlay);
@@ -104,9 +130,37 @@ export function ArenaPhaseScreens({
     onClose();
   };
 
+  if (clock.phase === "lobby" && exploring)
+    return (
+      <div className="pointer-events-none absolute inset-x-2 top-[calc(4.5rem+env(safe-area-inset-top))] z-10 flex justify-start">
+        <button
+          type="button"
+          className="pointer-events-auto min-h-11 max-w-[calc(100%-112px)] truncate rounded border border-[var(--arena-line)] bg-[var(--arena-panel)] px-4 text-sm text-[var(--arena-text)] shadow-lg"
+          ref={lobbyButton}
+          onClick={toggleExploring}
+        >
+          {room.roomCode ?? "Verbinden…"} · {room.crew.length}/8 · Lobby openen
+        </button>
+      </div>
+    );
   if (clock.phase === "lobby")
     return (
       <div className={VEIL_CLASS}>
+        <div className="flex justify-end px-4 pt-3">
+          <button
+            type="button"
+            className="min-h-11 rounded border border-[var(--arena-line)] px-4 text-sm"
+            ref={exploreButton}
+            onClick={toggleExploring}
+          >
+            Stad verkennen ↓
+          </button>
+        </div>
+        {room.failure || clock.error ? (
+          <p role="alert" className="m-3 text-sm text-[var(--arena-alert)]">
+            {room.failure || clock.error}
+          </p>
+        ) : null}
         <ArenaLobby
           roomCode={room.roomCode ?? "……"}
           zone={zone}
@@ -141,8 +195,15 @@ export function ArenaPhaseScreens({
           lines={clock.scoreboard}
           names={crewNames}
           secondsLeft={clock.secondsLeft ?? 0}
-          onRematch={room.isHost ? clock.backToLobby : undefined}
+          onRematch={
+            room.isHost && !clock.saving && !clock.error
+              ? clock.backToLobby
+              : undefined
+          }
           onLeave={leave}
+          saving={clock.saving}
+          error={clock.error}
+          onRetry={clock.retryResult}
         />
       </div>
     );

@@ -10,8 +10,9 @@
  */
 
 import * as Sentry from "@sentry/nextjs";
-import { stepArena, type ArenaWorld } from "../sim/arena";
+import type { stepArena, ArenaWorld } from "../sim/arena";
 import { playerById } from "../sim/players";
+import { cooldownTicks, hasAmmo } from "../sim/weapons";
 import { EMPTY_INPUT, type ArenaState, type WorldInput } from "../sim/types";
 import { applySnapshot } from "./snapshotApply";
 import type { MatchState } from "./matchPhase";
@@ -24,6 +25,9 @@ import {
 } from "./interpolate";
 import { encodeInput } from "./wire";
 import type { RealtimeTransport } from "./transport";
+import { isSnapshot, recordInvalidWireMessage } from "./wireValidation";
+import { predictLocal } from "./predictLocal";
+import { createSnapshotDecoder } from "./snapshotDelta";
 
 /** The client predicts at the host's rate, so a replayed tick matches a hosted one exactly. */
 export const CLIENT_TICK_HZ = 30;
@@ -40,6 +44,9 @@ const MAX_BUFFERED_INPUTS = CLIENT_TICK_HZ * 2;
 export type ClientLoopOptions = {
   transport: RealtimeTransport;
   roomCode: string;
+  /** Server-approved channels; omitted only by local simulation tests. */
+  stateChannel?: string;
+  inputChannel?: string;
   world: ArenaWorld;
   /** Which player in the state this client drives. */
   playerId: number;
@@ -75,6 +82,8 @@ export type ClientLoop = {
   stepFraction(): number;
   /** Sets the input this client is holding; it applies from the next predicted tick. */
   setInput(input: WorldInput): void;
+  /** Sends neutral input immediately and discards stale prediction after hiding the tab. */
+  releaseInput(): void;
   /** Folds in a snapshot from the host and replays anything it had not seen. */
   onSnapshot(snapshot: Snapshot): void;
   /** The predicted world, unblended — what the simulation believes. */
@@ -83,6 +92,8 @@ export type ClientLoop = {
   view(): ArenaState;
   /** Who drives which player, as the host last said; empty before the first snapshot. */
   seats(): ReadonlyMap<string, number>;
+  /** Seat history includes players who left before the scoreboard. */
+  accounts(): ReadonlyMap<string, number>;
   /** The host's tally as of the last snapshot — the only real one; predicted kills are not. */
   tally(): Tally;
   /** Where the host says the potje is; `null` before the first snapshot. */
@@ -104,12 +115,15 @@ type Reconciliation = { x: number; y: number; leftMs: number };
  * @returns The loop, which the caller drives with {@link ClientLoop.advance}.
  */
 export function createClientLoop(options: ClientLoopOptions): ClientLoop {
-  const step = options.step ?? stepArena;
+  const step = options.step ?? predictLocal;
+  const expand = createSnapshotDecoder();
   const stepSeconds = 1 / CLIENT_TICK_HZ;
   const inputs = options.transport.channel(
-    `arena:room:${options.roomCode}:inputs`,
+    options.inputChannel ?? `arena:room:${options.roomCode}:inputs`,
   );
-  const room = options.transport.channel(`arena:room:${options.roomCode}`);
+  const room = options.transport.channel(
+    options.stateChannel ?? `arena:room:${options.roomCode}`,
+  );
 
   const buffered: BufferedInput[] = [];
   const frames: SnapshotFrame[] = [];
@@ -117,13 +131,33 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
   let predicted = options.state;
   let held: WorldInput = EMPTY_INPUT;
   let seq = 0;
+  let nextShotFeedback = 0;
   let elapsedTotalMs = 0;
   let ticksRun = 0;
   let offset: Reconciliation = { x: 0, y: 0, leftMs: 0 };
   let running = true;
   let seats: ReadonlyMap<string, number> = new Map();
+  let accounts: ReadonlyMap<string, number> = new Map();
   let tally: Tally = emptyTally();
   let match: MatchState | null = null;
+  let lastSentTick = -15;
+  let lastSent = encodeInput(0, EMPTY_INPUT).slice(1).join(",");
+  let latched = { fire: false, enter: false, weaponNext: false };
+  let inputErrorReported = false;
+
+  function publishInput(input: WorldInput): void {
+    lastSentTick = seq;
+    lastSent = encodeInput(0, input).slice(1).join(",");
+    void inputs
+      .publish("input", encodeInput(seq, input))
+      .catch((error: unknown) => {
+        if (inputErrorReported) return;
+        inputErrorReported = true;
+        Sentry.captureException(error, {
+          tags: { area: "arena", kind: "client-input" },
+        });
+      });
+  }
 
   const unsubscribe = room.subscribe("state", (message) => {
     if (!running) return;
@@ -133,7 +167,11 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
     )
       return;
     try {
-      onSnapshot(message.data as Snapshot);
+      if (!isSnapshot(message.data)) {
+        recordInvalidWireMessage("snapshot");
+        return;
+      }
+      onSnapshot(message.data);
     } catch (error: unknown) {
       Sentry.captureException(error, {
         tags: { area: "arena", kind: "client-snapshot" },
@@ -146,15 +184,22 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
     seq += 1;
     buffered.push({ seq, input: held });
     if (buffered.length > MAX_BUFFERED_INPUTS) buffered.shift();
-    // This runs every predicted tick, so a transport that keeps refusing would otherwise be an
-    // unhandled rejection thirty times a second and nothing in Sentry.
-    void inputs
-      .publish("input", encodeInput(seq, held))
-      .catch((error: unknown) => {
-        Sentry.captureException(error, {
-          tags: { area: "arena", kind: "client-input" },
-        });
-      });
+    latched = {
+      fire: latched.fire || held.fire,
+      enter: latched.enter || held.enter,
+      weaponNext: latched.weaponNext || held.weaponNext,
+    };
+    const outgoing = { ...held, ...latched };
+    const changed = encodeInput(0, outgoing).slice(1).join(",") !== lastSent;
+    const active =
+      Math.hypot(...held.move) > 0.05 ||
+      held.fire ||
+      held.enter ||
+      held.weaponNext;
+    if (seq - lastSentTick >= (active || changed ? 2 : 15)) {
+      publishInput(outgoing);
+      latched = { fire: false, enter: false, weaponNext: false };
+    }
     predicted = step(
       predicted,
       new Map([[options.playerId, held]]),
@@ -162,7 +207,30 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
       options.world,
       options.random,
     );
-    options.onTick?.(predicted);
+    const player = playerById(predicted, options.playerId);
+    if (
+      !options.step &&
+      held.fire &&
+      player &&
+      player.health > 0 &&
+      player.vehicleId === null &&
+      seq >= nextShotFeedback &&
+      hasAmmo(player.ammo, player.weapon)
+    ) {
+      nextShotFeedback = seq + cooldownTicks(player.weapon);
+      options.onTick?.({
+        ...predicted,
+        events: [
+          {
+            kind: "shot",
+            weapon: player.weapon,
+            ownerId: player.id,
+            x: player.x,
+            y: player.y,
+          },
+        ],
+      });
+    } else options.onTick?.(predicted);
   }
 
   /** Re-applies every buffered input the host had not yet seen. */
@@ -183,8 +251,11 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
 
   /** Folds in a snapshot, replays unacknowledged inputs and records the error left over. */
   function onSnapshot(snapshot: Snapshot): void {
-    const view = decodeSnapshot(snapshot);
+    const full = expand(snapshot);
+    if (!full) return;
+    const view = decodeSnapshot(full);
     seats = view.seats;
+    accounts = view.accounts;
     tally = view.tally;
     match = view.match;
     frames.push({ serverTimeMs: view.serverTimeMs, players: view.players });
@@ -221,6 +292,13 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
   }
 
   return {
+    releaseInput(): void {
+      held = EMPTY_INPUT;
+      buffered.length = 0;
+      seq += 1;
+      latched = { fire: false, enter: false, weaponNext: false };
+      publishInput(EMPTY_INPUT);
+    },
     stepFraction(): number {
       const exact = (elapsedTotalMs * CLIENT_TICK_HZ) / 1000;
       return Math.min(1, Math.max(0, exact - ticksRun));
@@ -240,6 +318,9 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
     },
     seats(): ReadonlyMap<string, number> {
       return seats;
+    },
+    accounts(): ReadonlyMap<string, number> {
+      return accounts;
     },
     tally(): Tally {
       return tally;

@@ -7,6 +7,7 @@
  */
 
 import { z } from "zod";
+import { ArenaRoomTicketSchema } from "../cityArena/net/roomProtocol";
 
 /** What Ably's `createTokenRequest` returns, as much of it as the client needs. */
 export const AblyTokenRequestSchema = z.object({
@@ -24,32 +25,41 @@ export const RealtimeTokenResponseSchema = z.object({
   tokenRequest: AblyTokenRequestSchema,
   clientId: z.string(),
   displayName: z.string(),
+  ticket: ArenaRoomTicketSchema,
 });
 
 /** A signed token request plus who it belongs to. */
 export type RealtimeTokenResponse = z.infer<typeof RealtimeTokenResponseSchema>;
 
 /** One player's line as the host posts it. */
-const MatchResultSchema = z.object({
-  userId: z.string().min(1).max(64),
-  kills: z.number().int().min(0),
-  deaths: z.number().int().min(0),
-  won: z.boolean(),
-});
+const MatchResultSchema = z
+  .object({
+    memberId: z.uuid(),
+    kills: z.number().int().min(0).max(200),
+    deaths: z.number().int().min(0).max(200),
+    won: z.boolean(),
+  })
+  .strict();
 
 /**
  * A finished potje as the host posts it.
  *
- * The room code and the start time together identify the potje, which is what makes recording it
- * idempotent — see `arenaMatchService`.
+ * Identity, timestamps and the eligible roster come from the server-owned round.
  */
-export const PostMatchSchema = z.object({
-  roomCode: z.string().length(6),
-  zone: z.enum(["rhenen", "wageningen", "campus", "bennekom"]),
-  startedAt: z.iso.datetime(),
-  endedAt: z.iso.datetime(),
-  results: z.array(MatchResultSchema).min(2).max(8),
-});
+export const PostMatchSchema = z
+  .object({
+    roundId: z.uuid(),
+    memberId: z.uuid(),
+    epoch: z.number().int().positive(),
+    results: z.array(MatchResultSchema).min(1).max(8),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      new Set(value.results.map((row) => row.memberId)).size ===
+      value.results.length,
+    { message: "Een speler mag maar één uitslag hebben" },
+  );
 
 /** A posted potje. */
 export type PostMatchBody = z.infer<typeof PostMatchSchema>;

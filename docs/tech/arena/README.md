@@ -6,6 +6,30 @@ Top-down multiplayer arena game on the real map of Rhenen, Wageningen and Bennek
 This document covers the **map pipeline** (PR 1). Gameplay, netcode and persistence are
 documented as their PRs land. Design: `docs/superpowers/specs/2026-09-03-city-arena-design.md`.
 
+## Current multiplayer authority and audit (0.2.3)
+
+Multiplayer requires a verified NextAuth session for an existing account. PostgreSQL stores room
+membership, host leases, epochs, rounds and participant history; Ably presence and client cookies
+do not grant authority. The room API serializes joins (eight seats), heartbeat and host takeover.
+Short-lived Ably tokens grant exact `arena:v2:<room-id>:<epoch>:state` and `:inputs` capabilities;
+only the leased host may publish state. Snapshots are validated before decoding, including the
+current vehicle, weapon and brewery fields. Match completion checks the server-issued round,
+deadline and retained roster and writes once. Scores remain host-reported, not cheat-proof.
+
+Active input publishes at 15 Hz, idle at 2 Hz, with 30 Hz local movement prediction and vehicle
+delta snapshots. The renderer retains the newer sprites, canopy layer and movement smoothing,
+with adaptive raster resolution, bounded diagnostics, reduced-motion controls and a compact HUD.
+
+Apply `20260912203500_arena_room_authority` before deploying the application; existing games must
+reconnect to the new channels. Roll back by disabling multiplayer, not by restoring the old token
+issuer. Physical iOS/Android background and thermal tests remain release checks.
+
+See the [audit and ratings](audits/2026-09-12/report.md),
+[implementation plan](audits/2026-09-12/implementation-plan.md),
+[verification report](audits/2026-09-12/implementation-report.md) and
+[local reproduction instructions](../../../e2e/arena/README.md). The numbered runtime sections
+below record earlier development; the authority model in this section supersedes Plan 8.
+
 ## Entry Points
 
 - Build script: `scripts/arena/build-map.ts` (`npm run arena:build-map`, `npm run arena:build-map:check`)

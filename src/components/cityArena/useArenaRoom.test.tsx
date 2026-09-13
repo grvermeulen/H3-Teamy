@@ -1,129 +1,150 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { enterLobby, listLobbyRooms } from "@/lib/cityArena/net/lobbyPresence";
 import {
   createMemoryHub,
   createMemoryTransport,
-  type MemoryHub,
 } from "@/lib/cityArena/net/memoryTransport";
-import { openRoom } from "@/lib/cityArena/net/room";
-import type { PresenceData } from "@/lib/cityArena/net/transport";
-import type { ArenaEntry } from "./arenaEntry";
+import { roomTicket } from "@/lib/cityArena/net/roomProtocol.testFixtures";
+import { ArenaRequestError } from "@/lib/cityArena/net/roomClient";
 import { useArenaRoom } from "./useArenaRoom";
-
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
-const ROOM = "ABC234";
-
-/** Presence data for a desktop player. */
-function player(name: string): PresenceData {
-  return { name, colour: "#fff", role: "player", device: "desktop" };
-}
-
-/** Lets the hook's connection sequence — a handful of awaits — run to the end. */
-async function settle(): Promise<void> {
-  await act(async () => {
-    for (let index = 0; index < 12; index += 1) await Promise.resolve();
-  });
-}
-
-/** Renders the hook as "me", called Guido, over `hub`. */
-function renderRoom(hub: MemoryHub, entry: ArenaEntry) {
-  return renderHook(() =>
-    useArenaRoom({
-      entry,
-      fallbackZone: "wageningen",
-      createTransport: () => createMemoryTransport(hub, "me", "Guido"),
-    }),
-  );
-}
-
-/** A room already open on the hub, hosted by Bram, who advertises it in the lobby. */
-async function bramsRoom(hub: MemoryHub): Promise<void> {
-  const bram = createMemoryTransport(hub, "bram", "Bram");
-  await openRoom(bram, ROOM, player("Bram"));
-  await enterLobby(bram, {
-    host: player("Bram"),
-    room: { roomCode: ROOM, zone: "wageningen", players: 1, phase: "lobby" },
-  });
-}
-
-describe("useArenaRoom", () => {
+describe("server-approved arena room hook", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => ({ matches: false })),
+    );
   });
-
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
-
-  it("opens a fresh room as host and advertises it in the lobby", async () => {
-    const hub = createMemoryHub();
-    const { result } = renderRoom(hub, { kind: "new", zone: "campus" });
-    await settle();
-    expect(result.current.status).toBe("ready");
-    expect(result.current.isHost).toBe(true);
-    expect(result.current.hostClientId).toBe("me");
-    expect(result.current.clientId).toBe("me");
-    expect(result.current.crew).toEqual([
-      { clientId: "me", seat: 0, name: "Guido", isHost: true, isYou: true },
-    ]);
-    const rooms = await listLobbyRooms(createMemoryTransport(hub, "watcher"));
-    expect(rooms).toEqual([
-      expect.objectContaining({
-        roomCode: result.current.roomCode,
-        zone: "campus",
-        hostName: "Guido",
+  function setup() {
+    let ticket = roomTicket();
+    const send = vi.fn(async () => ticket);
+    const transport = createMemoryTransport(createMemoryHub(), ticket.memberId);
+    const refreshAuth = vi.fn(async () => ticket);
+    const createTransport = vi.fn(() => ({ ...transport, refreshAuth }));
+    const hook = renderHook(() =>
+      useArenaRoom({
+        entry: { kind: "new", zone: "campus" },
+        fallbackZone: "campus",
+        roomClient: send,
+        createTransport,
       }),
-    ]);
-  });
-
-  it("joins an open room behind its host, in join order", async () => {
-    const hub = createMemoryHub();
-    await bramsRoom(hub);
-    const { result } = renderRoom(hub, {
-      kind: "join",
-      roomCode: ROOM,
-      zone: "wageningen",
+    );
+    return {
+      ...hook,
+      send,
+      createTransport,
+      refreshAuth,
+      setTicket: (next: typeof ticket) => {
+        ticket = next;
+      },
+    };
+  }
+  async function settle() {
+    await act(async () => {
+      for (let step = 0; step < 20; step += 1) await Promise.resolve();
     });
+  }
+  it("opens only the server-approved seat and reports the server's crew and host", async () => {
+    const test = setup();
     await settle();
-    expect(result.current.status).toBe("ready");
-    expect(result.current.isHost).toBe(false);
-    expect(result.current.hostClientId).toBe("bram");
-    expect(result.current.crew.map((member) => member.clientId)).toEqual([
-      "bram",
-      "me",
-    ]);
-  });
-
-  it("re-elects without a host it was told is lost, and the new host takes the lobby", async () => {
-    const hub = createMemoryHub();
-    await bramsRoom(hub);
-    const { result } = renderRoom(hub, {
-      kind: "join",
-      roomCode: ROOM,
-      zone: "wageningen",
+    expect(test.result.current.failure).toBeNull();
+    expect(test.result.current.status).toBe("ready");
+    expect(test.result.current.roomCode).toBe("ABC234");
+    expect(test.result.current.clientId).toBe(roomTicket().memberId);
+    expect(test.result.current.isHost).toBe(true);
+    expect(test.createTransport).toHaveBeenCalledWith({
+      authUrl: "/api/arena/realtime-token?memberId=" + roomTicket().memberId,
     });
-    await settle();
-    act(() => result.current.reportHostLost("bram"));
-    expect(result.current.hostClientId).toBe("me");
-    expect(result.current.isHost).toBe(true);
-    expect(result.current.crew.find((member) => member.isHost)?.clientId).toBe(
-      "me",
+    expect(test.send.mock.calls[0][0]).toMatchObject({
+      action: "create",
+      zone: "campus",
+    });
+  });
+  it("creates only one membership when React replays the initial effect", async () => {
+    const ticket = roomTicket();
+    const send = vi.fn(async () => ticket);
+    const createTransport = () =>
+      createMemoryTransport(createMemoryHub(), ticket.memberId);
+    const hook = renderHook(
+      () =>
+        useArenaRoom({
+          entry: { kind: "new", zone: "campus" },
+          fallbackZone: "campus",
+          roomClient: send,
+          createTransport,
+        }),
+      { wrapper: StrictMode },
     );
     await settle();
-    // Bram's advert is superseded: the lobby lists the room under its new host.
-    const rooms = await listLobbyRooms(createMemoryTransport(hub, "watcher"));
-    expect(rooms).toEqual([
-      expect.objectContaining({ roomCode: ROOM, hostName: "Guido" }),
-    ]);
+    expect(hook.result.current.status).toBe("ready");
+    expect(
+      send.mock.calls.filter(([command]) => command.action === "create"),
+    ).toHaveLength(1);
+    expect(
+      send.mock.calls.filter(([command]) => command.action === "leave"),
+    ).toHaveLength(0);
   });
-
-  it("keeps hosting when told it is lost itself and nobody else is there", async () => {
-    const hub = createMemoryHub();
-    const { result } = renderRoom(hub, { kind: "new", zone: "campus" });
+  it("does not elect a host locally when another client reports silence", async () => {
+    const test = setup();
     await settle();
-    act(() => result.current.reportHostLost("me"));
-    expect(result.current.isHost).toBe(true);
+    act(() => test.result.current.reportHostLost("another-client"));
+    await settle();
+    expect(test.result.current.hostClientId).toBe(roomTicket().memberId);
+    expect(test.refreshAuth).not.toHaveBeenCalled();
+  });
+  it("refreshes capabilities before adopting a server host migration", async () => {
+    const test = setup();
+    await settle();
+    const nextHost = "33333333-3333-4333-8333-333333333333";
+    test.setTicket(roomTicket({ hostClientId: nextHost, epoch: 2 }));
+    act(() => test.result.current.reportHostLost(roomTicket().memberId));
+    await settle();
+    expect(test.refreshAuth).toHaveBeenCalledTimes(1);
+    expect(test.result.current.hostClientId).toBe(nextHost);
+    expect(test.result.current.isHost).toBe(false);
+  });
+  it("submits starts with the current seat and epoch and leaves on unmount", async () => {
+    const test = setup();
+    await settle();
+    await act(async () => {
+      await test.result.current.startRound();
+    });
+    expect(test.send).toHaveBeenCalledWith({
+      action: "start",
+      memberId: roomTicket().memberId,
+      epoch: 1,
+    });
+    test.unmount();
+    expect(test.send).toHaveBeenCalledWith(
+      { action: "leave", memberId: roomTicket().memberId },
+      true,
+    );
+  });
+  it("never opens a transport when the server refuses membership", async () => {
+    const createTransport = vi.fn();
+    const { result } = renderHook(() =>
+      useArenaRoom({
+        entry: { kind: "new", zone: "campus" },
+        fallbackZone: "campus",
+        createTransport,
+        roomClient: async () => {
+          throw new ArenaRequestError("Log in om te spelen", 401);
+        },
+      }),
+    );
+    await settle();
+    expect(result.current.status).toBe("failed");
+    expect(result.current.failure).toBe("Log in om te spelen");
+    expect(createTransport).not.toHaveBeenCalled();
   });
 });

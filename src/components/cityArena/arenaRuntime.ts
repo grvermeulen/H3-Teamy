@@ -6,7 +6,8 @@ import {
   type Tally,
 } from "@/lib/cityArena/net/scoreboard";
 import { LOCAL_PLAYER_ID, addArenaPlayer } from "@/lib/cityArena/sim/arena";
-import { HOST_TICK_HZ, type HostLoop } from "@/lib/cityArena/net/hostLoop";
+import type { HostLoop } from "@/lib/cityArena/net/hostLoop";
+import { EMPTY_INPUT } from "@/lib/cityArena/sim/types";
 import type { ClientLoop } from "@/lib/cityArena/net/clientLoop";
 import { localPlayer, playerById } from "@/lib/cityArena/sim/players";
 import * as Sentry from "@sentry/nextjs";
@@ -35,6 +36,10 @@ import {
   type DeathScreenPhase,
 } from "@/lib/cityArena/render/deathScreen";
 import { renderScene, type Scene } from "@/lib/cityArena/render/renderScene";
+import type { DrawStats } from "@/lib/cityArena/render/drawWorld";
+import { rasterBudgetForViewport } from "@/lib/cityArena/render/staticRaster";
+import { CANOPY_RESOLUTION } from "@/lib/cityArena/render/drawScenery";
+import type { ArenaSettings } from "@/lib/cityArena/schemas";
 import {
   smoothAlpha,
   smoothFrame,
@@ -141,12 +146,6 @@ const MAX_SIM_STEPS_PER_FRAME = 8;
 const LANDMARK_SNAP_DISTANCE_M = 200;
 /** Milliseconds per second, for converting between frame timestamps and simulation seconds. */
 const MS_PER_SECOND = 1000;
-/**
- * How often a hidden tab steps the world. `requestAnimationFrame` stops entirely in a hidden
- * tab, which would freeze the match for everyone this tab hosts; an interval keeps it stepping,
- * throttled by the browser but not stopped, and migration covers the rest (spec §6.6).
- */
-const HIDDEN_TICK_MS = MS_PER_SECOND / HOST_TICK_HZ;
 
 /** Data for the debug panel. */
 export type DebugSnapshot = {
@@ -224,6 +223,8 @@ export type Runtime = {
   violations: number;
   reportedViolations: Set<string>;
   reducedMotion: boolean;
+  quality: ArenaSettings["quality"];
+  renderScale: number;
   sound: ArenaSound;
   soundEnabled: boolean;
   haptics: Haptics;
@@ -337,6 +338,7 @@ function buildScene(
       tiles: session.tiles(),
       landmarks: session.landmarks(),
       loadedTileRects: session.loadedTileRects(),
+      rasterBudgetMs: runtime.renderScale === 1 ? 4 : 2,
     },
     zone,
     // Positions and headings come from the blended frame; a pickup and an effect never move, and
@@ -348,9 +350,14 @@ function buildScene(
     pickups: state.pickups,
     vehicles: frame.vehicles,
     bullets: frame.bullets,
-    effects: state.effects,
+    effects: runtime.reducedMotion
+      ? []
+      : runtime.renderScale === 1
+        ? state.effects
+        : state.effects.slice(-12),
     sirenVehicleIds: policeCarIds(state),
     tick: state.tick,
+    reducedMotion: runtime.reducedMotion,
     // Hidden during the death screen: the push-in transform would otherwise draw it up to 8%
     // off from the physical cursor (spec §7's push-in tops out at 1.08×).
     aimScreen: runtime.diedAtMs === null ? aimScreen : null,
@@ -372,8 +379,9 @@ function paintCanvas(
   camera: Camera,
   scene: Scene,
   feedback: FeedbackState,
-): void {
-  const dpr = window.devicePixelRatio || 1;
+  renderScale: number,
+): DrawStats {
+  const dpr = Math.min(renderScale === 1 ? 2 : 1, window.devicePixelRatio || 1);
   const targetWidth = Math.round(rect.width * dpr);
   const targetHeight = Math.round(rect.height * dpr);
   if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
@@ -381,16 +389,17 @@ function paintCanvas(
     canvas.height = targetHeight;
   }
   const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  if (!ctx) return { missing: 0, rasterised: false, rasterMs: 0 };
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, rect.width, rect.height);
-  renderScene(
+  const stats = renderScene(
     ctx,
     { rect: { x: 0, y: 0, width: rect.width, height: rect.height }, camera },
     scene,
   );
   // Over the scene and outside its transform: the vignette must not shake with the world.
   drawFeedback(ctx, { width: rect.width, height: rect.height }, feedback);
+  return stats;
 }
 
 /** Straight-line distance in metres between two points. */
@@ -500,6 +509,8 @@ export function createRuntime(
     violations: 0,
     reportedViolations: new Set<string>(),
     reducedMotion,
+    quality: "auto",
+    renderScale: 1,
     sound: createArenaSound(
       audioContextFactory,
       soundEnabled,
@@ -939,6 +950,7 @@ function refreshThrottled(
 function runFrame(
   timestamp: number,
   dt: number,
+  rawFrameMs: number,
   runtime: Runtime,
   canvas: HTMLCanvasElement,
   options: FrameLoopOptions,
@@ -946,6 +958,19 @@ function runFrame(
   const simStart = performance.now();
   const rect = canvas.getBoundingClientRect();
   const size: Viewport = { width: rect.width, height: rect.height };
+  runtime.baseZoom = zoomLevelForViewport(size.width);
+  runtime.renderScale =
+    runtime.quality === "low" ||
+    (runtime.quality === "auto" && size.width < 768)
+      ? 0.75
+      : 1;
+  const rasterBudget =
+    rasterBudgetForViewport(size, runtime.baseZoom) * runtime.renderScale ** 2;
+  runtime.session.raster.configure?.(rasterBudget, runtime.renderScale);
+  runtime.session.overhead.configure?.(
+    rasterBudget * CANOPY_RESOLUTION ** 2,
+    runtime.renderScale,
+  );
   const pointer = options.pointerRef.current?.position() ?? null;
   const player = myPlayer(runtime);
   options.inputRef.current.setAim(
@@ -975,18 +1000,21 @@ function runFrame(
   const zone = runtime.state.zoneKey
     ? findZoneByKey(runtime.session.index(), runtime.state.zoneKey)
     : null;
-  paintCanvas(
+  const drawStats = paintCanvas(
     canvas,
     rect,
     runtime.camera,
     buildScene(runtime, frame, zone, pointer, timestamp),
     runtime.feedback,
+    runtime.renderScale,
   );
   const drawEnd = performance.now();
   options.metricsRef.current.record({
-    frameMs: dt * MS_PER_SECOND,
+    frameMs: rawFrameMs,
     drawMs: drawEnd - drawStart,
     simMs: drawStart - simStart,
+    rasterMs: drawStats.rasterMs,
+    missingChunks: drawStats.missing,
   });
   refreshThrottled(runtime, timestamp, options);
 }
@@ -994,30 +1022,37 @@ function runFrame(
 /** Starts the requestAnimationFrame loop for one boot cycle; returns the cleanup that cancels it. */
 export function startFrameLoop(options: FrameLoopOptions): () => void {
   let handle = 0;
-  let interval: ReturnType<typeof setInterval> | null = null;
   let lastTimestamp: number | null = null;
   const frame = (timestamp: number): void => {
     const runtime = options.runtimeRef.current;
     const canvas = options.canvasRef.current;
     if (!runtime || !canvas) return;
     const dt = computeFrameDt(timestamp, lastTimestamp);
+    const rawFrameMs =
+      lastTimestamp === null
+        ? SIM_STEP_S * MS_PER_SECOND
+        : Math.max(0, timestamp - lastTimestamp);
     lastTimestamp = timestamp;
-    runFrame(timestamp, dt, runtime, canvas, options);
+    runFrame(timestamp, dt, rawFrameMs, runtime, canvas, options);
   };
   const tick = (timestamp: number): void => {
+    if (document.hidden) return;
     frame(timestamp);
     if (!document.hidden) handle = window.requestAnimationFrame(tick);
   };
-  // Frames while the tab shows; the interval while it is hidden. Both clock the world by the
-  // same timeline, so the hand-over between them costs at most one clamped frame.
+  // The room heartbeat maintains membership and relinquishes a hidden host's lease separately.
   const onVisibility = (): void => {
+    lastTimestamp = null;
     if (document.hidden) {
       window.cancelAnimationFrame(handle);
-      interval ??= setInterval(() => frame(performance.now()), HIDDEN_TICK_MS);
+      options.inputRef.current.clearAll();
+      const runtime = options.runtimeRef.current;
+      if (runtime?.netplay.kind === "client")
+        runtime.netplay.loop.releaseInput();
+      if (runtime?.netplay.kind === "host")
+        runtime.netplay.loop.setInput(runtime.netplay.playerId, EMPTY_INPUT);
       return;
     }
-    if (interval !== null) clearInterval(interval);
-    interval = null;
     handle = window.requestAnimationFrame(tick);
   };
   document.addEventListener("visibilitychange", onVisibility);
@@ -1025,6 +1060,5 @@ export function startFrameLoop(options: FrameLoopOptions): () => void {
   return () => {
     document.removeEventListener("visibilitychange", onVisibility);
     window.cancelAnimationFrame(handle);
-    if (interval !== null) clearInterval(interval);
   };
 }

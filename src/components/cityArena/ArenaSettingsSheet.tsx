@@ -10,6 +10,7 @@ import { useDialogFocusTrap } from "./useDialogFocusTrap";
 
 /** Props for {@link ArenaSettingsSheet}. */
 export type ArenaSettingsSheetProps = {
+  children?: React.ReactNode;
   settings: ArenaSettings;
   onChange: (patch: Partial<ArenaSettings>) => void;
   /** "Potje verlaten": leaves the room and closes the overlay. */
@@ -98,6 +99,7 @@ export function ArenaSettingsSheet({
   onChange,
   onLeave,
   onClose,
+  children,
 }: ArenaSettingsSheetProps): React.JSX.Element {
   const sheetRef = useRef<HTMLDivElement>(null);
   useDialogFocusTrap(sheetRef, onClose);
@@ -109,7 +111,7 @@ export function ArenaSettingsSheet({
         aria-modal="true"
         aria-label={MENU_LABEL}
         tabIndex={-1}
-        className="arena-card w-full max-w-sm p-4"
+        className="arena-card max-h-[85dvh] w-full max-w-sm overflow-y-auto p-4"
       >
         <h2 className="arena-display mb-2 text-2xl text-[var(--arena-text)]">
           {MENU_LABEL}
@@ -132,6 +134,23 @@ export function ArenaSettingsSheet({
         {RADIO_STATIONS.length > 0 ? (
           <StationSelect settings={settings} onChange={onChange} />
         ) : null}
+        <label className="flex min-h-[44px] items-center justify-between gap-4 py-2 text-sm">
+          <span>Beeldkwaliteit</span>
+          <select
+            aria-label="Beeldkwaliteit"
+            className="min-h-11 rounded border border-[var(--arena-line)] bg-[var(--arena-panel)] px-2"
+            value={settings.quality}
+            onChange={(event) =>
+              onChange({
+                quality: event.target.value as ArenaSettings["quality"],
+              })
+            }
+          >
+            <option value="auto">Automatisch</option>
+            <option value="low">Zuinig</option>
+            <option value="high">Hoog</option>
+          </select>
+        </label>
         <p className="arena-label mt-3 text-[var(--arena-dim)]">
           {CONTROLS_LABEL}
         </p>
@@ -162,6 +181,7 @@ export function ArenaSettingsSheet({
             ))}
           </select>
         </label>
+        {children}
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"

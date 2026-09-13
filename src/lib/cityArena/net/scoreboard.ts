@@ -86,9 +86,12 @@ export function rankScoreboard(
   players: ArenaPlayerState[],
   youId: number,
 ): ScoreLine[] {
-  const rows = players.map(
-    (player) =>
-      tally.get(player.id) ?? { playerId: player.id, kills: 0, deaths: 0 },
+  const playerIds = new Set([
+    ...players.map((player) => player.id),
+    ...tally.keys(),
+  ]);
+  const rows = [...playerIds].map(
+    (playerId) => tally.get(playerId) ?? { playerId, kills: 0, deaths: 0 },
   );
   const ranked = [...rows].sort((first, second) => {
     if (first.kills !== second.kills) return second.kills - first.kills;

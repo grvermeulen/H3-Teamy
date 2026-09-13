@@ -33,6 +33,8 @@ export type InputState = {
   /** Aim from the touch aim stick; while it is held it wins over the mouse. */
   setStickAim(angle: number | null): void;
   clearKeyboard(): void;
+  /** Releases every input source when focus or visibility is lost. */
+  clearAll(): void;
   snapshot(): WorldInput;
 };
 
@@ -81,6 +83,16 @@ export function createInputState(): InputState {
     clearKeyboard() {
       keyboard = [0, 0];
       buttons.keyboard = { ...RELEASED };
+    },
+    clearAll() {
+      keyboard = [0, 0];
+      stick = null;
+      stickIsSource = false;
+      aim = null;
+      stickAim = null;
+      buttons.keyboard = { ...RELEASED };
+      buttons.pointer = { ...RELEASED };
+      buttons.buttons = { ...RELEASED };
     },
     snapshot: () => ({
       ...EMPTY_INPUT,

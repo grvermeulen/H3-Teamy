@@ -28,10 +28,16 @@ export type WorldDrawSource = {
   tiles: DecodedTile[];
   landmarks: LandmarkLookup;
   loadedTileRects: Rect[];
+  /** Soft CPU budget; one non-preemptible chunk may exceed it. */
+  rasterBudgetMs?: number;
 };
 
 /** Outcome of one world draw: chunks still without a cached raster, and whether one was rasterised this call. */
-export type DrawStats = { missing: number; rasterised: boolean };
+export type DrawStats = {
+  missing: number;
+  rasterised: boolean;
+  rasterMs: number;
+};
 
 /** Spacing between diagonal hatch lines, in screen pixels. */
 const HATCH_SPACING_PX = 16;
@@ -89,8 +95,8 @@ function chunkHasTile(coord: ChunkCoord, loadedTileRects: Rect[]): boolean {
 }
 
 /**
- * Blits the chunks covering the view (rasterising at most one missing chunk this call, and only
- * among chunks that already have a loaded tile behind them), and hatches areas that have no
+ * Blits the chunks covering the view, rasterising within the supplied CPU budget and only
+ * where a loaded tile is available, and hatches areas that have no
  * loaded tile behind them instead of rasterising and caching a blank placeholder for them.
  */
 export function drawVisibleChunks(
@@ -103,11 +109,24 @@ export function drawVisibleChunks(
   const rasterisable = needed.filter((coord) =>
     chunkHasTile(coord, source.loadedTileRects),
   );
-  const rasterised = source.raster.rasterizeNext(
-    rasterisable,
-    source.tiles,
-    source.landmarks,
-  );
+  const rasterStart = performance.now();
+  let rasterised = false;
+  const maxChunks = source.rasterBudgetMs === undefined ? 1 : 4;
+  for (let count = 0; count < maxChunks; count += 1) {
+    if (
+      count > 0 &&
+      performance.now() - rasterStart >= (source.rasterBudgetMs ?? 0)
+    )
+      break;
+    const built = source.raster.rasterizeNext(
+      rasterisable,
+      source.tiles,
+      source.landmarks,
+    );
+    if (!built) break;
+    rasterised = true;
+  }
+  const rasterMs = performance.now() - rasterStart;
   const sizePx = CHUNK_METRES * camera.zoom;
   let missing = 0;
   for (const coord of needed) {
@@ -126,7 +145,7 @@ export function drawVisibleChunks(
       fillChunkArea(context, x, y, sizePx, PLACEHOLDER_FILL);
     else hatchChunkArea(context, x, y, sizePx);
   }
-  return { missing, rasterised };
+  return { missing, rasterised, rasterMs };
 }
 
 /**

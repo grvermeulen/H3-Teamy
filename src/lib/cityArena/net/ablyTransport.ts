@@ -9,6 +9,8 @@
 
 import * as Ably from "ably";
 import * as Sentry from "@sentry/nextjs";
+import { RealtimeTokenResponseSchema } from "../../schemas/arena";
+import type { ArenaRoomTicket } from "./roomProtocol";
 import type {
   ConnectionState,
   PresenceData,
@@ -102,6 +104,14 @@ async function tolerateGone(
 
 /** Wraps one Ably channel in the arena's interface. */
 function wrapChannel(channel: Ably.RealtimeChannel): TransportChannel {
+  let reported = false;
+  const report = (error: unknown): void => {
+    if (reported) return;
+    reported = true;
+    Sentry.captureException(error, {
+      tags: { area: "arena", kind: "channel-subscribe" },
+    });
+  };
   return {
     async publish(name: string, data: unknown): Promise<void> {
       await channel.publish(name, data);
@@ -117,7 +127,7 @@ function wrapChannel(channel: Ably.RealtimeChannel): TransportChannel {
           timestamp: message.timestamp ?? 0,
         });
       };
-      void channel.subscribe(name, listener);
+      void Promise.resolve(channel.subscribe(name, listener)).catch(report);
       return () => {
         channel.unsubscribe(name, listener);
       };
@@ -145,7 +155,9 @@ function wrapChannel(channel: Ably.RealtimeChannel): TransportChannel {
             member: toMember(message),
           });
         };
-        void channel.presence.subscribe(listener);
+        void Promise.resolve(channel.presence.subscribe(listener)).catch(
+          report,
+        );
         return () => {
           channel.presence.unsubscribe(listener);
         };
@@ -173,19 +185,24 @@ type AuthResult = (
 function tokenCallback(
   authUrl: string,
   onName: (name: string) => void,
+  onTicket: (ticket: ArenaRoomTicket) => void,
 ): (params: Ably.TokenParams, callback: AuthResult) => void {
   return async (_params: Ably.TokenParams, callback: AuthResult) => {
     try {
-      const response = await fetch(authUrl);
+      const response = await fetch(authUrl, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      if (response.status === 401 || response.status === 403) {
+        callback("Je verbinding is verlopen, open het potje opnieuw", null);
+        return;
+      }
       if (!response.ok)
         throw new Error(`realtime-token responded ${response.status}`);
-      const body = (await response.json()) as {
-        tokenRequest: unknown;
-        displayName?: unknown;
-      };
-      if (typeof body.displayName === "string" && body.displayName.length > 0)
-        onName(body.displayName);
-      callback(null, body.tokenRequest as Ably.TokenRequest);
+      const body = RealtimeTokenResponseSchema.parse(await response.json());
+      onName(body.displayName);
+      onTicket(body.ticket);
+      callback(null, body.tokenRequest);
     } catch (error: unknown) {
       Sentry.captureException(error, {
         tags: { area: "arena", kind: "realtime-auth" },
@@ -205,22 +222,55 @@ export function createAblyTransport(
   options: AblyTransportOptions = {},
 ): RealtimeTransport {
   let displayName = "";
+  let authorizedTicket: ArenaRoomTicket | undefined;
   const client = new Ably.Realtime({
-    authCallback: tokenCallback(options.authUrl ?? DEFAULT_AUTH_URL, (name) => {
-      displayName = name;
-    }),
+    authCallback: tokenCallback(
+      options.authUrl ?? DEFAULT_AUTH_URL,
+      (name) => {
+        displayName = name;
+      },
+      (ticket) => {
+        authorizedTicket = ticket;
+      },
+    ),
   });
   const channels = new Map<string, TransportChannel>();
 
   return {
     async connect(): Promise<TransportIdentity> {
-      await client.connection.once("connected");
+      if (client.connection.state !== "connected") {
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        let fail: (() => void) | undefined;
+        try {
+          await Promise.race([
+            client.connection.once("connected"),
+            new Promise<never>((_, reject) => {
+              fail = () =>
+                reject(new Error("De spelverbinding kon niet worden geopend"));
+              client.connection.on("failed", fail);
+              timeout = setTimeout(fail, 15_000);
+              if (
+                client.connection.state === "failed" ||
+                client.connection.state === "closed"
+              )
+                fail();
+            }),
+          ]);
+        } finally {
+          clearTimeout(timeout);
+          if (fail) client.connection.off("failed", fail);
+        }
+      }
       const serverTimeMs = await client.time();
       return {
         clientId: client.auth.clientId ?? "",
         displayName,
         serverTimeOffsetMs: serverTimeMs - Date.now(),
       };
+    },
+    async refreshAuth(): Promise<ArenaRoomTicket | undefined> {
+      await client.auth.authorize();
+      return authorizedTicket;
     },
     channel(name: string): TransportChannel {
       const existing = channels.get(name);
