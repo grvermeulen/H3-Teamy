@@ -7,12 +7,15 @@
  */
 
 import type { ZoneKey } from "@/lib/cityArena/world/mapTypes";
+import type { ArenaRole } from "@/lib/cityArena/net/roomProtocol";
 
 /** The three ways into the arena. */
 export type ArenaEntry =
   /** "Nieuw potje": open a fresh room in this zone and host it. */
-  | { kind: "new"; zone: ZoneKey }
-  /** "Code invoeren": the overlay asks for a code before connecting. */
-  | { kind: "code" }
-  /** A mission card was tapped: go straight to that room's lobby. */
-  | { kind: "join"; roomCode: string; zone: ZoneKey };
+  (
+    | { kind: "new"; zone: ZoneKey }
+    /** "Code invoeren": the overlay asks for a code before connecting. */
+    | { kind: "code" }
+    /** A mission card was tapped: go straight to that room's lobby. */
+    | { kind: "join"; roomCode: string; zone: ZoneKey }
+  ) & { role?: ArenaRole };

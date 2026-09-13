@@ -24,6 +24,19 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.3.0": {
+    title: "GTA H3 op de tv",
+    steps: [
+      {
+        title: "Samen op één scherm",
+        body: "Open /arena/scherm op de tv of een laptop. Spelers scannen de QR-code en gebruiken hun telefoon als controller. Het beeld splitst automatisch als jullie uit elkaar lopen.",
+      },
+      {
+        title: "Kies je bediening",
+        body: "Via ‘Spelen met de tv / controller’ kies je een eigen spelbeeld, alleen bediening of Scherm + controller om je telefoon te spiegelen. Je kunt ook met een standaardgamepad spelen.",
+      },
+    ],
+  },
   "0.2.3": {
     title: "Wat is er nieuw in 0.2.3",
     steps: [

@@ -7,6 +7,8 @@
 - /api/admin/feedback/[id]
 - /api/admin/status
 - /api/admin/users
+- /api/arena/display-matches
+- /api/arena/display-token
 - /api/arena/leaderboard
 - /api/arena/matches
 - /api/arena/realtime-token
@@ -58,6 +60,9 @@
 - /
 - /admin
 - /admin/feedback
+- /arena/controller
+- /arena/scherm
+- /arena/spelen
 - /attendance
 - /docs
 - /login

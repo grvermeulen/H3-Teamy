@@ -1,5 +1,16 @@
 # Isolated GTA H3 verification
 
+## TV / controller slice
+
+After the local migration and seed below, run `node e2e/arena/localServer.cjs dev` (or `start`
+after `build`) in a separate terminal, then `npm run test:arena:tv`. This uses installed Chrome
+through Playwright and the configured Ably application. It opens a no-login screen, two
+authenticated phone controllers, then a second screen and verifies host takeover. The second
+scenario uses a landscape hybrid host, a phone controller, and a simulated standard gamepad
+with movement/disconnect checks. Canvas pixels and network requests are checked; phone
+controllers must download zero map/sprite files. Screenshots and JSON verdicts are written
+to `docs/tech/arena/slice-2-verification/`. Physical casting/gamepads are a separate hardware check.
+
 Use Node 22 and a disposable PostgreSQL database named `gta_h3_test` on `127.0.0.1:54329`, with a local `postgres` account. The committed test configuration never reads a remote database URL. Do not point a production database at this port.
 
 ```powershell
