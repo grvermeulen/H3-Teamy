@@ -57,7 +57,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
-    "@sentry/nextjs": "^10.73.0",
+    "@sentry/nextjs": "^10.74.0",
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^14.0.1",
     "@tailwindcss/postcss": "^4.3.3",
