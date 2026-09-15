@@ -378,6 +378,7 @@ function buildScene(
     peopleSprites: session.sprites().people,
     itemSprites: session.sprites().items,
     playerSprite: session.sprites().player,
+    basketballSprite: session.sprites().landmarks?.["basketball-girls"],
   };
 }
 

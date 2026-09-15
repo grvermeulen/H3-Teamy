@@ -1,5 +1,6 @@
 import type { Point } from "../world/projection";
 import type { ArenaPlayerState, VehicleState } from "./types";
+import { activeBonus, BONUS_BALANCE } from "./landmarkBonuses";
 
 /** Health at spawn (spec §5). */
 export const PLAYER_MAX_HEALTH = 100;
@@ -47,7 +48,9 @@ export function damagePlayer(
 ): ArenaPlayerState {
   if (amount <= 0 || isDead(player) || isInvulnerable(player, tick))
     return player;
-  const health = Math.max(0, player.health - amount);
+  const factor =
+    activeBonus(player, tick) === "guard" ? BONUS_BALANCE.damageFactor : 1;
+  const health = Math.max(0, player.health - amount * factor);
   return { ...player, health, diedAtTick: health === 0 ? tick : null };
 }
 

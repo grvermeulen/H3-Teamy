@@ -8,6 +8,7 @@
  */
 
 import { VEHICLE_KINDS } from "../sim/vehicle";
+import { BONUS_KINDS, type LandmarkBonus } from "../sim/landmarkBonuses";
 import type { MatchPhase, MatchState } from "./matchPhase";
 import type { ScoreRow, Tally } from "./scoreboard";
 import type {
@@ -123,6 +124,8 @@ export type SnapshotPlayer = {
   heat: number;
   driveSteer: number;
   drunk: number;
+  /** Landmark bonus, including the host's expiry and cooldown ticks. */
+  bonus?: LandmarkBonus;
 };
 
 /** `drunk` travels as a whole percentage. */
@@ -209,6 +212,9 @@ function encodePlayers(state: ArenaState): number[][] {
     player.ammo.bat,
     // Appended again for the brewery (Plan 10), for the same reason.
     Math.round(player.drunk * DRUNK_SCALE),
+    player.bonus ? BONUS_KINDS.indexOf(player.bonus.kind) + 1 : 0,
+    player.bonus?.untilTick ?? 0,
+    player.bonus?.readyAtTick ?? 0,
   ]);
 }
 
@@ -324,6 +330,13 @@ function decodePlayers(rows: number[][]): SnapshotPlayer[] {
     heat: row[14] ?? 0,
     driveSteer: (row[15] ?? 0) / STEER_SCALE,
     drunk: (row[18] ?? 0) / DRUNK_SCALE,
+    bonus: row[19]
+      ? {
+          kind: BONUS_KINDS[row[19] - 1]!,
+          untilTick: row[20]!,
+          readyAtTick: row[21]!,
+        }
+      : undefined,
   }));
 }
 

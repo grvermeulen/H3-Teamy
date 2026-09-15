@@ -10,6 +10,8 @@ import { nearestRoadName } from "@/lib/cityArena/world/nearestRoad";
 import { currentWantedLevel } from "@/lib/cityArena/sim/wanted";
 import { boardableVehicle, occupiedVehicle } from "@/lib/cityArena/sim/arena";
 import { canOrderBeer } from "@/lib/cityArena/sim/beer";
+import { nearbyLandmarkActivity } from "@/lib/cityArena/world/landmarkActivities";
+import { activeBonus, BONUS_INFO } from "@/lib/cityArena/sim/landmarkBonuses";
 import { firesCannon, forwardSpeed } from "@/lib/cityArena/sim/vehicle";
 import type {
   ArenaPlayerState,
@@ -46,11 +48,29 @@ export type ArenaHud = {
    * no car in reach, because the same press boards a car when there is one.
    */
   canOrderBeer: boolean;
+  /** Nearby activity and cooldown, shown above the controls. */
+  landmark?: {
+    name: string;
+    action: string;
+    description: string;
+    reward: string;
+    cooldown: number;
+  } | null;
+  /** Active reward, with remaining seconds based on the simulation clock. */
+  bonus?: {
+    name: string;
+    detail: string;
+    seconds: number;
+    colour: string;
+    borderClass: string;
+    textClass: string;
+  } | null;
 };
 
 /** Computes the current pure HUD projection. */
 export function computeHud(
-  session: Pick<WorldSession, "index" | "tiles">,
+  session: Pick<WorldSession, "index" | "tiles"> &
+    Partial<Pick<WorldSession, "collision">>,
   state: ArenaState,
   player: ArenaPlayerState,
   soundEnabled = true,
@@ -59,6 +79,11 @@ export function computeHud(
   const zone = findZone(session.index(), [player.x, player.y]);
   const car = occupiedVehicle(state, player);
   const zoneSecondsLeft = zoneWarningSeconds(state, player);
+  const place =
+    boardableVehicle(state, player) === null
+      ? nearbyLandmarkActivity(session.index(), player, session.collision)
+      : null;
+  const bonus = activeBonus(player, state.tick);
   return {
     zoneName: zone?.name ?? null,
     zoneKey: zone?.key ?? null,
@@ -74,6 +99,24 @@ export function computeHud(
     soundEnabled,
     radioStation,
     drunk: player.drunk,
+    landmark: place
+      ? {
+          name: place.name,
+          action: place.activity.action,
+          description: place.activity.description,
+          reward: `${BONUS_INFO[place.activity.bonus].detail} · ${place.activity.seconds} s`,
+          cooldown: Math.max(
+            0,
+            Math.ceil(((player.bonus?.readyAtTick ?? 0) - state.tick) / 30),
+          ),
+        }
+      : null,
+    bonus: bonus
+      ? {
+          ...BONUS_INFO[bonus],
+          seconds: Math.ceil((player.bonus!.untilTick - state.tick) / 30),
+        }
+      : null,
     canOrderBeer:
       canOrderBeer(session.index(), player) &&
       boardableVehicle(state, player) === null,

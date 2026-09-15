@@ -42,6 +42,7 @@ import ArenaVitals from "./ArenaVitals";
 import ArenaWanted from "./ArenaWanted";
 import ArenaZoneWarning from "./ArenaZoneWarning";
 import ArenaBeerPrompt from "./ArenaBeerPrompt";
+import ArenaLandmarkPrompt from "./ArenaLandmarkPrompt";
 import DeathOverlay, { WASTED_WEBP } from "./DeathOverlay";
 import TouchStick from "./TouchStick";
 import {
@@ -291,9 +292,16 @@ function ArenaPlayfield({
         zoneWarning={game.hud.zoneWarning}
         secondsLeft={game.hud.zoneSecondsLeft}
       />
-      {playing ? (
+      {playing && !game.hud.landmark ? (
         <ArenaBeerPrompt
           canOrderBeer={game.hud.canOrderBeer}
+          showTouch={showTouch}
+        />
+      ) : null}
+      {playing ? (
+        <ArenaLandmarkPrompt
+          landmark={game.hud.landmark}
+          bonus={game.hud.bonus}
           showTouch={showTouch}
         />
       ) : null}
@@ -311,6 +319,13 @@ function ArenaPlayfield({
         <ArenaTouchButtons
           inVehicle={game.hud.inVehicle}
           canOrderBeer={game.hud.canOrderBeer}
+          interactionLabel={
+            game.hud.landmark
+              ? game.hud.landmark.cooldown > 0
+                ? "Even uitrusten"
+                : game.hud.landmark.action
+              : undefined
+          }
           onButton={game.setButton}
           showFire={!twinStick}
           onRadio={game.nextStation}

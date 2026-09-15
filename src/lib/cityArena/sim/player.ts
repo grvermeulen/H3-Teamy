@@ -27,24 +27,35 @@ export const MOVE_DEAD_ZONE = 0.05;
  * (a release ramp would add input latency exactly when a player is dodging), and the previous
  * speed is clamped to {@link WALK_SPEED_MPS} first so stepping out of a fast car cannot lurch.
  */
-function rampSpeed(previous: number, target: number, dt: number): number {
-  const from = Math.min(Math.max(0, previous), WALK_SPEED_MPS);
+function rampSpeed(
+  previous: number,
+  target: number,
+  dt: number,
+  factor: number,
+): number {
+  const from = Math.min(Math.max(0, previous), WALK_SPEED_MPS * factor);
   if (from >= target) return target;
-  return Math.min(target, from + WALK_ACCEL_MPS2 * dt);
+  return Math.min(target, from + WALK_ACCEL_MPS2 * factor * dt);
 }
 
-/** Advances the player by `dt` seconds and resolves collisions; the aim angle, when given, wins over the movement direction for the facing. */
+/** Advances by `dt`, applying the walking bonus before collision resolution; aiming overrides movement facing. */
 export function stepPlayer(
   player: PlayerState,
   input: WorldInput,
   dt: number,
   collision: Pick<CollisionGrid, "resolveCircle">,
+  speedFactor = 1,
 ): PlayerState {
   const inputMagnitude = Math.hypot(input.move[0], input.move[1]);
   const magnitude = Math.min(1, inputMagnitude);
   if (magnitude < MOVE_DEAD_ZONE)
     return { ...player, facing: input.aim ?? player.facing, speed: 0 };
-  const speed = rampSpeed(player.speed, magnitude * WALK_SPEED_MPS, dt);
+  const speed = rampSpeed(
+    player.speed,
+    magnitude * WALK_SPEED_MPS * speedFactor,
+    dt,
+    speedFactor,
+  );
   const stepPerUnit = (speed * dt) / inputMagnitude;
   const [resolvedX, resolvedY] = collision.resolveCircle(
     [

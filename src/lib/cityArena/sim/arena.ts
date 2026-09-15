@@ -27,6 +27,7 @@ import {
 import { applyWanted } from "./wanted";
 import { applyZoneRule } from "./zoneRule";
 import { soberUp } from "./beer";
+import { stepLandmarkBonuses } from "./landmarkVisits";
 import { EMPTY_INPUT } from "./types";
 import type { ArenaInputs, ArenaState, WorldInput } from "./types";
 import { applyEnterExit, applyWeaponSwitch, detectEdges } from "./boarding";
@@ -159,6 +160,7 @@ export function stepArena(
   next = applyExplosions(next, world, tick);
   next = applyZoneRule(next, world.index, tick);
   next = soberUp(next);
+  next = stepLandmarkBonuses(next);
   next = applyWanted(next, tick);
   next = manageCops(next, world, tick, random);
   next = managePoliceCars(next, world, tick, random);

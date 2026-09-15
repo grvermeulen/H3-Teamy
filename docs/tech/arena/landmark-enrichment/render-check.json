@@ -1,0 +1,107 @@
+{
+  "errors": [],
+  "reachable": [
+    {
+      "key": "cunerakerk",
+      "point": [-4152.342693798471, 2554.491550387776]
+    },
+    {
+      "key": "gastland",
+      "point": [-4030.9079818732484, 2010.8311443894509]
+    },
+    {
+      "key": "klein-zwitserland",
+      "point": [-3640.2983991309607, 2663.6331326493655]
+    },
+    {
+      "key": "grote-kerk-wageningen",
+      "point": [2592.6, 1691.15]
+    },
+    {
+      "key": "onder-de-linden",
+      "point": [1818.0816547105962, 568.9963375503916]
+    },
+    {
+      "key": "de-bongerd",
+      "point": [2777.4077262556025, -180.42919411992264]
+    },
+    {
+      "key": "wur-forum",
+      "point": [2684.593764122579, -606.8711867150134]
+    },
+    {
+      "key": "wur-orion",
+      "point": [2880.1649886501164, -577.3550919267886]
+    },
+    {
+      "key": "wur-atlas",
+      "point": [2975.522830566722, -711.5382244057369]
+    },
+    {
+      "key": "oude-kerk-bennekom",
+      "point": [3527.3920839483076, -1997.548737967763]
+    },
+    {
+      "key": "vrije-slag",
+      "point": [2276.706320593309, -2947.3323449083587]
+    }
+  ],
+  "timings": [
+    {
+      "key": "cunerakerk",
+      "ms": 31.4
+    },
+    {
+      "key": "gastland",
+      "ms": 6.7
+    },
+    {
+      "key": "klein-zwitserland",
+      "ms": 4.7
+    },
+    {
+      "key": "grote-kerk-wageningen",
+      "ms": 4.2
+    },
+    {
+      "key": "onder-de-linden",
+      "ms": 4.6
+    },
+    {
+      "key": "de-bongerd",
+      "ms": 3.2
+    },
+    {
+      "key": "wur-forum",
+      "ms": 2.8
+    },
+    {
+      "key": "wur-orion",
+      "ms": 2.4
+    },
+    {
+      "key": "wur-atlas",
+      "ms": 2.7
+    },
+    {
+      "key": "oude-kerk-bennekom",
+      "ms": 3.9
+    },
+    {
+      "key": "vrije-slag",
+      "ms": 5.9
+    },
+    {
+      "key": "bellefleur-basketball",
+      "ms": 2.8
+    },
+    {
+      "key": "neighbourhood",
+      "ms": 4.2
+    },
+    {
+      "key": "meadow",
+      "ms": 3.2
+    }
+  ]
+}

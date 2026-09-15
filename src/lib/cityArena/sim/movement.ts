@@ -16,6 +16,7 @@ import {
 import { pushEvent } from "./events";
 import { policeChase } from "./police";
 import { stepPlayer } from "./player";
+import { landmarkSpeedFactor } from "./landmarkBonuses";
 import { stepDrivers } from "./traffic";
 import { EMPTY_INPUT } from "./types";
 import type {
@@ -139,7 +140,16 @@ function walkPlayer(
 ): ArenaPlayerState {
   let player = isDead(walker)
     ? walker
-    : { ...walker, ...stepPlayer(walker, input, dt, world.collision) };
+    : {
+        ...walker,
+        ...stepPlayer(
+          walker,
+          input,
+          dt,
+          world.collision,
+          landmarkSpeedFactor(walker, tick),
+        ),
+      };
   for (const vehicle of vehicles) {
     const contact = resolveVehicleAgainstPlayer(vehicle, player);
     player = damagePlayer(contact.player, contact.damage, tick);

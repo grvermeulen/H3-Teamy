@@ -1,4 +1,5 @@
 import type { ZoneKey } from "../world/mapTypes";
+import type { LandmarkBonus } from "./landmarkBonuses";
 
 /**
  * Device-agnostic input (spec §7): a movement vector with length ≤ 1 (x east, y south), an
@@ -156,6 +157,8 @@ export type ArenaPlayerState = PlayerState & {
    * scaled down by it, and the renderer sways the view.
    */
   drunk: number;
+  /** Temporary reward and shared cooldown for landmark activities. */
+  bonus?: LandmarkBonus;
   /**
    * Edge-triggered buttons this player held last tick. It lives on the player rather than on
    * the world so one player holding Enter cannot swallow another player's press.

@@ -8,6 +8,13 @@ import type { GroundKind, LandmarkStyle } from "../world/mapTypes";
 import type { Point } from "../world/projection";
 import type { RasterContext } from "./canvasTypes";
 import { paintLandmarkArt } from "./drawLandmarks";
+import {
+  paintMeadowDetails,
+  paintNeighbourhoodRoof,
+  paintHouseGardens,
+} from "./drawNeighbourhood";
+import { LANDMARK_ACTIVITIES } from "../world/landmarkActivities";
+import { BONUS_INFO } from "../sim/landmarkBonuses";
 import { roofFill, roofPatterns, type RoofPatterns } from "./drawRoofs";
 import { paintFurniture, paintTreeShadows } from "./drawScenery";
 import {
@@ -169,6 +176,8 @@ function paintSurfaces(
     chunkRect.maxY - chunkRect.minY,
   );
   paintGround(context, touching, chunkRect, fills);
+  paintMeadowDetails(context, touching, chunkRect);
+  paintHouseGardens(context, touching, chunkRect);
   paintWater(
     context,
     touching,
@@ -237,6 +246,9 @@ function paintBuildings(
       ? landmarks.get(building.landmark)?.style
       : undefined;
     const depth = Math.min(4, Math.max(1, building.levels ?? 2)) * 0.7;
+    const sprite = style
+      ? landmarkSpriteFor(art, style, building.landmark)
+      : undefined;
     fillRing(
       context,
       building.ring.map(([x, y]): Point => [x + depth, y + depth]),
@@ -245,7 +257,11 @@ function paintBuildings(
     fillRing(
       context,
       building.ring,
-      style ? LANDMARK_FILL[style] : roofFill(building, roofs),
+      sprite
+        ? "#777566"
+        : style
+          ? LANDMARK_FILL[style]
+          : roofFill(building, roofs),
     );
     context.strokeStyle = BUILDING_STROKE;
     context.lineWidth = BUILDING_STROKE_WIDTH_M;
@@ -309,8 +325,9 @@ function paintBuildings(
       }
     }
     context.restore();
-    const sprite = style ? landmarkSpriteFor(art, style) : undefined;
-    if (sprite) paintLandmarkArt(context, building, sprite);
+    paintNeighbourhoodRoof(context, building);
+    if (sprite)
+      paintLandmarkArt(context, building, sprite, style !== "brewery");
   }
 }
 
@@ -374,8 +391,23 @@ function paintLabels(
       : undefined;
     if (!info || !rectsIntersect(building.bounds, chunkRect)) continue;
     const [x, y] = polygonCentroid(building.ring);
-    if (insideRect(x, y, tile.rect) && insideRect(x, y, chunkRect))
+    if (insideRect(x, y, tile.rect) && insideRect(x, y, chunkRect)) {
       paintText(context, info.name, x, y, 0, LANDMARK_LABEL_PX, zoom);
+      const activity = building.landmark
+        ? LANDMARK_ACTIVITIES[building.landmark]
+        : undefined;
+      if (activity && zoom >= 6) {
+        paintText(
+          context,
+          `${activity.action} · ${BONUS_INFO[activity.bonus].name}`,
+          x,
+          y + 15 / zoom,
+          0,
+          10,
+          zoom,
+        );
+      }
+    }
   }
 }
 

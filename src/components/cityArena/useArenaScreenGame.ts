@@ -193,6 +193,7 @@ export function useArenaScreenGame(
                 peopleSprites: sprites.people,
                 itemSprites: sprites.items,
                 playerSprite: sprites.player,
+                basketballSprite: sprites.landmarks?.["basketball-girls"],
               },
               names,
             );

@@ -8,7 +8,8 @@ import type {
   VehicleState,
 } from "../sim/types";
 import type { MapZone } from "../world/mapTypes";
-import type { Camera, Viewport } from "./camera";
+import { worldToScreen, type Camera, type Viewport } from "./camera";
+import { activeBonus, BONUS_INFO } from "../sim/landmarkBonuses";
 import type { RasterContext } from "./canvasTypes";
 import {
   DEAD_PLAYER_STYLE,
@@ -20,6 +21,7 @@ import {
 } from "./drawEntities";
 import { drawBullets, drawCrosshair, drawEffects } from "./drawProjectiles";
 import { drawPeople } from "./drawPeople";
+import { drawBasketball } from "./drawBasketball";
 import { drawPickups } from "./drawPickups";
 import { drawVehicles } from "./drawVehicles";
 import {
@@ -79,6 +81,8 @@ export type Scene = {
   itemSprites?: ItemSprites;
   /** Player character art, absent until it has loaded — the player falls back to the circle. */
   playerSprite?: PersonSprite;
+  /** The fixed neighbourhood basketball duo. */
+  basketballSprite?: import("./sprites").PropSprite;
 };
 
 /** Scales the viewport around its centre by `pushIn`. */
@@ -186,6 +190,22 @@ function drawPlayerLook(
         ? undefined
         : itemSpriteFor(scene.itemSprites, itemKeyForWeapon(player.weapon)),
     );
+    const bonus = activeBonus(player, scene.tick);
+    if (bonus) {
+      const [x, y] = worldToScreen(camera, size, [player.x, player.y]);
+      const seconds = Math.ceil((player.bonus!.untilTick - scene.tick) / 30);
+      context.save();
+      context.font = "bold 10px sans-serif";
+      context.textAlign = "center";
+      context.textBaseline = "top";
+      context.strokeStyle = "#101b20";
+      context.lineWidth = 3;
+      const label = `${BONUS_INFO[bonus].name} · ${seconds} s`;
+      context.strokeText(label, x, y + 12);
+      context.fillStyle = BONUS_INFO[bonus].colour;
+      context.fillText(label, x, y + 12);
+      context.restore();
+    }
   }
 }
 
@@ -245,6 +265,13 @@ export function renderScene(
     scene.itemSprites,
   );
   drawBullets(context, camera, size, scene.bullets);
+  drawBasketball(
+    context,
+    camera,
+    size,
+    scene.reducedMotion ? 0 : scene.tick,
+    scene.basketballSprite,
+  );
   drawEffects(context, camera, size, scene.effects, scene.tick);
   drawPlayerLook(context, camera, size, scene);
   const overheadStart = performance.now();

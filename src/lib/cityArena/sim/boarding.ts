@@ -17,7 +17,7 @@ import type {
 } from "./types";
 import { distanceToVehicle, localToWorld } from "./vehicle";
 import { nextWeapon } from "./weapons";
-import { orderBeer } from "./beer";
+import { visitLandmark } from "./landmarkVisits";
 import {
   BOARDING_TICKS,
   ENTER_RANGE_M,
@@ -125,7 +125,7 @@ export function exitVehicle(
 
 /**
  * Handles the Instappen/Uitstappen edge for a living player. On foot the car wins; with no car
- * in reach the same press orders a beer when the player stands at the brewery's tap.
+ * in reach the same press activates the nearby landmark's activity.
  */
 export function applyEnterExit(
   state: ArenaState,
@@ -136,7 +136,7 @@ export function applyEnterExit(
   if (!pressed || isDead(player)) return state;
   if (player.vehicleId !== null) return exitVehicle(state, player, world);
   const boarded = enterVehicle(state, player);
-  return boarded === state ? orderBeer(state, player, world.index) : boarded;
+  return boarded === state ? visitLandmark(state, player, world) : boarded;
 }
 
 /** Handles the Wapen edge. */
