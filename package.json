@@ -97,7 +97,7 @@
     "@vitest/coverage-v8": "^5.0.0",
     "dotenv-cli": "^11.0.0",
     "eslint": "^9.39.5",
-    "eslint-config-next": "16.3.4",
+    "eslint-config-next": "16.3.5",
     "husky": "^9.1.6",
     "jsdom": "^30.0.1",
     "osm2geojson-lite": "2.0.1",
