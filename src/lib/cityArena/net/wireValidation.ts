@@ -1,4 +1,5 @@
 import { MAX_BULLETS } from "../sim/bullets";
+import { BONUS_KINDS } from "../sim/landmarkBonuses";
 import {
   MAX_ARENA_PLAYERS,
   MAX_COPS,
@@ -106,7 +107,10 @@ export function isSnapshot(value: unknown): value is Snapshot {
     return false;
   if (snapshot.r === undefined && snapshot.x !== undefined) return false;
   if (
-    !rows(snapshot.p, 19, MAX_ARENA_PLAYERS) ||
+    !(
+      rows(snapshot.p, 22, MAX_ARENA_PLAYERS) ||
+      rows(snapshot.p, 19, MAX_ARENA_PLAYERS)
+    ) ||
     !rows(snapshot.v, 10, MAX_VEHICLES) ||
     !rows(snapshot.d, 6, MAX_PEDS) ||
     !rows(snapshot.c, 5, MAX_COPS) ||
@@ -133,7 +137,12 @@ export function isSnapshot(value: unknown): value is Snapshot {
         !integer(row[15], -100, 100) ||
         !integer(row[16], 0, 10_000) ||
         !integer(row[17], 0, 10_000) ||
-        !integer(row[18], 0, 100),
+        !integer(row[18], 0, 100) ||
+        (row.length === 22 &&
+          (!integer(row[19], 0, BONUS_KINDS.length) ||
+            !integer(row[20], 0, MAX_TICK) ||
+            !integer(row[21], row[20]!, MAX_TICK) ||
+            (row[19] === 0 && (row[20] !== 0 || row[21] !== 0)))),
     )
   )
     return false;

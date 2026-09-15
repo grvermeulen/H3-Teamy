@@ -251,6 +251,83 @@
       "widthMetres": 4.81,
       "pixelWidth": 256,
       "pixelHeight": 77
+    },
+    "gastland": {
+      "file": "/arena/sprites/landmark-gastland.png",
+      "lengthMetres": 32,
+      "widthMetres": 18.17,
+      "pixelWidth": 384,
+      "pixelHeight": 218
+    },
+    "onder-de-linden": {
+      "file": "/arena/sprites/landmark-onder-de-linden.png",
+      "lengthMetres": 16,
+      "widthMetres": 7.69,
+      "pixelWidth": 256,
+      "pixelHeight": 123
+    },
+    "cunerakerk": {
+      "file": "/arena/sprites/landmark-cunerakerk.png",
+      "lengthMetres": 40,
+      "widthMetres": 22.4,
+      "pixelWidth": 384,
+      "pixelHeight": 215
+    },
+    "vrije-slag": {
+      "file": "/arena/sprites/landmark-vrije-slag.png",
+      "lengthMetres": 40,
+      "widthMetres": 19.27,
+      "pixelWidth": 384,
+      "pixelHeight": 185
+    },
+    "grote-kerk-wageningen": {
+      "file": "/arena/sprites/landmark-grote-kerk-wageningen.png",
+      "lengthMetres": 40,
+      "widthMetres": 24.58,
+      "pixelWidth": 384,
+      "pixelHeight": 236
+    },
+    "oude-kerk-bennekom": {
+      "file": "/arena/sprites/landmark-oude-kerk-bennekom.png",
+      "lengthMetres": 28,
+      "widthMetres": 18.74,
+      "pixelWidth": 384,
+      "pixelHeight": 257
+    },
+    "de-bongerd": {
+      "file": "/arena/sprites/landmark-de-bongerd.png",
+      "lengthMetres": 32,
+      "widthMetres": 15.25,
+      "pixelWidth": 384,
+      "pixelHeight": 183
+    },
+    "wur-forum": {
+      "file": "/arena/sprites/landmark-wur-forum.png",
+      "lengthMetres": 40,
+      "widthMetres": 36.98,
+      "pixelWidth": 384,
+      "pixelHeight": 355
+    },
+    "wur-orion": {
+      "file": "/arena/sprites/landmark-wur-orion.png",
+      "lengthMetres": 40,
+      "widthMetres": 26.46,
+      "pixelWidth": 384,
+      "pixelHeight": 254
+    },
+    "wur-atlas": {
+      "file": "/arena/sprites/landmark-wur-atlas.png",
+      "lengthMetres": 40,
+      "widthMetres": 23.23,
+      "pixelWidth": 384,
+      "pixelHeight": 223
+    },
+    "basketball-girls": {
+      "file": "/arena/sprites/landmark-basketball-girls.png",
+      "lengthMetres": 4,
+      "widthMetres": 2.5,
+      "pixelWidth": 64,
+      "pixelHeight": 40
     }
   }
 }

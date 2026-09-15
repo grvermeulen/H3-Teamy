@@ -177,6 +177,23 @@ const itemSources = {
 // length is nominal — the painter fits it to each building — and sets the packed pixel size.
 const landmarkSources = {
   brewery: { file: "landmark-brewery.png", lengthM: 16 },
+  gastland: { file: "landmark-gastland.png", lengthM: 32 },
+  "onder-de-linden": { file: "landmark-onder-de-linden.png", lengthM: 16 },
+  cunerakerk: { file: "landmark-cunerakerk.png", lengthM: 40 },
+  "vrije-slag": { file: "landmark-vrije-slag.png", lengthM: 40 },
+  "grote-kerk-wageningen": {
+    file: "landmark-grote-kerk-wageningen.png",
+    lengthM: 40,
+  },
+  "oude-kerk-bennekom": {
+    file: "landmark-oude-kerk-bennekom.png",
+    lengthM: 28,
+  },
+  "de-bongerd": { file: "landmark-de-bongerd.png", lengthM: 32 },
+  "wur-forum": { file: "landmark-wur-forum.png", lengthM: 40 },
+  "wur-orion": { file: "landmark-wur-orion.png", lengthM: 40 },
+  "wur-atlas": { file: "landmark-wur-atlas.png", lengthM: 40 },
+  "basketball-girls": { file: "landmark-basketball-girls.png", lengthM: 4 },
 };
 
 /**
@@ -345,7 +362,12 @@ async function packAlongLength(source, pixelLong) {
   })
     .extract(bounds)
     .resize(pixelWidth, pixelHeight, { fit: "fill" })
-    .png()
+    .png(
+      source.file.startsWith("landmark-") &&
+        source.file !== "landmark-brewery.png"
+        ? { palette: true, colours: 128, dither: 0.5 }
+        : {},
+    )
     .toFile(path.join(outputDir, source.file));
   return {
     file: `${PUBLIC_BASE_PATH}/${source.file}`,
@@ -366,7 +388,7 @@ function packItemSprite(source) {
 function packLandmarkSprite(source) {
   return packAlongLength(
     source,
-    Math.round(source.lengthM * LANDMARK_PX_PER_METRE),
+    Math.min(384, Math.round(source.lengthM * LANDMARK_PX_PER_METRE)),
   );
 }
 

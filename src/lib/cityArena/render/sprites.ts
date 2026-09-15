@@ -70,10 +70,22 @@ export const ITEM_KEYS = [
 export type ItemKey = (typeof ITEM_KEYS)[number];
 
 /**
- * The landmark styles with art of their own: a building seen from above, laid along its
- * footprint's longest edge by `drawLandmarks.ts`. Every other style keeps its flat colour.
+ * Named landmark art, plus the brewery style fallback and the neighbourhood basketball duo.
  */
-export const LANDMARK_ART_KEYS = ["brewery"] as const satisfies LandmarkStyle[];
+export const LANDMARK_ART_KEYS = [
+  "brewery",
+  "gastland",
+  "onder-de-linden",
+  "cunerakerk",
+  "vrije-slag",
+  "grote-kerk-wageningen",
+  "oude-kerk-bennekom",
+  "de-bongerd",
+  "wur-forum",
+  "wur-orion",
+  "wur-atlas",
+  "basketball-girls",
+] as const;
 
 /** A key of {@link LANDMARK_ART_KEYS}. */
 export type LandmarkArtKey = (typeof LANDMARK_ART_KEYS)[number];
@@ -175,7 +187,7 @@ export type PropSprites = Partial<Record<PropKey, PropSprite>>;
 /** Items by key — pickups on the ground, weapons in a hand; each stays absent until its file decodes. */
 export type ItemSprites = Partial<Record<ItemKey, PropSprite>>;
 
-/** Landmark art by style; a style without it, or whose file failed, keeps its flat colour. */
+/** Landmark art by place; missing images retain the renderer's procedural building details. */
 export type LandmarkSprites = Partial<Record<LandmarkArtKey, PropSprite>>;
 
 /** The two roof textures: tiled for the small and low, flat for the big and tall. */
@@ -321,21 +333,23 @@ export function itemSpriteFor(
 }
 
 /** True when `style` is one of the styles that can carry art. */
-function isLandmarkArtKey(style: LandmarkStyle): style is LandmarkArtKey {
+function isLandmarkArtKey(style: string): style is LandmarkArtKey {
   return (LANDMARK_ART_KEYS as readonly string[]).includes(style);
 }
 
 /**
- * The art for a landmark style, or `undefined` for a style without any or whose file has not
- * loaded.
+ * Prefers a place's individual artwork, then its style's fallback.
  *
  * @param landmarks - The loaded landmark art.
  * @param style - The landmark's style.
+ * @param key - The specific map landmark, when available.
  * @returns The sprite, or `undefined`.
  */
 export function landmarkSpriteFor(
   landmarks: LandmarkSprites | undefined,
   style: LandmarkStyle,
+  key?: string,
 ): PropSprite | undefined {
+  if (key && isLandmarkArtKey(key) && landmarks?.[key]) return landmarks[key];
   return isLandmarkArtKey(style) ? landmarks?.[style] : undefined;
 }

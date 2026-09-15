@@ -1,0 +1,57 @@
+{
+  "landmark-gastland.png": {
+    "asset_id": "a31c8b36-d57f-51bd-a496-689b73854345",
+    "label": "gastland",
+    "sha12": "df661193f46a"
+  },
+  "landmark-onder-de-linden.png": {
+    "asset_id": "5e10aacc-fc5d-54a6-bc4c-ef3b6a513606",
+    "label": "onder-de-linden",
+    "sha12": "de40848053ec"
+  },
+  "landmark-cunerakerk.png": {
+    "asset_id": "1e572ca0-12bc-5d4a-b953-b6ad29e8c9ae",
+    "label": "cunerakerk",
+    "sha12": "83a0dcbb4ed0"
+  },
+  "landmark-vrije-slag.png": {
+    "asset_id": "f79e61ac-31c1-534d-92e9-a778ecb480af",
+    "label": "vrije-slag",
+    "sha12": "9d82ad67203f"
+  },
+  "landmark-grote-kerk-wageningen.png": {
+    "asset_id": "4583d00a-8b6a-511b-b8f5-acd526d03377",
+    "label": "grote-kerk-wageningen",
+    "sha12": "a14ef53f4fd4"
+  },
+  "landmark-oude-kerk-bennekom.png": {
+    "asset_id": "5bfe72d5-1f88-556d-ba2c-4a92ab2c47dd",
+    "label": "oude-kerk-bennekom",
+    "sha12": "393514727a41"
+  },
+  "landmark-de-bongerd.png": {
+    "asset_id": "60fca557-033e-5dfd-90aa-326ecc62fe10",
+    "label": "de-bongerd",
+    "sha12": "4501f88e5267"
+  },
+  "landmark-wur-forum.png": {
+    "asset_id": "200013c7-7360-584d-88f2-0c9ce3ab7009",
+    "label": "wur-forum",
+    "sha12": "52af03112506"
+  },
+  "landmark-wur-orion.png": {
+    "asset_id": "6f328e2f-1c93-5931-8577-fa49b8e6874f",
+    "label": "wur-orion",
+    "sha12": "1695aff9bca6"
+  },
+  "landmark-wur-atlas.png": {
+    "asset_id": "010fa0b4-4043-5379-afd8-31173fe1ae56",
+    "label": "wur-atlas",
+    "sha12": "efc560489d1c"
+  },
+  "landmark-basketball-girls.png": {
+    "asset_id": "e6e102cb-7fe6-53a5-8208-67495e0aa634",
+    "label": "basketball-girls",
+    "sha12": "caeeb4b5adab"
+  }
+}

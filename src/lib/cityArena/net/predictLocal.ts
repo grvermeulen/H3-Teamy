@@ -6,6 +6,7 @@ import {
 } from "../sim/collisions";
 import { driveStep } from "../sim/driveInput";
 import { stepPlayer } from "../sim/player";
+import { landmarkSpeedFactor } from "../sim/landmarkBonuses";
 import { playerById, replacePlayer } from "../sim/players";
 import { forwardSpeed, NO_CONTROLS, stepVehicle } from "../sim/vehicle";
 
@@ -55,7 +56,16 @@ export const predictLocal: typeof stepArena = (state, inputs, dt, world) => {
       },
     );
   }
-  let moved = { ...player, ...stepPlayer(player, input, dt, world.collision) };
+  let moved = {
+    ...player,
+    ...stepPlayer(
+      player,
+      input,
+      dt,
+      world.collision,
+      landmarkSpeedFactor(player, next.tick),
+    ),
+  };
   for (const obstacle of state.vehicles) {
     if (Math.hypot(obstacle.x - moved.x, obstacle.y - moved.y) > 12) continue;
     moved = resolveVehicleAgainstPlayer(obstacle, moved).player;

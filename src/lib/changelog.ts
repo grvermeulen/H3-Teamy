@@ -24,6 +24,23 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.3.2": {
+    title: "Ontdek de buurt in GTA H3",
+    steps: [
+      {
+        title: "Bekende plekken komen tot leven",
+        body: "De zwembaden, kerken, Café Onder de Linden en WUR-gebouwen hebben elk een eigen ontwerp. Ontdek ook het basketballende Oranje-duo bij Bellefleur 5.",
+      },
+      {
+        title: "Een bezoek geeft je een bonus",
+        body: "Loop naar een bekende plek en gebruik de interactieknop voor een korte activiteit. Een duik geeft extra loopsnelheid, koffie helpt je herstellen en de kerkklok biedt tijdelijke bescherming. De resterende tijd zie je in beeld.",
+      },
+      {
+        title: "Meer kleur in de straten",
+        body: "Daken, dakkapellen, zonnepanelen, tuinen, bloemen en akkers maken iedere buurt afwisselender.",
+      },
+    ],
+  },
   "0.3.1": {
     title: "GTA H3: hulp bij casten",
     steps: [

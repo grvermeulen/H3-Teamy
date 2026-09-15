@@ -27,6 +27,8 @@ export type ArenaTouchButtonsProps = {
   inVehicle: boolean;
   /** True at the brewery's tap: the Instappen button reads Biertje. Defaults to false. */
   canOrderBeer?: boolean;
+  /** Action offered by the nearby landmark. */
+  interactionLabel?: string;
   onButton: (name: ButtonName, pressed: boolean) => void;
   /** False with the twin-stick layout, where the aim stick fires (spec §7). Defaults to true. */
   showFire?: boolean;
@@ -98,6 +100,7 @@ function HoldButton({
 export default function ArenaTouchButtons({
   inVehicle,
   canOrderBeer = false,
+  interactionLabel,
   onButton,
   showFire = true,
   onRadio,
@@ -106,7 +109,7 @@ export default function ArenaTouchButtons({
     ? EXIT_LABEL
     : canOrderBeer
       ? BEER_LABEL
-      : ENTER_LABEL;
+      : (interactionLabel ?? ENTER_LABEL);
   return (
     <div
       data-testid="arena-touch-buttons"

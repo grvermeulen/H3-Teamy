@@ -73,15 +73,19 @@ export function orientedBox(ring: Point[]): OrientedBox {
  * @param context - The chunk's context, in world metres.
  * @param building - The landmark's footprint.
  * @param sprite - The style's art.
+ * @param fitFootprint - Fits both dimensions of larger landmarks; the brewery keeps its authored aspect.
  */
 export function paintLandmarkArt(
   context: RasterContext,
   building: Pick<DecodedBuilding, "ring">,
   sprite: PropSprite,
+  fitFootprint = false,
 ): void {
   const box = orientedBox(building.ring);
   const length = box.length + 2 * LANDMARK_ART_OVERHANG_M;
-  const width = (length * sprite.widthMetres) / sprite.lengthMetres;
+  const width = fitFootprint
+    ? box.width + 2 * LANDMARK_ART_OVERHANG_M
+    : (length * sprite.widthMetres) / sprite.lengthMetres;
   context.save();
   context.translate(box.centre[0], box.centre[1]);
   context.rotate(box.angle);
