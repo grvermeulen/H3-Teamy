@@ -15,8 +15,13 @@ vi.mock("next/dynamic", () => ({
 }));
 
 describe("location selection across arena modes", () => {
-  beforeEach(() => localStorage.clear());
-  afterEach(cleanup);
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+  afterEach(() => {
+    cleanup();
+  });
 
   it.each(["player", "display", "controller", "hybrid"] as const)(
     "creates a %s room in the chosen location",

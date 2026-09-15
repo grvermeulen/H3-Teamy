@@ -4,12 +4,14 @@ import { zoneName } from "./launcher/MissionCard";
 interface ArenaRoomLocationProps {
   zone: ZoneKey;
   onNewGame?: () => void;
+  leaving?: boolean;
 }
 
 /** Explains a shared room's fixed starting location and offers a fresh location choice. */
 export function ArenaRoomLocation({
   zone,
   onNewGame,
+  leaving = false,
 }: ArenaRoomLocationProps): React.JSX.Element {
   return (
     <section
@@ -25,9 +27,10 @@ export function ArenaRoomLocation({
         <button
           type="button"
           onClick={onNewGame}
+          disabled={leaving}
           className="mt-3 min-h-11 rounded border border-[var(--arena-amber)] px-3 py-2 text-[var(--arena-amber)]"
         >
-          Verlaten en andere locatie kiezen
+          {leaving ? "Potje verlaten…" : "Verlaten en andere locatie kiezen"}
         </button>
       ) : null}
     </section>

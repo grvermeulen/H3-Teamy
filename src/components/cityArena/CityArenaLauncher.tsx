@@ -143,8 +143,12 @@ export default function CityArenaLauncher(): React.JSX.Element {
     setChoosingLocation(false);
     setEntry({ kind: "new", zone });
   }, []);
-  const openCodeEntry = useCallback(() => setEntry({ kind: "code" }), []);
+  const openCodeEntry = useCallback(() => {
+    setChoosingLocation(false);
+    setEntry({ kind: "code" });
+  }, []);
   const openRoom = useCallback((room: LobbyRoom) => {
+    setChoosingLocation(false);
     setEntry({ kind: "join", roomCode: room.roomCode, zone: room.zone });
   }, []);
   const close = useCallback(() => setEntry(null), []);

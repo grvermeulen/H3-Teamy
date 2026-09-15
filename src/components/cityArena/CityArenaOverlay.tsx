@@ -437,6 +437,7 @@ export default function CityArenaOverlay({
   const debug = useDebugFlag();
   const reducedMotion = useReducedMotion();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [scoreboardHeld, setScoreboardHeld] = useState(false);
   const game = useArenaGame({
     zoneKey: zone,
@@ -517,10 +518,12 @@ export default function CityArenaOverlay({
           {room.ticket ? (
             <ArenaRoomLocation
               zone={room.zone}
+              leaving={leaving}
               onNewGame={
                 onNewGame
-                  ? () => {
-                      room.leave();
+                  ? async () => {
+                      setLeaving(true);
+                      await room.leave();
                       onNewGame();
                     }
                   : undefined

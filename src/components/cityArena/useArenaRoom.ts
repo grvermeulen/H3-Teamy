@@ -63,7 +63,7 @@ function reportFailure(error: unknown): void {
 /** Connects only after membership approval and follows server-issued host epochs. */
 export function useArenaRoom(
   options: UseArenaRoomOptions,
-): ArenaRoom & { leave: () => void } {
+): ArenaRoom & { leave: () => Promise<void> } {
   const [ticket, setTicket] = useState<ArenaRoomTicket | null>(null);
   const [status, setStatus] = useState<ArenaRoom["status"]>("connecting");
   const [connection, setConnection] = useState<ConnectionState>("connecting");
@@ -72,7 +72,7 @@ export function useArenaRoom(
   const transportRef = useRef<RealtimeTransport | null>(null);
   const ticketRef = useRef<ArenaRoomTicket | null>(null);
   const pulseRef = useRef<(() => void) | null>(null);
-  const leaveRef = useRef<(() => void) | null>(null);
+  const leaveRef = useRef<(() => Promise<void>) | null>(null);
   const startRef = useRef<(() => Promise<ArenaRoomTicket>) | null>(null);
   const unwillingUntilRef = useRef(0);
   const canHostRef = useRef(options.canHost ?? true);
@@ -101,9 +101,11 @@ export function useArenaRoom(
     const joinNonce = crypto.randomUUID();
     const initialZone =
       options.entry.kind === "code" ? options.fallbackZone : options.entry.zone;
-    const release = (memberId: string): void => {
-      void send({ action: "leave", memberId }, true).catch(reportFailure);
-    };
+    let releaseDone = Promise.resolve();
+    const release = (memberId: string): Promise<void> =>
+      send({ action: "leave", memberId }, true)
+        .then(() => undefined)
+        .catch(reportFailure);
     const apply = async (next: ArenaRoomTicket): Promise<ArenaRoomTicket> => {
       const previous = ticketRef.current;
       if (previous && next.serverTime < previous.serverTime) return previous;
@@ -187,11 +189,14 @@ export function useArenaRoom(
       stopState?.();
       const current = ticketRef.current;
       ticketRef.current = null;
-      if (current) release(current.memberId);
+      if (current) releaseDone = release(current.memberId);
       transportRef.current?.close();
       transportRef.current = null;
     };
-    leaveRef.current = stop;
+    leaveRef.current = () => {
+      stop();
+      return releaseDone;
+    };
     startRef.current = async () => {
       const current = ticketRef.current;
       if (!current || disposed)
@@ -280,7 +285,9 @@ export function useArenaRoom(
   }, []);
 
   const transport = useCallback(() => transportRef.current, []);
-  const leave = useCallback(() => leaveRef.current?.(), []);
+  const leave = useCallback(async (): Promise<void> => {
+    await leaveRef.current?.();
+  }, []);
   const startRound = useCallback(async (): Promise<ArenaRoomTicket> => {
     if (!startRef.current)
       throw new ArenaRequestError("Je bent nog niet verbonden", 409);

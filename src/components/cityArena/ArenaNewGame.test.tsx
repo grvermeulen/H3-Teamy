@@ -5,8 +5,13 @@ import { ZONE_OPTIONS } from "@/lib/cityArena/constants";
 import { ArenaNewGame } from "./ArenaNewGame";
 
 describe("new arena location", () => {
-  beforeEach(() => localStorage.clear());
-  afterEach(cleanup);
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+  afterEach(() => {
+    cleanup();
+  });
 
   it.each(ZONE_OPTIONS)(
     "creates a room in $name only after confirmation",
@@ -31,7 +36,7 @@ describe("new arena location", () => {
     expect(screen.getByRole("radio", { name: /Bennekom/ })).toBeChecked();
     fireEvent.click(screen.getByRole("radio", { name: /WUR-campus/ }));
     fireEvent.click(screen.getByRole("button", { name: "Annuleren" }));
-    expect(onCancel).toHaveBeenCalledOnce();
+    expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onStart).not.toHaveBeenCalled();
     expect(loadArenaSettings().lastZone).toBe("bennekom");
   });

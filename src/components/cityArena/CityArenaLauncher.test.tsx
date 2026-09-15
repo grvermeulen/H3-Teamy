@@ -127,6 +127,27 @@ describe("CityArenaLauncher", () => {
     expect(screen.getByTestId("overlay-stub")).toHaveTextContent("code:");
   });
 
+  it.each(["code", "room"])(
+    "closes the location chooser when switching to %s entry",
+    async (kind) => {
+      serveRooms([room()]);
+      render(<CityArenaLauncher />);
+      const join = await screen.findByRole("button", {
+        name: /meedoen · lobby openen/i,
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Nieuw potje" }));
+      fireEvent.click(
+        kind === "code"
+          ? screen.getByRole("button", { name: "Code invoeren" })
+          : join,
+      );
+      fireEvent.click(screen.getByText("dicht"));
+      expect(
+        screen.queryByText("Waar wil je beginnen?"),
+      ).not.toBeInTheDocument();
+    },
+  );
+
   it("closes the overlay again", async () => {
     render(<CityArenaLauncher />);
     fireEvent.click(await screen.findByRole("button", { name: "Nieuw potje" }));
