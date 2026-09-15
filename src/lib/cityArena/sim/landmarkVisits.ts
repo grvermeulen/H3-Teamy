@@ -1,7 +1,8 @@
 import { nearbyLandmarkActivity } from "../world/landmarkActivities";
 import type { ArenaWorld } from "./arenaWorld";
+import { PLAYER_MAX_HEALTH } from "./damage";
 import { orderBeer } from "./beer";
-import { activeBonus } from "./landmarkBonuses";
+import { activeBonus, BONUS_BALANCE } from "./landmarkBonuses";
 import { SIM_STEP_S } from "./player";
 import { playersOf, replacePlayer } from "./players";
 import type { ArenaPlayerState, ArenaState } from "./types";
@@ -23,7 +24,7 @@ export function visitLandmark(
     bonus: {
       kind: place.activity.bonus,
       untilTick,
-      readyAtTick: untilTick + 15 / SIM_STEP_S,
+      readyAtTick: untilTick + BONUS_BALANCE.restSeconds / SIM_STEP_S,
     },
   });
 }
@@ -37,11 +38,14 @@ export function stepLandmarkBonuses(state: ArenaState): ArenaState {
       next = replacePlayer(next, { ...player, bonus: undefined });
     } else if (
       activeBonus(player, state.tick) === "recovery" &&
-      player.health < 100
+      player.health < PLAYER_MAX_HEALTH
     ) {
       next = replacePlayer(next, {
         ...player,
-        health: Math.min(100, player.health + 2 * SIM_STEP_S),
+        health: Math.min(
+          PLAYER_MAX_HEALTH,
+          player.health + BONUS_BALANCE.recoveryPerSecond * SIM_STEP_S,
+        ),
       });
     }
   }

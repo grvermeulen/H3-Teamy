@@ -40,6 +40,7 @@ export function drawBasketball(
   context.arc(2.65, 0, 0.25, 0, Math.PI * 2);
   context.stroke();
   context.restore();
+  // The court follows the street; the upright character artwork faces the camera.
   context.save();
   context.translate(x, y);
   context.scale(camera.zoom, camera.zoom);

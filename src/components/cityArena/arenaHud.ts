@@ -62,6 +62,8 @@ export type ArenaHud = {
     detail: string;
     seconds: number;
     colour: string;
+    borderClass: string;
+    textClass: string;
   } | null;
 };
 

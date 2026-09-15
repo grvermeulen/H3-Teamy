@@ -49,7 +49,7 @@ import {
 } from "./weapons";
 import { exitVehicle, occupiedVehicle } from "./boarding";
 import { drunkDamageFactor } from "./beer";
-import { activeBonus } from "./landmarkBonuses";
+import { activeBonus, BONUS_BALANCE } from "./landmarkBonuses";
 import { firesCannon, lengthOf } from "./vehicle";
 import type { ArenaWorld } from "./arenaWorld";
 
@@ -154,7 +154,7 @@ function fireShots(
         shot.damage *
         drunkDamageFactor(player.drunk) *
         (isMelee(trigger.weapon) && activeBonus(player, tick) === "power"
-          ? 1.25
+          ? BONUS_BALANCE.meleeFactor
           : 1),
     }));
   const muzzleId = state.nextId + shots.length;
@@ -206,7 +206,13 @@ export function applyFire(
   const shooter = afterShot(player, trigger.weapon, tick);
   if (activeBonus(player, tick) === "focus")
     shooter.nextShotTick =
-      tick + Math.max(1, Math.ceil((shooter.nextShotTick - tick) * 0.8));
+      tick +
+      Math.max(
+        1,
+        Math.ceil(
+          (shooter.nextShotTick - tick) * BONUS_BALANCE.shotCooldownFactor,
+        ),
+      );
   return replacePlayer(fired, shooter);
 }
 

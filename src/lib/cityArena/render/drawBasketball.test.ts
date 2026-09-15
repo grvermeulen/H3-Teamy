@@ -18,7 +18,7 @@ describe("the Bellefleur basketball scene", () => {
     const ctx = createFakeContext();
     const [x, y] = BASKETBALL_COURT_CENTRE;
     drawBasketball(ctx, { x, y, zoom: 12 }, { width: 480, height: 320 }, 9, {
-      image: {} as CanvasImageSource,
+      image: document.createElement("canvas"),
       lengthMetres: 4,
       widthMetres: 2.5,
     });

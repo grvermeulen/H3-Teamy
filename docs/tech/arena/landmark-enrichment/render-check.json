@@ -49,59 +49,59 @@
   "timings": [
     {
       "key": "cunerakerk",
-      "ms": 29.6
+      "ms": 31.4
     },
     {
       "key": "gastland",
-      "ms": 12.7
-    },
-    {
-      "key": "klein-zwitserland",
-      "ms": 10.4
-    },
-    {
-      "key": "grote-kerk-wageningen",
-      "ms": 5.3
-    },
-    {
-      "key": "onder-de-linden",
       "ms": 6.7
     },
     {
+      "key": "klein-zwitserland",
+      "ms": 4.7
+    },
+    {
+      "key": "grote-kerk-wageningen",
+      "ms": 4.2
+    },
+    {
+      "key": "onder-de-linden",
+      "ms": 4.6
+    },
+    {
       "key": "de-bongerd",
-      "ms": 6.1
+      "ms": 3.2
     },
     {
       "key": "wur-forum",
-      "ms": 5.5
+      "ms": 2.8
     },
     {
       "key": "wur-orion",
-      "ms": 4.9
+      "ms": 2.4
     },
     {
       "key": "wur-atlas",
-      "ms": 4.9
+      "ms": 2.7
     },
     {
       "key": "oude-kerk-bennekom",
-      "ms": 6.4
+      "ms": 3.9
     },
     {
       "key": "vrije-slag",
-      "ms": 11.5
+      "ms": 5.9
     },
     {
       "key": "bellefleur-basketball",
-      "ms": 5.2
+      "ms": 2.8
     },
     {
       "key": "neighbourhood",
-      "ms": 6
+      "ms": 4.2
     },
     {
       "key": "meadow",
-      "ms": 5.3
+      "ms": 3.2
     }
   ]
 }

@@ -122,8 +122,9 @@ async function main() {
     fs.createReadStream(file).pipe(res);
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const browser = await chromium.launch({ headless: true, channel: "chrome" });
+  let browser;
   try {
+    browser = await chromium.launch({ headless: true, channel: "chrome" });
     const page = await browser.newPage({
       viewport: { width: 1544, height: 1100 },
       deviceScaleFactor: 1,
@@ -150,8 +151,11 @@ async function main() {
       `Rendered ${timings.length} map views: ${path.join(output, "map-gallery.png")}`,
     );
   } finally {
-    await browser.close();
-    server.close();
+    try {
+      await browser?.close();
+    } finally {
+      server.close();
+    }
   }
 }
 main().catch((error) => {

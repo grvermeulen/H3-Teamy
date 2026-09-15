@@ -16,7 +16,7 @@ import type { MapIndex } from "../world/mapTypes";
 
 const index: MapIndex = {
   version: 1,
-  generatedAt: "2026-09-15",
+  generatedAt: "2026-09-15T12:00:00",
   origin: { lat: 51.98, lon: 5.625 },
   unitsPerMetre: 4,
   bounds: { minX: -1000, minY: -1000, maxX: 1000, maxY: 1000 },

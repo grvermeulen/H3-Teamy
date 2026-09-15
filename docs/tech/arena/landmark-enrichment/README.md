@@ -41,7 +41,7 @@ De host past bonussen toe in de simulatie. Loopsnelheid gebruikt dezelfde factor
 
 Gecontroleerd:
 
-- Volledige suite op de actuele basisbranch: **1.747 tests geslaagd**, 28 overgeslagen, inclusief controles voor slagkracht, schietpauze, bonusverloop en de basketballocatie.
+- Volledige suite op de actuele basisbranch: **1.753 tests geslaagd**, 28 overgeslagen, inclusief controles voor slagkracht, schietpauze, bonusverloop en de basketballocatie.
 - Productiebouw en TypeScriptcontrole geslaagd.
 - ESLint: nul fouten, twee bestaande waarschuwingen in `EventList.tsx` en `src/types/ical.d.ts`.
 - `npm audit --omit=dev`: nul kwetsbaarheden.

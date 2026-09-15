@@ -2,23 +2,27 @@
 
 import type { ArenaHud } from "./arenaHud";
 
+interface ArenaLandmarkPromptProps extends Pick<
+  ArenaHud,
+  "landmark" | "bonus"
+> {
+  showTouch: boolean;
+}
+
 /** Activity instructions and a persistent timer for the player's temporary stat bonus. */
 export default function ArenaLandmarkPrompt({
   landmark,
   bonus,
   showTouch,
-}: Pick<ArenaHud, "landmark" | "bonus"> & {
-  showTouch: boolean;
-}): React.JSX.Element | null {
+}: ArenaLandmarkPromptProps): React.JSX.Element | null {
   if (!landmark && !bonus) return null;
   return (
     <div className="pointer-events-none absolute left-3 right-28 top-12 z-10 flex max-w-sm flex-col gap-2 text-xs">
       {bonus ? (
         <div
-          className="rounded-lg border bg-[#101b20]/95 px-3 py-2"
-          style={{ borderColor: bonus.colour }}
+          className={`rounded-lg border bg-[#101b20]/95 px-3 py-2 ${bonus.borderClass}`}
         >
-          <strong style={{ color: bonus.colour }}>{bonus.name}</strong>
+          <strong className={bonus.textClass}>{bonus.name}</strong>
           <span
             className="float-right tabular-nums text-white"
             aria-label="Resterende bonustijd"
