@@ -44,7 +44,7 @@ export const ARENA_CAST_HELP: Record<
     steps: [
       "Verbind je telefoon en je Chromecast of tv met Google Cast met hetzelfde wifi-netwerk.",
       "Open Google Home. Houd bij Apparaten de tegel van je tv of Chromecast ingedrukt.",
-      "Kies Casten en Mijn scherm casten. Bevestig het delen van je scherm of selecteer de app waarin H3 openstaat.",
+      "Kies Casten en Mijn scherm casten. Kies daarna Scherm casten en bevestig het delen van je scherm.",
       "Ga terug naar H3 en draai je telefoon horizontaal om verder te spelen.",
     ],
     note: "Heeft je telefoon Smart View of Scherm casten? Je kunt ook die schermspiegeloptie gebruiken als je tv die ondersteunt.",
