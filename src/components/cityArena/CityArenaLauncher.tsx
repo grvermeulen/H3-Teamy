@@ -4,7 +4,6 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { loadArenaSettings, saveArenaSettings } from "@/lib/cityArena/storage";
 import type { LobbyRoom } from "@/lib/cityArena/net/lobbyPresence";
 import type { ZoneKey } from "@/lib/cityArena/world/mapTypes";
 import { useSession } from "../SessionContext";
@@ -13,6 +12,7 @@ import { CityArenaLaunchIcon } from "./CityArenaLaunchIcon";
 import { ArenaLeaderboard } from "./launcher/ArenaLeaderboard";
 import { RoomList } from "./launcher/RoomList";
 import { useActiveRooms } from "./launcher/useActiveRooms";
+import { ArenaNewGame } from "./ArenaNewGame";
 import type { ArenaEntry } from "./arenaEntry";
 
 /** Same full-screen layer as the overlay itself, so the chunk load never flashes inline. */
@@ -128,7 +128,7 @@ export default function CityArenaLauncher(): React.JSX.Element {
   const rooms = useActiveRooms(loggedIn);
   const [entry, setEntry] = useState<ArenaEntry | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [zone] = useState<ZoneKey>(() => loadArenaSettings().lastZone);
+  const [choosingLocation, setChoosingLocation] = useState(false);
 
   const statusLine = useMemo(
     () => statusLineFor(rooms.status === "ready" ? rooms.rooms.length : null),
@@ -136,11 +136,19 @@ export default function CityArenaLauncher(): React.JSX.Element {
   );
 
   const openNewRoom = useCallback(() => {
-    saveArenaSettings({ lastZone: zone });
+    setEntry(null);
+    setChoosingLocation(true);
+  }, []);
+  const startNewRoom = useCallback((zone: ZoneKey) => {
+    setChoosingLocation(false);
     setEntry({ kind: "new", zone });
-  }, [zone]);
-  const openCodeEntry = useCallback(() => setEntry({ kind: "code" }), []);
+  }, []);
+  const openCodeEntry = useCallback(() => {
+    setChoosingLocation(false);
+    setEntry({ kind: "code" });
+  }, []);
   const openRoom = useCallback((room: LobbyRoom) => {
+    setChoosingLocation(false);
     setEntry({ kind: "join", roomCode: room.roomCode, zone: room.zone });
   }, []);
   const close = useCallback(() => setEntry(null), []);
@@ -164,6 +172,13 @@ export default function CityArenaLauncher(): React.JSX.Element {
             onLeaderboard={() => setShowLeaderboard((open) => !open)}
           />
         ) : null}
+        {loggedIn && choosingLocation ? (
+          <ArenaNewGame
+            onStart={startNewRoom}
+            onCancel={() => setChoosingLocation(false)}
+            focusOnOpen
+          />
+        ) : null}
         <div className="mt-3 flex flex-wrap gap-3 text-sm">
           <Link
             className="min-h-11 py-2 underline text-[var(--arena-amber)]"
@@ -183,7 +198,11 @@ export default function CityArenaLauncher(): React.JSX.Element {
         </p>
       </div>
       {entry && loggedIn ? (
-        <CityArenaOverlay entry={entry} onClose={close} />
+        <CityArenaOverlay
+          entry={entry}
+          onClose={close}
+          onNewGame={openNewRoom}
+        />
       ) : null}
     </>
   );

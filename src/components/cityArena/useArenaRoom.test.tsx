@@ -130,6 +130,32 @@ describe("server-approved arena room hook", () => {
       true,
     );
   });
+  it("waits for the leave request and releases the old membership only once", async () => {
+    const test = setup();
+    await settle();
+    let acknowledge!: () => void;
+    test.send.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          acknowledge = () => resolve(roomTicket());
+        }),
+    );
+    const left = vi.fn();
+    const leaving = test.result.current.leave().then(left);
+    await settle();
+    expect(left).not.toHaveBeenCalled();
+    expect(test.send).toHaveBeenLastCalledWith(
+      { action: "leave", memberId: roomTicket().memberId },
+      true,
+    );
+    test.unmount();
+    acknowledge();
+    await leaving;
+    expect(left).toHaveBeenCalledTimes(1);
+    expect(
+      test.send.mock.calls.filter(([command]) => command.action === "leave"),
+    ).toHaveLength(1);
+  });
   it("never opens a transport when the server refuses membership", async () => {
     const createTransport = vi.fn();
     const { result } = renderHook(() =>

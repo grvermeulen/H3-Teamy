@@ -24,6 +24,15 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.3.3": {
+    title: "Kies waar je potje begint",
+    steps: [
+      {
+        title: "Een duidelijke startlocatie",
+        body: "Kies bij Nieuw potje uit Rhenen centrum, Wageningen centrum, de WUR-campus en Bennekom. Je laatste keuze wordt onthouden. Via het spelmenu kun je je kamer verlaten en een andere startlocatie kiezen voor een nieuw potje.",
+      },
+    ],
+  },
   "0.3.2": {
     title: "Ontdek de buurt in GTA H3",
     steps: [
