@@ -24,12 +24,17 @@ vi.mock("next/dynamic", () => ({
     const Stub = ({
       entry,
       onClose,
+      onNewGame,
     }: {
       entry: { kind: string; roomCode?: string; zone?: string };
       onClose: () => void;
+      onNewGame: () => void;
     }): React.JSX.Element => (
       <div data-testid="overlay-stub">
         {`${entry.kind}:${entry.roomCode ?? entry.zone ?? ""}`}
+        <button type="button" onClick={onNewGame}>
+          andere locatie
+        </button>
         <button type="button" onClick={onClose}>
           dicht
         </button>
@@ -103,7 +108,15 @@ describe("CityArenaLauncher", () => {
   it("opens a fresh potje from Nieuw potje", async () => {
     render(<CityArenaLauncher />);
     fireEvent.click(await screen.findByRole("button", { name: "Nieuw potje" }));
-    expect(screen.getByTestId("overlay-stub")).toHaveTextContent("new:");
+    expect(screen.queryByTestId("overlay-stub")).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: /WUR-campus/ }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Potje openen in WUR-campus" }),
+    );
+    expect(screen.getByTestId("overlay-stub")).toHaveTextContent("new:campus");
+    fireEvent.click(screen.getByRole("button", { name: "andere locatie" }));
+    expect(screen.queryByTestId("overlay-stub")).toBeNull();
+    expect(screen.getByRole("radio", { name: /WUR-campus/ })).toBeChecked();
   });
 
   it("opens code entry from Code invoeren", async () => {
@@ -117,6 +130,7 @@ describe("CityArenaLauncher", () => {
   it("closes the overlay again", async () => {
     render(<CityArenaLauncher />);
     fireEvent.click(await screen.findByRole("button", { name: "Nieuw potje" }));
+    fireEvent.click(screen.getByRole("button", { name: /Potje openen in/ }));
     fireEvent.click(screen.getByText("dicht"));
     expect(screen.queryByTestId("overlay-stub")).toBeNull();
   });

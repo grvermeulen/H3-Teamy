@@ -8,8 +8,8 @@ import {
   ArenaRoomCodeSchema,
   type ArenaRole,
 } from "@/lib/cityArena/net/roomProtocol";
-import { ZONE_OPTIONS } from "@/lib/cityArena/constants";
-import type { ZoneKey } from "@/lib/cityArena/world/mapTypes";
+import { DEFAULT_ARENA_SETTINGS } from "@/lib/cityArena/schemas";
+import { ArenaNewGame } from "./ArenaNewGame";
 import type { ArenaEntry } from "./arenaEntry";
 
 const ArenaController = dynamic(
@@ -33,7 +33,6 @@ export function ArenaModePage({
   const session = useSession();
   const [role, setRole] = useState(defaultRole);
   const [code, setCode] = useState("");
-  const [zone, setZone] = useState<ZoneKey>("rhenen");
   const [entry, setEntry] = useState<ArenaEntry | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [callbackUrl, setCallbackUrl] = useState("/arena/controller");
@@ -53,7 +52,7 @@ export function ArenaModePage({
     return entry.role === "controller" ? (
       <ArenaController entry={entry} onClose={close} />
     ) : (
-      <CityArenaOverlay entry={entry} onClose={close} />
+      <CityArenaOverlay entry={entry} onClose={close} onNewGame={close} />
     );
   const allowed = role === "display" || (!session.loading && session.loggedIn);
   return (
@@ -111,7 +110,12 @@ export function ArenaModePage({
             return;
           }
           setError(null);
-          setEntry({ kind: "join", roomCode: parsed.data, zone, role });
+          setEntry({
+            kind: "join",
+            roomCode: parsed.data,
+            zone: DEFAULT_ARENA_SETTINGS.lastZone,
+            role,
+          });
         }}
       >
         <label className="min-w-0 flex-1 text-sm">
@@ -140,30 +144,10 @@ export function ArenaModePage({
           {error}
         </p>
       ) : null}
-      <div className="mt-6 border-t border-[var(--arena-line)] pt-5">
-        <label className="block text-sm">
-          Zone
-          <select
-            aria-label="Zone"
-            value={zone}
-            onChange={(event) => setZone(event.target.value as ZoneKey)}
-            className="ml-3 min-h-11 rounded bg-[var(--arena-panel)] px-3"
-          >
-            {ZONE_OPTIONS.map((item) => (
-              <option key={item.key} value={item.key}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          disabled={!allowed}
-          onClick={() => setEntry({ kind: "new", zone, role })}
-          className="mt-3 min-h-12 rounded border border-[var(--arena-amber)] px-5 disabled:opacity-40"
-        >
-          Nieuwe kamer openen
-        </button>
-      </div>
+      <ArenaNewGame
+        disabled={!allowed}
+        onStart={(zone) => setEntry({ kind: "new", zone, role })}
+      />
       <div className="mt-6 space-y-2 text-sm text-[var(--arena-dim)]">
         <p>
           Tv: open deze pagina in de tv-browser, sluit een laptop aan met HDMI

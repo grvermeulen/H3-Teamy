@@ -11,6 +11,7 @@ import {
 } from "react";
 import { createPortal, preload } from "react-dom";
 import { ZONE_OPTIONS } from "@/lib/cityArena/constants";
+import { ArenaRoomLocation } from "./ArenaRoomLocation";
 import { ArenaPhaseScreens } from "./ArenaPhaseScreens";
 import { ArenaSettingsSheet, MENU_LABEL } from "./ArenaSettingsSheet";
 import { ArenaTouchTip } from "./ArenaTouchTip";
@@ -59,7 +60,11 @@ const TOUCH_MEDIA_QUERY = "(max-width: 768px), (pointer: coarse)";
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 /** Props for {@link CityArenaOverlay}. */
-type CityArenaOverlayProps = { entry: ArenaEntry; onClose: () => void };
+type CityArenaOverlayProps = {
+  entry: ArenaEntry;
+  onClose: () => void;
+  onNewGame?: () => void;
+};
 
 /**
  * The overlay draws whichever phase the match clock is in.
@@ -419,6 +424,7 @@ function useDebugFlag(): boolean {
 export default function CityArenaOverlay({
   entry,
   onClose,
+  onNewGame,
 }: CityArenaOverlayProps): ReactPortal | null {
   const fallbackZone = ZONE_OPTIONS[0]!.key;
   const room = useArenaRoom({ entry, fallbackZone });
@@ -508,12 +514,26 @@ export default function CityArenaOverlay({
           onLeave={leave}
           onClose={closeMenu}
         >
-          <ArenaZonePicker
-            zones={game.zones}
-            currentKey={game.hud.zoneKey ?? ""}
-            disabled={game.phase !== "playing" || !!room.ticket}
-            onTeleport={game.teleportToZone}
-          />
+          {room.ticket ? (
+            <ArenaRoomLocation
+              zone={room.zone}
+              onNewGame={
+                onNewGame
+                  ? () => {
+                      room.leave();
+                      onNewGame();
+                    }
+                  : undefined
+              }
+            />
+          ) : (
+            <ArenaZonePicker
+              zones={game.zones}
+              currentKey={game.hud.zoneKey ?? ""}
+              disabled={game.phase !== "playing"}
+              onTeleport={game.teleportToZone}
+            />
+          )}
         </ArenaSettingsSheet>
       ) : null}
     </div>
