@@ -34,6 +34,8 @@ import {
 import type { MapZone, ZoneKey } from "@/lib/cityArena/world/mapTypes";
 import ArenaDebugOverlay from "./ArenaDebugOverlay";
 import ArenaRadar from "./ArenaRadar";
+import ArenaNavigationMap from "./ArenaNavigationMap";
+import type { NavigationMapData } from "@/lib/cityArena/render/navigationMap";
 import ArenaLoadingScreen, {
   ATTRIBUTION_TEXT,
   MAP_LOAD_FAILURE_TEXT,
@@ -269,6 +271,7 @@ type ArenaPlayfieldProps = {
   aimStick: StickController;
   tip: { shown: boolean; dismiss: () => void };
   sharedScreen?: boolean;
+  onOpenMap: () => void;
 };
 
 /** Canvas plus the loading, error, stick, buttons, death and debug layers drawn on top of it. */
@@ -282,6 +285,7 @@ function ArenaPlayfield({
   aimStick,
   tip,
   sharedScreen = false,
+  onOpenMap,
 }: ArenaPlayfieldProps): React.JSX.Element {
   const playing = game.phase === "playing";
   const twinStick = game.settings.twinStick;
@@ -292,7 +296,11 @@ function ArenaPlayfield({
         className="block h-full w-full touch-none [@media(pointer:fine)]:cursor-none"
         aria-label="GTA H3 speelveld"
       />
-      <ArenaRadar snapshot={game.radar} />
+      <ArenaRadar
+        snapshot={game.radar}
+        onOpen={onOpenMap}
+        disabled={!playing}
+      />
       <ArenaZoneWarning
         zoneWarning={game.hud.zoneWarning}
         secondsLeft={game.hud.zoneSecondsLeft}
@@ -437,6 +445,7 @@ export default function CityArenaOverlay({
   const debug = useDebugFlag();
   const reducedMotion = useReducedMotion();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mapData, setMapData] = useState<NavigationMapData | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [scoreboardHeld, setScoreboardHeld] = useState(false);
   const game = useArenaGame({
@@ -445,7 +454,10 @@ export default function CityArenaOverlay({
     debug,
     reducedMotion,
     netplay: netplayFor(room),
-    keys: { onScoreboard: setScoreboardHeld, suspended: menuOpen },
+    keys: {
+      onScoreboard: setScoreboardHeld,
+      suspended: menuOpen || mapData !== null,
+    },
     sharedScreen:
       entry.role === "hybrid"
         ? room.crew.filter(
@@ -458,6 +470,8 @@ export default function CityArenaOverlay({
   const tip = useTouchTip(showTouch && game.phase === "playing");
   const openMenu = useCallback(() => setMenuOpen(true), []);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const closeMap = useCallback(() => setMapData(null), []);
+  const openMap = (): void => setMapData(game.navigationMap());
   const leave = useCallback(() => {
     room.leave();
     onClose();
@@ -465,7 +479,7 @@ export default function CityArenaOverlay({
   // Escape opens the menu (spec §7); the menu's own trap closes it again, and "Sluiten" is the
   // way out of the overlay.
   // Stood down while the sheet is open: the sheet's own trap owns Tab and Escape until then.
-  useDialogFocusTrap(dialogRef, openMenu, !menuOpen);
+  useDialogFocusTrap(dialogRef, openMenu, !menuOpen && !mapData);
   useLockBodyScroll();
   useWarmDeathArtwork();
 
@@ -500,6 +514,7 @@ export default function CityArenaOverlay({
         aimStick={aimStick}
         tip={tip}
         sharedScreen={entry.role === "hybrid"}
+        onOpenMap={openMap}
       />
       <ArenaFooter showTouch={showTouch} twinStick={game.settings.twinStick} />
       <ArenaPhaseScreens
@@ -508,6 +523,14 @@ export default function CityArenaOverlay({
         onClose={onClose}
         showScoreboard={scoreboardHeld}
       />
+      {mapData ? (
+        <ArenaNavigationMap
+          data={mapData}
+          radar={game.radar}
+          onDestination={game.setDestination}
+          onClose={closeMap}
+        />
+      ) : null}
       {menuOpen ? (
         <ArenaSettingsSheet
           settings={game.settings}

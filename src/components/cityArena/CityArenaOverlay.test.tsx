@@ -374,6 +374,40 @@ describe("CityArenaOverlay", () => {
     expect(localStorage.getItem(ARENA_TOUCH_TIP_KEY)).toBe("1");
   });
 
+  it("opens the radar as a map, retains the selected route when closing, and restores focus", async () => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    renderOverlay(vi.fn());
+    const opener = screen.getByRole("button", {
+      name: "Kaart openen",
+      exact: true,
+    });
+    await waitFor(() => expect(opener).toBeEnabled());
+    opener.focus();
+    fireEvent.click(opener);
+    expect(
+      screen.getByRole("dialog", { name: "Route plannen" }),
+    ).toBeInTheDocument();
+    const map = screen.getByLabelText("Stratenkaart");
+    fireEvent.keyDown(map, { key: "ArrowRight" });
+    fireEvent.keyDown(map, { key: "Enter" });
+    expect(screen.getByRole("status")).toHaveTextContent("Volg de route");
+    fireEvent.keyDown(map, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Route plannen" })).toBeNull();
+    expect(opener).toHaveFocus();
+    expect(
+      screen.getByRole("button", { name: /Volg de route/ }),
+    ).toBeInTheDocument();
+    fireEvent.click(opener);
+    fireEvent.click(screen.getByRole("button", { name: "Navigatie stoppen" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Kies je bestemming");
+  });
+
   it("shows a fire button instead of the aim stick with Enkele stick, and no tip once read", async () => {
     localStorage.setItem(
       ARENA_SETTINGS_KEY,

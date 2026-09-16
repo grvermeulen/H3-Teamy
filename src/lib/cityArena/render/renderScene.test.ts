@@ -73,6 +73,26 @@ const viewport = {
 };
 
 describe("renderScene", () => {
+  it("anchors navigation to the street before drawing the player and entities", () => {
+    const context = createFakeContext();
+    renderScene(
+      context,
+      viewport,
+      sceneWith({
+        navigation: [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+        ],
+      }),
+    );
+    const ribbon = context.calls.indexOf("stroke(rgba(34,211,238,0.28),9.6)");
+    const player = context.calls.indexOf(`fill(${PLAYER_FILL})`);
+    expect(ribbon).toBeGreaterThan(-1);
+    expect(ribbon).toBeLessThan(player);
+    expect(context.calls).toContain("rotate(0)");
+    expect(context.calls).toContain("rotate(1.57)");
+  });
   it("clips, pushes in, draws world → cars → bullets → effects → player → crosshair and restores", () => {
     const context = createFakeContext();
     const stats = renderScene(context, viewport, sceneWith({}));

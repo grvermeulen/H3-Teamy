@@ -1,6 +1,7 @@
 import type { MapRoads } from "../world/mapTypes";
 import { fromUnits, type Point } from "../world/projection";
 import type { RoadGraph } from "../world/roadGraph";
+import type { NavigationSnapshot } from "../world/navigation";
 import type { PickupKind } from "../sim/types";
 import {
   PICKUP_HEALTH,
@@ -32,6 +33,7 @@ export const EMPTY_RADAR_SNAPSHOT: RadarSnapshot = {
 
 /** Immutable render data for the north-up radar. */
 export type RadarSnapshot = {
+  navigation?: NavigationSnapshot | null;
   player: Point;
   roads: Array<readonly [Point, Point]>;
   pickups: Array<{ point: Point; kind: PickupKind }>;
@@ -190,6 +192,28 @@ export function drawRadar(
     context.moveTo(from[0], from[1]);
     context.lineTo(to[0], to[1]);
     context.stroke();
+  }
+
+  if (snapshot.navigation) {
+    context.strokeStyle = "#22d3ee";
+    context.lineWidth = 2.5;
+    context.beginPath();
+    snapshot.navigation.points.forEach((point, index) => {
+      const [x, y] = radarPoint(point, snapshot.player, size, RADAR_RANGE_M);
+      if (index === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    context.stroke();
+    const [x, y] = radarPoint(
+      snapshot.navigation.destination,
+      snapshot.player,
+      size,
+      RADAR_RANGE_M,
+    );
+    context.fillStyle = "#22d3ee";
+    context.beginPath();
+    context.arc(x, y, 4, 0, Math.PI * 2);
+    context.fill();
   }
 
   if (snapshot.zoneCentre && snapshot.zoneRadiusM !== null) {

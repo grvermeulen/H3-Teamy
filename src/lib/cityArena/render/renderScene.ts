@@ -21,6 +21,8 @@ import {
 } from "./drawEntities";
 import { drawBullets, drawCrosshair, drawEffects } from "./drawProjectiles";
 import { drawPeople } from "./drawPeople";
+import { drawNavigation } from "./drawNavigation";
+import type { Point } from "../world/projection";
 import { drawBasketball } from "./drawBasketball";
 import { drawPickups } from "./drawPickups";
 import { drawVehicles } from "./drawVehicles";
@@ -47,6 +49,8 @@ export type SceneViewport = {
 
 /** Everything drawn for one viewport; `pushIn` (1 = none) zooms around the centre for the death screen. */
 export type Scene = {
+  /** Road guidance belonging to this viewport's player. */
+  navigation?: Point[];
   world: WorldDrawSource;
   zone: MapZone | null;
   /** Every player in the match; the one whose id is `localPlayerId` is this client's own. */
@@ -235,6 +239,7 @@ export function renderScene(
   }
   const stats = drawVisibleChunks(context, camera, size, scene.world);
   if (scene.zone) drawZoneRing(context, camera, size, scene.zone);
+  if (scene.navigation) drawNavigation(context, camera, size, scene.navigation);
   drawPickups(
     context,
     camera,

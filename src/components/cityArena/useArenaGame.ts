@@ -49,6 +49,7 @@ import type {
   ZoneKey,
 } from "@/lib/cityArena/world/mapTypes";
 import type { Point } from "@/lib/cityArena/world/projection";
+import type { NavigationMapData } from "@/lib/cityArena/render/navigationMap";
 import { type WorldSession } from "@/lib/cityArena/world/worldSession";
 import { findZoneByKey } from "@/lib/cityArena/world/zone";
 import type { ArenaSettings } from "@/lib/cityArena/schemas";
@@ -132,6 +133,10 @@ export type ArenaGame = MatchSeam & {
   zones: MapZone[];
   death: DeathInfo | null;
   radar: RadarSnapshot;
+  /** Reads loaded streets and places when opening the full-screen map. */
+  navigationMap(): NavigationMapData | null;
+  /** Selects a road destination, or clears navigation with null. */
+  setDestination(point: Point | null): void;
   setSound(enabled: boolean): void;
   /** The player's settings, as persisted. */
   settings: ArenaSettings;
@@ -701,6 +706,26 @@ export function useArenaGame({
     if (runtime.inputSuspended) inputRef.current.clearAll();
   }, [sharedScreen, keys?.suspended, phase, runtimeRef, inputRef]);
   const seam = useMatchSeam(runtimeRef);
+  const navigationMap = useCallback((): NavigationMapData | null => {
+    const runtime = runtimeRef.current;
+    return runtime
+      ? { index: runtime.session.index(), graph: runtime.session.graph() }
+      : null;
+  }, [runtimeRef]);
+  const setDestination = useCallback(
+    (point: Point | null) => {
+      const runtime = runtimeRef.current;
+      if (!runtime) return;
+      const player = myPlayer(runtime);
+      runtime.navigation.select(
+        point,
+        [player.x, player.y],
+        player.vehicleId !== null,
+      );
+      setRadar({ ...radar, navigation: runtime.navigation.snapshot() });
+    },
+    [runtimeRef, radar, setRadar],
+  );
   const teleportToZone = useTeleport(runtimeRef, setHud);
   const updateSettings = useCallback(
     (patch: Partial<ArenaSettings>) => {
@@ -745,6 +770,8 @@ export function useArenaGame({
     cycleWeapon,
     nextStation,
     teleportToZone,
+    navigationMap,
+    setDestination,
     debugSnapshot,
   };
 }

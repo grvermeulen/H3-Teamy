@@ -24,6 +24,19 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.3.4": {
+    title: "Vind je weg in GTA H3",
+    steps: [
+      {
+        title: "Een grote kaart om je route te plannen",
+        body: "Tik op de kleine kaart om de stratenkaart op volledig scherm te openen. Sleep en zoom om de buurt te bekijken. Houd een straat ingedrukt of kies een bekende plek om je bestemming in te stellen.",
+      },
+      {
+        title: "Volg de pijlen op straat",
+        body: "Je route verschijnt op de kaart én als blauwe pijlen op de weg. De navigatie past zich onderweg aan en houdt tijdens het rijden rekening met eenrichtingsstraten. Open de kaart opnieuw om je bestemming te veranderen of de navigatie te stoppen.",
+      },
+    ],
+  },
   "0.3.3": {
     title: "Kies waar je potje begint",
     steps: [
