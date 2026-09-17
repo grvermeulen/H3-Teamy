@@ -6,7 +6,9 @@ import {
   useEffect,
   useRef,
   useState,
+  type Dispatch,
   type RefObject,
+  type SetStateAction,
 } from "react";
 import {
   createFrameMetrics,
@@ -589,7 +591,7 @@ type ArenaGameState = {
   debugSnapshot: DebugSnapshot | null;
   setDebugSnapshot: (snapshot: DebugSnapshot | null) => void;
   radar: RadarSnapshot;
-  setRadar: (radar: RadarSnapshot) => void;
+  setRadar: Dispatch<SetStateAction<RadarSnapshot>>;
 };
 
 /** The three state slices the frame loop writes into and the hook exposes to the overlay. */
@@ -722,9 +724,10 @@ export function useArenaGame({
         [player.x, player.y],
         player.vehicleId !== null,
       );
-      setRadar({ ...radar, navigation: runtime.navigation.snapshot() });
+      const navigation = runtime.navigation.snapshot();
+      setRadar((previous) => ({ ...previous, navigation }));
     },
-    [runtimeRef, radar, setRadar],
+    [runtimeRef, setRadar],
   );
   const teleportToZone = useTeleport(runtimeRef, setHud);
   const updateSettings = useCallback(

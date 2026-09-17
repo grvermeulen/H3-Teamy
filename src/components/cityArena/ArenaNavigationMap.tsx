@@ -36,6 +36,13 @@ type Press = {
 };
 const buttonClass =
   "min-h-11 rounded-lg border border-slate-600 bg-slate-900 px-4 text-sm text-slate-100 focus-visible:outline-2 focus-visible:outline-cyan-300";
+const MIN_SCALE = 0.025;
+const MAX_SCALE = 4;
+const INITIAL_SCALE = 0.7;
+const LONG_PRESS_MS = 550;
+const DRAG_THRESHOLD_PX = 8;
+const KEY_PAN_PX = 80;
+const OVERVIEW_PADDING_PX = 80;
 
 /** Full-screen street map with long-press routing, drag/zoom controls and a keyboard destination alternative. */
 export default function ArenaNavigationMap({
@@ -49,7 +56,7 @@ export default function ArenaNavigationMap({
   const press = useRef<Press | null>(null);
   const [view, setView] = useState<MapView>(() => ({
     center: radar.player,
-    scale: 0.7,
+    scale: INITIAL_SCALE,
   }));
   const [size, setSize] = useState({ width: 1, height: 1 });
   const [holding, setHolding] = useState(false);
@@ -97,7 +104,7 @@ export default function ArenaNavigationMap({
     cancelPress();
     setView((previous) => ({
       ...previous,
-      scale: Math.max(0.025, Math.min(4, previous.scale * factor)),
+      scale: Math.max(MIN_SCALE, Math.min(MAX_SCALE, previous.scale * factor)),
     }));
   };
   const pointerDown = (event: PointerEvent<HTMLCanvasElement>): void => {
@@ -126,7 +133,7 @@ export default function ArenaNavigationMap({
           press.current.moved = true;
         }
         setHolding(false);
-      }, 550),
+      }, LONG_PRESS_MS),
     };
     setHolding(true);
   };
@@ -135,7 +142,7 @@ export default function ArenaNavigationMap({
     if (!start || start.id !== event.pointerId) return;
     const dx = event.clientX - start.x;
     const dy = event.clientY - start.y;
-    if (Math.hypot(dx, dy) <= 8 && !start.moved) return;
+    if (Math.hypot(dx, dy) <= DRAG_THRESHOLD_PX && !start.moved) return;
     if (start.timer) clearTimeout(start.timer);
     start.timer = null;
     start.moved = true;
@@ -165,11 +172,13 @@ export default function ArenaNavigationMap({
         (bounds.minY + bounds.maxY) / 2,
       ],
       scale: Math.max(
-        0.025,
+        MIN_SCALE,
         Math.min(
-          4,
-          (size.width - 80) / Math.max(100, bounds.maxX - bounds.minX),
-          (size.height - 80) / Math.max(100, bounds.maxY - bounds.minY),
+          MAX_SCALE,
+          (size.width - OVERVIEW_PADDING_PX) /
+            Math.max(100, bounds.maxX - bounds.minX),
+          (size.height - OVERVIEW_PADDING_PX) /
+            Math.max(100, bounds.maxY - bounds.minY),
         ),
       ),
     });
@@ -231,8 +240,8 @@ export default function ArenaNavigationMap({
               setView((previous) => ({
                 ...previous,
                 center: [
-                  previous.center[0] + (shift[0] * 80) / previous.scale,
-                  previous.center[1] + (shift[1] * 80) / previous.scale,
+                  previous.center[0] + (shift[0] * KEY_PAN_PX) / previous.scale,
+                  previous.center[1] + (shift[1] * KEY_PAN_PX) / previous.scale,
                 ],
               }));
             }
@@ -281,7 +290,7 @@ export default function ArenaNavigationMap({
             className={buttonClass}
             onClick={() => {
               cancelPress();
-              setView({ center: radar.player, scale: 0.7 });
+              setView({ center: radar.player, scale: INITIAL_SCALE });
             }}
           >
             Mijn locatie

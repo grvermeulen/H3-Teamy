@@ -41,6 +41,7 @@ const data: NavigationMapData = {
 
 describe("full-screen navigation map", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.useFakeTimers();
     vi.stubGlobal(
       "ResizeObserver",
