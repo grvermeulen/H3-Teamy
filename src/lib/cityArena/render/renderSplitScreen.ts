@@ -40,6 +40,9 @@ export function renderSplitScreen(
       },
       {
         ...scene,
+        navigation: view.ids.includes(scene.localPlayerId)
+          ? scene.navigation
+          : undefined,
         world: {
           ...scene.world,
           rasterBudgetMs: Math.max(0, budget - total.rasterMs),

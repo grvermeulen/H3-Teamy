@@ -1,5 +1,7 @@
 # Arena (GTA H3)
 
+For the full-screen map and road guidance in **0.3.4**, see [Kaart en navigatie](NAVIGATION.md).
+
 ## Summary
 
 Top-down multiplayer arena game on the real map of Rhenen, Wageningen and Bennekom.

@@ -36,6 +36,10 @@ import {
   type DeathScreenPhase,
 } from "@/lib/cityArena/render/deathScreen";
 import { renderScene, type Scene } from "@/lib/cityArena/render/renderScene";
+import {
+  createArenaNavigation,
+  type ArenaNavigation,
+} from "@/lib/cityArena/world/navigation";
 import { renderSplitScreen } from "@/lib/cityArena/render/renderSplitScreen";
 import {
   updateSplitScreen,
@@ -241,6 +245,7 @@ export type Runtime = {
   /** The vignette, shake, hit marker and heartbeat, folded per tick. */
   feedback: FeedbackState;
   radarRoadIndex: RadarRoadIndex;
+  navigation: ArenaNavigation;
   disposed: boolean;
   sharedScreen?: { clientId: string; name: string }[];
   split?: SplitScreen;
@@ -354,6 +359,11 @@ function buildScene(
     // everything counted in ticks below — the flashing, the shake, the sway — stays on the tick.
     players: frame.players,
     localPlayerId: myPlayerId(runtime),
+    navigation:
+      runtime.navigation.snapshot()?.status === "navigating" &&
+      runtime.diedAtMs === null
+        ? runtime.navigation.snapshot()?.points
+        : undefined,
     peds: frame.peds,
     cops: frame.cops,
     pickups: state.pickups,
@@ -543,6 +553,7 @@ export function createRuntime(
       session.graph().nodes,
       session.graph().edges,
     ),
+    navigation: createArenaNavigation(session.graph()),
     disposed: false,
   };
   return runtime;
@@ -949,8 +960,8 @@ function refreshThrottled(
       runtime.state,
       myPlayer(runtime),
     );
-    options.setRadar(
-      buildRadarSnapshot(
+    options.setRadar({
+      ...buildRadarSnapshot(
         runtime.state,
         myPlayer(runtime),
         zone,
@@ -960,7 +971,12 @@ function refreshThrottled(
           RADAR_RANGE_M,
         ),
       ),
-    );
+      navigation: runtime.navigation.update(
+        [myPlayer(runtime).x, myPlayer(runtime).y],
+        myPlayer(runtime).vehicleId !== null,
+        timestamp,
+      ),
+    });
   }
   if (options.debug && timestamp - runtime.lastDebug >= DEBUG_REFRESH_MS) {
     runtime.lastDebug = timestamp;

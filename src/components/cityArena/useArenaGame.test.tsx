@@ -515,6 +515,21 @@ describe("debug hooks", () => {
     vi.unstubAllGlobals();
   });
 
+  it("preserves the latest radar position when a held destination gesture completes", async () => {
+    const { result } = await bootArenaWithCanvas({ debug: true });
+    const selectDestination = result.current.setDestination;
+    const before = result.current.radar.player;
+    window.__arena?.dispatch({ move: [1, 0] }, 6);
+    const tick = getTick();
+    act(() => tick(0));
+    act(() => tick(FRAME_STEP_MS));
+    const latest = result.current.radar.player;
+    expect(latest[0]).toBeGreaterThan(before[0]);
+    act(() => selectDestination([100, 0]));
+    expect(result.current.radar.player).toEqual(latest);
+    expect(result.current.radar.navigation?.destination).toEqual([100, 0]);
+  });
+
   it("installs window.__arena in debug mode and removes it on unmount", async () => {
     const { session, resolveReady } = createControllableSession();
     mockCreateWorldSession.mockReturnValue(session);
