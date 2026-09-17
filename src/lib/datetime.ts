@@ -1,29 +1,33 @@
 /**
- * Centralised, locale-pinned datetime formatters. Always render in `nl-NL`
- * regardless of the browser's preferred locale so weekday and month names
- * appear identical across devices.
+ * Dutch datetime formatters using Europe/Amsterdam, including daylight saving,
+ * so match times and dates remain consistent across devices and server timezones.
  */
 
 const DATE_LOCALE = "nl-NL";
+const TIME_ZONE = "Europe/Amsterdam";
 
 const dateFmt = new Intl.DateTimeFormat(DATE_LOCALE, {
+  timeZone: TIME_ZONE,
   weekday: "short",
   day: "2-digit",
   month: "short",
 });
 
 const timeFmt = new Intl.DateTimeFormat(DATE_LOCALE, {
+  timeZone: TIME_ZONE,
   hour: "2-digit",
   minute: "2-digit",
 });
 
 const longDateFmt = new Intl.DateTimeFormat(DATE_LOCALE, {
+  timeZone: TIME_ZONE,
   weekday: "long",
   day: "numeric",
   month: "long",
 });
 
 const dateTimeFmt = new Intl.DateTimeFormat(DATE_LOCALE, {
+  timeZone: TIME_ZONE,
   day: "2-digit",
   month: "2-digit",
   year: "numeric",
