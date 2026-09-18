@@ -33,9 +33,7 @@ export function optionalMissionAction(
           },
         ]
       : []),
-    ...(pickup &&
-    player.vehicleId === null &&
-    !run.inventory.includes(pickup.alias)
+    ...(pickup && !run.inventory.includes(pickup.alias)
       ? [{ ...pickup, recharge: false }]
       : []),
   ];
