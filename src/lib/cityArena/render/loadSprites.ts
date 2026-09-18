@@ -159,14 +159,14 @@ async function loadVehicle(
   }
 }
 
-/** Loads every kind's sprite the manifest has; a kind whose file is missing stays on the sedan's art. */
+/** Loads the supplied vehicle entries independently; failed images remain absent for the painter's fallback. */
 async function loadVehicles(
   loadImage: ImageLoader,
   factory: CanvasFactory,
-  manifest: SpriteManifest,
+  entriesByKind: SpriteManifest["vehicles"],
 ): Promise<VehicleSprites> {
   const entries = VEHICLE_KINDS.flatMap((kind) => {
-    const entry = manifest.vehicles[kind];
+    const entry = entriesByKind[kind];
     return entry ? [{ kind, entry }] : [];
   });
   const loaded = await Promise.all(
@@ -314,6 +314,7 @@ async function loadAll(
     water,
     ground,
     vehicles,
+    wrecks,
     people,
     props,
     items,
@@ -324,7 +325,12 @@ async function loadAll(
     loadSurface(options.loadImage, manifest.surfaces.pavement),
     loadSurface(options.loadImage, manifest.surfaces.water),
     loadGround(options.loadImage, manifest.surfaces),
-    loadVehicles(options.loadImage, options.canvasFactory, manifest),
+    loadVehicles(options.loadImage, options.canvasFactory, manifest.vehicles),
+    loadVehicles(
+      options.loadImage,
+      options.canvasFactory,
+      manifest.wrecks ?? {},
+    ),
     loadPeople(options.loadImage, manifest),
     loadPropRecord(options.loadImage, PROP_KEYS, manifest.props),
     loadPropRecord(options.loadImage, ITEM_KEYS, manifest.items),
@@ -338,6 +344,7 @@ async function loadAll(
     ground,
     car: vehicles.sedan,
     vehicles,
+    wrecks,
     player: people.player,
     people,
     props,
@@ -351,6 +358,7 @@ async function loadAll(
 function hasAnySprite(sprites: ArenaSprites): boolean {
   if (Object.values(sprites.ground ?? {}).some(Boolean)) return true;
   if (Object.values(sprites.vehicles ?? {}).some(Boolean)) return true;
+  if (Object.values(sprites.wrecks ?? {}).some(Boolean)) return true;
   if (Object.values(sprites.people ?? {}).some(Boolean)) return true;
   if (Object.values(sprites.props ?? {}).some(Boolean)) return true;
   if (Object.values(sprites.items ?? {}).some(Boolean)) return true;

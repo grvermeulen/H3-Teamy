@@ -4,6 +4,10 @@
 
 `node e2e/arena/tileSeams.browser.cjs` controleert canvaspixels met de echte kaarttekenaar in geïnstalleerde Chrome. De 54 combinaties omvatten zoom, schermschaal, rasterkwaliteit en camerakanteling. Deze test heeft geen server, database of account nodig. Resultaten en een controlebeeld met de campuskaart en speltexturen komen in `.cache/arena-tile-seams/`.
 
+## Voertuigwrakken
+
+`node e2e/arena/wrecks.browser.cjs` laadt de echte sprites in Chrome, laat alle tien voertuigtypen via de explosielogica in wrakken veranderen en tekent beide toestanden op twee zoomstanden. De controlebeelden staan in `.cache/arena-wrecks/`. Er is geen server, database of account nodig.
+
 ## TV / controller slice
 
 After the local migration and seed below, run `node e2e/arena/localServer.cjs dev` (or `start`

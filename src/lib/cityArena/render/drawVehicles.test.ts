@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createVehicle } from "../sim/vehicle";
 import { createCamera } from "./camera";
 import {
@@ -32,7 +32,7 @@ describe("drawVehicles", () => {
     expect(context.calls[context.calls.length - 1]).toBe("restore()");
   });
 
-  it("draws a wreck as one dark slab and three smoke puffs on a damaged car", () => {
+  it("draws a wreck silhouette without artwork and three smoke puffs on a damaged car", () => {
     const context = createFakeContext();
     const wreck = {
       ...createVehicle(1, "sedan", [10, 10], 0, 0),
@@ -42,7 +42,7 @@ describe("drawVehicles", () => {
     drawVehicle(context, camera, viewport, wreck, 0, false);
     expect(
       context.calls.filter((call) => call.startsWith("fillRect")),
-    ).toHaveLength(1);
+    ).toHaveLength(6);
     expect(context.calls.some((call) => call.startsWith("arc("))).toBe(false);
     const smokeContext = createFakeContext();
     const smoking = {
@@ -92,7 +92,7 @@ describe("drawVehicles", () => {
     );
     expect(
       wreckContext.calls.filter((call) => call.startsWith("fillRect")).length,
-    ).toBe(1);
+    ).toBe(6);
   });
 
   it("draws the sprite over the body's metre box instead of the vector body", () => {
@@ -191,7 +191,7 @@ describe("drawVehicles", () => {
     ).toEqual([]);
   });
 
-  it("keeps a wreck as one dark slab even once the sprite has loaded", () => {
+  it("does not draw intact artwork for a wreck when its damaged sprite is missing", () => {
     const context = createFakeContext();
     const wreck = {
       ...createVehicle(3, "sedan", [10, 10], 0, 0),
@@ -201,8 +201,46 @@ describe("drawVehicles", () => {
     expect(context.calls.some((call) => call.startsWith("drawImage"))).toBe(
       false,
     );
-    expect(context.calls.filter((call) => call.startsWith("fillRect"))).toEqual(
-      ["fillRect(-16.8,-7.2,33.6,14.4)"],
-    );
+    expect(context.calls.some((call) => call.startsWith("lineTo"))).toBe(true);
   });
+
+  it.each(["sedan", "compact", "sport", "police", "bus", "tank"] as const)(
+    "draws the %s wreck sprite at its vehicle heading without live lights or doors",
+    (kind) => {
+      const context = createFakeContext();
+      const wreckArt = { base: document.createElement("canvas"), tinted: [] };
+      const drawImage = vi.spyOn(context, "drawImage");
+      const wreck = {
+        ...createVehicle(3, kind, [10, 10], 0.7, 2),
+        wrecked: true,
+        health: 0,
+      };
+      drawVehicle(
+        context,
+        camera,
+        viewport,
+        wreck,
+        10,
+        false,
+        {
+          vehicles: { [kind]: sprite },
+          wrecks: {
+            sedan: wreckArt,
+            [kind === "compact" || kind === "sport" ? "sedan" : kind]: wreckArt,
+          },
+        },
+        true,
+      );
+      expect(context.calls).toContain("rotate(0.7)");
+      expect(
+        context.calls.filter((call) => call.startsWith("drawImage")),
+      ).toHaveLength(1);
+      expect(drawImage.mock.calls[0][0]).toBe(wreckArt.base);
+      expect(
+        context.calls.some(
+          (call) => call.startsWith("fillRect") || call.startsWith("arc("),
+        ),
+      ).toBe(false);
+    },
+  );
 });

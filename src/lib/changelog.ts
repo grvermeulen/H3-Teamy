@@ -24,6 +24,15 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.4.3": {
+    title: "Herkenbare autowrakken",
+    steps: [
+      {
+        title: "Uitgebrand, maar herkenbaar",
+        body: "Ontplofte voertuigen krijgen nu echte wraksprites met kapotte ruiten, verwrongen metaal en brandschade. Ook politiewagens, bestelwagens, bussen, oldtimers, tractors en tanks hebben hun eigen uitgebrande uiterlijk.",
+      },
+    ],
+  },
   "0.4.2": {
     title: "Een naadloze stad",
     steps: [

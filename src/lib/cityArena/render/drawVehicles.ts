@@ -17,7 +17,12 @@ import {
   POLICE_LIGHT_RED,
   PLAYER_RING,
 } from "./palette";
-import { hasOwnVehicleArt, vehicleSpriteFor, type VehicleArt } from "./sprites";
+import {
+  hasOwnVehicleArt,
+  vehicleSpriteFor,
+  vehicleWreckSpriteFor,
+  type VehicleArt,
+} from "./sprites";
 
 /** Window glass size along the body, metres. */
 const WINDOW_LENGTH_M = 1.4;
@@ -213,9 +218,64 @@ function drawLightGlow(
   context.restore();
 }
 
+/** Charred chassis, exposed cabin and tires while wreck artwork is still loading. */
+function drawVectorWreck(
+  context: RasterContext,
+  vehicle: VehicleState,
+  zoom: number,
+): void {
+  const length = lengthOf(vehicle.kind);
+  const width = widthOf(vehicle.kind);
+  for (const forward of [-length * 0.32, length * 0.32])
+    for (const side of [-width * 0.43, width * 0.43])
+      fillLocalRect(
+        context,
+        zoom,
+        forward,
+        side,
+        length * 0.2,
+        width * 0.16,
+        "#171817",
+      );
+  context.beginPath();
+  for (const [i, [x, y]] of [
+    [-0.47, -0.36],
+    [-0.22, -0.45],
+    [0.35, -0.39],
+    [0.46, -0.18],
+    [0.39, 0.12],
+    [0.48, 0.36],
+    [-0.25, 0.43],
+    [-0.46, 0.3],
+  ].entries()) {
+    if (i === 0) context.moveTo(x * length * zoom, y * width * zoom);
+    else context.lineTo(x * length * zoom, y * width * zoom);
+  }
+  context.closePath();
+  context.fillStyle = CAR_WRECK;
+  context.fill();
+  fillLocalRect(
+    context,
+    zoom,
+    -length * 0.04,
+    0,
+    length * 0.42,
+    width * 0.64,
+    "#161a1a",
+  );
+  fillLocalRect(
+    context,
+    zoom,
+    length * 0.28,
+    -width * 0.08,
+    length * 0.16,
+    width * 0.45,
+    "#5b4b3d",
+  );
+}
+
 /**
- * One car's body: the sprite when its art has loaded, else the vector body it was drawn as
- * before. A wreck stays a dark slab either way — the sprites are intact cars. A police car gets
+ * One car's body: intact or wreck artwork, with a vector fallback while loading. A police car gets
  * the vector light bar only while it borrows the sedan's art or has none (its own sprite carries
  * the bar), and either way its lights glow and flash only while the police are driving it.
  */
@@ -229,15 +289,8 @@ function drawBody(
   lit: boolean,
 ): void {
   if (vehicle.wrecked) {
-    fillLocalRect(
-      context,
-      zoom,
-      0,
-      0,
-      lengthOf(vehicle.kind),
-      widthOf(vehicle.kind),
-      CAR_WRECK,
-    );
+    if (sprite) drawSpriteBody(context, vehicle, sprite, zoom);
+    else drawVectorWreck(context, vehicle, zoom);
     return;
   }
   if (sprite) drawSpriteBody(context, vehicle, sprite, zoom);
@@ -359,7 +412,9 @@ export function drawVehicle(
     vehicle,
     camera.zoom,
     tick,
-    vehicleSpriteFor(art, vehicle.kind, vehicle.colour),
+    vehicle.wrecked
+      ? vehicleWreckSpriteFor(art, vehicle.kind)
+      : vehicleSpriteFor(art, vehicle.kind, vehicle.colour),
     hasOwnVehicleArt(art, vehicle.kind),
     lit,
   );

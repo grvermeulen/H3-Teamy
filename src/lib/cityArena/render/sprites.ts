@@ -130,6 +130,7 @@ export const SpriteManifestSchema = z.object({
     roofFlat: SurfaceEntrySchema,
   }),
   vehicles: z.partialRecord(z.enum(VEHICLE_KINDS), VehicleEntrySchema),
+  wrecks: z.partialRecord(z.enum(VEHICLE_KINDS), VehicleEntrySchema).optional(),
   people: z.record(z.string(), PersonEntrySchema),
   props: z.partialRecord(z.enum(PROP_KEYS), PropEntrySchema),
   items: z.partialRecord(z.enum(ITEM_KEYS), PropEntrySchema),
@@ -206,6 +207,8 @@ export type ArenaSprites = {
   /** The sedan's sprite: what every kind without art of its own is drawn with. */
   car?: VehicleSprite;
   vehicles?: VehicleSprites;
+  /** Burned-out vehicle bodies, kept separate from intact and tinted art. */
+  wrecks?: VehicleSprites;
   player?: PersonSprite;
   people?: PersonSprites;
   /** Tree canopies and street furniture, painted into the chunk rasters. */
@@ -219,7 +222,7 @@ export type ArenaSprites = {
 };
 
 /** The slice of the sprites the vehicle painter reads. */
-export type VehicleArt = Pick<ArenaSprites, "car" | "vehicles">;
+export type VehicleArt = Pick<ArenaSprites, "car" | "vehicles" | "wrecks">;
 
 /** A decoded character strip: the art plus the cell size and how many cells it holds. */
 export type PersonSprite = {
@@ -291,6 +294,17 @@ export function vehicleSpriteFor(
   if (!sprite) return undefined;
   if (sprite.tinted.length === 0) return sprite.base;
   return sprite.tinted[colour % sprite.tinted.length];
+}
+
+/** Burned-out body by kind, with the sedan wreck shared by compact and sports cars. */
+export function vehicleWreckSpriteFor(
+  art: VehicleArt | undefined,
+  kind: VehicleKind,
+): CanvasImageSource | undefined {
+  return (
+    art?.wrecks?.[kind] ??
+    (kind === "compact" || kind === "sport" ? art?.wrecks?.sedan : undefined)
+  )?.base;
 }
 
 /**
