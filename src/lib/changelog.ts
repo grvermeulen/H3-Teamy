@@ -24,6 +24,15 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.4.5": {
+    title: "Een kleiner logboek",
+    steps: [
+      {
+        title: "Nooit hoger dan de minimap",
+        body: "Het ingeklapte missiepaneel is nu maximaal 90 pixels hoog, ook na voltooiing of mislukking en bij het hervatten van je spel. Tik op het paneel voor je volledige logboek, gesprekken en beloning.",
+      },
+    ],
+  },
   "0.4.4": {
     title: "Meer zicht tijdens missies",
     steps: [
