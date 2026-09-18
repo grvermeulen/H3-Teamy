@@ -202,7 +202,12 @@ export function attachKeyboard(
       return;
     }
     const button = KEY_BUTTONS[event.code];
-    if (!button || event.target instanceof HTMLButtonElement) return;
+    if (
+      !button ||
+      (event.target instanceof HTMLButtonElement &&
+        (event.code === "Enter" || event.code === "Space"))
+    )
+      return;
     event.preventDefault();
     onUserGesture?.();
     pressedButtons.add(event.code);

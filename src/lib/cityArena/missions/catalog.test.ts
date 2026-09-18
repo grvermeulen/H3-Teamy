@@ -48,12 +48,22 @@ describe("the authored city contracts", () => {
             `${mission.id}:${reference}`,
           ).toBeDefined();
       }
-      for (const actor of missionScenario(mission).actors)
+      for (const actor of missionScenario(mission).actors) {
+        const firstUse = missionPrimitives(mission).find(
+          ({ objective }) =>
+            "target" in objective && objective.target === actor.alias,
+        );
+        if (firstUse)
+          expect(
+            actor.fromStage,
+            `${mission.id}:${actor.alias} must exist when first needed`,
+          ).toBeLessThanOrEqual(firstUse.stage);
         for (const reference of [actor.alias, ...(actor.route ?? [])])
           expect(
             targets[reference],
             `${mission.id}:${reference}`,
           ).toBeDefined();
+      }
       for (const stage of mission.stages) {
         expect(stage.hints).toHaveLength(2);
         expect(stage.dialogue.length).toBeGreaterThan(0);

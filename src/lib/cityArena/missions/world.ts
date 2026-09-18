@@ -161,7 +161,7 @@ export function missionInteractionLabel(
     if (
       !references.some(
         (reference) =>
-          targets[reference] &&
+          targets[reference]?.alive &&
           distance([player.x, player.y], targets[reference].position) <=
             (objective.kind === "deliver" ? 4 : 3),
       )
@@ -175,9 +175,18 @@ export function missionInteractionLabel(
       case "collect":
         return player.vehicleId === null ? "Oppakken" : null;
       case "deliver":
-        return "Afleveren";
+        if (
+          player.speed < 0.5 &&
+          objective.items.every((item) => run.inventory.includes(item)) &&
+          (!objective.vehicle ||
+            player.vehicleId === targets[objective.vehicle]?.id)
+        )
+          return "Afleveren";
+        break;
       case "interact":
-        return "Vasthouden";
+        if (player.vehicleId === null && player.speed < 0.5)
+          return "Vasthouden";
+        break;
       default:
         break;
     }
