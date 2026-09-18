@@ -32,7 +32,7 @@ function Briefing({
           (candidate) =>
             candidate?.connected && candidate.mapping === "standard",
         );
-      const pressed = [0, 1].map(
+      const pressed = [0, 2].map(
         (index) => (pad?.buttons[index]?.value ?? 0) > 0.5,
       );
       if (pressed[0] && !previous[0])
@@ -81,6 +81,9 @@ function Briefing({
             Later
           </button>
         </div>
+        <p className="mt-3 text-xs text-slate-400">
+          Gamepad: A aannemen · X later
+        </p>
       </div>
     </div>
   );

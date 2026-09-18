@@ -202,6 +202,18 @@ function applyCommand(
         ? missionById(old.run.definitionId)
         : undefined;
   const contact = nearbyMissionContact(index, player);
+  if (
+    command.kind === "accept" &&
+    definition &&
+    missionUnavailable(
+      definition,
+      old,
+      state.tick,
+      state.zoneEnforced,
+      state.roundTicksLeft,
+    )
+  )
+    profile.offer = null;
   if (command.kind === "close") profile.offer = null;
   if (command.kind === "hint" && old.run)
     profile.run = revealMissionHint(old.run);

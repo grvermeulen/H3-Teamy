@@ -25,6 +25,22 @@ import { createCollisionGrid } from "../world/collisionGrid";
 import { decodeRoadGraph } from "../world/roadGraph";
 
 const index = parseMapIndex(map);
+it("closes an expired briefing instead of leaving its accept button stuck", () => {
+  const offered = command(initial(), {
+    sequence: 1,
+    kind: "offer",
+    missionId: "M01",
+  });
+  offered.zoneEnforced = true;
+  offered.roundTicksLeft = 0;
+  const rejected = command(offered, {
+    sequence: 2,
+    kind: "accept",
+    missionId: "M01",
+  });
+  expect(rejected.players[0].mission?.offer).toBeNull();
+  expect(rejected.players[0].mission?.run).toBeNull();
+});
 it("makes room for a mission vehicle when ambient vehicles fill the entity budget", () => {
   const state = initial();
   const player = state.players[0];

@@ -360,4 +360,4 @@ Start with a complete M01 vertical slice before expanding the catalogue. Then sh
 - [x] Hijacking an AI-driven car visibly opens its door, ejects its driver and seats the player consistently for all observers.
 - [x] All 12 new radio pieces are real, reviewed audio files, including Dutch vocals, preaching, rants and four full summer trance tracks.
 - [x] Gunshots are louder and radio slightly quieter, with clean mixing and ducking recovery to the reduced radio level.
-- [x] Desktop, emulated phone and TV/controller browser flows pass the automated checks described above; production build, typecheck, lint (two pre-existing warnings), 1,890 unit tests and 21 database integration tests pass. Full npm audit reports zero vulnerabilities.
+- [x] Desktop, emulated phone and TV/controller browser flows pass the automated checks described above; production build, typecheck, lint (two pre-existing warnings), the full unit test suite and 21 database integration tests pass. Full npm audit reports zero vulnerabilities.
