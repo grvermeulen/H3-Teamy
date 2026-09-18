@@ -12,6 +12,8 @@ import { NO_SPRITES, type ArenaSprites } from "./sprites";
  * half the ground's pixels per metre, and skips the canvas altogether for a chunk without a tree.
  */
 export type ChunkLayer = {
+  /** Extra raster pixels painted beyond each edge; only for opaque layers. */
+  bleedPixels?: number;
   /** Pixels per metre relative to the zoom: 1 paints at the zoom, 0.5 at half of it. */
   resolution: number;
   /** Whether the layer has anything at all inside `rect`; `false` costs no canvas. */
@@ -27,8 +29,12 @@ export type ChunkLayer = {
   ): void;
 };
 
+/** Opaque edge overlap keeps fractional canvas blits from exposing the background. */
+const GROUND_BLEED_PIXELS = 2;
+
 /** The ground: every chunk with a tile behind it has something to paint. */
 export const GROUND_LAYER: ChunkLayer = {
+  bleedPixels: GROUND_BLEED_PIXELS,
   resolution: 1,
   covers: () => true,
   paint: paintChunk,
@@ -65,6 +71,7 @@ export type ChunkCoord = { zoom: ZoomLevel; chunkX: number; chunkY: number };
 export type Chunk = {
   key: string;
   coord: ChunkCoord;
+  /** Painted world bounds, including the opaque layer's edge overlap. */
   rect: Rect;
   target: RasterTarget | null;
   bytes: number;
@@ -160,7 +167,10 @@ export function rasterBudgetForViewport(
   const chunksWide = chunksAcrossAxis(viewport.width, chunkPx);
   const chunksTall = chunksAcrossAxis(viewport.height, chunkPx);
   const workingSetBytes =
-    chunksWide * chunksTall * chunkPx * chunkPx * BYTES_PER_PIXEL_RGBA;
+    chunksWide *
+    chunksTall *
+    (chunkPx + 2 * GROUND_BLEED_PIXELS) ** 2 *
+    BYTES_PER_PIXEL_RGBA;
   return Math.max(
     RASTER_BUDGET_BYTES,
     workingSetBytes,
@@ -199,23 +209,26 @@ function rasterizeChunk(
   const key = chunkKey(coord);
   if (!layer.covers(rect, tiles))
     return { key, coord, rect, target: null, bytes: EMPTY_CHUNK_BYTES };
-  const sizePx = Math.round(
+  const interiorPx = Math.round(
     CHUNK_METRES * coord.zoom * layer.resolution * scale,
   );
+  const zoom = interiorPx / CHUNK_METRES;
+  const bleedPixels = layer.bleedPixels ?? 0;
+  const bleedMetres = bleedPixels / zoom;
+  const paintRect = {
+    minX: rect.minX - bleedMetres,
+    minY: rect.minY - bleedMetres,
+    maxX: rect.maxX + bleedMetres,
+    maxY: rect.maxY + bleedMetres,
+  };
+  const sizePx = interiorPx + 2 * bleedPixels;
   const target = factory(sizePx, sizePx);
   if (!target) return null;
-  layer.paint(
-    target.ctx,
-    rect,
-    coord.zoom * layer.resolution * scale,
-    tiles,
-    landmarks,
-    sprites,
-  );
+  layer.paint(target.ctx, paintRect, zoom, tiles, landmarks, sprites);
   return {
     key,
     coord,
-    rect,
+    rect: paintRect,
     target,
     bytes: sizePx * sizePx * BYTES_PER_PIXEL_RGBA,
   };

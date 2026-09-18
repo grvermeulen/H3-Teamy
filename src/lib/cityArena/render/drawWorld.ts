@@ -145,8 +145,19 @@ export function drawVisibleChunks(
     ]);
     const chunk = source.raster.getChunk(coord);
     if (chunk) {
-      if (chunk.target)
-        context.drawImage(chunk.target.canvas, x, y, sizePx, sizePx);
+      if (chunk.target) {
+        const [paintX, paintY] = worldToScreen(camera, viewport, [
+          chunk.rect.minX,
+          chunk.rect.minY,
+        ]);
+        context.drawImage(
+          chunk.target.canvas,
+          paintX,
+          paintY,
+          (chunk.rect.maxX - chunk.rect.minX) * camera.zoom,
+          (chunk.rect.maxY - chunk.rect.minY) * camera.zoom,
+        );
+      }
       continue;
     }
     missing += 1;

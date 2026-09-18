@@ -24,6 +24,15 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.4.2": {
+    title: "Een naadloze stad",
+    steps: [
+      {
+        title: "Kaarttegels sluiten vloeiend aan",
+        body: "De donkere naden tussen kaarttegels zijn verholpen. Wegen, gebouwen en gras sluiten nu ook tijdens vloeiend zoomen en bewegen op elkaar aan.",
+      },
+    ],
+  },
   "0.4.1": {
     title: "Missies en uitstappen hersteld",
     steps: [
