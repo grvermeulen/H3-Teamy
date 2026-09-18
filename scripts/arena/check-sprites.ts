@@ -63,7 +63,10 @@ function entriesOf(
     file: entry.file,
     cap: limits.surfaceBytes,
   }));
-  const vehicles = Object.values(manifest.vehicles)
+  const vehicles = [
+    ...Object.values(manifest.vehicles),
+    ...Object.values(manifest.wrecks ?? {}),
+  ]
     .filter((entry) => entry !== undefined)
     .map((entry) => ({
       file: entry.file,

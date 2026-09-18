@@ -207,6 +207,34 @@ describe("createSpriteStore", () => {
     expect(sprites.people?.ped1?.frames).toBe(8);
   });
 
+  it("loads untinted wrecks separately and keeps intact cars available if wreck loading fails", async () => {
+    const withWrecks = {
+      ...manifest,
+      wrecks: {
+        sedan: {
+          ...manifest.vehicles.sedan,
+          file: "/arena/sprites/wreck-sedan.png",
+          tint: false,
+        },
+        bus: { ...manifest.vehicles.bus, file: "/arena/sprites/wreck-bus.png" },
+      },
+    };
+    const store = createSpriteStore({
+      canvasFactory,
+      fetchImpl: fakeFetch(withWrecks),
+      loadImage: async (src) => {
+        if (src.endsWith("wreck-bus.png")) throw new Error("missing wreck");
+        return loadImage(src);
+      },
+    });
+    await store.load();
+    expect(store.current().wrecks?.sedan?.tinted).toEqual([]);
+    expect(store.current().wrecks?.sedan?.base).toBeDefined();
+    expect(store.current().wrecks?.bus).toBeUndefined();
+    expect(store.current().vehicles?.bus?.base).toBeDefined();
+    expect(store.current().car?.tinted).toHaveLength(CAR_BODY_COLOURS.length);
+  });
+
   it("clamps a strip to the frames its file holds and reports the stale file", async () => {
     const store = createSpriteStore({
       canvasFactory,

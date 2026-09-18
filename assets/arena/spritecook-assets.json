@@ -53,5 +53,45 @@
     "asset_id": "e6e102cb-7fe6-53a5-8208-67495e0aa634",
     "label": "basketball-girls",
     "sha12": "caeeb4b5adab"
+  },
+  "wreck-sedan.png": {
+    "asset_id": "be899990-a641-4eb9-a26a-e48574eac2ef",
+    "label": "GTA H3 wrak sedan",
+    "sha12": "2e1a63007711"
+  },
+  "wreck-police.png": {
+    "asset_id": "0030004c-2710-45ce-970c-e416d519a665",
+    "label": "GTA H3 wrak police",
+    "sha12": "44a6f9772bab"
+  },
+  "wreck-van.png": {
+    "asset_id": "7e3b8247-8bd0-4f1d-a313-708acdbdcc6c",
+    "label": "GTA H3 wrak van",
+    "sha12": "05a909a41873"
+  },
+  "wreck-pickup.png": {
+    "asset_id": "6a923288-6004-4802-b1b9-04ec8b301725",
+    "label": "GTA H3 wrak pickup",
+    "sha12": "fd330ea545ac"
+  },
+  "wreck-bus.png": {
+    "asset_id": "5f0df2db-4e01-470b-9389-cd60bbac42e4",
+    "label": "GTA H3 wrak bus",
+    "sha12": "6e4735f42f3d"
+  },
+  "wreck-oldtimer.png": {
+    "asset_id": "712d1ebf-a6d8-4a7a-8917-8ca05a8a5fe9",
+    "label": "GTA H3 wrak oldtimer",
+    "sha12": "ee936174f303"
+  },
+  "wreck-tractor.png": {
+    "asset_id": "cc59f027-98fe-4662-af96-d09de958d7f1",
+    "label": "GTA H3 wrak tractor",
+    "sha12": "4cacd648835a"
+  },
+  "wreck-tank.png": {
+    "asset_id": "96a20f0c-c19c-4855-a016-084c94f374f2",
+    "label": "GTA H3 wrak tank",
+    "sha12": "d5a5bfd13c87"
   }
 }

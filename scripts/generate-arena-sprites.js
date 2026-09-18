@@ -110,6 +110,16 @@ const vehicleSources = {
   // Drawn in code by scripts/arena/draw-tank-sprite.js, so it needs no generator run.
   tank: { file: "vehicle-tank.png", lengthM: 7, widthM: 3.4, tint: false },
 };
+const wreckSources = Object.fromEntries(
+  Object.entries(vehicleSources).map(([kind, source]) => [
+    kind,
+    {
+      ...source,
+      file: `wreck-${kind}.png`,
+      tint: false,
+    },
+  ]),
+);
 // Character art: a horizontal strip of square frames, drawn facing down its own image so the
 // canvas can rotate it by the person's facing. One frame means a still character; a still
 // source is turned into an eight-frame walk here. `ped1`…`ped6` are the pedestrians' looks
@@ -203,6 +213,7 @@ function assertSourcesExist() {
   const files = [
     ...Object.values(surfaceSources).map(surfaceFile),
     ...Object.values(vehicleSources).map((vehicle) => vehicle.file),
+    ...Object.values(wreckSources).map((wreck) => wreck.file),
     ...Object.values(personSources).map((person) => person.file),
     ...Object.values(propSources).map((prop) => prop.file),
     ...Object.values(itemSources).map((item) => item.file),
@@ -527,6 +538,9 @@ async function packSprites() {
   const vehicles = {};
   for (const [name, source] of Object.entries(vehicleSources))
     vehicles[name] = await packVehicleSprite(source);
+  const wrecks = {};
+  for (const [name, source] of Object.entries(wreckSources))
+    wrecks[name] = await packVehicleSprite(source);
   const people = {};
   for (const [name, person] of Object.entries(personSources))
     people[name] = await packPersonSprite(person.file, person.frames);
@@ -543,6 +557,7 @@ async function packSprites() {
     version: 1,
     surfaces,
     vehicles,
+    wrecks,
     people,
     props,
     items,
