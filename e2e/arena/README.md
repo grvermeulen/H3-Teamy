@@ -1,5 +1,9 @@
 # Isolated GTA H3 verification
 
+## Kaartnaden
+
+`node e2e/arena/tileSeams.browser.cjs` controleert canvaspixels met de echte kaarttekenaar in geïnstalleerde Chrome. De 54 combinaties omvatten zoom, schermschaal, rasterkwaliteit en camerakanteling. Deze test heeft geen server, database of account nodig. Resultaten en een controlebeeld met de campuskaart en speltexturen komen in `.cache/arena-tile-seams/`.
+
 ## TV / controller slice
 
 After the local migration and seed below, run `node e2e/arena/localServer.cjs dev` (or `start`
