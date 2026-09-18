@@ -49,11 +49,9 @@ it("starts compact with the objective, timer, condition and nearby interaction s
   expect(screen.getByText(/1\/5 ·/)).toHaveTextContent(
     MISDELIVERED_PARCEL.stages[0].text,
   );
-  expect(screen.getByText("403 m · 90 s over")).toBeVisible();
-  expect(
-    screen.getByRole("progressbar", { name: "Pakket intact: 80/100" }),
-  ).toHaveAttribute("value", "80");
-  expect(screen.getByText("E / interactie: Pakket oppakken")).toBeVisible();
+  expect(screen.getByText(/403 m · 90 s over/)).toHaveTextContent(
+    "Pakket intact: 80/100 · E / interactie: Pakket oppakken",
+  );
   expect(
     screen.queryByRole("button", { name: "Hint" }),
   ).not.toBeInTheDocument();
@@ -117,8 +115,8 @@ it("reveals dialogue and mission controls on demand and preserves the choice acr
   ).toHaveAttribute("aria-expanded", "false");
 });
 
-it.each(["completed", "failed"] as const)(
-  "automatically shows the %s result even when collapsed",
+it.each(["completed", "failed", "abandoned"] as const)(
+  "collapses the %s result even when the active mission was expanded",
   (status) => {
     const mission = activeMission();
     const onAction = vi.fn();
@@ -133,6 +131,9 @@ it.each(["completed", "failed"] as const)(
       ...mission,
       profile: { ...mission.profile, run: { ...mission.profile.run!, status } },
     };
+    fireEvent.click(
+      screen.getByRole("button", { name: "Missiedetails uitklappen" }),
+    );
     view.rerender(
       <ArenaMissionPanel
         mission={result}
@@ -141,16 +142,60 @@ it.each(["completed", "failed"] as const)(
       />,
     );
     expect(
-      screen.queryByRole("button", { name: "Missiedetails uitklappen" }),
+      screen.getByRole("button", { name: "Missiedetails uitklappen" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("button", { name: "Logboek", exact: true }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(MISDELIVERED_PARCEL.success[0].text),
     ).not.toBeInTheDocument();
     if (status === "completed")
       expect(screen.getByText(/Voltooid!/)).toBeVisible();
-    else {
+    fireEvent.click(
+      screen.getByRole("button", { name: "Missiedetails uitklappen" }),
+    );
+    if (status === "completed")
+      expect(
+        screen.getByText(MISDELIVERED_PARCEL.success[0].text),
+      ).toBeVisible();
+    if (status === "failed") {
       fireEvent.click(screen.getByRole("button", { name: "Opnieuw proberen" }));
       expect(onAction).toHaveBeenLastCalledWith({ kind: "retry" });
     }
   },
 );
+
+it("keeps the idle logbook compact while making nearby jobs reachable", () => {
+  const mission = activeMission();
+  mission.profile.run = null;
+  mission.definition = null;
+  mission.contact = {
+    name: "Noor",
+    greeting: "Een pakket voor jou.",
+    jobs: [{ id: "M01", title: "Verkeerd bezorgd", unavailable: null }],
+  };
+  const onAction = vi.fn();
+  render(
+    <ArenaMissionPanel
+      mission={mission}
+      onAction={onAction}
+      onRoute={vi.fn()}
+    />,
+  );
+  expect(screen.getByText("Werk bij Noor · tik voor opdrachten")).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "Verkeerd bezorgd" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Missiedetails uitklappen" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Verkeerd bezorgd" }));
+  expect(onAction).toHaveBeenLastCalledWith({
+    kind: "offer",
+    missionId: "M01",
+  });
+});
 
 it("accepts after releasing the fire button, even when a controller snapshot replaces its callback", () => {
   vi.useFakeTimers();

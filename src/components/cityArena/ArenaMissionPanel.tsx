@@ -114,7 +114,7 @@ function MissionPanel({
   const run = profile.run;
   const stage = definition && run ? definition.stages[run.stage] : null;
   const active = Boolean(stage && run?.status === "active");
-  const compact = active && !expanded;
+  const compact = !expanded;
   const receipt = profile.wallet.receipts.find(
     (entry) => entry.contractId === run?.contractId,
   );
@@ -122,73 +122,111 @@ function MissionPanel({
     <>
       <section
         aria-label="Missies en geld"
-        className={`absolute top-3 left-3 z-10 max-h-[42%] w-[min(20rem,calc(100%-8rem))] overflow-y-auto rounded-lg border border-white/20 text-white shadow-lg ${compact ? "bg-slate-950/55 px-2 pb-2 text-xs" : "bg-slate-950/90 p-3 text-sm"}`}
+        className={`absolute top-3 left-3 z-10 w-[min(20rem,calc(100%-8rem))] rounded-lg border border-white/20 text-white shadow-lg ${compact ? "max-h-[90px] overflow-hidden bg-slate-950/55 text-xs" : "max-h-[42%] overflow-y-auto bg-slate-950/90 p-3 text-sm"}`}
       >
-        {active && (
+        {compact ? (
           <button
             type="button"
-            aria-label={
-              expanded ? "Missiedetails inklappen" : "Missiedetails uitklappen"
-            }
-            aria-expanded={expanded}
-            onClick={() => setExpanded(!expanded)}
-            className="flex min-h-11 w-full items-center justify-between gap-2 rounded text-left font-bold text-amber-200 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-amber-200"
+            aria-label="Missiedetails uitklappen"
+            aria-expanded={false}
+            onClick={() => setExpanded(true)}
+            className="block min-h-11 w-full rounded p-2 text-left hover:bg-white/10 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-amber-200"
           >
-            <span>{definition?.title}</span>
-            <span aria-hidden="true">{expanded ? "▴" : "▾"}</span>
-          </button>
-        )}
-        {!compact && (
-          <div className="flex items-center justify-between gap-3">
-            <strong className="text-emerald-300">
-              €{profile.wallet.balance}{" "}
-              <span className="text-xs font-normal">
-                · verdiend €{profile.wallet.earned}
+            <span className="flex items-center justify-between gap-2 font-bold text-amber-200">
+              <span className="truncate">{definition?.title ?? "Logboek"}</span>
+              <span aria-hidden="true">▾</span>
+            </span>
+            <span aria-live="polite" className="block">
+              <span className="line-clamp-2">
+                {active && run && stage && definition
+                  ? `${run.stage + 1}/${definition.stages.length} · ${stage.text}`
+                  : run?.status === "completed"
+                    ? `Voltooid! €${(receipt?.base ?? 0) + (receipt?.bonus ?? 0)} ontvangen.`
+                    : run?.status === "failed"
+                      ? `Mislukt · ${run.failure ?? definition?.failure}`
+                      : contact
+                        ? `Werk bij ${contact.name} · tik voor opdrachten`
+                        : "Zoek een straatcontact met het €-teken voor werk."}
               </span>
-            </strong>
+              <span className="block truncate text-slate-300">
+                {active
+                  ? [
+                      mission.distanceM !== null
+                        ? `${mission.distanceM} m`
+                        : null,
+                      mission.secondsLeft !== null
+                        ? `${mission.secondsLeft} s over`
+                        : null,
+                      ...(mission.meters?.map(
+                        (meter) =>
+                          `${meter.label}: ${Math.floor(meter.value)}/${meter.max}`,
+                      ) ?? []),
+                      mission.action
+                        ? `E / interactie: ${mission.action}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")
+                  : `€${profile.wallet.balance} · verdiend €${profile.wallet.earned}`}
+              </span>
+            </span>
+          </button>
+        ) : (
+          <>
             <button
-              className={button}
-              aria-expanded={journal}
-              onClick={() => setJournal(!journal)}
+              type="button"
+              aria-label="Missiedetails inklappen"
+              aria-expanded={true}
+              onClick={() => setExpanded(false)}
+              className="flex min-h-11 w-full items-center justify-between gap-2 rounded text-left font-bold text-amber-200 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-amber-200"
             >
-              Logboek
+              <span>{definition?.title ?? "Logboek"}</span>
+              <span aria-hidden="true">▴</span>
             </button>
-          </div>
-        )}
-        {definition && run && stage ? (
-          <div aria-live="polite" className={compact ? "" : "mt-2"}>
-            {!active && (
-              <h3 className="font-bold text-amber-200">{definition.title}</h3>
-            )}
-            {run.status === "active" ? (
-              <>
-                <p className="mt-1">
-                  {run.stage + 1}/{definition.stages.length} · {stage.text}
-                </p>
-                <p className="text-xs text-slate-300">
-                  {mission.distanceM !== null ? `${mission.distanceM} m` : ""}
-                  {mission.secondsLeft !== null
-                    ? ` · ${mission.secondsLeft} s over`
-                    : ""}
-                </p>
-                {!compact && (
-                  <p className="my-2 text-xs">
-                    <strong>{stage.dialogue[0].speaker}: </strong>
-                    {stage.dialogue[0].text}
-                  </p>
-                )}
-                {mission.meters?.map((meter) => (
-                  <label key={meter.label} className="my-2 block text-xs">
-                    {meter.label}: {Math.floor(meter.value)}/{meter.max}
-                    <progress
-                      className="block h-2 w-full accent-amber-300"
-                      value={meter.value}
-                      max={meter.max}
-                    />
-                  </label>
-                ))}
-                {!compact && (
+            <div className="flex items-center justify-between gap-3">
+              <strong className="text-emerald-300">
+                €{profile.wallet.balance}{" "}
+                <span className="text-xs font-normal">
+                  · verdiend €{profile.wallet.earned}
+                </span>
+              </strong>
+              <button
+                className={button}
+                aria-expanded={journal}
+                onClick={() => setJournal(!journal)}
+              >
+                Logboek
+              </button>
+            </div>
+            {definition && run && stage ? (
+              <div aria-live="polite" className="mt-2">
+                {run.status === "active" ? (
                   <>
+                    <p className="mt-1">
+                      {run.stage + 1}/{definition.stages.length} · {stage.text}
+                    </p>
+                    <p className="text-xs text-slate-300">
+                      {mission.distanceM !== null
+                        ? `${mission.distanceM} m`
+                        : ""}
+                      {mission.secondsLeft !== null
+                        ? ` · ${mission.secondsLeft} s over`
+                        : ""}
+                    </p>
+                    <p className="my-2 text-xs">
+                      <strong>{stage.dialogue[0].speaker}: </strong>
+                      {stage.dialogue[0].text}
+                    </p>
+                    {mission.meters?.map((meter) => (
+                      <label key={meter.label} className="my-2 block text-xs">
+                        {meter.label}: {Math.floor(meter.value)}/{meter.max}
+                        <progress
+                          className="block h-2 w-full accent-amber-300"
+                          value={meter.value}
+                          max={meter.max}
+                        />
+                      </label>
+                    ))}
                     {stage.hints.slice(0, run.hint).map((hint) => (
                       <p key={hint} className="my-1 text-xs text-amber-100">
                         Hint: {hint}
@@ -219,90 +257,92 @@ function MissionPanel({
                       )}
                     </div>
                   </>
-                )}
-              </>
-            ) : (
-              <>
-                <p className="my-2">
-                  {run.status === "completed"
-                    ? `Voltooid! €${receipt?.base ?? 0} + €${receipt?.bonus ?? 0} bonus ontvangen.`
-                    : (run.failure ?? definition.failure)}
-                </p>
-                {run.status === "completed" ? (
+                ) : (
                   <>
-                    <p className="text-xs text-amber-200">
-                      Medaille:{" "}
-                      {profile.records?.[definition.id]?.medal === "gold"
-                        ? "goud"
-                        : profile.records?.[definition.id]?.medal === "silver"
-                          ? "zilver"
-                          : "brons"}
+                    <p className="my-2">
+                      {run.status === "completed"
+                        ? `Voltooid! €${receipt?.base ?? 0} + €${receipt?.bonus ?? 0} bonus ontvangen.`
+                        : (run.failure ?? definition.failure)}
                     </p>
-                    {definition.success.map((line, i) => (
-                      <p key={i} className="text-xs">
-                        <strong>{line.speaker}: </strong>
-                        {line.text}
-                      </p>
-                    ))}
+                    {run.status === "completed" ? (
+                      <>
+                        <p className="text-xs text-amber-200">
+                          Medaille:{" "}
+                          {profile.records?.[definition.id]?.medal === "gold"
+                            ? "goud"
+                            : profile.records?.[definition.id]?.medal ===
+                                "silver"
+                              ? "zilver"
+                              : "brons"}
+                        </p>
+                        {definition.success.map((line, i) => (
+                          <p key={i} className="text-xs">
+                            <strong>{line.speaker}: </strong>
+                            {line.text}
+                          </p>
+                        ))}
+                      </>
+                    ) : run.status === "failed" ? (
+                      <button
+                        className={button}
+                        onClick={() => onAction({ kind: "retry" })}
+                      >
+                        Opnieuw proberen
+                      </button>
+                    ) : null}
                   </>
-                ) : run.status === "failed" ? (
-                  <button
-                    className={button}
-                    onClick={() => onAction({ kind: "retry" })}
-                  >
-                    Opnieuw proberen
-                  </button>
-                ) : null}
-              </>
-            )}
-            {!compact &&
-              journal &&
-              definition.stages.slice(0, run.stage + 1).map((entry) => (
-                <div
-                  key={entry.id}
-                  className="mt-3 border-t border-white/15 pt-2"
-                >
-                  <p className="font-semibold">{entry.text}</p>
-                  {entry.dialogue.map((line, i) => (
-                    <p key={i} className="text-xs">
-                      <strong>{line.speaker}: </strong>
-                      {line.text}
-                    </p>
-                  ))}
-                </div>
-              ))}
-          </div>
-        ) : (
-          <p className="mt-2 text-xs text-slate-300">
-            Zoek een straatcontact met het €-teken voor werk.
-          </p>
-        )}
-        {contact && run?.status !== "active" && (
-          <div className="mt-3">
-            <h3 className="font-bold">{contact.name}</h3>
-            <p className="my-1 text-xs">{contact.greeting}</p>
-            {contact.jobs.map((job) => (
-              <div key={job.id} className="mt-2">
-                <button
-                  className={button}
-                  disabled={Boolean(job.unavailable)}
-                  onClick={() => onAction({ kind: "offer", missionId: job.id })}
-                >
-                  {job.title}
-                </button>
-                {job.unavailable && (
-                  <p className="mt-1 text-xs text-slate-300">
-                    {job.unavailable}
-                  </p>
                 )}
+                {journal &&
+                  definition.stages.slice(0, run.stage + 1).map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="mt-3 border-t border-white/15 pt-2"
+                    >
+                      <p className="font-semibold">{entry.text}</p>
+                      {entry.dialogue.map((line, i) => (
+                        <p key={i} className="text-xs">
+                          <strong>{line.speaker}: </strong>
+                          {line.text}
+                        </p>
+                      ))}
+                    </div>
+                  ))}
               </div>
-            ))}
-          </div>
-        )}
-        {mission.action && (
-          <p className="mt-2 text-xs text-amber-200">
-            E / interactie: {mission.action}
-          </p>
+            ) : (
+              <p className="mt-2 text-xs text-slate-300">
+                Zoek een straatcontact met het €-teken voor werk.
+              </p>
+            )}
+            {contact && run?.status !== "active" && (
+              <div className="mt-3">
+                <h3 className="font-bold">{contact.name}</h3>
+                <p className="my-1 text-xs">{contact.greeting}</p>
+                {contact.jobs.map((job) => (
+                  <div key={job.id} className="mt-2">
+                    <button
+                      className={button}
+                      disabled={Boolean(job.unavailable)}
+                      onClick={() =>
+                        onAction({ kind: "offer", missionId: job.id })
+                      }
+                    >
+                      {job.title}
+                    </button>
+                    {job.unavailable && (
+                      <p className="mt-1 text-xs text-slate-300">
+                        {job.unavailable}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            {mission.action && (
+              <p className="mt-2 text-xs text-amber-200">
+                E / interactie: {mission.action}
+              </p>
+            )}
+          </>
         )}
       </section>
       {mission.offer && <Briefing offer={mission.offer} onAction={onAction} />}
@@ -310,11 +350,11 @@ function MissionPanel({
   );
 }
 
-/** Shows the briefing in full and starts each accepted contract with a compact objective HUD. */
+/** Keeps the mission HUD compact until opened, including after completion or failure. */
 export function ArenaMissionPanel(props: MissionPanelProps): React.JSX.Element {
   return (
     <MissionPanel
-      key={props.mission.profile.run?.contractId ?? "idle"}
+      key={`${props.mission.profile.run?.contractId ?? "idle"}:${props.mission.profile.run?.status ?? "idle"}`}
       {...props}
     />
   );

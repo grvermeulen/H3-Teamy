@@ -63,7 +63,15 @@ async function visit(page, position, holdMs = 120) {
     await expect
       .poll(() => page.evaluate(() => window.__arena.getState().tick))
       .toBeGreaterThan(5);
-    await visit(page, point("noor"));
+    await visit(page, point("noor"), 0);
+    const idlePanel = page.getByRole("region", { name: "Missies en geld" });
+    expect((await idlePanel.boundingBox()).height).toBeLessThanOrEqual(90);
+    await idlePanel
+      .getByRole("button", { name: "Missiedetails uitklappen" })
+      .click();
+    await idlePanel
+      .getByRole("button", { name: "Verkeerd bezorgd", exact: true })
+      .click();
     const offer = page.getByRole("dialog", { name: "Verkeerd bezorgd" });
     await expect(offer).toBeVisible();
     await page.screenshot({ path: path.join(output, "desktop-briefing.png") });
@@ -100,10 +108,11 @@ async function visit(page, position, holdMs = 120) {
       panel.getByRole("button", { name: "Hint", exact: true }),
     ).toHaveCount(0);
     const compactBounds = await panel.boundingBox();
-    expect(compactBounds.height).toBeLessThan(150);
     const radarBounds = await page
       .getByRole("button", { name: "Kaart openen", exact: true })
       .boundingBox();
+    expect(compactBounds.height).toBeLessThanOrEqual(radarBounds.height);
+    expect(compactBounds.height).toBeLessThanOrEqual(90);
     expect(compactBounds.x + compactBounds.width).toBeLessThan(radarBounds.x);
     await page.screenshot({ path: path.join(output, "mobile-mission.png") });
     await expand.click();
@@ -163,6 +172,11 @@ async function visit(page, position, holdMs = 120) {
         ),
       )
       .toBe(325);
+    await expect(expand).toHaveAttribute("aria-expanded", "false");
+    const completedBounds = await panel.boundingBox();
+    expect(completedBounds.height).toBeLessThanOrEqual(radarBounds.height);
+    expect(completedBounds.height).toBeLessThanOrEqual(90);
+    await expect(panel.getByText("Voltooid! €325 ontvangen.")).toBeVisible();
     await page.waitForTimeout(1100);
     await page.getByRole("button", { name: "Sluiten", exact: true }).click();
     await page
@@ -177,6 +191,12 @@ async function visit(page, position, holdMs = 120) {
       .toBe(325);
     await page.screenshot({
       path: path.join(output, "mobile-payout-restored.png"),
+    });
+    expect((await panel.boundingBox()).height).toBeLessThanOrEqual(90);
+    await expand.click();
+    await expect(panel.getByText(/Medaille:/)).toBeVisible();
+    await page.screenshot({
+      path: path.join(output, "mobile-payout-expanded.png"),
     });
     await page.getByRole("button", { name: "Logboek", exact: true }).click();
     await page.evaluate(() => {
@@ -250,6 +270,7 @@ async function visit(page, position, holdMs = 120) {
           restored: 325,
           mobileOverflow: false,
           compactPanelHeight: compactBounds.height,
+          completedPanelHeight: completedBounds.height,
           missionDetailsToggle: true,
           exitAfterFocusedButton: true,
           shadowLookoutFound: true,
