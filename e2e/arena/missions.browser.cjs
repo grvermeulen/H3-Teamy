@@ -91,7 +91,32 @@ async function visit(page, position, holdMs = 120) {
     );
     await page.screenshot({ path: path.join(output, "desktop-mission.png") });
     await page.setViewportSize({ width: 390, height: 844 });
+    const panel = page.getByRole("region", { name: "Missies en geld" });
+    const expand = panel.getByRole("button", {
+      name: "Missiedetails uitklappen",
+    });
+    await expect(expand).toHaveAttribute("aria-expanded", "false");
+    await expect(
+      panel.getByRole("button", { name: "Hint", exact: true }),
+    ).toHaveCount(0);
+    const compactBounds = await panel.boundingBox();
+    expect(compactBounds.height).toBeLessThan(150);
+    const radarBounds = await page
+      .getByRole("button", { name: "Kaart openen", exact: true })
+      .boundingBox();
+    expect(compactBounds.x + compactBounds.width).toBeLessThan(radarBounds.x);
     await page.screenshot({ path: path.join(output, "mobile-mission.png") });
+    await expand.click();
+    await expect(
+      panel.getByRole("button", { name: "Hint", exact: true }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: path.join(output, "mobile-mission-expanded.png"),
+    });
+    await panel
+      .getByRole("button", { name: "Missiedetails inklappen" })
+      .click();
+    await expect(expand).toHaveAttribute("aria-expanded", "false");
     await visit(page, point("M01:parcel"));
     await expect
       .poll(() =>
@@ -224,6 +249,8 @@ async function visit(page, position, holdMs = 120) {
           paid: 325,
           restored: 325,
           mobileOverflow: false,
+          compactPanelHeight: compactBounds.height,
+          missionDetailsToggle: true,
           exitAfterFocusedButton: true,
           shadowLookoutFound: true,
           errors,
