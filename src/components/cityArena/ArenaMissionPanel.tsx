@@ -23,8 +23,13 @@ function Briefing({
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => onAction({ kind: "close" }), [onAction]);
   useDialogFocusTrap(ref, close);
+  const actionRef = useRef(onAction);
+  useEffect(() => {
+    actionRef.current = onAction;
+  }, [onAction]);
   useEffect(() => {
     let previous = [true, true];
+    let accepting = false;
     const interval = setInterval(() => {
       const pad = navigator
         .getGamepads?.()
@@ -35,13 +40,16 @@ function Briefing({
       const pressed = [0, 2].map(
         (index) => (pad?.buttons[index]?.value ?? 0) > 0.5,
       );
-      if (pressed[0] && !previous[0])
-        onAction({ kind: "accept", missionId: offer.id });
-      else if (pressed[1] && !previous[1]) close();
+      if (pressed[0] && !previous[0]) accepting = true;
+      if (!pressed[0] && accepting) {
+        accepting = false;
+        actionRef.current({ kind: "accept", missionId: offer.id });
+      } else if (pressed[1] && !previous[1])
+        actionRef.current({ kind: "close" });
       previous = pressed;
     }, 50);
     return () => clearInterval(interval);
-  }, [close, offer.id, onAction]);
+  }, [offer.id]);
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/70 p-4">
       <div
