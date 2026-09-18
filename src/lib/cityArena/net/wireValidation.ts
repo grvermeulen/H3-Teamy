@@ -10,6 +10,10 @@ import {
 import type { Snapshot } from "./snapshotWire";
 import { VEHICLE_KINDS } from "../sim/vehicle";
 import type { InputFrame } from "./wire";
+import { MISSION_COMMANDS } from "./wire";
+import { MissionProfileSchema } from "../missions/validation";
+import { VehicleBoardingSchema } from "./boardingValidation";
+import { MissionReceiptSchema } from "../missions/receipts";
 
 /** Maximum accepted snapshot, including room metadata, below Ably's 64 KiB limit. */
 export const MAX_WIRE_SNAPSHOT_BYTES = 48 * 1024;
@@ -31,6 +35,9 @@ const SNAPSHOT_KEYS = new Set([
   "f",
   "r",
   "x",
+  "u",
+  "h",
+  "l",
 ]);
 const rejected = { input: 0, snapshot: 0 };
 
@@ -53,11 +60,15 @@ function integer(value: unknown, min: number, max: number): value is number {
   );
 }
 
-/** Accepts only the exact five-field input protocol, including known button bits. */
+/** Accepts movement inputs and bounded reliable mission intents with known button bits. */
 export function isInputFrame(value: unknown): value is InputFrame {
   return (
     Array.isArray(value) &&
-    value.length === 5 &&
+    (value.length === 5 ||
+      (value.length === 8 &&
+        integer(value[5], 1, MAX_TICK) &&
+        integer(value[6], 0, MISSION_COMMANDS.length - 1) &&
+        integer(value[7], 0, 24))) &&
     integer(value[0], 0, MAX_TICK) &&
     integer(value[1], -100, 100) &&
     integer(value[2], -100, 100) &&
@@ -91,7 +102,7 @@ export function isSnapshot(value: unknown): value is Snapshot {
   if (Object.keys(snapshot).some((key) => !SNAPSHOT_KEYS.has(key)))
     return false;
   if (
-    snapshot.n !== 2 ||
+    snapshot.n !== 3 ||
     !integer(snapshot.t, 0, MAX_TICK) ||
     !integer(snapshot.s, 0, Number.MAX_SAFE_INTEGER)
   )
@@ -178,7 +189,93 @@ export function isSnapshot(value: unknown): value is Snapshot {
     )
   )
     return false;
-  if (snapshot.y !== undefined && !rows(snapshot.y, 3, 64)) return false;
+  if (snapshot.u !== undefined) {
+    if (!Array.isArray(snapshot.u) || snapshot.u.length > MAX_ARENA_PLAYERS)
+      return false;
+    const owners = new Set<number>();
+    for (const entry of snapshot.u) {
+      if (
+        !Array.isArray(entry) ||
+        entry.length !== 2 ||
+        !integer(entry[0], 0, MAX_TICK) ||
+        owners.has(entry[0]) ||
+        !snapshot.p.some((row) => row[0] === entry[0])
+      )
+        return false;
+      const profile = MissionProfileSchema.safeParse(entry[1]);
+      if (
+        !profile.success ||
+        (profile.data.run && profile.data.run.ownerId !== entry[0])
+      )
+        return false;
+      owners.add(entry[0]);
+    }
+  }
+  if (snapshot.h !== undefined) {
+    if (!Array.isArray(snapshot.h) || snapshot.h.length > MAX_ARENA_PLAYERS)
+      return false;
+    const cars = new Set<number>();
+    const owners = new Set<number>();
+    for (const entry of snapshot.h) {
+      if (
+        !Array.isArray(entry) ||
+        entry.length !== 2 ||
+        !integer(entry[0], 0, MAX_TICK) ||
+        cars.has(entry[0])
+      )
+        return false;
+      const boarding = VehicleBoardingSchema.safeParse(entry[1]);
+      if (
+        !boarding.success ||
+        owners.has(boarding.data.ownerId) ||
+        !snapshot.p.some((row) => row[0] === boarding.data.ownerId) ||
+        boarding.data.startTick > snapshot.t ||
+        (boarding.data.driver && boarding.data.driver.vehicleId !== entry[0])
+      )
+        return false;
+      cars.add(entry[0]);
+      owners.add(boarding.data.ownerId);
+    }
+  }
+  if (snapshot.e !== undefined && !integer(snapshot.e, 0, MAX_TICK))
+    return false;
+  if (snapshot.y !== undefined) {
+    if (
+      !Array.isArray(snapshot.y) ||
+      snapshot.y.length > 64 ||
+      new Set(snapshot.y.map((row) => (Array.isArray(row) ? row[0] : null)))
+        .size !== snapshot.y.length ||
+      snapshot.y.some((row) => !rows([row], 3, 1) && !rows([row], 5, 1))
+    )
+      return false;
+    if (
+      snapshot.y.some(
+        (row) =>
+          row.length === 5 &&
+          (!integer(row[3], 0, 10_000_000) || !integer(row[4], 0, 24)),
+      )
+    )
+      return false;
+  }
+  if (snapshot.l !== undefined) {
+    if (!Array.isArray(snapshot.l) || snapshot.l.length > 64) return false;
+    const owners = new Set<number>();
+    for (const entry of snapshot.l) {
+      if (
+        !Array.isArray(entry) ||
+        entry.length !== 2 ||
+        !integer(entry[0], 0, MAX_TICK) ||
+        owners.has(entry[0]) ||
+        !Array.isArray(entry[1]) ||
+        entry[1].length > 24 ||
+        entry[1].some(
+          (receipt) => !MissionReceiptSchema.safeParse(receipt).success,
+        )
+      )
+        return false;
+      owners.add(entry[0]);
+    }
+  }
   if (
     Array.isArray(snapshot.y) &&
     snapshot.y.some((row) => row[1] < 0 || row[2] < 0)

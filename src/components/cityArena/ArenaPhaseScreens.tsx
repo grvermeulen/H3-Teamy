@@ -26,6 +26,7 @@ const LIVE_SCOREBOARD_MS = 500;
 function useLiveScoreboard(
   game: MatchSeam,
   active: boolean,
+  scoringVersion: number,
 ): { lines: ScoreLine[]; accounts: ReadonlyMap<number, string> } {
   const [, setBeat] = useState(0);
   useEffect(() => {
@@ -39,7 +40,7 @@ function useLiveScoreboard(
   const peek = active ? game.peek() : null;
   if (!peek) return { lines: [], accounts: new Map() };
   return {
-    lines: rankScoreboard(peek.tally, peek.players, peek.youId),
+    lines: rankScoreboard(peek.tally, peek.players, peek.youId, scoringVersion),
     accounts: new Map(
       [...peek.seats].map(([clientId, playerId]) => [playerId, clientId]),
     ),
@@ -124,7 +125,11 @@ export function ArenaPhaseScreens({
   };
   const crewNames = useScoreboardNames(room.crew, clock.accounts);
   const inPlay = clock.phase === "countdown" || clock.phase === "playing";
-  const live = useLiveScoreboard(game, showScoreboard && inPlay);
+  const live = useLiveScoreboard(
+    game,
+    showScoreboard && inPlay,
+    room.ticket?.round ? (room.ticket.round.scoringVersion ?? 1) : 2,
+  );
   const liveNames = useScoreboardNames(room.crew, live.accounts);
   const leave = (): void => {
     room.leave();

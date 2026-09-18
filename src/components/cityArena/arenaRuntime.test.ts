@@ -18,12 +18,14 @@ describe("arena runtime async guards", () => {
 });
 
 describe("nextCamera", () => {
-  it("holds the viewport zoom on foot and widens one step at driving speed", () => {
+  it("smoothly closes in on foot and widens at driving speed", () => {
     const start = createCamera([0, 0], 8);
     const walking = nextCamera(start, 8, [10, 0], [5.5, 0], 1 / 30, false);
-    expect(walking.zoom).toBe(8);
+    expect(walking.zoom).toBeGreaterThan(8);
     expect(walking.x).toBeGreaterThan(0);
-    expect(nextCamera(start, 8, [10, 0], [20, 0], 1 / 30, true).zoom).toBe(6);
+    const driving = nextCamera(start, 8, [10, 0], [20, 0], 1 / 30, true);
+    expect(driving.zoom).toBeLessThan(8);
+    expect(driving.zoom).toBeGreaterThan(6);
   });
 
   it("leads further ahead while driving", () => {
@@ -34,7 +36,7 @@ describe("nextCamera", () => {
       inCar = nextCamera(inCar, 8, [0, 0], [1000, 0], 1 / 60, true);
     }
     expect(onFoot.x).toBeCloseTo(15, 1);
-    expect(inCar.x).toBeCloseTo(30, 1);
+    expect(inCar.x).toBeCloseTo(25, 1);
   });
 });
 

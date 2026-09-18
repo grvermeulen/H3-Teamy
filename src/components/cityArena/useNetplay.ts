@@ -52,6 +52,7 @@ export type ArenaNetplayOptions = {
   isHost: boolean;
   /** Everyone present in the room, by client id, so the host can seat them. */
   memberIds: string[];
+  round?: { startedAt: number; finishesAt: number } | null;
   /**
    * Called with the host to re-elect without: the one in `hostClientId` after it has been quiet
    * for the silence window, or this client itself when, hosting, it hears another member publish
@@ -412,6 +413,12 @@ export function useNetplay(
     isHost,
     onHostLost,
   ]);
+
+  useEffect(() => {
+    const runtime = runtimeRef.current;
+    if (runtime?.netplay.kind === "host")
+      runtime.netplay.loop.setRoundWindow?.(options?.round ?? null);
+  });
 
   // Declared after the loop effect and keyed on everything it is, so a freshly created host loop
   // seats the room in the same commit — and a change of crew alone seats only the difference.

@@ -236,7 +236,7 @@ describe("snapshot wire format", () => {
       "bus",
       "tractor",
     ]);
-    expect(back.vehicles[0]!.health).toBe(220);
+    expect(back.vehicles[0]!.health).toBe(350);
   });
 
   it("round-trips cars, pedestrians, cops, bullets and pickups", () => {

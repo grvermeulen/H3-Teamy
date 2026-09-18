@@ -1,5 +1,7 @@
 import type { ZoneKey } from "../world/mapTypes";
+import type { Point } from "../world/projection";
 import type { LandmarkBonus } from "./landmarkBonuses";
+import type { MissionCommand, MissionProfile } from "../missions/types";
 
 /**
  * Device-agnostic input (spec §7): a movement vector with length ≤ 1 (x east, y south), an
@@ -11,6 +13,7 @@ import type { LandmarkBonus } from "./landmarkBonuses";
  * tank steering.
  */
 export type WorldInput = {
+  missionCommand?: MissionCommand;
   move: [number, number];
   moveIsAnalog: boolean;
   aim: number | null;
@@ -39,6 +42,9 @@ export type ArenaInputs = ReadonlyMap<number, WorldInput>;
 /** Builds a full input from the fields a test or a debug dispatch cares about. */
 export function createInput(partial: Partial<WorldInput>): WorldInput {
   return {
+    ...(partial.missionCommand
+      ? { missionCommand: partial.missionCommand }
+      : {}),
     move: partial.move ?? [0, 0],
     moveIsAnalog: partial.moveIsAnalog ?? false,
     aim: partial.aim ?? null,
@@ -89,6 +95,7 @@ export type VehicleKind =
 
 /** A car; `heading` in radians, velocity in world m/s, `colour` indexes the render palette. */
 export type VehicleState = {
+  boarding?: VehicleBoarding;
   id: number;
   kind: VehicleKind;
   x: number;
@@ -99,6 +106,16 @@ export type VehicleState = {
   health: number;
   wrecked: boolean;
   colour: number;
+};
+
+/** Fixed-tick door/entry transaction; ownership commits only after the driver leaves. */
+export type VehicleBoarding = {
+  ownerId: number;
+  startTick: number;
+  side: -1 | 1;
+  from: Point;
+  driver: DriverState | null;
+  ejectedId: number | null;
 };
 
 /** A projectile (or fist reach) travelling along a unit direction until its range runs out. */
@@ -137,6 +154,7 @@ export type AmmoState = Record<MagazineWeapon, number>;
 
 /** The player with everything the arena adds to walking. */
 export type ArenaPlayerState = PlayerState & {
+  mission?: MissionProfile;
   id: number;
   health: number;
   weapon: WeaponKind;
@@ -241,6 +259,21 @@ export type HitTargetKind = "player" | "ped" | "cop" | "vehicle";
 
 /** A serialisable simulation event consumed by audio and future netcode. */
 export type ArenaEvent =
+  | {
+      kind: "door";
+      phase: "open" | "eject" | "close";
+      playerId: number;
+      vehicleId: number;
+      x: number;
+      y: number;
+    }
+  | {
+      kind: "hijack";
+      playerId: number;
+      vehicleId: number;
+      x: number;
+      y: number;
+    }
   | { kind: "shot"; weapon: WeaponKind; ownerId: number; x: number; y: number }
   | {
       kind: "hit";
@@ -280,6 +313,8 @@ export type ArenaEvent =
 
 /** Full arena simulation state: plain, JSON-serialisable data. */
 export type ArenaState = {
+  /** Authoritative remaining round budget; absent during solo exploration. */
+  roundTicksLeft?: number;
   tick: number;
   seed: number;
   nextId: number;

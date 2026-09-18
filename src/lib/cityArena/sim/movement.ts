@@ -210,6 +210,14 @@ export function moveEntities(
     if (vehicleId !== null && vehicleId !== undefined)
       controls.set(vehicleId, drive.controls);
   }
+  for (const vehicle of state.vehicles) {
+    if (!vehicle.boarding) continue;
+    const speed = forwardSpeed(vehicle);
+    controls.set(vehicle.id, {
+      throttle: Math.abs(speed) > 0.5 ? -Math.sign(speed) : 0,
+      steer: 0,
+    });
+  }
   const moved = stepVehicles(state, dt, world, controls);
   let next: ArenaState = {
     ...state,
@@ -218,6 +226,10 @@ export function moveEntities(
     events: moved.events,
   };
   for (const player of orderedPlayers(state)) {
+    if (
+      state.vehicles.some((vehicle) => vehicle.boarding?.ownerId === player.id)
+    )
+      continue;
     const driving = occupiedVehicle(state, player);
     if (driving) {
       const ridden =

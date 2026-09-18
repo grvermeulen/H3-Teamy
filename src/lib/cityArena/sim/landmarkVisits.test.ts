@@ -53,8 +53,8 @@ describe("landmark visits", () => {
     );
     expect(first.players[0].bonus).toEqual({
       kind: "speed",
-      untilTick: 1201,
-      readyAtTick: 1651,
+      untilTick: 3601,
+      readyAtTick: 4051,
     });
     const held = stepArena(
       first,
@@ -65,10 +65,12 @@ describe("landmark visits", () => {
     );
     expect(held.players[0].bonus).toEqual(first.players[0].bonus);
     expect(visitLandmark(held, held.players[0], world)).toBe(held);
-    const ready = { ...held, tick: 1651 };
+    expect(activeBonus(first.players[0], 3600)).toBe("speed");
+    expect(activeBonus(first.players[0], 3601)).toBeNull();
+    const ready = { ...held, tick: 4051 };
     expect(
       visitLandmark(ready, ready.players[0], world).players[0].bonus?.untilTick,
-    ).toBe(2851);
+    ).toBe(7651);
   });
   it("offers large landmarks at the outside wall, not only the inaccessible centre", () => {
     const collision: ArenaWorld["collision"] = {
@@ -113,7 +115,7 @@ describe("landmark visits", () => {
       world,
       random,
     );
-    expect(next.players[0].vehicleId).toBe(42);
+    expect(next.vehicles[0].boarding?.ownerId).toBe(0);
     expect(next.players[0].bonus).toBeUndefined();
   });
   it("uses identical bonus movement for the host and prediction and expires exactly on time", () => {

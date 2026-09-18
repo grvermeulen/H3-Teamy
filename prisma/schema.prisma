@@ -244,6 +244,7 @@ model ArenaMatch {
   /** The server-issued lifecycle ID; historical results predate this field. */
   roundId    String?            @unique
   verification String           @default("host-reported")
+  scoringVersion Int            @default(1)
   results    ArenaMatchResult[]
 
   @@unique([roomCode, startedAt])
@@ -255,6 +256,7 @@ model ArenaRoom {
   id             String            @id @default(uuid())
   code           String            @unique
   zone           String
+  protocolVersion Int              @default(2)
   createdAt      DateTime          @default(now())
   expiresAt      DateTime
   hostMemberId   String?
@@ -295,6 +297,7 @@ model ArenaRound {
   startedAt    DateTime
   finishesAt   DateTime
   completedAt  DateTime?
+  scoringVersion Int                   @default(1)
   room         ArenaRoom               @relation(fields: [roomId], references: [id], onDelete: Cascade)
   participants ArenaRoundParticipant[]
 
@@ -334,10 +337,16 @@ model ArenaMatchResult {
   kills   Int
   deaths  Int
   won     Boolean
+  cashEarned Int @default(0)
+  missionsCompleted Int @default(0)
+  score Int @default(0)
+  scoringVersion Int @default(1)
+  receipts Json @default("[]")
 
   match ArenaMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
   user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([matchId, userId])
+  @@index([scoringVersion])
   @@index([userId])
 }

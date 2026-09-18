@@ -14,6 +14,8 @@ export const RadioTrackSchema = z.object({
   file: z.string().regex(/^[a-z0-9]+-\d+-[0-9a-f]{8}\.mp3$/),
   title: z.string().min(1),
   seconds: z.number().positive(),
+  content: z.enum(["song", "talk"]).optional(),
+  transcript: z.string().max(10000).optional(),
 });
 
 /** One station: an id the settings store, a name the HUD shows, and its playlist in order. */

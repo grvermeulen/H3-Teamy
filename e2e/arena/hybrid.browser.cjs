@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const base = "http://localhost:3100";
-const output = path.resolve("docs/tech/arena/slice-2-verification");
+const output = path.resolve(".cache/arena-mission-verification/multiplayer");
 
 async function login(context, name) {
   const { csrfToken } = await (
@@ -78,10 +78,10 @@ async function login(context, name) {
     });
     await page.goto(base + "/arena/spelen");
     await expect(
-      page.getByRole("button", { name: "Nieuwe kamer openen" }),
+      page.getByRole("button", { name: /Potje openen in/ }),
     ).toBeEnabled();
     await page.getByLabel("Speelstand").selectOption("hybrid");
-    await page.getByRole("button", { name: "Nieuwe kamer openen" }).click();
+    await page.getByRole("button", { name: /Potje openen in/ }).click();
     await expect(page.getByTestId("room-code")).toHaveText(/^[A-Z2-9]{6}$/, {
       timeout: 45000,
     });
@@ -107,7 +107,7 @@ async function login(context, name) {
                   typeof message.data === "string"
                     ? JSON.parse(message.data)
                     : message.data;
-                if (state?.n === 2) latest = state;
+                if (state?.n === 3) latest = state;
               }
             }
         } catch {

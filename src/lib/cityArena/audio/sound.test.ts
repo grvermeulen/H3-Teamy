@@ -53,7 +53,9 @@ describe("createArenaSound", () => {
       { kind: "shot", weapon: "cannon", ownerId: 0, x: 0, y: 0 },
     ]);
     expect(player.play).toHaveBeenCalledTimes(1);
-    expect(player.play).toHaveBeenCalledWith("explosion");
+    expect(player.play).toHaveBeenCalledWith("explosion", 1, 1.25);
+    sound.handleEvents([{ kind: "explosion", x: 0, y: 0 }]);
+    expect(player.play).toHaveBeenLastCalledWith("explosion");
     const { context, factory: bare } = createFakeAudioContext();
     const silent = createArenaSound(bare, true, () => playerWith([]));
     silent.unlock();

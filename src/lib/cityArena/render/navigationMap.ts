@@ -5,7 +5,11 @@ import type { RadarSnapshot } from "./radar";
 import type { Viewport } from "./camera";
 
 /** Shared world metadata; the map uses the loaded graph without downloading extra tiles. */
-export type NavigationMapData = { index: MapIndex; graph: RoadGraph };
+export type NavigationMapData = {
+  index: MapIndex;
+  graph: RoadGraph;
+  missions?: import("../missions/hud").MissionMapMarker[];
+};
 /** A freely pannable north-up map, in CSS pixels per metre. */
 export type MapView = { center: Point; scale: number };
 
@@ -114,6 +118,23 @@ export function drawNavigationMap(
     }
   }
   const route = radar.navigation;
+  for (const marker of data.missions ?? []) {
+    const [x, y] = screen(marker.position);
+    if (!visible([x, y])) continue;
+    ctx.fillStyle =
+      marker.state === "active"
+        ? "#fde047"
+        : marker.state === "available"
+          ? "#6ee7b7"
+          : "#cbd5e1";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(
+      `${marker.state === "active" ? "▼" : marker.state === "completed" ? "✓" : marker.state === "locked" ? "◇" : "€"} ${marker.title}`,
+      x,
+      y - 12,
+    );
+  }
   if (route) {
     ctx.strokeStyle = "#22d3ee";
     ctx.lineWidth = 4;

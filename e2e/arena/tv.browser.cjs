@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const base = "http://localhost:3100";
-const output = path.resolve("docs/tech/arena/slice-2-verification");
+const output = path.resolve(".cache/arena-mission-verification/multiplayer");
 fs.mkdirSync(output, { recursive: true });
 
 function watch(page) {
@@ -32,7 +32,7 @@ function watch(page) {
               typeof message.data === "string"
                 ? JSON.parse(message.data)
                 : message.data;
-            if (data?.n === 2 && Array.isArray(data.p)) {
+            if (data?.n === 3 && Array.isArray(data.p)) {
               report.snapshots.push(data);
               if (report.snapshots.length > 100) report.snapshots.shift();
             }
@@ -82,7 +82,7 @@ async function login(context, name) {
     const screen = await tv.newPage();
     const screenReport = watch(screen);
     await screen.goto(base + "/arena/scherm");
-    await screen.getByRole("button", { name: "Nieuwe kamer openen" }).click();
+    await screen.getByRole("button", { name: /Potje openen in/ }).click();
     await expect(screen.getByTestId("room-code")).toHaveText(/^[A-Z2-9]{6}$/, {
       timeout: 30000,
     });

@@ -19,10 +19,22 @@ function player(id: number): ArenaPlayerState {
 
 /** Folds several ticks of events in. */
 function tallyAll(...ticks: ArenaEvent[][]): Tally {
-  return ticks.reduce(tallyEvents, emptyTally());
+  return ticks.reduce(
+    (tally, events) => tallyEvents(tally, events),
+    emptyTally(),
+  );
 }
 
 describe("tallyEvents", () => {
+  it("counts a mission guard's victim without adding the NPC to the scoreboard", () => {
+    const tally = tallyEvents(
+      emptyTally(),
+      [killed(2, 9001)],
+      [player(1), player(2)],
+    );
+    expect(tally.get(2)?.deaths).toBe(1);
+    expect(tally.has(9001)).toBe(false);
+  });
   it("counts a kill for the killer and a death for the victim", () => {
     const tally = tallyAll([killed(2, 1)]);
     expect(tally.get(1)).toEqual({ playerId: 1, kills: 1, deaths: 0 });

@@ -1,4 +1,5 @@
 import { pointInRect, type Rect } from "../mapBuild/geometry";
+import { missionEntityIds } from "../missions/actors";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import type { Point } from "../world/projection";
 import { MAX_PEDS, MAX_TRAFFIC, MAX_VEHICLES } from "./limits";
@@ -62,6 +63,7 @@ function vehiclePoints(state: ArenaState): Point[] {
 
 /** Drops the old zone's people, traffic and pickups, keeping parked cars and any car a player drives. */
 function clearPopulation(state: ArenaState): ArenaState {
+  const protectedIds = missionEntityIds(state);
   const driven = new Set(state.traffic.map((driver) => driver.vehicleId));
   // Any car with a player at the wheel survives the clear-out, not just the local player's:
   // clearing a zone must never delete the car somebody else is driving out of it.
@@ -72,9 +74,21 @@ function clearPopulation(state: ArenaState): ArenaState {
   );
   const vehicles = state.vehicles.filter(
     (vehicle) =>
-      occupied.has(vehicle.id) || (!driven.has(vehicle.id) && !vehicle.wrecked),
+      protectedIds.has(vehicle.id) ||
+      vehicle.boarding ||
+      occupied.has(vehicle.id) ||
+      (!driven.has(vehicle.id) && !vehicle.wrecked),
   );
-  return { ...state, vehicles, peds: [], cops: [], pickups: [], traffic: [] };
+  return {
+    ...state,
+    vehicles,
+    peds: state.peds.filter((ped) => protectedIds.has(ped.id)),
+    cops: [],
+    pickups: [],
+    traffic: state.traffic.filter((driver) =>
+      protectedIds.has(driver.vehicleId),
+    ),
+  };
 }
 
 /** Appends spawned cars and their drivers, advancing the id counter. */
@@ -108,7 +122,7 @@ function spawnZoneTraffic(
       vehiclePoints(state),
       null,
       state.nextId,
-      count,
+      Math.min(count, MAX_TRAFFIC - state.traffic.length),
       anchorPoints(state),
     ),
   );
@@ -139,14 +153,20 @@ export function populateZone(
     avoid,
     null,
     cleared.nextId + pickups.length,
-    PEDS_PER_ZONE,
+    Math.max(
+      0,
+      Math.min(
+        PEDS_PER_ZONE - cleared.peds.length,
+        MAX_PEDS - cleared.peds.length,
+      ),
+    ),
     anchorPoints(cleared),
   );
   const populated: ArenaState = {
     ...cleared,
     activeZoneKey: zone.key,
     pickups,
-    peds,
+    peds: [...cleared.peds, ...peds],
     nextId: cleared.nextId + pickups.length + peds.length,
   };
   return spawnZoneTraffic(populated, zone, graph, random);
@@ -163,8 +183,17 @@ export function topUpPeds(
   random: () => number,
 ): ArenaState {
   const anchors = anchorPoints(state);
-  const peds = recyclePeds(state.peds, anchors, world.viewRect ?? null);
-  const recycled = peds === state.peds ? state : { ...state, peds };
+  const protectedIds = missionEntityIds(state);
+  const retained = new Set(
+    recyclePeds(state.peds, anchors, world.viewRect ?? null).map(
+      (ped) => ped.id,
+    ),
+  );
+  const peds = state.peds.filter(
+    (ped) => retained.has(ped.id) || protectedIds.has(ped.id),
+  );
+  const recycled =
+    peds.length === state.peds.length ? state : { ...state, peds };
   const room = Math.min(
     PEDS_PER_ZONE - alivePeds(recycled.peds).length,
     MAX_PEDS - recycled.peds.length,
@@ -211,7 +240,13 @@ function recycleTraffic(
     const vehicle = state.vehicles.find(
       (candidate) => candidate.id === driver.vehicleId,
     );
-    if (!vehicle || vehicle.wrecked) continue;
+    if (
+      !vehicle ||
+      vehicle.wrecked ||
+      vehicle.boarding ||
+      missionEntityIds(state).has(vehicle.id)
+    )
+      continue;
     const point: Point = [vehicle.x, vehicle.y];
     if (viewRect && pointInRect(point, viewRect)) continue;
     if (farFromAll(point, anchors, TRAFFIC_RECYCLE_DISTANCE_M))

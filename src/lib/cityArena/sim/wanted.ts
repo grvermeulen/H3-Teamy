@@ -97,6 +97,8 @@ export function heatFromEvents(
   traffic: DriverState[],
 ): number {
   let heat = 0;
+  for (const theft of eventsOfKind(events, "hijack"))
+    if (theft.playerId === player.id) heat += HEAT_PER_LEVEL;
   for (const kill of eventsOfKind(events, "kill")) {
     if (kill.killerId !== player.id) continue;
     // Killing another player is the point of the potje, not a crime against the city, so it

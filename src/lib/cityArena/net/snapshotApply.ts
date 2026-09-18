@@ -62,6 +62,7 @@ function patchPlayer(
     driveSteer: row.driveSteer,
     drunk: row.drunk,
     bonus: row.bonus,
+    mission: row.mission,
     // Not on the wire: bookkeeping the host owns but nobody renders.
     heatTick: local?.heatTick ?? 0,
     outsideSinceTick: local?.outsideSinceTick ?? null,
@@ -165,6 +166,7 @@ export function applySnapshot(
     health: row.health,
     wrecked: row.wrecked,
     colour: row.colour,
+    boarding: row.boarding,
   }));
   const nextPickups: PickupState[] = view.pickups.map((row) => ({
     id: row.id,
@@ -187,6 +189,7 @@ export function applySnapshot(
   return {
     ...state,
     tick: view.tick,
+    roundTicksLeft: view.roundTicksLeft,
     nextId: highestId + 1,
     players: view.players.map((row) => patchPlayer(row, players.get(row.id))),
     vehicles: nextVehicles,

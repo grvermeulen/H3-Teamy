@@ -13,12 +13,17 @@
  */
 
 import type { ArenaEvent, ArenaPlayerState } from "../sim/types";
+import type { MissionReceipt } from "../missions/types";
+import { arenaScore, compareArenaScores, isArenaWinner } from "../scoring";
 
 /** One player's line on the scoreboard. */
 export type ScoreRow = {
   playerId: number;
   kills: number;
   deaths: number;
+  cashEarned?: number;
+  missionsCompleted?: number;
+  receipts?: MissionReceipt[];
 };
 
 /** Kills and deaths so far, by player id. */
@@ -49,21 +54,38 @@ function rowFor(tally: Map<number, ScoreRow>, playerId: number): ScoreRow {
  * @param events - This tick's events.
  * @returns The tally including this tick.
  */
-export function tallyEvents(tally: Tally, events: ArenaEvent[]): Tally {
+export function tallyEvents(
+  tally: Tally,
+  events: ArenaEvent[],
+  players: ArenaPlayerState[] = [],
+): Tally {
   const next = new Map(
     [...tally].map(([id, row]) => [id, { ...row }] as const),
   );
   for (const event of events) {
     if (event.kind !== "kill" || event.victim !== "player") continue;
     if (event.victimId !== null) rowFor(next, event.victimId).deaths += 1;
-    if (event.killerId !== null && event.killerId !== event.victimId)
+    if (
+      event.killerId !== null &&
+      event.killerId !== event.victimId &&
+      (players.length === 0 ||
+        players.some((player) => player.id === event.killerId))
+    )
       rowFor(next, event.killerId).kills += 1;
+  }
+  for (const player of players) {
+    if (!player.mission) continue;
+    const row = rowFor(next, player.id);
+    row.cashEarned = player.mission.wallet.earned;
+    row.missionsCompleted = player.mission.wallet.receipts.length;
+    row.receipts = player.mission.wallet.receipts;
   }
   return next;
 }
 
 /** A scoreboard line, ready to render. */
 export type ScoreLine = ScoreRow & {
+  score?: number;
   /** True for the player reading the screen. */
   isYou: boolean;
   /** True for whoever is top; a shared top means several winners, which is honest. */
@@ -71,7 +93,7 @@ export type ScoreLine = ScoreRow & {
 };
 
 /**
- * The scoreboard in ranking order: most kills first, then fewest deaths, then lowest id.
+ * Ranks earned points, then fewest deaths and lowest id; legacy rounds use kills.
  *
  * The final tie-break on id is what stops two clients rendering the same scores in a different
  * order, the same reason host election never falls through to array order.
@@ -85,6 +107,7 @@ export function rankScoreboard(
   tally: Tally,
   players: ArenaPlayerState[],
   youId: number,
+  scoringVersion = 2,
 ): ScoreLine[] {
   const playerIds = new Set([
     ...players.map((player) => player.id),
@@ -94,19 +117,16 @@ export function rankScoreboard(
     (playerId) => tally.get(playerId) ?? { playerId, kills: 0, deaths: 0 },
   );
   const ranked = [...rows].sort((first, second) => {
-    if (first.kills !== second.kills) return second.kills - first.kills;
-    if (first.deaths !== second.deaths) return first.deaths - second.deaths;
-    return first.playerId - second.playerId;
+    return (
+      compareArenaScores(first, second, scoringVersion) ||
+      first.playerId - second.playerId
+    );
   });
   const best = ranked[0];
-  // Nobody "wins" a potje in which not a single kill was scored.
-  const winning = best && best.kills > 0 ? best : null;
   return ranked.map((row) => ({
     ...row,
+    score: arenaScore(row, scoringVersion),
     isYou: row.playerId === youId,
-    isWinner:
-      winning !== null &&
-      row.kills === winning.kills &&
-      row.deaths === winning.deaths,
+    isWinner: !!best && isArenaWinner(row, best, scoringVersion),
   }));
 }

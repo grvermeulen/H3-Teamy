@@ -17,6 +17,8 @@ import { readArenaGamepad } from "@/lib/cityArena/input/gamepad";
 import type { ArenaPlayerState } from "@/lib/cityArena/sim/types";
 import type { ArenaRoom } from "./useArenaRoom";
 import type { MatchPeek, MatchSeam } from "./matchSeam";
+import { missionHud, type MissionHud } from "@/lib/cityArena/missions/hud";
+import type { MissionCommand } from "@/lib/cityArena/missions/types";
 
 /** Controller-only data and actions: importing this hook never loads map assets. */
 export function useArenaController(
@@ -25,6 +27,8 @@ export function useArenaController(
 ): MatchSeam & {
   player: ArenaPlayerState | null;
   receiving: boolean;
+  mission: MissionHud | null;
+  missionAction(command: Omit<MissionCommand, "sequence">): void;
   setInputVector(vector: [number, number] | null): void;
   setAimVector(vector: [number, number] | null): void;
   setButton(name: ButtonName, pressed: boolean): void;
@@ -33,6 +37,8 @@ export function useArenaController(
   const observerRef = useRef<ArenaObserver | null>(null);
   const [player, setPlayer] = useState<ArenaPlayerState | null>(null);
   const [receiving, setReceiving] = useState(false);
+  const [mission, setMission] = useState<MissionHud | null>(null);
+  const missionSequence = useRef(0);
   const vibrateRef = useRef(vibrate);
   const sequence = useRef(0);
   useEffect(() => {
@@ -80,6 +86,8 @@ export function useArenaController(
         const me =
           state.players.find((candidate) => candidate.id === id) ?? null;
         setPlayer(me);
+        setMission(me ? missionHud(null, state, me) : null);
+        if (me?.mission) controls.acknowledgeMission(me.mission.lastCommand);
         setReceiving(me !== null);
         if (me && previousHealth !== null && me.health < previousHealth)
           haptics.fire(me.health === 0 ? "death" : "hit");
@@ -148,6 +156,19 @@ export function useArenaController(
     [],
   );
   const resetTally = useCallback(() => undefined, []);
+  const missionAction = useCallback(
+    (command: Omit<MissionCommand, "sequence">) => {
+      missionSequence.current =
+        Math.max(missionSequence.current, player?.mission?.lastCommand ?? 0) +
+        1;
+      input.current.clearAll();
+      input.current.setMissionCommand({
+        ...command,
+        sequence: missionSequence.current,
+      });
+    },
+    [player],
+  );
   const setMatch = useCallback(() => undefined, []);
   return {
     peek,
@@ -155,6 +176,8 @@ export function useArenaController(
     setMatch,
     player,
     receiving,
+    mission,
+    missionAction,
     setInputVector,
     setAimVector,
     setButton,

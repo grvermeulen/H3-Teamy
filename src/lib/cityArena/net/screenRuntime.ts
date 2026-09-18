@@ -88,6 +88,7 @@ export function createArenaScreenRuntime(
   };
   return {
     sync(ticket, transport, ready) {
+      host?.setRoundWindow(ticket.round);
       const nextKey =
         ready && ticket.hostClientId
           ? `${ticket.epoch}:${ticket.hostClientId}`
@@ -120,6 +121,7 @@ export function createArenaScreenRuntime(
             });
             for (const [id, seat] of seats) host.claim(id, seat);
             if (match) host.setMatch(match);
+            host.setRoundWindow(ticket.round);
           } else {
             observer = createArenaObserver({
               transport,

@@ -10,6 +10,8 @@ type LeaderboardRow = {
   wins: number;
   kills: number;
   deaths: number;
+  score: number;
+  cashEarned: number;
 };
 
 /** What the panel knows right now. */
@@ -33,12 +35,15 @@ function place(index: number): string {
  */
 export function ArenaLeaderboard(): React.JSX.Element {
   const [state, setState] = useState<State>({ status: "loading" });
+  const [version, setVersion] = useState<1 | 2>(2);
 
   useEffect(() => {
     let alive = true;
     const load = async (): Promise<void> => {
       try {
-        const response = await fetch("/api/arena/leaderboard");
+        const response = await fetch(
+          `/api/arena/leaderboard?version=${version}`,
+        );
         if (!response.ok) throw new Error(`ranglijst ${response.status}`);
         const body = (await response.json()) as { rows?: LeaderboardRow[] };
         if (!alive) return;
@@ -58,7 +63,22 @@ export function ArenaLeaderboard(): React.JSX.Element {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [version]);
+
+  const switcher = (
+    <button
+      type="button"
+      className="mt-2 min-h-11 text-xs underline"
+      onClick={() => {
+        setState({ status: "loading" });
+        setVersion(version === 2 ? 1 : 2);
+      }}
+    >
+      {version === 2
+        ? "Historische uitslagen (oude puntentelling)"
+        : "Terug naar missies en geldscore"}
+    </button>
+  );
 
   if (state.status === "loading")
     return (
@@ -77,6 +97,7 @@ export function ArenaLeaderboard(): React.JSX.Element {
           Nog geen potjes gespeeld. Speel er een met z&apos;n tweeën om de
           ranglijst te openen.
         </p>
+        {switcher}
       </div>
     );
 
@@ -84,6 +105,7 @@ export function ArenaLeaderboard(): React.JSX.Element {
     <div className="arena-card mt-1.5 p-3">
       <span className="arena-label block text-[var(--arena-amber)]">
         Ranglijst · top {state.rows.length}
+        {version === 1 ? " · historische uitslagen" : " · missies en geldscore"}
       </span>
       <ul className="mt-2 flex flex-col gap-1">
         {state.rows.map((row, index) => (
@@ -99,12 +121,13 @@ export function ArenaLeaderboard(): React.JSX.Element {
             </span>
             <span className="shrink-0 text-[11px] uppercase tracking-wider text-[var(--arena-dim)] tabular-nums">
               <span className="text-[var(--arena-text)]">{row.wins}</span> gew ·{" "}
-              <span className="text-[var(--arena-text)]">{row.kills}</span>{" "}
-              kills
+              <span className="text-[var(--arena-text)]">{row.score ?? 0}</span>{" "}
+              punten · €{row.cashEarned ?? 0}
             </span>
           </li>
         ))}
       </ul>
+      {switcher}
     </div>
   );
 }

@@ -11,6 +11,34 @@ const landmarks: LandmarkLookup = new Map();
 const viewport = { width: 256, height: 128 };
 
 describe("drawVisibleChunks", () => {
+  it("reuses discrete ground and canopy rasters throughout fractional zoom changes", () => {
+    const source = {
+      raster: createStaticRaster((width, height) =>
+        createFakeTarget(width, height),
+      ),
+      overhead: createStaticRaster((width, height) =>
+        createFakeTarget(width, height),
+      ),
+      tiles: [],
+      landmarks,
+      loadedTileRects: [{ minX: -1000, minY: -1000, maxX: 1000, maxY: 1000 }],
+    };
+    for (let frame = 0; frame < 120; frame++) {
+      const camera = createCamera([0, 0], 8 + Math.sin(frame / 10) * 0.5);
+      drawVisibleChunks(createFakeContext(), camera, viewport, source);
+      drawOverheadChunks(createFakeContext(), camera, viewport, source);
+    }
+    expect(source.raster.stats().chunks).toBe(4);
+    expect(source.overhead.stats().chunks).toBe(4);
+    expect(
+      drawVisibleChunks(
+        createFakeContext(),
+        createCamera([0, 0], 8.2),
+        viewport,
+        source,
+      ).rasterised,
+    ).toBe(false);
+  });
   it("keeps ground and overhead work queued when another viewport consumed the frame budget", () => {
     const makeRaster = () =>
       createStaticRaster((width, height) => createFakeTarget(width, height));

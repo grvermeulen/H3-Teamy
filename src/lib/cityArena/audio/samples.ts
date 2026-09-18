@@ -49,7 +49,7 @@ export type SamplePlayer = {
    */
   preload(): Promise<void>;
   /** Plays a clip once. `false` means it is not available, and the caller keeps its own sound. */
-  play(clip: ClipName, rate?: number): boolean;
+  play(clip: ClipName, rate?: number, gainScale?: number): boolean;
   /** Starts a looping clip, or `null` when it is not available. */
   startLoop(clip: ClipName): LoopHandle | null;
   /** Whether the clip decoded. */
@@ -118,7 +118,11 @@ export function createSamplePlayer(
   let loading: Promise<void> | null = null;
 
   /** A source for `clip` through a gain node at the clip's level, or null when it is missing. */
-  function voice(clip: ClipName, rate: number): BufferSourceLike | null {
+  function voice(
+    clip: ClipName,
+    rate: number,
+    gainScale = 1,
+  ): BufferSourceLike | null {
     const buffer = buffers.get(clip);
     if (!buffer) return null;
     try {
@@ -127,7 +131,10 @@ export function createSamplePlayer(
       source.buffer = buffer;
       source.loop = AUDIO_CLIPS[clip].loop;
       source.playbackRate.setValueAtTime(rate, context.currentTime);
-      gain.gain.setValueAtTime(AUDIO_CLIPS[clip].gain, context.currentTime);
+      gain.gain.setValueAtTime(
+        AUDIO_CLIPS[clip].gain * gainScale,
+        context.currentTime,
+      );
       source.connect(gain);
       gain.connect(destination);
       source.start(context.currentTime);
@@ -148,8 +155,8 @@ export function createSamplePlayer(
       ).then(() => undefined);
       return loading;
     },
-    play(clip: ClipName, rate = 1): boolean {
-      return voice(clip, rate) !== null;
+    play(clip: ClipName, rate = 1, gainScale = 1): boolean {
+      return voice(clip, rate, gainScale) !== null;
     },
     startLoop(clip: ClipName): LoopHandle | null {
       const source = voice(clip, 1);

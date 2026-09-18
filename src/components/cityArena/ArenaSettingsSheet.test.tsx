@@ -44,12 +44,17 @@ describe("ArenaSettingsSheet", () => {
     expect(screen.getByRole("dialog", { name: "Menu" })).toBeInTheDocument();
     expect(screen.getByLabelText("Geluid")).toBeChecked();
     expect(screen.getByLabelText("Trillen")).toBeChecked();
+    expect(screen.getByLabelText("Dynamische camera")).toBeChecked();
     expect(screen.getByLabelText("Enkele stick")).not.toBeChecked();
     expect(screen.getByLabelText("Indeling")).toHaveValue("auto");
   });
 
   it("reports each change as a patch", () => {
     const handlers = renderSheet();
+    fireEvent.click(screen.getByLabelText("Dynamische camera"));
+    expect(handlers.onChange).toHaveBeenLastCalledWith({
+      dynamicCamera: false,
+    });
     fireEvent.click(screen.getByLabelText("Trillen"));
     expect(handlers.onChange).toHaveBeenLastCalledWith({ vibrate: false });
     fireEvent.click(screen.getByLabelText("Geluid"));

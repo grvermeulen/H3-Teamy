@@ -59,6 +59,20 @@ describe("createSamplePlayer", () => {
     expect(context.gains.at(-1)!.gain.value).toBe(AUDIO_CLIPS.pistol.gain);
   });
 
+  it("boosts a cannon sample without changing later explosion playback", async () => {
+    const { context } = createFakeAudioContext();
+    const player = createSamplePlayer(
+      context,
+      context.destination,
+      serving(["explosion"]),
+    );
+    await player.preload();
+    player.play("explosion", 1, 1.25);
+    expect(context.gains.at(-1)!.gain.value).toBe(1);
+    player.play("explosion");
+    expect(context.gains.at(-1)!.gain.value).toBe(0.8);
+  });
+
   it("plays at the rate it is given", async () => {
     const { context } = createFakeAudioContext();
     const player = createSamplePlayer(

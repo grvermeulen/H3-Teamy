@@ -45,7 +45,7 @@ describe("vehicle geometry", () => {
       heading: 0,
       velocityX: 0,
       velocityY: 0,
-      health: 100,
+      health: 160,
       wrecked: false,
       colour: 2,
     });
@@ -237,11 +237,11 @@ describe("vehicle kinds", () => {
   });
 
   it("spawns each kind with its own health and smokes at the same share of it", () => {
-    expect(createVehicle(1, "bus", [0, 0], 0, 0).health).toBe(220);
-    expect(createVehicle(2, "compact", [0, 0], 0, 0).health).toBe(100);
-    expect(healthMaxOf("oldtimer")).toBe(70);
-    expect(smokeHealthOf("bus")).toBeCloseTo(88);
-    expect(smokeHealthOf("sedan")).toBeCloseTo(40);
+    expect(createVehicle(1, "bus", [0, 0], 0, 0).health).toBe(350);
+    expect(createVehicle(2, "compact", [0, 0], 0, 0).health).toBe(160);
+    expect(healthMaxOf("oldtimer")).toBe(120);
+    expect(smokeHealthOf("bus")).toBeCloseTo(140);
+    expect(smokeHealthOf("sedan")).toBeCloseTo(72);
   });
 
   it("turns a bus more slowly than a compact at the same speed", () => {

@@ -18,12 +18,8 @@ import type {
 import { distanceToVehicle, localToWorld } from "./vehicle";
 import { nextWeapon } from "./weapons";
 import { visitLandmark } from "./landmarkVisits";
-import {
-  BOARDING_TICKS,
-  ENTER_RANGE_M,
-  EXIT_OFFSET_M,
-  type ArenaWorld,
-} from "./arenaWorld";
+import { beginBoarding, cancelPlayerBoarding } from "./hijacking";
+import { ENTER_RANGE_M, EXIT_OFFSET_M, type ArenaWorld } from "./arenaWorld";
 
 /** Rising edges of `player`'s edge-triggered buttons plus the held state to remember. */
 export function detectEdges(
@@ -60,7 +56,7 @@ export function boardableVehicle(
   let best: VehicleState | null = null;
   let bestDistance = ENTER_RANGE_M;
   for (const vehicle of state.vehicles) {
-    if (vehicle.wrecked) continue;
+    if (vehicle.wrecked || vehicle.boarding) continue;
     const distance = distanceToVehicle(vehicle, at);
     if (distance <= bestDistance) {
       bestDistance = distance;
@@ -71,25 +67,14 @@ export function boardableVehicle(
 }
 
 /** Instappen: board the car {@link boardableVehicle} found, if any. */
-function enterVehicle(state: ArenaState, player: ArenaPlayerState): ArenaState {
+function enterVehicle(
+  state: ArenaState,
+  player: ArenaPlayerState,
+  world: ArenaWorld,
+): ArenaState {
   const best = boardableVehicle(state, player);
   if (!best) return state;
-  return replacePlayer(
-    {
-      ...state,
-      traffic: state.traffic.filter((driver) => driver.vehicleId !== best.id),
-    },
-    {
-      ...player,
-      vehicleId: best.id,
-      boardingTicksLeft: BOARDING_TICKS,
-      x: best.x,
-      y: best.y,
-      facing: best.heading,
-      speed: 0,
-      driveSteer: 0,
-    },
-  );
+  return beginBoarding(state, player, best, world);
 }
 
 /** Where a player stands after leaving a car: beside the driver's door, pushed out of walls. */
@@ -134,9 +119,12 @@ export function applyEnterExit(
   world: ArenaWorld,
 ): ArenaState {
   if (!pressed || isDead(player)) return state;
+  if (state.vehicles.some((vehicle) => vehicle.boarding?.ownerId === player.id))
+    return cancelPlayerBoarding(state, player.id);
   if (player.vehicleId !== null) return exitVehicle(state, player, world);
-  const boarded = enterVehicle(state, player);
-  return boarded === state ? visitLandmark(state, player, world) : boarded;
+  return boardableVehicle(state, player)
+    ? enterVehicle(state, player, world)
+    : visitLandmark(state, player, world);
 }
 
 /** Handles the Wapen edge. */

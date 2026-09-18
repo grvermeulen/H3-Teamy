@@ -1,4 +1,5 @@
 import { EMPTY_INPUT, type WorldInput } from "../sim/types";
+import type { MissionCommand } from "../missions/types";
 
 /** Scales a vector down to unit length when it is longer. */
 export function clampToUnit(vector: [number, number]): [number, number] {
@@ -26,6 +27,8 @@ export type ButtonState = Record<ButtonName, boolean>;
  * centre instead of snapping it to the keyboard's digital mapping in a single tick.
  */
 export type InputState = {
+  setMissionCommand(command: MissionCommand): void;
+  acknowledgeMission(sequence: number): void;
   setKeyboard(vector: [number, number]): void;
   setStick(vector: [number, number] | null): void;
   setButton(source: InputSource, name: ButtonName, pressed: boolean): void;
@@ -42,6 +45,7 @@ const RELEASED: ButtonState = { fire: false, enter: false, weaponNext: false };
 
 /** Creates an empty input state. */
 export function createInputState(): InputState {
+  let missionCommand: MissionCommand | undefined;
   let keyboard: [number, number] = [0, 0];
   let stick: [number, number] | null = null;
   // Which source last moved the player, independent of whether a finger is down right now (see
@@ -62,6 +66,13 @@ export function createInputState(): InputState {
     return stick ?? [0, 0];
   };
   return {
+    setMissionCommand(command) {
+      missionCommand = command;
+    },
+    acknowledgeMission(sequence) {
+      if (missionCommand && missionCommand.sequence <= sequence)
+        missionCommand = undefined;
+    },
     setKeyboard(vector) {
       keyboard = vector;
       stickIsSource = false;
@@ -96,6 +107,7 @@ export function createInputState(): InputState {
     },
     snapshot: () => ({
       ...EMPTY_INPUT,
+      ...(missionCommand ? { missionCommand } : {}),
       move: clampToUnit(movement()),
       moveIsAnalog: stickIsSource,
       aim: stickAim ?? aim,

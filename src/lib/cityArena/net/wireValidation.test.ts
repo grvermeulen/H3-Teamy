@@ -3,7 +3,7 @@ import { isInputFrame, isSnapshot } from "./wireValidation";
 import type { Snapshot } from "./snapshotWire";
 
 const snapshot: Snapshot = {
-  n: 2,
+  n: 3,
   t: 30,
   s: 1000,
   p: [],

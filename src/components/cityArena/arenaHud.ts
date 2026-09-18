@@ -1,4 +1,5 @@
 import type { WorldSession } from "@/lib/cityArena/world/worldSession";
+import { missionHud, type MissionHud } from "@/lib/cityArena/missions/hud";
 import type { MapZone, ZoneKey } from "@/lib/cityArena/world/mapTypes";
 import {
   zoneCentreMetres,
@@ -27,6 +28,7 @@ import {
 
 /** Pure data consumed by the arena HUD. */
 export type ArenaHud = {
+  mission?: MissionHud;
   zoneName: string | null;
   zoneKey: ZoneKey | null;
   street: string | null;
@@ -85,6 +87,7 @@ export function computeHud(
       : null;
   const bonus = activeBonus(player, state.tick);
   return {
+    mission: missionHud(session.index(), state, player),
     zoneName: zone?.name ?? null,
     zoneKey: zone?.key ?? null,
     street: nearestRoadName(session.tiles(), [player.x, player.y]),

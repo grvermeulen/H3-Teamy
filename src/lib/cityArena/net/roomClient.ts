@@ -1,5 +1,6 @@
 import {
   ArenaRoomTicketSchema,
+  ARENA_PROTOCOL_VERSION,
   type ArenaRoomCommand,
   type ArenaRoomTicket,
 } from "./roomProtocol";
@@ -35,7 +36,10 @@ export async function sendArenaRoomCommand(
         display && command.action !== "create" && command.action !== "join"
           ? "PATCH"
           : "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Arena-Protocol": String(ARENA_PROTOCOL_VERSION),
+      },
       body: JSON.stringify(command),
       credentials: "same-origin",
       cache: "no-store",

@@ -11,7 +11,6 @@ import { createCollisionGrid } from "../world/collisionGrid";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
 import {
-  BOARDING_TICKS,
   ENTER_RANGE_M,
   addArenaPlayer,
   createArenaState,
@@ -37,6 +36,7 @@ import {
   type WorldInput,
 } from "./types";
 import { createVehicle, distanceToVehicle } from "./vehicle";
+import { PARKED_ENTRY_TICKS } from "./hijacking";
 
 /** One zone with spawn nodes at 0, 100, 200 and 300 m along y = 0. */
 const zone: MapZone = {
@@ -404,15 +404,15 @@ describe("stepArena pickups", () => {
 });
 
 describe("stepArena driving", () => {
-  it("enters a car within 1.5 m on a rising edge, boards for 18 ticks, then drives with the car", () => {
+  it("reserves a car within 1.5 m, opens the door before seating and drives only after closing", () => {
     const near = withCar(boot(), 3);
     const boarded = run(near, createInput({ enter: true }), 1);
-    expect(localPlayer(boarded).vehicleId).toBe(500);
-    expect(localPlayer(boarded).boardingTicksLeft).toBe(BOARDING_TICKS - 1);
+    expect(localPlayer(boarded).vehicleId).toBeNull();
+    expect(boarded.vehicles[0].boarding?.ownerId).toBe(0);
     const stillBoarding = run(
       boarded,
       createInput({ enter: true, move: [0, -1] }),
-      17,
+      PARKED_ENTRY_TICKS,
     );
     expect(localPlayer(stillBoarding).vehicleId).toBe(500);
     expect(localPlayer(stillBoarding).boardingTicksLeft).toBe(0);
@@ -427,8 +427,8 @@ describe("stepArena driving", () => {
   it("drives from an analog stick and re-centres the wheel on foot", () => {
     const boarded = run(withCar(boot(), 3), createInput({ enter: true }), 1);
     expect(localPlayer(boarded).driveSteer).toBe(0);
-    expect(localPlayer(boarded).boardingTicksLeft).toBe(BOARDING_TICKS - 1);
-    const ready = run(boarded, EMPTY_INPUT, BOARDING_TICKS - 1);
+    expect(boarded.vehicles[0].boarding?.ownerId).toBe(0);
+    const ready = run(boarded, EMPTY_INPUT, PARKED_ENTRY_TICKS);
     expect(localPlayer(ready).boardingTicksLeft).toBe(0);
     // The car heads east; the stick points south, a 90° error asking for full
     // lock that the limiter releases at 6 / 30 = 0.2 per tick.
@@ -462,7 +462,10 @@ describe("stepArena driving", () => {
     expect(localPlayer(settled).x).toBeCloseTo(localPlayer(out).x);
     expect(localPlayer(settled).y).toBeCloseTo(localPlayer(out).y);
     const reboarded = run(settled, createInput({ enter: true }), 1);
-    expect(localPlayer(reboarded).vehicleId).toBe(vehicle.id);
+    expect(reboarded.vehicles[0].boarding?.ownerId).toBe(0);
+    expect(
+      localPlayer(run(reboarded, EMPTY_INPUT, PARKED_ENTRY_TICKS)).vehicleId,
+    ).toBe(vehicle.id);
   });
 
   it("refuses cars out of reach and wrecks", () => {
@@ -525,8 +528,8 @@ describe("stepArena vehicle collision damage", () => {
       EMPTY_INPUT,
       1,
     );
-    expect(crashed.vehicles[0].health).toBeCloseTo(88);
-    expect(crashed.vehicles[1].health).toBeCloseTo(88);
+    expect(crashed.vehicles[0].health).toBeCloseTo(chasing.health - 12);
+    expect(crashed.vehicles[1].health).toBeCloseTo(parked.health - 12);
   });
 });
 
@@ -544,7 +547,7 @@ describe("the tank", () => {
     expect(checkInvariants(state)).toEqual([]);
   });
 
-  it("fires the cannon from the barrel at its wheel, free of charge, and wrecks a car with one shell", () => {
+  it("fires from the barrel without ammo and leaves a tougher compact barely alive after one shell", () => {
     const state = boot();
     const me = localPlayer(state);
     const tank = createVehicle(500, "tank", [me.x, me.y], 0, 0);
@@ -575,11 +578,12 @@ describe("the tank", () => {
     });
     const hit = run(seated, createInput({ fire: true }), 12);
     expect(hit.bullets).toHaveLength(0);
-    expect(hit.vehicles.find((vehicle) => vehicle.id === 501)?.wrecked).toBe(
-      true,
-    );
+    expect(hit.vehicles.find((vehicle) => vehicle.id === 501)).toMatchObject({
+      health: 10,
+      wrecked: false,
+    });
     expect(hit.vehicles.find((vehicle) => vehicle.id === 500)?.health).toBe(
-      600,
+      750,
     );
   });
 });
@@ -655,12 +659,12 @@ describe("stepArena firing and death", () => {
     expect(localPlayer(fired).weapon).toBe("pistol");
   });
 
-  it("wrecks a car after 100 damage and only hurts a player inside the 3 m blast", () => {
+  it("wrecks a compact after 160 damage and only hurts a player inside the 3 m blast", () => {
     const state = boot();
     const shot = run(
       withCar(state, 6),
       createInput({ fire: true, aim: 0 }),
-      49,
+      85,
     );
     expect(shot.vehicles[0]).toMatchObject({ health: 0, wrecked: true });
     expect(shot.effects.map((effect) => effect.kind)).toContain("explosion");
@@ -687,7 +691,11 @@ describe("stepArena firing and death", () => {
 
   it("kills the occupant of an exploding car, ejects the body and respawns after 90 ticks with a shield", () => {
     const state = boot();
-    const seated = run(withCar(state, 3), createInput({ enter: true }), 1);
+    const seated = run(
+      run(withCar(state, 3), createInput({ enter: true }), 1),
+      EMPTY_INPUT,
+      PARKED_ENTRY_TICKS,
+    );
     const doomed = {
       ...seated,
       vehicles: [{ ...seated.vehicles[0], health: 0 }],
@@ -696,7 +704,7 @@ describe("stepArena firing and death", () => {
     expect(localPlayer(dead)).toMatchObject({
       health: 0,
       vehicleId: null,
-      diedAtTick: 2,
+      diedAtTick: seated.tick + 1,
     });
     expect(dead.vehicles[0].wrecked).toBe(true);
     const waiting = run(
@@ -705,18 +713,18 @@ describe("stepArena firing and death", () => {
       88,
     );
     expect(localPlayer(waiting)).toMatchObject({
-      diedAtTick: 2,
+      diedAtTick: seated.tick + 1,
       x: localPlayer(dead).x,
       vehicleId: null,
     });
     expect(waiting.bullets).toEqual([]);
     const alive = run(waiting, EMPTY_INPUT, 2);
-    expect(alive.tick).toBe(92);
+    expect(alive.tick).toBe(dead.tick + 90);
     expect(localPlayer(alive)).toMatchObject({
       health: 100,
       diedAtTick: null,
       weapon: "pistol",
-      invulnerableUntilTick: 152,
+      invulnerableUntilTick: alive.tick + 60,
       ammo: { uzi: 0, shotgun: 0, rifle: 0, bat: 0 },
     });
     expect(SPAWN_XS).toContain(localPlayer(alive).x);
@@ -923,8 +931,10 @@ describe("stepArena police cars", () => {
     const { state: crashed, events } = runCollecting(ramming, EMPTY_INPUT, 3);
     expect(localPlayer(crashed).heat).toBe(60);
     // The heavier police car takes the smaller share of the same impact.
-    expect(crashed.vehicles[0].health).toBeLessThan(crashed.vehicles[1].health);
-    expect(crashed.vehicles[1].health).toBeLessThan(100);
+    expect(
+      ramming.vehicles[0].health - crashed.vehicles[0].health,
+    ).toBeGreaterThan(ramming.vehicles[1].health - crashed.vehicles[1].health);
+    expect(crashed.vehicles[1].health).toBeLessThan(ramming.vehicles[1].health);
     const impact = events.find((event) => event.kind === "impact");
     expect(impact).toMatchObject({ vehicleId: 600, otherVehicleId: 601 });
     // Contact registers a tick earlier through the hull circles than through the old body circle.

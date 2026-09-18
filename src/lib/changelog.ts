@@ -24,6 +24,23 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.4.0": {
+    title: "Aan het werk in GTA H3",
+    steps: [
+      {
+        title: "24 missies op straat",
+        body: "Zoek de acht opdrachtgevers met het €-teken. Bezorg pakketten, race, beroof een transport, bescherm je passagier of bouw een rave op. Gesprekken, doelen en hints helpen je onderweg. Je solovoortgang blijft op dit apparaat bewaard.",
+      },
+      {
+        title: "Verdien je plek op het scorebord",
+        body: "Elke verdiende euro is een punt; een uitschakeling levert 250 punten op. Nieuwe potjes duren twaalf minuten, zodat er ook tijd is voor langere opdrachten.",
+      },
+      {
+        title: "Meer rijplezier en radio",
+        body: "De camera zoomt soepel uit bij snelheid. Auto’s kunnen meer hebben en bij een kaping zie je de deur en bestuurder bewegen. Locatiebonussen duren drie keer langer. Luister naar twaalf nieuwe radiostukken, van pastapreken tot zomertrance. Schoten klinken harder en de radio iets zachter.",
+      },
+    ],
+  },
   "0.3.4": {
     title: "Vind je weg in GTA H3",
     steps: [

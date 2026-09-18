@@ -1,3 +1,6 @@
+import { drawMissions, drawMissionProps } from "./drawMissions";
+import { boardingPeople } from "./boardingPeople";
+import { missionPassengerIds } from "../missions/actors";
 import type {
   ArenaPlayerState,
   BulletState,
@@ -49,6 +52,8 @@ export type SceneViewport = {
 
 /** Everything drawn for one viewport; `pushIn` (1 = none) zooms around the centre for the death screen. */
 export type Scene = {
+  missionContacts?: readonly import("../missions/contacts").MissionContact[];
+  missionRound?: boolean;
   /** Road guidance belonging to this viewport's player. */
   navigation?: Point[];
   world: WorldDrawSource;
@@ -258,17 +263,37 @@ export function renderScene(
     localVehicleId(scene),
     scene.vehicleArt,
     scene.sirenVehicleIds,
+    scene.tick,
   );
+  const props = drawMissionProps(context, camera, size, scene);
+  const passengers = missionPassengerIds(scene);
   drawPeople(
     context,
     camera,
     size,
-    scene.peds,
+    boardingPeople(
+      scene.peds.filter((ped) => !passengers.has(ped.id) && !props.has(ped.id)),
+      scene.vehicles,
+      scene.tick,
+      scene.reducedMotion,
+    ),
     scene.cops,
     scene.peopleSprites,
     scene.tick,
     scene.itemSprites,
   );
+  if (scene.missionContacts)
+    drawMissions(
+      context,
+      camera,
+      size,
+      scene.missionContacts,
+      scene.players.find((player) => player.id === scene.localPlayerId),
+      scene.tick,
+      scene.missionRound ?? false,
+      scene.peopleSprites,
+      scene,
+    );
   drawBullets(context, camera, size, scene.bullets);
   drawBasketball(
     context,

@@ -1,4 +1,5 @@
 "use client";
+import { ArenaMissionPanel } from "./ArenaMissionPanel";
 
 import {
   useCallback,
@@ -305,6 +306,13 @@ function ArenaPlayfield({
         zoneWarning={game.hud.zoneWarning}
         secondsLeft={game.hud.zoneSecondsLeft}
       />
+      {playing && game.hud.mission ? (
+        <ArenaMissionPanel
+          mission={game.hud.mission}
+          onAction={game.missionAction}
+          onRoute={game.setDestination}
+        />
+      ) : null}
       {playing && !game.hud.landmark ? (
         <ArenaBeerPrompt
           canOrderBeer={game.hud.canOrderBeer}
@@ -333,11 +341,12 @@ function ArenaPlayfield({
           inVehicle={game.hud.inVehicle}
           canOrderBeer={game.hud.canOrderBeer}
           interactionLabel={
-            game.hud.landmark
+            game.hud.mission?.action ??
+            (game.hud.landmark
               ? game.hud.landmark.cooldown > 0
                 ? "Even uitrusten"
                 : game.hud.landmark.action
-              : undefined
+              : undefined)
           }
           onButton={game.setButton}
           showFire={!twinStick}
@@ -406,6 +415,7 @@ function netplayFor(room: ArenaRoom): ArenaNetplayOptions {
     connected: room.connection === "connected",
     roomCode: room.roomCode,
     stateChannel: channels?.state,
+    round: room.ticket?.round,
     inputChannel: channels?.inputs,
     clientId: room.clientId,
     clockOffsetMs: room.clockOffsetMs,
@@ -453,7 +463,7 @@ export default function CityArenaOverlay({
     canvasRef,
     debug,
     reducedMotion,
-    netplay: netplayFor(room),
+    netplay: entry.kind === "solo" ? undefined : netplayFor(room),
     keys: {
       onScoreboard: setScoreboardHeld,
       suspended: menuOpen || mapData !== null,
@@ -479,7 +489,11 @@ export default function CityArenaOverlay({
   // Escape opens the menu (spec §7); the menu's own trap closes it again, and "Sluiten" is the
   // way out of the overlay.
   // Stood down while the sheet is open: the sheet's own trap owns Tab and Escape until then.
-  useDialogFocusTrap(dialogRef, openMenu, !menuOpen && !mapData);
+  useDialogFocusTrap(
+    dialogRef,
+    openMenu,
+    !menuOpen && !mapData && !game.hud.mission?.offer,
+  );
   useLockBodyScroll();
   useWarmDeathArtwork();
 
@@ -517,12 +531,14 @@ export default function CityArenaOverlay({
         onOpenMap={openMap}
       />
       <ArenaFooter showTouch={showTouch} twinStick={game.settings.twinStick} />
-      <ArenaPhaseScreens
-        game={game}
-        room={room}
-        onClose={onClose}
-        showScoreboard={scoreboardHeld}
-      />
+      {entry.kind !== "solo" && (
+        <ArenaPhaseScreens
+          game={game}
+          room={room}
+          onClose={onClose}
+          showScoreboard={scoreboardHeld}
+        />
+      )}
       {mapData ? (
         <ArenaNavigationMap
           data={mapData}
@@ -538,6 +554,14 @@ export default function CityArenaOverlay({
           onLeave={leave}
           onClose={closeMenu}
         >
+          <button
+            type="button"
+            className="my-2 min-h-11 rounded border border-white/25 px-3 text-sm"
+            onClick={game.nextRadioTrack}
+            disabled={!game.settings.radio}
+          >
+            Volgend radionummer
+          </button>
           {room.ticket ? (
             <ArenaRoomLocation
               zone={room.zone}

@@ -161,20 +161,25 @@ describe("CityArenaOverlay", () => {
       // subset the renderer needs, so a cast is unavoidable here (test file only).
       () => createFakeContext() as unknown as CanvasRenderingContext2D,
     );
-    // Runs each frame as a microtask (capped) instead of a real 16ms timer, so the frame loop
-    // settles without any real waits (same pattern as SpaceInvadersGame.test.tsx).
+    // Yield between frames so React can commit the asynchronously loaded room and world.
     let rafCount = 0;
+    let frameTime = performance.now();
     vi.stubGlobal(
       "requestAnimationFrame",
       (callback: FrameRequestCallback): number => {
         rafCount += 1;
         if (rafCount <= MAX_MOCKED_ANIMATION_FRAMES) {
-          queueMicrotask(() => callback(performance.now() + rafCount * 16));
+          return window.setTimeout(() => {
+            frameTime = Math.max(performance.now(), frameTime + 16);
+            callback(frameTime);
+          }, 0);
         }
-        return rafCount;
+        return 0;
       },
     );
-    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    vi.stubGlobal("cancelAnimationFrame", (id: number) =>
+      window.clearTimeout(id),
+    );
   });
 
   afterEach(() => {

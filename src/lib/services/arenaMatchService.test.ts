@@ -34,6 +34,9 @@ describe("leaderboard", () => {
       wins: 3,
       kills: 20,
       deaths: 9,
+      score: 0,
+      cashEarned: 0,
+      missionsCompleted: 0,
     });
     expect(typeof rows[2]?.kills).toBe("number");
   });

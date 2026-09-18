@@ -35,6 +35,7 @@ function request(path: string, body?: unknown): NextRequest {
       cookie: `anon_id=${accountId}`,
       origin: "http://localhost",
       "Content-Type": "application/json",
+      "X-Arena-Protocol": "3",
       "x-forwarded-for": "127.0.0.1",
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),

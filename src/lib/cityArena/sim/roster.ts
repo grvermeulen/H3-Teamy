@@ -19,6 +19,7 @@ import { chooseRespawnNode, nearestZone } from "./spawn";
 import type { ArenaPlayerState, ArenaState } from "./types";
 import { SPAWN_AMMO } from "./weapons";
 import { exitVehicle } from "./boarding";
+import { cancelPlayerBoarding } from "./hijacking";
 import { LOCAL_PLAYER_ID, type ArenaWorld } from "./arenaWorld";
 
 /** A player standing at `position` with the spawn loadout, ready to fire from `tick`. */
@@ -111,6 +112,7 @@ export function addArenaPlayer(
  * wheel — an ambient driver may pick it up again, exactly as when a player steps out.
  */
 export function removeArenaPlayer(state: ArenaState, id: number): ArenaState {
+  state = cancelPlayerBoarding(state, id);
   const players = state.players.filter((player) => player.id !== id);
   if (players.length === state.players.length) return state;
   return { ...state, players };
@@ -149,6 +151,7 @@ export function applyRespawn(
     ...createArenaPlayer(spawn, tick),
     id: player.id,
     invulnerableUntilTick: tick + INVULNERABLE_TICKS,
+    mission: player.mission,
   });
 }
 

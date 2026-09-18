@@ -82,6 +82,11 @@ export function useArenaRoom(
   }, [options.canHost]);
 
   useEffect(() => {
+    if (options.entry.kind === "solo") {
+      setStatus("ready");
+      setConnection("connected");
+      return undefined;
+    }
     const role = options.entry.role ?? "player";
     const display = role === "display";
     const device: "mobile" | "desktop" = window.matchMedia("(pointer: coarse)")

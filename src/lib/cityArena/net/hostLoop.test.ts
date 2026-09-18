@@ -95,6 +95,19 @@ function snapshots(published: { data: unknown }[]) {
 }
 
 describe("hostLoop stepping", () => {
+  it("freezes gameplay at the server deadline while continuing fresh snapshots", () => {
+    const { loop } = hostOnHub();
+    const before = loop.state().players[0];
+    loop.setRoundWindow({ startedAt: 0, finishesAt: 1000 });
+    loop.setInput(before.id, createInput({ move: [1, 0], fire: true }));
+    loop.advance(100);
+    expect(loop.state().tick).toBeGreaterThan(0);
+    expect(loop.state().players[0]).toEqual(before);
+    expect(loop.tally().size).toBe(0);
+    loop.setRoundWindow({ startedAt: 0, finishesAt: 2000 });
+    loop.advance(100);
+    expect(loop.state().players[0].x).toBeGreaterThan(before.x);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -367,6 +380,43 @@ describe("hostLoop failure handling", () => {
 });
 
 describe("hostLoop review findings", () => {
+  it("retains earned money and completed contracts when a former member returns", () => {
+    const { loop } = hostOnHub(3);
+    const id = loop.addMember("returning")!;
+    const player = loop.state().players.find((entry) => entry.id === id)!;
+    player.mission = {
+      offer: null,
+      run: null,
+      completed: ["M01"],
+      cooldownUntil: {},
+      lastCommand: 0,
+      attempt: 1,
+      wallet: {
+        balance: 325,
+        earned: 325,
+        receipts: [
+          {
+            contractId: "contract-1",
+            missionId: "M01",
+            version: 1,
+            playerId: id,
+            tick: 0,
+            base: 250,
+            bonus: 75,
+            total: 325,
+          },
+        ],
+      },
+    };
+    loop.removeMember("returning");
+    expect(loop.addMember("returning")).toBe(id);
+    const returned = loop.state().players.find((entry) => entry.id === id)!;
+    expect(returned.mission?.wallet.earned).toBe(325);
+    expect(returned.mission?.completed).toEqual(["M01"]);
+    loop.advance(100);
+    expect(loop.tally().get(id)?.cashEarned).toBe(325);
+    loop.stop();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });

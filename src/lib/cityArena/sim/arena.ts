@@ -28,6 +28,9 @@ import { applyWanted } from "./wanted";
 import { applyZoneRule } from "./zoneRule";
 import { soberUp } from "./beer";
 import { stepLandmarkBonuses } from "./landmarkVisits";
+import { handleMissionInput, stepWorldMissions } from "../missions/world";
+import { stepBoarding, cancelPlayerBoarding } from "./hijacking";
+import { ensureMissionActors, stepMissionActors } from "../missions/actors";
 import { EMPTY_INPUT } from "./types";
 import type { ArenaInputs, ArenaState, WorldInput } from "./types";
 import { applyEnterExit, applyWeaponSwitch, detectEdges } from "./boarding";
@@ -118,6 +121,14 @@ function stepPlayerBefore(
   next = applyRespawn(next, held, world, tick, random);
   const respawned = playerById(next, playerId);
   if (!respawned) return next;
+  const mission = handleMissionInput(
+    next,
+    respawned,
+    input,
+    edges.enterPressed,
+    world.index,
+  );
+  if (mission.handled) return mission.state;
   next = applyWeaponSwitch(next, respawned, edges.weaponPressed);
   const switched = playerById(next, playerId);
   if (!switched) return next;
@@ -132,10 +143,16 @@ export function stepArena(
   world: ArenaWorld,
   random: () => number,
 ): ArenaState {
-  const tick = state.tick + 1;
+  const paused =
+    !state.zoneEnforced &&
+    state.players.length === 1 &&
+    Boolean(state.players[0].mission?.offer);
+  const tick = state.tick + (paused ? 0 : 1);
   let next: ArenaState = { ...state, tick, events: [] };
-  next = applyPopulation(next, world, tick, random);
-  next = stepPickups(next, tick);
+  if (!paused) {
+    next = applyPopulation(next, world, tick, random);
+    next = stepPickups(next, tick);
+  }
   for (const player of orderedPlayers(next))
     next = stepPlayerBefore(
       next,
@@ -145,22 +162,35 @@ export function stepArena(
       tick,
       random,
     );
-  next = moveEntities(next, inputs, dt, world, tick, random);
+  if (paused) return next;
+  next = ensureMissionActors(next, world);
+  const worldInputs = new Map(
+    [...inputs].map(([id, input]) => [
+      id,
+      next.players.find((player) => player.id === id)?.mission?.offer
+        ? EMPTY_INPUT
+        : input,
+    ]),
+  );
+  next = moveEntities(next, worldInputs, dt, world, tick, random);
+  next = stepBoarding(next, world);
   for (const player of orderedPlayers(next))
     next = applyFire(
       next,
       player,
-      inputs.get(player.id) ?? EMPTY_INPUT,
+      worldInputs.get(player.id) ?? EMPTY_INPUT,
       tick,
       random,
     );
   next = stepCops(next, world, dt, tick, random);
   next = stepPeds(next, world, dt, tick, random);
+  next = stepMissionActors(next, world, random);
   next = advanceBullets(next, dt, world, tick);
   next = applyExplosions(next, world, tick);
   next = applyZoneRule(next, world.index, tick);
   next = soberUp(next);
   next = stepLandmarkBonuses(next);
+  next = stepWorldMissions(next, state, inputs, world.index);
   next = applyWanted(next, tick);
   next = manageCops(next, world, tick, random);
   next = managePoliceCars(next, world, tick, random);
@@ -183,6 +213,7 @@ export function teleportArenaPlayer(
   position: Point,
   index: MapIndex,
 ): ArenaState {
+  state = cancelPlayerBoarding(state, localPlayer(state).id);
   return {
     ...replacePlayer(state, {
       ...localPlayer(state),

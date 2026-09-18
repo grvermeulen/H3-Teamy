@@ -316,6 +316,38 @@ export default function ArenaNavigationMap({
             : "Kies je bestemming op de kaart of bij de bekende plekken."}
         </p>
         <div className="flex flex-wrap items-center gap-2">
+          {data.missions?.length ? (
+            <label className="text-xs">
+              Missies{" "}
+              <select
+                className={buttonClass}
+                value=""
+                onChange={(event) => {
+                  const marker = data.missions?.find(
+                    (entry) => entry.id === event.target.value,
+                  );
+                  if (marker) {
+                    cancelPress();
+                    onDestination(marker.position);
+                  }
+                }}
+              >
+                <option value="">Straatcontact of doel kiezen</option>
+                {data.missions.map((marker) => (
+                  <option key={marker.id} value={marker.id}>
+                    {marker.state === "active"
+                      ? "▼ Doel"
+                      : marker.state === "locked"
+                        ? "◇ Vergrendeld"
+                        : marker.state === "completed"
+                          ? "✓ Voltooid"
+                          : "€ Werk"}
+                    : {marker.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label className="sr-only" htmlFor="arena-map-place">
             Bekende plek
           </label>
