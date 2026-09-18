@@ -1,4 +1,5 @@
 "use client";
+import { contactsForMap } from "@/lib/cityArena/missions/world";
 
 import {
   useCallback,
@@ -21,6 +22,9 @@ import {
 import { findZoneByKey } from "@/lib/cityArena/world/zone";
 import { fromUnits } from "@/lib/cityArena/world/projection";
 import { policeCarIds } from "@/lib/cityArena/sim/police";
+import { occupiedVehicle } from "@/lib/cityArena/sim/boarding";
+import type { Point } from "@/lib/cityArena/world/projection";
+import { loadArenaSettings } from "@/lib/cityArena/storage";
 import type { MatchState } from "@/lib/cityArena/net/matchPhase";
 import type { MatchSeam, MatchPeek } from "./matchSeam";
 import type { ArenaRoom } from "./useArenaRoom";
@@ -50,6 +54,7 @@ export function useArenaScreenGame(
     let reportedEpoch: number | null = null;
     let split: SplitScreen = { views: [], dividerOpacity: 0 };
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const settings = loadArenaSettings();
     const session = createBrowserArenaSession(
       () => {
         if (!disposed)
@@ -152,10 +157,20 @@ export function useArenaScreenGame(
               : state.players;
             split = updateSplitScreen(
               split,
-              tracked,
+              tracked.map((candidate) => {
+                const vehicle = occupiedVehicle(state, candidate);
+                const velocity: Point = vehicle
+                  ? [vehicle.velocityX, vehicle.velocityY]
+                  : [
+                      Math.cos(candidate.facing) * candidate.speed,
+                      Math.sin(candidate.facing) * candidate.speed,
+                    ];
+                return { ...candidate, velocity, driving: vehicle !== null };
+              }),
               size,
               dt / 1000,
               reduced.matches,
+              settings.dynamicCamera,
             );
             const sprites = session.sprites();
             const names = new Map<number, string>();
@@ -167,6 +182,8 @@ export function useArenaScreenGame(
               context,
               split,
               {
+                missionContacts: contactsForMap(session.index()),
+                missionRound: state.zoneEnforced,
                 world: {
                   raster: session.raster,
                   overhead: session.overhead,

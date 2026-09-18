@@ -36,9 +36,9 @@ export const AUDIO_CLIP_DIR = "/arena/audio";
 
 /** Every clip the arena knows; the files themselves land separately, with their credits. */
 export const AUDIO_CLIPS: Record<ClipName, ClipSpec> = {
-  pistol: { file: "pistol.mp3", gain: 0.5, loop: false },
-  uzi: { file: "uzi.mp3", gain: 0.4, loop: false },
-  shotgun: { file: "shotgun.mp3", gain: 0.6, loop: false },
+  pistol: { file: "pistol.mp3", gain: 0.625, loop: false },
+  uzi: { file: "uzi.mp3", gain: 0.5, loop: false },
+  shotgun: { file: "shotgun.mp3", gain: 0.75, loop: false },
   footstep: { file: "footstep.mp3", gain: 0.2, loop: false },
   engine: { file: "engine.mp3", gain: 0.3, loop: true },
   skid: { file: "skid.mp3", gain: 0.35, loop: false },
@@ -48,7 +48,7 @@ export const AUDIO_CLIPS: Record<ClipName, ClipSpec> = {
   pickup: { file: "pickup.mp3", gain: 0.4, loop: false },
   death: { file: "death.mp3", gain: 0.6, loop: false },
   bat: { file: "bat.mp3", gain: 0.5, loop: false },
-  rifle: { file: "rifle.mp3", gain: 0.6, loop: false },
+  rifle: { file: "rifle.mp3", gain: 0.75, loop: false },
 };
 
 /** Every clip name, in table order. */

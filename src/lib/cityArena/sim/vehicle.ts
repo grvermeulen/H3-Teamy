@@ -40,10 +40,10 @@ export const VEHICLE_LENGTH_M = 4.2;
 export const VEHICLE_WIDTH_M = 1.8;
 /** Full-lock turn rate of the four original kinds at grip speed (spec §5). */
 export const STEER_RATE_RAD_S = 2.6;
-/** Health at spawn of the four original kinds (spec §5). */
-export const VEHICLE_MAX_HEALTH = 100;
+/** Base health for compact and sports cars. */
+export const VEHICLE_MAX_HEALTH = 160;
 
-/** The four original kinds share one body, one handling and one health. */
+/** Shared dimensions and handling; sedan and police durability override the base. */
 const ORIGINAL_BODY = {
   steerRateRadS: STEER_RATE_RAD_S,
   healthMax: VEHICLE_MAX_HEALTH,
@@ -65,6 +65,7 @@ export const VEHICLE_SPECS: Record<VehicleKind, VehicleSpec> = {
     accelMps2: 8,
     maxSpeedMps: 28,
     ...ORIGINAL_BODY,
+    healthMax: 180,
     massT: 1.4,
   },
   sport: {
@@ -79,6 +80,7 @@ export const VEHICLE_SPECS: Record<VehicleKind, VehicleSpec> = {
     accelMps2: 9,
     maxSpeedMps: 30,
     ...ORIGINAL_BODY,
+    healthMax: 210,
     massT: 1.6,
   },
   van: {
@@ -86,7 +88,7 @@ export const VEHICLE_SPECS: Record<VehicleKind, VehicleSpec> = {
     accelMps2: 5,
     maxSpeedMps: 24,
     steerRateRadS: 2.2,
-    healthMax: 140,
+    healthMax: 230,
     lengthM: 5,
     widthM: 2,
     massT: 2.2,
@@ -96,7 +98,7 @@ export const VEHICLE_SPECS: Record<VehicleKind, VehicleSpec> = {
     accelMps2: 7,
     maxSpeedMps: 27,
     steerRateRadS: 2.4,
-    healthMax: 120,
+    healthMax: 210,
     lengthM: 5.2,
     widthM: 1.9,
     massT: 2,
@@ -106,7 +108,7 @@ export const VEHICLE_SPECS: Record<VehicleKind, VehicleSpec> = {
     accelMps2: 3,
     maxSpeedMps: 18,
     steerRateRadS: 1.6,
-    healthMax: 220,
+    healthMax: 350,
     lengthM: 12,
     widthM: 2.5,
     massT: 12,
@@ -116,7 +118,7 @@ export const VEHICLE_SPECS: Record<VehicleKind, VehicleSpec> = {
     accelMps2: 5,
     maxSpeedMps: 20,
     steerRateRadS: 2.3,
-    healthMax: 70,
+    healthMax: 120,
     lengthM: 4.4,
     widthM: 1.7,
     massT: 1.1,
@@ -126,19 +128,19 @@ export const VEHICLE_SPECS: Record<VehicleKind, VehicleSpec> = {
     accelMps2: 2,
     maxSpeedMps: 8,
     steerRateRadS: 1.8,
-    healthMax: 180,
+    healthMax: 300,
     lengthM: 4,
     widthM: 2.2,
     massT: 4,
   },
-  // One per zone, parked across the map from the spawn: slow, six times a car's health, heavy
+  // One per zone, parked across the map from the spawn: slow, armoured, heavy
   // enough to shove a bus, and the only kind with a gun (`firesCannon`).
   tank: {
     label: "Tank",
     accelMps2: 3,
     maxSpeedMps: 13,
     steerRateRadS: 1.5,
-    healthMax: 600,
+    healthMax: 750,
     lengthM: 7,
     widthM: 3.4,
     massT: 45,

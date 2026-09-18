@@ -27,6 +27,8 @@ import { decodeInput, type InputFrame } from "./wire";
 import { encodeSnapshot } from "./snapshotWire";
 import { isInputFrame, recordInvalidWireMessage } from "./wireValidation";
 import { createSnapshotEncoder } from "./snapshotDelta";
+import { clearMissionActors } from "../missions/actors";
+import { emptyMissionProfile } from "../missions/world";
 
 /** The simulation runs at 30 Hz (spec §6.6). */
 export const HOST_TICK_HZ = 30;
@@ -102,6 +104,8 @@ export type HostLoop = {
   match(): MatchState;
   /** Moves the potje on. Only the host's clock calls this (spec §2). */
   setMatch(match: MatchState): void;
+  /** Freezes gameplay and scoring outside the server-issued round window. */
+  setRoundWindow(round: { startedAt: number; finishesAt: number } | null): void;
   /** Seats a member and returns the player id they were given, or `null` when the match is full. */
   addMember(clientId: string): number | null;
   /**
@@ -180,6 +184,7 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
   let localSeq = 0;
 
   let state = options.state;
+  let roundWindow: { startedAt: number; finishesAt: number } | null = null;
   /** Elapsed time the loop has been handed, which ticks are derived from rather than subtracted. */
   let elapsedTotalMs = 0;
   /** Ticks the loop has accounted for, including any it dropped when catch-up was capped. */
@@ -231,6 +236,47 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
   /** Runs one tick, reporting and swallowing a failure so the loop survives it (spec §6.6). */
   function runTick(): void {
     try {
+      const now = options.serverTimeMs();
+      state = {
+        ...state,
+        roundTicksLeft: roundWindow
+          ? Math.max(
+              0,
+              Math.floor(
+                ((roundWindow.finishesAt - now) / 1000) * HOST_TICK_HZ,
+              ),
+            )
+          : undefined,
+      };
+      if (
+        roundWindow &&
+        (now < roundWindow.startedAt || now >= roundWindow.finishesAt)
+      ) {
+        if (now >= roundWindow.finishesAt)
+          state = {
+            ...state,
+            players: state.players.map((player) =>
+              player.mission?.run?.status === "active"
+                ? {
+                    ...player,
+                    mission: {
+                      ...player.mission,
+                      offer: null,
+                      run: {
+                        ...player.mission.run,
+                        status: "failed",
+                        failure:
+                          "De speeltijd is voorbij; deze missie is niet uitbetaald.",
+                      },
+                    },
+                  }
+                : player,
+            ),
+          };
+        state = { ...state, tick: state.tick + 1, events: [] };
+        options.onTick?.(state);
+        return;
+      }
       state = step(
         state,
         collectInputs(),
@@ -238,7 +284,7 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
         options.world,
         options.random,
       );
-      tally = tallyEvents(tally, state.events);
+      tally = tallyEvents(tally, state.events, state.players);
       options.onTick?.(state);
       consecutiveFailures = 0;
     } catch (error: unknown) {
@@ -318,11 +364,25 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
       );
       if (!joined.player) return null;
       const playerId = accounts.get(clientId) ?? joined.player.id;
+      const previousScore = tally.get(playerId);
+      const restoredMission = previousScore?.receipts?.length
+        ? {
+            ...emptyMissionProfile(),
+            completed: previousScore.receipts.map(
+              (receipt) => receipt.missionId,
+            ),
+            wallet: {
+              balance: previousScore.cashEarned ?? 0,
+              earned: previousScore.cashEarned ?? 0,
+              receipts: previousScore.receipts,
+            },
+          }
+        : undefined;
       state = {
         ...joined.state,
         players: joined.state.players.map((player) =>
           player.id === joined.player!.id
-            ? { ...player, id: playerId }
+            ? { ...player, id: playerId, mission: restoredMission }
             : player,
         ),
       };
@@ -339,8 +399,15 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
       if (playerId === undefined) return;
       playerByClient.delete(clientId);
       pending.delete(playerId);
+      local.delete(playerId);
       delete lastInputSeqs[playerId];
+      const departing = state.players.find((player) => player.id === playerId);
+      if (departing?.mission) {
+        tally = tallyEvents(tally, [], [departing]);
+      }
       state = removeArenaPlayer(state, playerId);
+      if (departing?.mission)
+        state = clearMissionActors(state, departing.mission);
     },
     setInput(playerId: number, input: WorldInput): void {
       local.set(playerId, input);
@@ -358,6 +425,15 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
     },
     resetTally(): void {
       tally = emptyTally();
+      for (const player of state.players)
+        if (player.mission) state = clearMissionActors(state, player.mission);
+      state = {
+        ...state,
+        players: state.players.map((player) => ({
+          ...player,
+          mission: undefined,
+        })),
+      };
       accounts.clear();
       for (const [clientId, playerId] of playerByClient)
         remember(clientId, playerId);
@@ -367,6 +443,9 @@ export function createHostLoop(options: HostLoopOptions): HostLoop {
     },
     setMatch(next: MatchState): void {
       match = next;
+    },
+    setRoundWindow(next): void {
+      roundWindow = next;
     },
     state(): ArenaState {
       return state;

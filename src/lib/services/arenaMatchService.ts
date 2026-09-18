@@ -2,6 +2,12 @@ import { prisma } from "../db";
 import { PostMatchSchema, type PostMatchBody } from "../schemas/arena";
 import { ROOM_RULES } from "../cityArena/net/roomProtocol";
 import {
+  arenaScore,
+  compareArenaScores,
+  isArenaWinner,
+} from "../cityArena/scoring";
+import { validRoundReceipts } from "../cityArena/missions/receipts";
+import {
   ArenaRoomError,
   lockArenaRoom,
   requireArenaMember,
@@ -81,17 +87,39 @@ export async function recordMatch(
         "De uitslag moet alle deelnemers van dit potje bevatten",
       );
     }
-    const ranked = [...parsed.results].sort(
-      (a, b) => b.kills - a.kills || a.deaths - b.deaths,
+    const version = round.scoringVersion ?? 1;
+    const contracts = new Set<string>();
+    for (const result of parsed.results) {
+      const receipts = result.receipts ?? [];
+      const cash = result.cashEarned ?? 0;
+      const count = result.missionsCompleted ?? 0;
+      if (
+        (version === 1 &&
+          (cash !== 0 || count !== 0 || receipts.length !== 0)) ||
+        cash !== receipts.reduce((sum, receipt) => sum + receipt.total, 0) ||
+        count !== receipts.length ||
+        !validRoundReceipts(
+          receipts,
+          room.zone,
+          (round.finishesAt.getTime() - round.startedAt.getTime()) / 1000,
+        ) ||
+        receipts.some((receipt) => contracts.has(receipt.contractId))
+      ) {
+        throw new ArenaRoomError(
+          "invalid-rewards",
+          422,
+          "De missiebeloningen kloppen niet met de uitslag",
+        );
+      }
+      for (const receipt of receipts) contracts.add(receipt.contractId);
+    }
+    const ranked = [...parsed.results].sort((a, b) =>
+      compareArenaScores(a, b, version),
     );
     const best = ranked[0]!;
     if (
       parsed.results.some(
-        (row) =>
-          row.won !==
-          (best.kills > 0 &&
-            row.kills === best.kills &&
-            row.deaths === best.deaths),
+        (row) => row.won !== isArenaWinner(row, best, version),
       )
     ) {
       throw new ArenaRoomError(
@@ -111,12 +139,18 @@ export async function recordMatch(
           endedAt: round.finishesAt,
           hostUserId: typeof posterUserId === "string" ? posterUserId : null,
           verification: "host-reported",
+          scoringVersion: version,
           results: {
             create: parsed.results.map((result) => ({
               userId: roster.get(result.memberId)!,
               kills: result.kills,
               deaths: result.deaths,
               won: result.won,
+              cashEarned: result.cashEarned ?? 0,
+              missionsCompleted: result.missionsCompleted ?? 0,
+              score: arenaScore(result, version),
+              scoringVersion: version,
+              receipts: result.receipts ?? [],
             })),
           },
         },
@@ -143,34 +177,47 @@ export type LeaderboardRow = {
   wins: number;
   kills: number;
   deaths: number;
+  score: number;
+  cashEarned: number;
+  missionsCompleted: number;
 };
 
 /** How many players the ranglijst shows (spec §2). */
 export const LEADERBOARD_SIZE = 10;
 
 /**
- * The ranglijst: the top players by wins, then kills.
+ * The ranglijst: wins, earned points and cash within one scoring version.
  *
  * @param limit - How many rows to return.
  * @returns The ranked rows, longest-standing player first on a complete tie.
  */
 export async function leaderboard(
   limit = LEADERBOARD_SIZE,
+  scoringVersion: 1 | 2 = 2,
 ): Promise<LeaderboardRow[]> {
-  // Ranked and cut in the database: the ranking uses wins first and kills second, which
-  // Prisma's groupBy cannot order by, and pulling every player's totals into memory to sort
-  // them here would grow with every potje ever played. The final tie on user id keeps the list
-  // stable between requests.
+  // Aggregate in PostgreSQL so reading the top ten does not load every player's history.
   const rows = await prisma.$queryRaw<
-    { userId: string; wins: bigint; kills: bigint; deaths: bigint }[]
+    {
+      userId: string;
+      wins: bigint;
+      kills: bigint;
+      deaths: bigint;
+      score: bigint;
+      cashEarned: bigint;
+      missionsCompleted: bigint;
+    }[]
   >`
     SELECT "userId",
            SUM(CASE WHEN "won" THEN 1 ELSE 0 END) AS "wins",
            SUM("kills") AS "kills",
-           SUM("deaths") AS "deaths"
+           SUM("deaths") AS "deaths",
+           SUM("score") AS "score",
+           SUM("cashEarned") AS "cashEarned",
+           SUM("missionsCompleted") AS "missionsCompleted"
     FROM "ArenaMatchResult"
+    WHERE "scoringVersion" = ${scoringVersion}
     GROUP BY "userId"
-    ORDER BY "wins" DESC, "kills" DESC, "userId" ASC
+    ORDER BY "wins" DESC, "score" DESC, "cashEarned" DESC, "userId" ASC
     LIMIT ${limit}`;
   const users = await prisma.user.findMany({
     where: { id: { in: rows.map((row) => row.userId) } },
@@ -184,5 +231,8 @@ export async function leaderboard(
     wins: Number(row.wins),
     kills: Number(row.kills),
     deaths: Number(row.deaths),
+    score: Number(row.score ?? 0),
+    cashEarned: Number(row.cashEarned ?? 0),
+    missionsCompleted: Number(row.missionsCompleted ?? 0),
   }));
 }

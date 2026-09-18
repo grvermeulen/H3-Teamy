@@ -22,6 +22,7 @@ import {
   stationById,
   trackUrl,
   type RadioStation,
+  type RadioTrack,
 } from "./stations";
 
 /** The slice of an `<audio>` element the radio drives; a fake in tests. */
@@ -53,6 +54,12 @@ export type RadioOptions = {
 
 /** The radio the runtime drives. */
 export type RadioPlayer = {
+  /** Current track, including a temporary mission broadcast. */
+  track(): RadioTrack | null;
+  /** Skips within the selected station without changing saved station preference. */
+  nextTrack(): void;
+  /** Temporarily plays an authored mission broadcast; null restores normal radio. */
+  setMissionTrack(title: string | null): void;
   /** From a gesture: primes the element silently so later plays are allowed, and retries a refused play. */
   unlock(): void;
   /** Plays while true, pauses — keeping the position — while false. */
@@ -81,7 +88,7 @@ export type RadioFactory = (
 ) => RadioPlayer | null;
 
 /** The radio's level relative to the master gain: under the effects, over the engine. */
-export const RADIO_GAIN = 0.5;
+export const RADIO_GAIN = 0.4;
 /** The share of its level the radio drops to under a shot or an explosion. */
 export const DUCK_LEVEL = 0.35;
 /** Seconds the radio takes to come back up after a duck. */
@@ -122,6 +129,11 @@ export function createRadio(options: RadioOptions): RadioPlayer {
   let primed = false;
   let refused = false;
   let disposed = false;
+  let missionTrack: RadioTrack | null = null;
+  let resumeTime = 0;
+  let pendingSeek: number | null = null;
+  const currentTrack = (): RadioTrack | null =>
+    missionTrack ?? current?.tracks[trackIndex] ?? null;
   const gain: GainNodeLike = context.createGain();
   setParam(gain.gain, 0, context.currentTime);
   source.connect(gain);
@@ -129,7 +141,7 @@ export function createRadio(options: RadioOptions): RadioPlayer {
 
   const wantsPlay = (): boolean =>
     !disposed &&
-    inCar &&
+    (inCar || missionTrack !== null) &&
     enabled &&
     soundOn &&
     current !== null &&
@@ -137,12 +149,16 @@ export function createRadio(options: RadioOptions): RadioPlayer {
 
   /** Points the element at the current track when it is not already there. */
   function load(): void {
-    const track = current?.tracks[trackIndex];
+    const track = currentTrack();
     if (!track) return;
     const url = trackUrl(track);
     if (loaded === url) return;
     element.src = url;
     loaded = url;
+    if (pendingSeek !== null) {
+      element.currentTime = pendingSeek;
+      pendingSeek = null;
+    }
   }
 
   /**
@@ -191,6 +207,11 @@ export function createRadio(options: RadioOptions): RadioPlayer {
 
   /** The next track of the playlist, wrapping. */
   function onEnded(): void {
+    if (missionTrack) {
+      element.currentTime = 0;
+      apply();
+      return;
+    }
     if (!current || current.tracks.length === 0) return;
     trackIndex = (trackIndex + 1) % current.tracks.length;
     loaded = null;
@@ -209,6 +230,21 @@ export function createRadio(options: RadioOptions): RadioPlayer {
   }
 
   return {
+    track: currentTrack,
+    nextTrack: onEnded,
+    setMissionTrack(title): void {
+      const next = title
+        ? (stations
+            .flatMap((station) => station.tracks)
+            .find((track) => track.title === title) ?? null)
+        : null;
+      if (next === missionTrack) return;
+      if (!missionTrack) resumeTime = element.currentTime;
+      missionTrack = next;
+      loaded = null;
+      pendingSeek = next ? 0 : resumeTime;
+      apply();
+    },
     unlock(): void {
       if (disposed || !current || !enabled) return;
       if (!primed) {

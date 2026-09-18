@@ -8,9 +8,11 @@
  */
 
 import { VEHICLE_KINDS } from "../sim/vehicle";
+import type { MissionProfile } from "../missions/types";
 import { BONUS_KINDS, type LandmarkBonus } from "../sim/landmarkBonuses";
 import type { MatchPhase, MatchState } from "./matchPhase";
 import type { ScoreRow, Tally } from "./scoreboard";
+import type { MissionReceipt } from "../missions/types";
 import type {
   AmmoState,
   ArenaState,
@@ -22,6 +24,7 @@ import type {
   PickupState,
   VehicleKind,
   VehicleState,
+  VehicleBoarding,
   WeaponKind,
 } from "../sim/types";
 import {
@@ -75,8 +78,12 @@ const MATCH_PHASES: readonly MatchPhase[] = [
 
 /** One full snapshot as it travels; single-letter keys keep the JSON small. */
 export type Snapshot = {
+  e?: number;
+  h?: [number, VehicleBoarding][];
+  /** Per-player contracts and wallet, bounded to the authored catalogue. */
+  u?: [number, MissionProfile][];
   /** Wire protocol version; incompatible snapshots are rejected before decoding. */
-  n: 2;
+  n: 3;
   /** Vehicle baseline tick and removals; absent on full keyframes. */
   r?: number;
   x?: number[];
@@ -99,6 +106,8 @@ export type Snapshot = {
   a?: [string, number][];
   /** The host's tally: `[playerId, kills, deaths]`. A client's predicted kills are not real. */
   y?: number[][];
+  /** Payout evidence retained for players who leave before results are submitted. */
+  l?: [number, MissionReceipt[]][];
   /**
    * Where the potje is: `[phase, sinceTick]`. Only the host advances the match (spec §2), so a
    * client reads its countdown and scorebord from here rather than keeping a clock of its own.
@@ -108,6 +117,7 @@ export type Snapshot = {
 
 /** A player as the snapshot carries them: render state plus what the step needs to continue. */
 export type SnapshotPlayer = {
+  mission?: MissionProfile;
   id: number;
   x: number;
   y: number;
@@ -135,7 +145,7 @@ const DRUNK_SCALE = 100;
 export type SnapshotVehicle = Pick<
   VehicleState,
   "id" | "kind" | "x" | "y" | "heading" | "health" | "wrecked" | "colour"
-> & { velocityX: number; velocityY: number };
+> & { velocityX: number; velocityY: number; boarding?: VehicleBoarding };
 
 /** A pedestrian as the snapshot carries them; the rail is AI memory, rebuilt locally. */
 export type SnapshotPed = Pick<
@@ -162,6 +172,7 @@ export type SnapshotPickup = Pick<PickupState, "id" | "kind" | "x" | "y"> & {
 
 /** A snapshot decoded back into named fields, ready for the client loop to reconcile against. */
 export type SnapshotView = {
+  roundTicksLeft?: number;
   tick: number;
   serverTimeMs: number;
   players: SnapshotPlayer[];
@@ -237,7 +248,7 @@ function encodeVehicles(state: ArenaState): number[][] {
 /** The host's additions to a snapshot: who sits where, the tally, and where the potje is. */
 function encodeExtras(
   extras: SnapshotExtras,
-): Pick<Snapshot, "m" | "a" | "y" | "f"> {
+): Pick<Snapshot, "m" | "a" | "y" | "f" | "l"> {
   return {
     m: [...extras.seats.entries()],
     ...(extras.accounts ? { a: [...extras.accounts.entries()] } : {}),
@@ -245,7 +256,13 @@ function encodeExtras(
       row.playerId,
       row.kills,
       row.deaths,
+      ...(row.cashEarned !== undefined
+        ? [row.cashEarned, row.missionsCompleted ?? 0]
+        : []),
     ]),
+    l: [...extras.tally.values()]
+      .filter((row) => row.receipts?.length)
+      .map((row) => [row.playerId, row.receipts!]),
     f: [indexIn(MATCH_PHASES, extras.match.phase), extras.match.since],
   };
 }
@@ -266,11 +283,45 @@ export function encodeSnapshot(
 ): Snapshot {
   return {
     ...(extras ? encodeExtras(extras) : {}),
-    n: 2,
+    n: 3,
     t: state.tick,
+    ...(state.roundTicksLeft !== undefined ? { e: state.roundTicksLeft } : {}),
     s: Math.round(serverTimeMs),
     p: encodePlayers(state),
+    ...(state.players.some((player) => player.mission)
+      ? {
+          u: state.players.flatMap((player): [number, MissionProfile][] =>
+            player.mission
+              ? [
+                  [
+                    player.id,
+                    {
+                      ...player.mission,
+                      actors: player.mission.actors
+                        ? Object.fromEntries(
+                            Object.entries(player.mission.actors).map(
+                              ([alias, actor]) => [
+                                alias,
+                                { ...actor, path: [] },
+                              ],
+                            ),
+                          )
+                        : undefined,
+                    },
+                  ],
+                ]
+              : [],
+          ),
+        }
+      : {}),
     v: encodeVehicles(state),
+    ...(state.vehicles.some((vehicle) => vehicle.boarding)
+      ? {
+          h: state.vehicles.flatMap((vehicle): [number, VehicleBoarding][] =>
+            vehicle.boarding ? [[vehicle.id, vehicle.boarding]] : [],
+          ),
+        }
+      : {}),
     d: state.peds.map((ped) => [
       ped.id,
       Math.round(ped.x * POSITION_SCALE),
@@ -366,8 +417,25 @@ export function decodeSnapshot(snapshot: Snapshot): SnapshotView {
   const lastInputSeqs: Record<number, number> = {};
   for (const [id = 0, seq = 0] of snapshot.q) lastInputSeqs[id] = seq;
   const tally = new Map<number, ScoreRow>();
-  for (const [playerId = 0, kills = 0, deaths = 0] of snapshot.y ?? [])
-    tally.set(playerId, { playerId, kills, deaths });
+  for (const [
+    playerId = 0,
+    kills = 0,
+    deaths = 0,
+    cashEarned,
+    missionsCompleted,
+  ] of snapshot.y ?? [])
+    tally.set(playerId, {
+      playerId,
+      kills,
+      deaths,
+      ...(cashEarned !== undefined
+        ? {
+            cashEarned,
+            missionsCompleted,
+            receipts: snapshot.l?.find(([id]) => id === playerId)?.[1] ?? [],
+          }
+        : {}),
+    });
   return {
     seats: new Map(snapshot.m ?? []),
     accounts: new Map(snapshot.a ?? snapshot.m ?? []),
@@ -376,9 +444,16 @@ export function decodeSnapshot(snapshot: Snapshot): SnapshotView {
       ? { phase: entryAt(MATCH_PHASES, snapshot.f[0]), since: snapshot.f[1] }
       : null,
     tick: snapshot.t,
+    roundTicksLeft: snapshot.e,
     serverTimeMs: snapshot.s,
-    players: decodePlayers(snapshot.p),
-    vehicles: decodeVehicles(snapshot.v),
+    players: decodePlayers(snapshot.p).map((player) => ({
+      ...player,
+      mission: snapshot.u?.find(([id]) => id === player.id)?.[1],
+    })),
+    vehicles: decodeVehicles(snapshot.v).map((vehicle) => ({
+      ...vehicle,
+      boarding: snapshot.h?.find(([id]) => id === vehicle.id)?.[1],
+    })),
     peds: snapshot.d.map((row) => ({
       id: row[0] ?? 0,
       x: (row[1] ?? 0) / POSITION_SCALE,

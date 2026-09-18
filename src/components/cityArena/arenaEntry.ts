@@ -14,6 +14,7 @@ export type ArenaEntry =
   /** "Nieuw potje": open a fresh room in this zone and host it. */
   (
     | { kind: "new"; zone: ZoneKey }
+    | { kind: "solo"; zone: ZoneKey }
     /** "Code invoeren": the overlay asks for a code before connecting. */
     | { kind: "code" }
     /** A mission card was tapped: go straight to that room's lobby. */

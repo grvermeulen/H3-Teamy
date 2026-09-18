@@ -166,6 +166,8 @@ export const ArenaSettingsSchema = z.object({
   forceLayout: z.enum(layouts).optional(),
   /** Raster resolution and visual effects; automatic follows the viewport. */
   quality: z.enum(["auto", "low", "high"]).default("auto"),
+  /** Speed-dependent camera framing; reduced-motion preferences still take precedence. */
+  dynamicCamera: z.boolean().default(true),
   /** "Radio": music in the car (Plan 7). */
   radio: z.boolean().default(true),
   /** The station tuned in, by id; absent or unknown, the first station plays. */
@@ -180,6 +182,7 @@ export type ArenaLayout = (typeof layouts)[number];
 
 /** Defaults used when nothing valid is stored. */
 export const DEFAULT_ARENA_SETTINGS: ArenaSettings = {
+  dynamicCamera: true,
   quality: "auto",
   lastZone: DEFAULT_ZONE,
   sound: true,

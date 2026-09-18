@@ -100,6 +100,13 @@ async function postResult(
       kills: line.kills,
       deaths: line.deaths,
       won: line.isWinner,
+      ...(ticket.round?.scoringVersion === 2
+        ? {
+            cashEarned: line.cashEarned ?? 0,
+            missionsCompleted: line.missionsCompleted ?? 0,
+            receipts: line.receipts ?? [],
+          }
+        : {}),
     }))
     .filter((row): row is { memberId: string } & typeof row => !!row.memberId);
   const response = await fetch(
@@ -202,7 +209,14 @@ function pollClock(game: MatchSeam, refs: ClockRefs, set: ClockSetters): void {
   // The scorebord is read at the moment play ends, so a kill landing during the scorebord
   // itself cannot change a result players are already looking at.
   if (next.phase === "scoreboard") {
-    const lines = rankScoreboard(peek.tally, peek.players, peek.youId);
+    const lines = rankScoreboard(
+      peek.tally,
+      peek.players,
+      peek.youId,
+      recording.ticket?.round
+        ? (recording.ticket.round.scoringVersion ?? 1)
+        : 2,
+    );
     const accounts = accountsFrom(peek.seats);
     set.setScoreboard(lines);
     set.setAccounts(accounts);

@@ -8,6 +8,7 @@
 
 import { z } from "zod";
 import { ArenaRoomTicketSchema } from "../cityArena/net/roomProtocol";
+import { MissionReceiptSchema } from "../cityArena/missions/receipts";
 
 /** What Ably's `createTokenRequest` returns, as much of it as the client needs. */
 export const AblyTokenRequestSchema = z.object({
@@ -38,6 +39,9 @@ const MatchResultSchema = z
     kills: z.number().int().min(0).max(200),
     deaths: z.number().int().min(0).max(200),
     won: z.boolean(),
+    cashEarned: z.number().int().min(0).max(100_000).optional(),
+    missionsCompleted: z.number().int().min(0).max(24).optional(),
+    receipts: z.array(MissionReceiptSchema).max(24).optional(),
   })
   .strict();
 

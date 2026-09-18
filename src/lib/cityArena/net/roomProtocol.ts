@@ -1,14 +1,17 @@
 import { z } from "zod";
+/** Mission actors and receipts require the same wire/content version on every participant. */
+export const ARENA_PROTOCOL_VERSION = 3;
 
 /** Server time windows for room liveness and channel authorization. */
 export const ROOM_RULES = {
   heartbeatMs: 3000,
-  memberTtlMs: 20_000,
+  memberTtlMs: 60_000,
   hostLeaseMs: 12_000,
   tokenTtlMs: 60_000,
   roomTtlMs: 2 * 60 * 60 * 1000,
   countdownMs: 3000,
   matchMs: 180_000,
+  missionMatchMs: 720_000,
   completionGraceMs: 5 * 60 * 1000,
   capacity: 8,
   displayCapacity: 2,
@@ -96,6 +99,7 @@ export const ArenaRoomTicketSchema = z.object({
       startedAt: z.number(),
       finishesAt: z.number(),
       completedAt: z.number().nullable(),
+      scoringVersion: z.union([z.literal(1), z.literal(2)]).optional(),
     })
     .nullable(),
 });

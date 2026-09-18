@@ -41,7 +41,8 @@ export async function GET(req: NextRequest): Promise<Response> {
       clientAddress(req),
     );
     if (!verdict.allowed) return rateLimited(verdict);
-    const rows = await leaderboard(LEADERBOARD_SIZE);
+    const version = req.nextUrl.searchParams.get("version") === "1" ? 1 : 2;
+    const rows = await leaderboard(LEADERBOARD_SIZE, version);
     const response = NextResponse.json<LeaderboardResponse>({ rows });
     response.headers.set(
       "Cache-Control",

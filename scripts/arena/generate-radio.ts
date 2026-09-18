@@ -1,7 +1,7 @@
 /**
  * Generates the car radio's tracks with ElevenLabs' Music API (Plan 7, Task 5).
  *
- * One request per planned track, instrumental, two minutes, written to
+ * Original instrumental, vocal and spoken compositions, written to
  * `public/arena/radio/tracks/<station>-<n>-<hash>.mp3` — the hash is the file's own, so a
  * regenerated track gets a new name and can never be shadowed by a cached one — and recorded in
  * the dial manifest (`src/lib/cityArena/audio/radio/stations.json`) and in
@@ -16,7 +16,10 @@
  */
 
 import { createHash } from "node:crypto";
-import { rm } from "node:fs/promises";
+import { readFile, rm, mkdir } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { config } from "dotenv";
 import path from "node:path";
 import { z } from "zod";
 import {
@@ -31,13 +34,14 @@ import {
 } from "./check-radio";
 import { creditRows, creditsFile, fileOfRow } from "./credits";
 import { readIfPresent, writeAtomic } from "./files";
+import { RADIO_EXPANSION, type RadioChunk } from "./radio-expansion";
 
 /** ElevenLabs' music endpoint; the format is a query parameter, the rest is the body. */
 const ENDPOINT = "https://api.elevenlabs.io/v1/music";
 /** Where the plan's credit counter is read, to report what a run cost. */
 const SUBSCRIPTION_ENDPOINT = "https://api.elevenlabs.io/v1/user/subscription";
-/** MP3, 44.1 kHz, 96 kbps: the floor for music, and ~0.7 MiB a minute. */
-const OUTPUT_FORMAT = "mp3_44100_96";
+/** Stereo MP3, 44.1 kHz, 128 kbps before and after mastering. */
+const OUTPUT_FORMAT = "mp3_44100_128";
 /** The music model; `music_v1` is the fallback if the plan does not have this one. */
 const MODEL_ID = "music_v2";
 /** How long each track is asked to be. */
@@ -53,7 +57,15 @@ const SubscriptionSchema = z.object({ character_count: z.number() });
 type PlannedStation = {
   id: string;
   name: string;
-  tracks: { title: string; prompt: string }[];
+  tracks: PlannedTrack[];
+};
+type PlannedTrack = {
+  title: string;
+  prompt: string;
+  seconds?: number;
+  chunks?: RadioChunk[];
+  content?: "song" | "talk";
+  transcript?: string;
 };
 
 /** What each station plays. Adding a track here and running the script generates it. */
@@ -126,25 +138,132 @@ const DIAL: PlannedStation[] = [
   },
 ];
 
+for (const production of RADIO_EXPANSION) {
+  let station = DIAL.find((entry) => entry.id === production.station);
+  if (!station) {
+    station = {
+      id: production.station,
+      name: production.stationName,
+      tracks: [],
+    };
+    DIAL.push(station);
+  }
+  station.tracks.push(production);
+}
+
 /** Asks ElevenLabs for one track and returns the MP3 bytes. */
-async function generate(key: string, prompt: string): Promise<Uint8Array> {
-  const response = await fetch(`${ENDPOINT}?output_format=${OUTPUT_FORMAT}`, {
+async function generate(
+  key: string,
+  planned: PlannedTrack,
+): Promise<Uint8Array> {
+  const request: RequestInit = {
     method: "POST",
     headers: { "xi-api-key": key, "Content-Type": "application/json" },
     body: JSON.stringify({
-      prompt,
-      music_length_ms: TRACK_SECONDS * 1000,
+      ...(planned.chunks
+        ? { composition_plan: { chunks: planned.chunks } }
+        : {
+            prompt: planned.prompt,
+            music_length_ms: (planned.seconds ?? TRACK_SECONDS) * 1000,
+            force_instrumental: true,
+          }),
       model_id: MODEL_ID,
-      force_instrumental: true,
     }),
     // The key must never travel to wherever a redirect points.
     redirect: "error",
-  });
+    signal: AbortSignal.timeout(600_000),
+  };
+  let response: Response | undefined;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      response = await fetch(
+        `${ENDPOINT}?output_format=${OUTPUT_FORMAT}`,
+        request,
+      );
+      break;
+    } catch (error) {
+      const code =
+        error instanceof Error &&
+        error.cause &&
+        typeof error.cause === "object" &&
+        "code" in error.cause
+          ? error.cause.code
+          : null;
+      if (code !== "UND_ERR_CONNECT_TIMEOUT" || attempt === 2) throw error;
+      console.log("Connection did not open; retrying before dispatch.");
+    }
+  }
+  if (!response) throw new Error("Music request could not connect");
   if (!response.ok)
     throw new Error(
       `ElevenLabs answered ${response.status}: ${await response.text()}`,
     );
   return new Uint8Array(await response.arrayBuffer());
+}
+
+const runFile = promisify(execFile);
+
+/** Normalizes voice/music loudness and verifies a complete, decodable stereo file before publication. */
+async function master(
+  bytes: Uint8Array,
+  id: string,
+  expectedSeconds: number,
+): Promise<{ bytes: Uint8Array; seconds: number }> {
+  const cache = path.resolve(".cache", "arena-radio");
+  await mkdir(cache, { recursive: true });
+  const raw = path.join(cache, `${id}-raw.mp3`);
+  const mastered = path.join(cache, `${id}-master.mp3`);
+  await writeAtomic(raw, bytes);
+  await runFile(
+    "ffmpeg",
+    [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-y",
+      "-i",
+      raw,
+      "-af",
+      "loudnorm=I=-18:TP=-1.5:LRA=9",
+      "-ar",
+      "44100",
+      "-ac",
+      "2",
+      "-b:a",
+      "128k",
+      mastered,
+    ],
+    { windowsHide: true },
+  );
+  const probe = await runFile(
+    "ffprobe",
+    [
+      "-v",
+      "error",
+      "-show_entries",
+      "format=duration:stream=codec_name,sample_rate,channels",
+      "-of",
+      "json",
+      mastered,
+    ],
+    { windowsHide: true },
+  );
+  const metadata = JSON.parse(probe.stdout) as {
+    format: { duration: string };
+    streams: { codec_name: string; sample_rate: string; channels: number }[];
+  };
+  const seconds = Number(metadata.format.duration);
+  if (
+    !Number.isFinite(seconds) ||
+    Math.abs(seconds - expectedSeconds) > 4 ||
+    metadata.streams[0]?.codec_name !== "mp3" ||
+    metadata.streams[0]?.channels !== 2
+  )
+    throw new Error(`Invalid audio duration or format for ${id}`);
+  return {
+    bytes: await readFile(mastered),
+    seconds: Math.round(seconds * 1000) / 1000,
+  };
 }
 
 /** The plan's credit counter, or null when it cannot be read; a report, never a gate. */
@@ -235,16 +354,24 @@ async function produce(
   key: string,
   station: RadioStation,
   index: number,
-  planned: { title: string; prompt: string },
+  planned: PlannedTrack,
 ): Promise<{ row: string; superseded: string | null }> {
-  const bytes = await generate(key, planned.prompt);
+  const raw = await generate(key, planned);
+  const { bytes, seconds } = await master(
+    raw,
+    `${station.id}-${index + 1}`,
+    planned.seconds ?? TRACK_SECONDS,
+  );
   const file = fileNameFor(station.id, index, bytes);
   await writeAtomic(path.join(RADIO_TRACK_DIR, file), bytes);
   const previous = station.tracks[index];
   station.tracks[index] = {
     file,
     title: planned.title,
-    seconds: TRACK_SECONDS,
+    seconds,
+    ...(planned.content
+      ? { content: planned.content, transcript: planned.transcript }
+      : {}),
   };
   console.log(`${Math.round(bytes.byteLength / 1024)} KB → ${file}`);
   return {
@@ -255,13 +382,46 @@ async function produce(
 
 /** Generates the tracks of the stations named, or every planned track without a file. */
 async function main(): Promise<void> {
-  const key = process.env.ELEVENLABS_API_KEY;
-  if (!key) throw new Error("ELEVENLABS_API_KEY is not set");
-  const named = process.argv.slice(2);
+  config({ path: [".env.local", ".env"], quiet: true });
+  const args = process.argv.slice(2);
+  const trackArg = args.find((arg) => arg.startsWith("--track="));
+  const trackNumber = trackArg ? Number(trackArg.slice(8)) : null;
+  const named = args.filter(
+    (arg) => !arg.startsWith("--track=") && arg !== "--dry-run",
+  );
+  if (
+    trackNumber !== null &&
+    (!Number.isInteger(trackNumber) || trackNumber < 1 || named.length !== 1)
+  )
+    throw new Error(
+      "Use --track=N with exactly one station and a positive track number",
+    );
   for (const id of named)
     if (!DIAL.some((station) => station.id === id))
       throw new Error(`Unknown station: ${id}`);
   const manifest = await readManifest();
+  if (args.includes("--dry-run")) {
+    for (const station of DIAL.filter(
+      (entry) => named.length === 0 || named.includes(entry.id),
+    )) {
+      for (const [index, track] of station.tracks.entries()) {
+        if (trackNumber !== null && index !== trackNumber - 1) continue;
+        if (
+          named.length === 0 &&
+          manifest.stations.find((entry) => entry.id === station.id)?.tracks[
+            index
+          ]
+        )
+          continue;
+        console.log(
+          `${station.id} --track=${index + 1}: ${track.title} (${track.seconds ?? TRACK_SECONDS}s)`,
+        );
+      }
+    }
+    return;
+  }
+  const key = process.env.ELEVENLABS_API_KEY;
+  if (!key) throw new Error("ELEVENLABS_API_KEY is not set");
   const existingCredits = (await readIfPresent(RADIO_CREDITS_FILE)) ?? "";
   const before = await creditsUsed(key);
   const freshRows = new Map<string, string>();
@@ -269,8 +429,13 @@ async function main(): Promise<void> {
   for (const planned of DIAL) {
     // A targeted run touches the stations named and nothing else — every track costs credits.
     if (named.length > 0 && !named.includes(planned.id)) continue;
+    if (trackNumber !== null && trackNumber > planned.tracks.length)
+      throw new Error(
+        `Station ${planned.id} has only ${planned.tracks.length} tracks`,
+      );
     const station = stationEntry(manifest, planned);
     for (const [index, track] of planned.tracks.entries()) {
+      if (trackNumber !== null && index !== trackNumber - 1) continue;
       if (station.tracks[index] && named.length === 0) continue;
       process.stdout.write(`${planned.name} · ${track.title} … `);
       const { row, superseded } = await produce(key, station, index, track);
@@ -296,5 +461,12 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
   console.error(error instanceof Error ? error.message : String(error));
+  if (
+    error instanceof Error &&
+    error.cause &&
+    typeof error.cause === "object" &&
+    "code" in error.cause
+  )
+    console.error(`Network code: ${String(error.cause.code)}`);
   process.exitCode = 1;
 });

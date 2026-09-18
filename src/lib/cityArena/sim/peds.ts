@@ -1,4 +1,6 @@
 import { pointInRect, type Rect } from "../mapBuild/geometry";
+import { driverIsLanding } from "./hijacking";
+import { missionEntityIds, missionPassengerIds } from "../missions/actors";
 import type { CollisionGrid } from "../world/collisionGrid";
 import type { MapZone } from "../world/mapTypes";
 import { moveToward } from "../world/pathFollow";
@@ -378,6 +380,7 @@ function hitPedWithVehicle(
 }
 
 function runOverPeds(state: ArenaState, tick: number): ArenaState {
+  const passengers = missionPassengerIds(state);
   let peds = state.peds;
   let events = state.events;
   for (const vehicle of state.vehicles) {
@@ -386,7 +389,9 @@ function runOverPeds(state: ArenaState, tick: number): ArenaState {
     const next: PedState[] = [];
     for (const ped of peds) {
       const hit =
-        ped.mode === "dead"
+        ped.mode === "dead" ||
+        driverIsLanding(state, ped.id) ||
+        passengers.has(ped.id)
           ? { ped, killed: false }
           : hitPedWithVehicle(ped, vehicle, tick);
       if (hit.killed)
@@ -415,8 +420,12 @@ export function stepPeds(
 ): ArenaState {
   const sources = threatSources(state.events, state.effects, tick);
   const peds: PedState[] = [];
+  const missionIds = missionEntityIds(state);
   for (const ped of frightenPeds(state.peds, sources, tick)) {
-    const next = stepPed(ped, world, dt, tick, random);
+    const next =
+      driverIsLanding(state, ped.id) || missionIds.has(ped.id)
+        ? ped
+        : stepPed(ped, world, dt, tick, random);
     if (next) peds.push(next);
   }
   return runOverPeds({ ...state, peds }, tick);

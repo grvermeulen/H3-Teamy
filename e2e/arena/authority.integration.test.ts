@@ -36,6 +36,116 @@ async function create(host: ArenaUser): Promise<ArenaRoomTicket> {
 }
 
 describe("PostgreSQL arena authority", () => {
+  it("records a cash-only winner once and rejects altered or duplicate mission receipts", async () => {
+    const host = user("cash-host");
+    const guest = user("cash-guest");
+    for (const actor of [host, guest]) {
+      await prisma.user.create({
+        data: {
+          id: actor.userId,
+          firstName: actor.displayName,
+          lastName: "Test",
+        },
+      });
+      createdUsers.push(actor.userId);
+    }
+    const room = await create(host);
+    const joined = (await commandArenaRoom(
+      guest,
+      { action: "join", roomCode: room.roomCode, joinNonce: randomUUID() },
+      at,
+    ))!;
+    const started = (await commandArenaRoom(
+      host,
+      { action: "start", memberId: room.memberId, epoch: room.epoch },
+      at,
+    ))!;
+    expect(started.round?.scoringVersion).toBe(2);
+    const finish = new Date(started.round!.finishesAt);
+    const current = (await commandArenaRoom(
+      host,
+      { action: "heartbeat", memberId: room.memberId, visible: true },
+      finish,
+    ))!;
+    const receipt = {
+      contractId: "cash-contract",
+      missionId: "M13",
+      version: 1,
+      playerId: 0,
+      tick: 3000,
+      base: 450,
+      bonus: 150,
+      total: 600,
+    };
+    const input = {
+      roundId: started.round!.id,
+      memberId: room.memberId,
+      epoch: current.epoch,
+      results: [
+        {
+          memberId: room.memberId,
+          kills: 0,
+          deaths: 0,
+          won: true,
+          cashEarned: 600,
+          missionsCompleted: 1,
+          receipts: [receipt],
+        },
+        {
+          memberId: joined.memberId,
+          kills: 2,
+          deaths: 0,
+          won: false,
+          cashEarned: 0,
+          missionsCompleted: 0,
+          receipts: [],
+        },
+      ],
+    };
+    await expect(
+      recordMatch(
+        host.userId,
+        {
+          ...input,
+          results: [{ ...input.results[0], cashEarned: 601 }, input.results[1]],
+        },
+        finish,
+      ),
+    ).rejects.toMatchObject({ reason: "invalid-rewards" });
+    await expect(
+      recordMatch(
+        host.userId,
+        {
+          ...input,
+          results: [
+            {
+              ...input.results[0],
+              cashEarned: 1200,
+              missionsCompleted: 2,
+              receipts: [receipt, receipt],
+            },
+            input.results[1],
+          ],
+        },
+        finish,
+      ),
+    ).rejects.toMatchObject({ reason: "invalid-rewards" });
+    const first = await recordMatch(host.userId, input, finish);
+    expect(await recordMatch(host.userId, input, finish)).toEqual(first);
+    const saved = await prisma.arenaMatchResult.findMany({
+      where: { matchId: first.matchId! },
+      orderBy: { score: "desc" },
+    });
+    expect(saved[0]).toMatchObject({
+      userId: host.userId,
+      score: 600,
+      cashEarned: 600,
+      missionsCompleted: 1,
+      scoringVersion: 2,
+      won: true,
+    });
+    expect(saved[1]).toMatchObject({ score: 500, won: false });
+  });
   beforeEach(() => {
     if (
       process.env.DATABASE_URL !==
@@ -274,26 +384,26 @@ describe("PostgreSQL arena authority", () => {
     await commandArenaRoom(
       remaining,
       { action: "heartbeat", memberId: peer.memberId, visible: true },
-      after(20000),
+      after(ROOM_RULES.memberTtlMs),
     );
     for (let i = 0; i < 7; i++)
       await commandArenaRoom(
         user(`fill-${i}`),
         { action: "join", roomCode: room.roomCode, joinNonce: randomUUID() },
-        after(21000),
+        after(ROOM_RULES.memberTtlMs + 1000),
       );
     await expect(
       commandArenaRoom(
         host,
         { action: "create", zone: "campus", joinNonce: nonce },
-        after(22000),
+        after(ROOM_RULES.memberTtlMs + 2000),
       ),
     ).rejects.toMatchObject({ reason: "room-full" });
     await expect(
       commandArenaRoom(
         host,
         { action: "heartbeat", memberId: room.memberId, visible: true },
-        after(22000),
+        after(ROOM_RULES.memberTtlMs + 2000),
       ),
     ).rejects.toMatchObject({ reason: "room-full" });
   });
@@ -337,7 +447,7 @@ describe("PostgreSQL arena authority", () => {
       { action: "leave", memberId: joined!.memberId },
       after(1500),
     );
-    const end = ROOM_RULES.countdownMs + ROOM_RULES.matchMs;
+    const end = ROOM_RULES.countdownMs + ROOM_RULES.missionMatchMs;
     const renewed = await commandArenaRoom(
       host,
       { action: "heartbeat", memberId: room.memberId, visible: true },
@@ -404,7 +514,7 @@ describe("PostgreSQL arena authority", () => {
       { action: "start", memberId: room.memberId, epoch: room.epoch },
       at,
     );
-    const end = ROOM_RULES.countdownMs + ROOM_RULES.matchMs;
+    const end = ROOM_RULES.countdownMs + ROOM_RULES.missionMatchMs;
     const renewed = await commandArenaRoom(
       host,
       { action: "heartbeat", memberId: room.memberId, visible: true },

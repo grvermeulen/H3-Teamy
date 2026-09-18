@@ -1,6 +1,9 @@
 "use client";
+import { useArenaMissionSave } from "./useArenaMissionSave";
 
 import { replacePlayer } from "@/lib/cityArena/sim/players";
+import type { MissionCommand } from "@/lib/cityArena/missions/types";
+import { missionMapMarkers } from "@/lib/cityArena/missions/hud";
 import {
   useCallback,
   useEffect,
@@ -128,6 +131,7 @@ export type ArenaKeyOptions = {
 };
 /** Hook result consumed by the overlay. */
 export type ArenaGame = MatchSeam & {
+  missionAction(command: Omit<MissionCommand, "sequence">): void;
   phase: ArenaPhase;
   progress: LoadProgress;
   failed: boolean;
@@ -154,6 +158,8 @@ export type ArenaGame = MatchSeam & {
   cycleWeapon(): void;
   /** Switches the radio to the next station, as R and the Radio button do. */
   nextStation(): void;
+  /** Skips the current radio song within its station. */
+  nextRadioTrack(): void;
   teleportToZone(key: ZoneKey): void;
   debugSnapshot: DebugSnapshot | null;
 };
@@ -218,6 +224,7 @@ async function bootSession(
   );
   runtime.hapticsEnabled = settingsRef.current.vibrate;
   runtime.quality = settingsRef.current.quality;
+  runtime.dynamicCamera = settingsRef.current.dynamicCamera;
   runtimeRef.current = runtime;
   return {
     index,
@@ -625,6 +632,7 @@ function applySettings(runtime: Runtime | null, settings: ArenaSettings): void {
   if (settings.sound) runtime.sound.unlock();
   runtime.hapticsEnabled = settings.vibrate;
   runtime.quality = settings.quality;
+  runtime.dynamicCamera = settings.dynamicCamera;
   runtime.sound.radio?.setEnabled(settings.radio);
   runtime.sound.radio?.tune(settings.radioStation ?? "");
 }
@@ -700,6 +708,7 @@ export function useArenaGame({
     setDebugSnapshot,
   });
   useNetplay(runtimeRef, phase === "playing", netplay);
+  useArenaMissionSave(runtimeRef, phase === "playing" && !netplay);
   useEffect(() => {
     const runtime = runtimeRef.current;
     if (!runtime) return;
@@ -711,7 +720,15 @@ export function useArenaGame({
   const navigationMap = useCallback((): NavigationMapData | null => {
     const runtime = runtimeRef.current;
     return runtime
-      ? { index: runtime.session.index(), graph: runtime.session.graph() }
+      ? {
+          index: runtime.session.index(),
+          graph: runtime.session.graph(),
+          missions: missionMapMarkers(
+            runtime.session.index(),
+            runtime.state,
+            myPlayer(runtime),
+          ),
+        }
       : null;
   }, [runtimeRef]);
   const setDestination = useCallback(
@@ -750,12 +767,35 @@ export function useArenaGame({
     const station = runtimeRef.current?.sound.radio?.nextStation();
     if (station) updateSettings({ radioStation: station.id });
   }, [runtimeRef, updateSettings]);
+  const missionSequence = useRef(0);
+  const nextRadioTrack = useCallback(
+    () => runtimeRef.current?.sound.radio?.nextTrack(),
+    [runtimeRef],
+  );
+  const missionAction = useCallback(
+    (command: Omit<MissionCommand, "sequence">) => {
+      const runtime = runtimeRef.current;
+      if (!runtime) return;
+      missionSequence.current =
+        Math.max(
+          missionSequence.current,
+          myPlayer(runtime).mission?.lastCommand ?? 0,
+        ) + 1;
+      inputRef.current.clearAll();
+      inputRef.current.setMissionCommand({
+        ...command,
+        sequence: missionSequence.current,
+      });
+    },
+    [runtimeRef, inputRef],
+  );
   useEffect(() => {
     nextStationRef.current = nextStation;
   }, [nextStation]);
 
   return {
     ...seam,
+    missionAction,
     phase,
     progress,
     failed,
@@ -772,6 +812,7 @@ export function useArenaGame({
     selectWeapon,
     cycleWeapon,
     nextStation,
+    nextRadioTrack,
     teleportToZone,
     navigationMap,
     setDestination,

@@ -8,6 +8,32 @@ const layout = (players: ReturnType<typeof player>[], previous = empty) =>
   updateSplitScreen(previous, players, size, 1, true);
 
 describe("TV camera layout", () => {
+  it("widens for fast traffic while keeping every grouped player in view", () => {
+    const stopped = [
+      { ...player(0, 0), velocity: [0, 0] as [number, number], driving: true },
+    ];
+    const fast = [
+      { ...player(0, 0), velocity: [36, 0] as [number, number], driving: true },
+    ];
+    let slowView = empty;
+    let fastView = empty;
+    for (let frame = 0; frame < 240; frame++) {
+      slowView = updateSplitScreen(slowView, stopped, size, 1 / 60);
+      fastView = updateSplitScreen(fastView, fast, size, 1 / 60);
+    }
+    expect(fastView.views[0].zoom).toBeLessThan(slowView.views[0].zoom * 0.8);
+    const group = updateSplitScreen(
+      fastView,
+      [...fast, player(1, 95)],
+      size,
+      1 / 60,
+    );
+    expect(group.views).toHaveLength(1);
+    expect(group.views[0].zoom).toBeLessThanOrEqual(size.width / 127);
+    const steadySlow = updateSplitScreen(empty, stopped, size, 1, true);
+    const steadyFast = updateSplitScreen(empty, fast, size, 1, true);
+    expect(steadySlow.views[0].zoom).toBe(steadyFast.views[0].zoom);
+  });
   it("accepts the browser's DOMRect viewport", () => {
     const viewport = new DOMRect(0, 0, 1280, 720);
     for (const distance of [50, 200]) {

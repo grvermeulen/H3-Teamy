@@ -270,10 +270,18 @@ export function createArenaSound(
     // A clip that played is the whole sound; the oscillator branches below are the fallback for
     // a clip that has not landed, and stay for as long as that can be true.
     const clip = clipFor(event);
-    if (clip !== null && player?.play(clip)) return;
+    if (clip !== null) {
+      const played =
+        event.kind === "shot" && event.weapon === "cannon"
+          ? player?.play(clip, 1, 1.25)
+          : player?.play(clip);
+      if (played) return;
+    }
     if (event.kind === "shot") {
       const tone = shotTone(event.weapon);
-      playTone(tone.frequency, tone.duration, tone.type, 0.22);
+      const gain =
+        event.weapon === "fist" || event.weapon === "bat" ? 0.22 : 0.275;
+      playTone(tone.frequency, tone.duration, tone.type, gain);
     } else if (event.kind === "explosion") {
       playTone(95, 0.35, "sawtooth", 0.35, 35);
     } else if (event.kind === "pickup" || event.kind === "beer") {
@@ -281,6 +289,11 @@ export function createArenaSound(
       playTone(780, 0.12, "sine", 0.14);
     } else if (event.kind === "hit") {
       playTone(260, 0.035, "triangle", 0.12);
+    } else if (event.kind === "door") {
+      if (event.phase === "open") playTone(420, 0.07, "triangle", 0.1, 180);
+      else if (event.phase === "eject")
+        playTone(160, 0.18, "sawtooth", 0.1, 80);
+      else playTone(110, 0.08, "triangle", 0.2, 40);
     }
   }
 

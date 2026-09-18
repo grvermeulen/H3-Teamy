@@ -180,6 +180,8 @@ export function applyFire(
   random: () => number,
 ): ArenaState {
   const angle = input.aim ?? player.facing;
+  if (state.vehicles.some((vehicle) => vehicle.boarding?.ownerId === player.id))
+    return state;
   const trigger = triggerOf(state, player, angle);
   if (!canFire(state, player, input, trigger.weapon, tick)) return state;
   const { shots, effects, nextId } = fireShots(

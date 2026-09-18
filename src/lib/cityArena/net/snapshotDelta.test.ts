@@ -7,7 +7,7 @@ const packet = (
   tick: number,
   vehicles = [[1, 0, 0, 0, 0, 0, 0, 100, 0, 0]],
 ): Snapshot => ({
-  n: 2,
+  n: 3,
   t: tick,
   s: tick * 34,
   p: [],
@@ -20,6 +20,19 @@ const packet = (
 });
 
 describe("snapshot vehicle baselines", () => {
+  it("preserves armoured vehicle health above one byte through full and delta frames", () => {
+    const encode = createSnapshotEncoder();
+    const decode = createSnapshotDecoder();
+    const tank = [1, 9, 0, 0, 0, 0, 0, 750, 0, 0];
+    const full = encode(packet(3, [tank]));
+    expect(isSnapshot(full)).toBe(true);
+    expect(decode(full)?.v[0][7]).toBe(750);
+    const damaged = [...tank];
+    damaged[7] = 599;
+    const delta = encode(packet(6, [damaged]));
+    expect(isSnapshot(delta)).toBe(true);
+    expect(decode(delta)?.v[0][7]).toBe(599);
+  });
   it("recovers independently after lost/reordered deltas and carries additions and removals", () => {
     const encode = createSnapshotEncoder();
     const decode = createSnapshotDecoder();

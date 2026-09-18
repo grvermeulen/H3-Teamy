@@ -295,6 +295,46 @@ function drawOccupiedRing(
   context.stroke();
 }
 
+/** Hinged door over both sprite and vector bodies; the tank uses a roof hatch. */
+export function drawBoardingDoor(
+  context: RasterContext,
+  vehicle: VehicleState,
+  zoom: number,
+  tick: number,
+): void {
+  const boarding = vehicle.boarding;
+  if (!boarding || vehicle.wrecked) return;
+  const age = tick - boarding.startTick;
+  const closeAt = boarding.driver ? 33 : 17;
+  const openness = Math.max(
+    0,
+    Math.min(1, (age - 6) / 7, (closeAt + 7 - age) / 7),
+  );
+  if (openness === 0) return;
+  context.save();
+  context.fillStyle =
+    CAR_BODY_COLOURS[vehicle.colour % CAR_BODY_COLOURS.length];
+  context.strokeStyle = CAR_WINDOW;
+  context.lineWidth = Math.max(1, zoom * 0.1);
+  if (vehicle.kind === "tank") {
+    context.beginPath();
+    context.arc(-zoom * 0.3, 0, zoom * 0.55, 0, Math.PI * 2);
+    context.stroke();
+    context.fillRect(-zoom * 0.8, -zoom * openness, zoom, zoom * 0.2);
+  } else {
+    context.translate(
+      (vehicle.kind === "bus" ? 3.3 : 0.95) * zoom,
+      (boarding.side * widthOf(vehicle.kind) * zoom) / 2,
+    );
+    context.rotate((-boarding.side * openness * 65 * Math.PI) / 180);
+    context.beginPath();
+    context.rect(-1.3 * zoom, -0.12 * zoom, 1.3 * zoom, 0.24 * zoom);
+    context.fill();
+    context.stroke();
+  }
+  context.restore();
+}
+
 /**
  * Draws one car in its own frame: body, smoke when damaged, and the occupant ring. `lit` turns a
  * police car's lights on.
@@ -308,6 +348,7 @@ export function drawVehicle(
   occupied: boolean,
   art?: VehicleArt,
   lit = false,
+  boardingTick = tick,
 ): void {
   const [x, y] = worldToScreen(camera, viewport, [vehicle.x, vehicle.y]);
   context.save();
@@ -325,6 +366,7 @@ export function drawVehicle(
   if (!vehicle.wrecked && vehicle.health < smokeHealthOf(vehicle.kind))
     drawSmoke(context, vehicle, camera.zoom, tick);
   if (occupied) drawOccupiedRing(context, vehicle, camera.zoom);
+  drawBoardingDoor(context, vehicle, camera.zoom, boardingTick);
   context.restore();
 }
 
@@ -338,6 +380,7 @@ export function drawVehicles(
   occupiedId: number | null,
   art?: VehicleArt,
   litIds?: ReadonlySet<number>,
+  boardingTick = tick,
 ): void {
   const view = visibleRect(camera, viewport);
   for (const vehicle of vehicles) {
@@ -356,6 +399,7 @@ export function drawVehicles(
       vehicle.id === occupiedId,
       art,
       litIds?.has(vehicle.id) ?? false,
+      boardingTick,
     );
   }
 }

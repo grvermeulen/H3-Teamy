@@ -1,6 +1,7 @@
 import { rectsIntersect, type Rect } from "../mapBuild/geometry";
 import type { DecodedTile } from "../world/decode";
 import {
+  rasterZoomFor,
   visibleRect,
   worldToScreen,
   type Camera,
@@ -105,7 +106,10 @@ export function drawVisibleChunks(
   viewport: Viewport,
   source: WorldDrawSource,
 ): DrawStats {
-  const needed = chunksCovering(visibleRect(camera, viewport), camera.zoom);
+  const needed = chunksCovering(
+    visibleRect(camera, viewport),
+    camera.rasterZoom ?? rasterZoomFor(camera.zoom),
+  );
   const rasterisable = needed.filter((coord) =>
     chunkHasTile(coord, source.loadedTileRects),
   );
@@ -167,7 +171,10 @@ export function drawOverheadChunks(
   viewport: Viewport,
   source: WorldDrawSource,
 ): boolean {
-  const needed = chunksCovering(visibleRect(camera, viewport), camera.zoom);
+  const needed = chunksCovering(
+    visibleRect(camera, viewport),
+    camera.rasterZoom ?? rasterZoomFor(camera.zoom),
+  );
   const rasterised =
     source.rasterBudgetMs === 0
       ? false

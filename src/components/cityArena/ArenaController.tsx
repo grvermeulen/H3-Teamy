@@ -11,6 +11,7 @@ import ArenaTouchButtons from "./ArenaTouchButtons";
 import ArenaVitals from "./ArenaVitals";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { ArenaPhaseScreens } from "./ArenaPhaseScreens";
+import { ArenaMissionPanel } from "./ArenaMissionPanel";
 
 /** Phone-only controls and status, without a canvas, world boot or image preloads. */
 export function ArenaController({
@@ -50,6 +51,13 @@ export function ArenaController({
         </button>
       </header>
       <main className="relative min-h-0 flex-1">
+        {game.mission && (
+          <ArenaMissionPanel
+            mission={{ ...game.mission, destination: null }}
+            onAction={game.missionAction}
+            onRoute={() => undefined}
+          />
+        )}
         <div className="pointer-events-none absolute inset-x-3 top-4 text-center">
           <p className="arena-display text-2xl">
             {me?.health === 0
@@ -65,6 +73,7 @@ export function ArenaController({
         <TouchStick stick={stick} onVector={game.setInputVector} />
         <TouchStick side="right" stick={aim} onVector={game.setAimVector} />
         <ArenaTouchButtons
+          interactionLabel={game.mission?.action ?? undefined}
           inVehicle={me?.vehicleId != null}
           onButton={game.setButton}
           showFire={false}

@@ -1,6 +1,7 @@
 "use client";
 
 import type { ScoreLine } from "@/lib/cityArena/net/scoreboard";
+import { arenaScore } from "@/lib/cityArena/scoring";
 import { ATTRIBUTION_TEXT } from "./ArenaLoadingScreen";
 
 /** Props for {@link ArenaScoreboard}. */
@@ -59,8 +60,14 @@ function ScoreRowView({
         ) : null}
       </span>
       <span className="shrink-0 text-right text-[11px] uppercase tracking-wider text-[var(--arena-dim)] tabular-nums">
-        <span className="text-[var(--arena-text)]">{line.kills}</span> kills ·{" "}
-        <span className="text-[var(--arena-text)]">{line.deaths}</span> deaths
+        <span className="block text-[var(--arena-amber)]">
+          {line.score ?? arenaScore(line)} punten · €{line.cashEarned ?? 0}
+        </span>
+        <span className="block">{line.missionsCompleted ?? 0} missies</span>
+        <span className="text-[var(--arena-text)]">{line.kills}</span>{" "}
+        uitschakelingen ·{" "}
+        <span className="text-[var(--arena-text)]">{line.deaths}</span> keer
+        dood
       </span>
     </li>
   );
@@ -90,7 +97,7 @@ export function ArenaScoreboard({
   error,
   onRetry,
 }: ArenaScoreboardProps): React.JSX.Element {
-  const nobodyScored = lines.every((line) => line.kills === 0);
+  const nobodyScored = lines.every((line) => arenaScore(line) === 0);
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-3 p-3">
       <header className="flex items-start justify-between gap-3">
@@ -108,6 +115,8 @@ export function ArenaScoreboard({
       </header>
       <p className="text-xs text-[var(--arena-dim)]">
         Uitslag gemeld door de host · niet onafhankelijk gecontroleerd
+        <br />
+        €1 verdiend = 1 punt · uitschakeling = 250 punten
       </p>
       {saving ? (
         <p role="status" className="text-xs text-[var(--arena-dim)]">

@@ -15,6 +15,7 @@ import {
   ArenaRoomCodeSchema,
   ArenaRoomCommandSchema,
   ROOM_RULES,
+  ARENA_PROTOCOL_VERSION,
 } from "@/lib/cityArena/net/roomProtocol";
 import {
   ARENA_LIMITS,
@@ -34,6 +35,14 @@ export async function POST(req: NextRequest): Promise<Response> {
   try {
     const rejected = await guardArenaRequest(req);
     if (rejected) return rejected;
+    if (req.headers.get("X-Arena-Protocol") !== String(ARENA_PROTOCOL_VERSION))
+      return NextResponse.json(
+        {
+          error: "Het spel is bijgewerkt. Vernieuw de pagina om mee te spelen.",
+          reason: "protocol-mismatch",
+        },
+        { status: 409 },
+      );
     const limit = await checkRateLimit(ARENA_LIMITS.join, clientAddress(req));
     if (!limit.allowed) return rateLimited(limit);
     const body: unknown = await req.json();

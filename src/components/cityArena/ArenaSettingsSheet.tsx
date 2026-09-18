@@ -157,6 +157,11 @@ export function ArenaSettingsSheet({
               checked={settings.radio}
               onChange={(radio) => onChange({ radio })}
             />
+            <SettingSwitch
+              label="Dynamische camera"
+              checked={settings.dynamicCamera}
+              onChange={(dynamicCamera) => onChange({ dynamicCamera })}
+            />
             {RADIO_STATIONS.length > 0 ? (
               <StationSelect settings={settings} onChange={onChange} />
             ) : null}

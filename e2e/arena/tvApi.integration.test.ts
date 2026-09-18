@@ -45,6 +45,7 @@ function request(
       cookie,
       origin,
       "content-type": "application/json",
+      "X-Arena-Protocol": "3",
       "x-forwarded-for": address,
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),

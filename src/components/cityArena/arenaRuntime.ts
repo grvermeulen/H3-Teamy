@@ -1,4 +1,8 @@
 "use client";
+import { contactsForMap } from "@/lib/cityArena/missions/world";
+import { missionHud } from "@/lib/cityArena/missions/hud";
+import { missionById } from "@/lib/cityArena/missions/catalog";
+import { missionScenario } from "@/lib/cityArena/missions/scenarios";
 
 import {
   emptyTally,
@@ -19,12 +23,9 @@ import type {
 import type { InputState } from "@/lib/cityArena/input/inputState";
 import type { PointerAim } from "@/lib/cityArena/input/pointerAim";
 import {
-  DRIVING_LOOK_AHEAD_MAX_M,
-  LOOK_AHEAD_MAX_M,
   createCamera,
   screenToWorld,
-  speedZoomLevel,
-  updateCamera,
+  updateSpeedCamera,
   visibleRect,
   zoomLevelForViewport,
   type Camera,
@@ -210,8 +211,9 @@ export type Runtime = {
    */
   previousState: ArenaState | null;
   camera: Camera;
-  /** Zoom the viewport width asks for; the live camera may sit one step wider while driving. */
+  /** Baseline framing for this viewport; live zoom follows the player's speed. */
   baseZoom: ZoomLevel;
+  dynamicCamera?: boolean;
   random: () => number;
   accumulator: number;
   /**
@@ -246,6 +248,8 @@ export type Runtime = {
   feedback: FeedbackState;
   radarRoadIndex: RadarRoadIndex;
   navigation: ArenaNavigation;
+  missionRouteKey?: string;
+  missionRoutePosition?: Point | null;
   disposed: boolean;
   sharedScreen?: { clientId: string; name: string }[];
   split?: SplitScreen;
@@ -346,6 +350,8 @@ function buildScene(
 ): Scene {
   const { session, state } = runtime;
   return {
+    missionContacts: contactsForMap(session.index()),
+    missionRound: state.zoneEnforced,
     world: {
       raster: session.raster,
       overhead: session.overhead,
@@ -653,19 +659,19 @@ export function nextCamera(
   velocity: Point,
   dt: number,
   driving: boolean,
+  viewport: Viewport = { width: 1200, height: 800 },
+  dynamic = true,
 ): Camera {
-  const eased = updateCamera(
+  return updateSpeedCamera(
     camera,
+    baseZoom,
     target,
     velocity,
     dt,
-    driving ? DRIVING_LOOK_AHEAD_MAX_M : LOOK_AHEAD_MAX_M,
+    driving,
+    viewport,
+    dynamic,
   );
-  const speedMps = Math.hypot(velocity[0], velocity[1]);
-  return {
-    ...eased,
-    zoom: speedZoomLevel(baseZoom, speedMps, camera.zoom),
-  };
 }
 
 /**
@@ -680,6 +686,7 @@ function followPlayer(
   runtime: Runtime,
   frame: SmoothedFrame,
   dt: number,
+  viewport: Viewport,
 ): void {
   const player =
     smoothedPlayer(frame, myPlayerId(runtime)) ?? myPlayer(runtime);
@@ -697,6 +704,8 @@ function followPlayer(
     velocity,
     dt,
     car !== null,
+    viewport,
+    !runtime.reducedMotion && runtime.dynamicCamera !== false,
   );
 }
 
@@ -710,12 +719,26 @@ export function hudRadioStation(
   runtime: Pick<Runtime, "sound">,
 ): string | null {
   const radio = runtime.sound.radio;
-  return radio?.playing() ? (radio.station()?.name ?? null) : null;
+  if (!radio?.playing()) return null;
+  const track = radio.track?.();
+  return track
+    ? `${radio.station()?.name ?? "Radio"} · ${track.title}`
+    : (radio.station()?.name ?? null);
 }
 
 /** Drives the engine loop from the car this player sits in, if any. */
 function updateEngineSound(runtime: Runtime): void {
   const player = myPlayer(runtime);
+  const run = player.mission?.run;
+  const mission = run && missionById(run.definitionId);
+  const broadcast =
+    mission &&
+    run &&
+    (run.status === "active" ||
+      (run.status === "completed" && runtime.state.tick - run.lastTick < 600))
+      ? (missionScenario(mission).radioStages?.[run.stage] ?? null)
+      : null;
+  runtime.sound.radio?.setMissionTrack?.(broadcast);
   const car = occupiedVehicle(runtime.state, player);
   runtime.sound.updateEngine(
     car ? Math.abs(forwardSpeed(car)) : 0,
@@ -857,7 +880,11 @@ function advanceSimulation(
       ),
     );
     feelTick(runtime, runtime.state);
-    runtime.tally = tallyEvents(runtime.tally, runtime.state.events);
+    runtime.tally = tallyEvents(
+      runtime.tally,
+      runtime.state.events,
+      runtime.state.players,
+    );
     updateEngineSound(runtime);
     updateSirenSound(runtime);
     runtime.accumulator -= SIM_STEP_S;
@@ -946,6 +973,30 @@ function refreshThrottled(
   }
   if (timestamp - runtime.lastHud >= HUD_REFRESH_MS) {
     runtime.lastHud = timestamp;
+    const mission = missionHud(
+      runtime.session.index(),
+      runtime.state,
+      myPlayer(runtime),
+    );
+    const routeKey =
+      mission.profile.run?.status === "active"
+        ? `${mission.profile.run.contractId}:${mission.profile.run.stage}:${mission.profile.run.objective.gate}:${mission.profile.run.inventory.join(",")}`
+        : "";
+    const targetMoved =
+      mission.destination &&
+      runtime.missionRoutePosition &&
+      distanceBetween(mission.destination, runtime.missionRoutePosition) >= 12;
+    if (runtime.missionRouteKey !== routeKey || targetMoved) {
+      const player = myPlayer(runtime);
+      if (routeKey || runtime.missionRouteKey)
+        runtime.navigation.select(
+          mission.destination,
+          [player.x, player.y],
+          player.vehicleId !== null,
+        );
+      runtime.missionRouteKey = routeKey;
+      runtime.missionRoutePosition = mission.destination;
+    }
     options.setHud(
       computeHud(
         runtime.session,
@@ -1013,6 +1064,7 @@ function runFrame(
   );
   const pointer = options.pointerRef.current?.position() ?? null;
   const player = myPlayer(runtime);
+  options.inputRef.current.acknowledgeMission(player.mission?.lastCommand ?? 0);
   const ownView = runtime.split?.views.find((view) =>
     view.ids.includes(player.id),
   );
@@ -1049,7 +1101,7 @@ function runFrame(
     runtime.state,
     renderAlpha(runtime),
   );
-  followPlayer(runtime, frame, dt);
+  followPlayer(runtime, frame, dt, size);
   if (trackDeath(runtime, timestamp))
     options.setDeath(
       runtime.diedAtMs === null ? null : { diedAtMs: runtime.diedAtMs },
@@ -1069,10 +1121,20 @@ function runFrame(
     );
     runtime.split = updateSplitScreen(
       runtime.split ?? { views: [], dividerOpacity: 0 },
-      tracked,
+      tracked.map((candidate) => {
+        const vehicle = occupiedVehicle(runtime.state, candidate);
+        const velocity: Point = vehicle
+          ? [vehicle.velocityX, vehicle.velocityY]
+          : [
+              Math.cos(candidate.facing) * candidate.speed,
+              Math.sin(candidate.facing) * candidate.speed,
+            ];
+        return { ...candidate, velocity, driving: vehicle !== null };
+      }),
       size,
       dt,
       runtime.reducedMotion,
+      runtime.dynamicCamera !== false,
     );
   } else runtime.split = undefined;
   const zone = runtime.state.zoneKey

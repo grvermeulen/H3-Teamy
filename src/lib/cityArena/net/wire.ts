@@ -9,6 +9,17 @@
  */
 
 import type { WorldInput } from "../sim/types";
+import type { MissionCommand } from "../missions/types";
+
+/** Stable mission intent order on the input wire. */
+export const MISSION_COMMANDS: readonly MissionCommand["kind"][] = [
+  "offer",
+  "accept",
+  "close",
+  "hint",
+  "abandon",
+  "retry",
+];
 
 /** Move components travel as hundredths, so the frame stays integers. */
 export const MOVE_SCALE = 100;
@@ -131,6 +142,15 @@ export function encodeInput(seq: number, input: WorldInput): InputFrame {
     quantise(input.move[1], MOVE_SCALE, MOVE_SCALE),
     input.aim === null ? NO_AIM : packAngle(input.aim),
     flags,
+    ...(input.missionCommand
+      ? [
+          input.missionCommand.sequence,
+          MISSION_COMMANDS.indexOf(input.missionCommand.kind),
+          input.missionCommand.missionId
+            ? Number(input.missionCommand.missionId.slice(1))
+            : 0,
+        ]
+      : []),
   ];
 }
 
@@ -166,6 +186,17 @@ export function decodeInput(frame: InputFrame): {
   return {
     seq: safeInt(seq, 0, Number.MAX_SAFE_INTEGER, 0),
     input: {
+      ...(frame.length === 8 && frame[5] > 0 && MISSION_COMMANDS[frame[6]]
+        ? {
+            missionCommand: {
+              sequence: frame[5],
+              kind: MISSION_COMMANDS[frame[6]],
+              ...(frame[7]
+                ? { missionId: `M${String(frame[7]).padStart(2, "0")}` }
+                : {}),
+            },
+          }
+        : {}),
       move: [
         safeInt(moveX, -MOVE_SCALE, MOVE_SCALE, 0) / MOVE_SCALE,
         safeInt(moveY, -MOVE_SCALE, MOVE_SCALE, 0) / MOVE_SCALE,

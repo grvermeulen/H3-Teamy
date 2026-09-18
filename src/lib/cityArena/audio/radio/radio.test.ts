@@ -51,6 +51,41 @@ const flush = (): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("createRadio", () => {
+  it("restores the interrupted station after a mission ends while muted and on foot", async () => {
+    const { element, radio } = setup();
+    radio.setInCar(true);
+    element.currentTime = 42;
+    radio.setMissionTrack("Drie");
+    radio.setInCar(false);
+    radio.setEnabled(false);
+    radio.setMissionTrack(null);
+    radio.setEnabled(true);
+    radio.setInCar(true);
+    await flush();
+    expect(element.currentTime).toBe(42);
+  });
+  it("plays mission audio on foot, respects mute and restores the regular track position", async () => {
+    const { element, radio } = setup();
+    radio.setInCar(true);
+    await flush();
+    element.currentTime = 42;
+    radio.setMissionTrack("Drie");
+    radio.setInCar(false);
+    await flush();
+    expect(radio.track()?.title).toBe("Drie");
+    expect(element.paused).toBe(false);
+    radio.setEnabled(false);
+    expect(element.paused).toBe(true);
+    radio.setEnabled(true);
+    radio.setInCar(true);
+    radio.setMissionTrack(null);
+    await flush();
+    expect(radio.track()?.title).toBe("Een");
+    expect(element.currentTime).toBe(42);
+    radio.nextTrack();
+    await flush();
+    expect(radio.track()?.title).toBe("Twee");
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });

@@ -56,7 +56,7 @@ describe("damage", () => {
 
   it("damages cars down to zero, leaves wrecks alone and tests the blast radius", () => {
     const car = createVehicle(1, "sedan", [0, 0], 0, 0);
-    expect(damageVehicle(car, 78).health).toBe(22);
+    expect(damageVehicle(car, 78).health).toBe(102);
     expect(damageVehicle({ ...car, health: 22 }, 78).health).toBe(0);
     const wreck = { ...car, wrecked: true, health: 0 };
     expect(damageVehicle(wreck, 10)).toBe(wreck);

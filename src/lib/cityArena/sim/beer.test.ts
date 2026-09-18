@@ -127,7 +127,7 @@ describe("the brewery", () => {
     const car = createVehicle(50, "sedan", [localPlayer(base).x + 1, 0], 0, 0);
     const state = { ...base, vehicles: [car] };
     const next = run(state, press);
-    expect(localPlayer(next).vehicleId).toBe(car.id);
+    expect(next.vehicles[0].boarding?.ownerId).toBe(localPlayer(next).id);
     expect(localPlayer(next).drunk).toBe(0);
   });
 

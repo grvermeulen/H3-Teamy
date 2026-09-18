@@ -170,6 +170,7 @@ describe("ArenaSettingsSchema", () => {
       vibrate: true,
       twinStick: true,
       radio: true,
+      dynamicCamera: true,
       quality: "auto",
     });
     expect(

@@ -1,13 +1,19 @@
 import {
-  ZOOM_LEVELS,
+  createCamera,
+  updateSpeedCamera,
   type Camera,
   type Viewport,
-  type ZoomLevel,
 } from "./camera";
 import type { Point } from "../world/projection";
 
 /** A tracked player position, including players waiting to respawn. */
-export type SplitPlayer = { id: number; x: number; y: number };
+export type SplitPlayer = {
+  id: number;
+  x: number;
+  y: number;
+  velocity?: Point;
+  driving?: boolean;
+};
 type ScreenRect = { x: number; y: number; width: number; height: number };
 /** A camera plus its clipped region in CSS pixels. */
 export type SplitView = {
@@ -185,6 +191,7 @@ export function updateSplitScreen(
   size: Viewport,
   dt: number,
   reducedMotion = false,
+  dynamicCamera = true,
 ): SplitScreen {
   if (!players.length || size.width <= 0 || size.height <= 0)
     return { views: [], dividerOpacity: 0 };
@@ -212,13 +219,24 @@ export function updateSplitScreen(
     const region = cameraRegion(clip);
     const target = centre(group);
     const old = previous.views.find((view) => view.ids.includes(ids[0]!));
-    const zoom = old
-      ? blend(old.zoom, zoomFor(group, region.safe))
-      : zoomFor(group, region.safe);
-    let rasterZoom: ZoomLevel = ZOOM_LEVELS[0];
-    for (const level of ZOOM_LEVELS)
-      if (Math.abs(level - zoom) < Math.abs(rasterZoom - zoom))
-        rasterZoom = level;
+    const fastest = group.reduce((best, player) =>
+      Math.hypot(...(player.velocity ?? [0, 0])) >
+      Math.hypot(...(best.velocity ?? [0, 0]))
+        ? player
+        : best,
+    );
+    const groupZoom = zoomFor(group, region.safe);
+    const moving = updateSpeedCamera(
+      old ? { ...old.camera, zoom: old.zoom } : createCamera(target, groupZoom),
+      Math.min(12, Math.max(4, region.safe.width / 100)),
+      target,
+      fastest.velocity ?? [0, 0],
+      dt,
+      group.some((player) => player.driving),
+      region.safe,
+      !reducedMotion && dynamicCamera,
+    );
+    const zoom = Math.min(groupZoom, moving.zoom);
     // Change all polygon topologies together so merging and resizing cannot leave holes.
     const movedClip =
       easeRegions && old
@@ -233,9 +251,20 @@ export function updateSplitScreen(
       rect: cameraRegion(movedClip).rect,
       zoom,
       camera: {
-        x: old ? blend(old.camera.x, target[0]) : target[0],
-        y: old ? blend(old.camera.y, target[1]) : target[1],
-        zoom: rasterZoom,
+        ...moving,
+        x:
+          group.length === 1 && !reducedMotion
+            ? moving.x
+            : old
+              ? blend(old.camera.x, target[0])
+              : target[0],
+        y:
+          group.length === 1 && !reducedMotion
+            ? moving.y
+            : old
+              ? blend(old.camera.y, target[1])
+              : target[1],
+        zoom,
       },
     };
   });

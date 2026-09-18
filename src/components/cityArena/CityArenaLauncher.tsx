@@ -14,6 +14,7 @@ import { RoomList } from "./launcher/RoomList";
 import { useActiveRooms } from "./launcher/useActiveRooms";
 import { ArenaNewGame } from "./ArenaNewGame";
 import type { ArenaEntry } from "./arenaEntry";
+import { loadArenaSettings } from "@/lib/cityArena/storage";
 
 /** Same full-screen layer as the overlay itself, so the chunk load never flashes inline. */
 function ChunkLoadingOverlay(): React.JSX.Element | null {
@@ -165,6 +166,20 @@ export default function CityArenaLauncher(): React.JSX.Element {
           )}
         </div>
         {loggedIn && showLeaderboard ? <ArenaLeaderboard /> : null}
+        {loggedIn ? (
+          <button
+            type="button"
+            className="arena-label mt-3 min-h-11 w-full bg-[var(--arena-amber)] px-3 py-3 text-[var(--arena-void)]"
+            onClick={() =>
+              setEntry({
+                kind: "solo",
+                zone: loadArenaSettings().lastZone ?? "rhenen",
+              })
+            }
+          >
+            Soloverhaal · missies en vrij rondrijden
+          </button>
+        ) : null}
         {loggedIn ? (
           <LauncherActions
             onNewRoom={openNewRoom}

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { authorizeArenaRequest } from "@/lib/arenaAuth";
-import { ArenaRoomCommandSchema } from "@/lib/cityArena/net/roomProtocol";
+import {
+  ArenaRoomCommandSchema,
+  ARENA_PROTOCOL_VERSION,
+} from "@/lib/cityArena/net/roomProtocol";
 import { ARENA_LIMITS, checkRateLimit, rateLimited } from "@/lib/rateLimit";
 import {
   ArenaRoomError,
@@ -21,6 +24,17 @@ export async function POST(req: NextRequest): Promise<Response> {
     if (!parsed.success)
       return NextResponse.json({ error: "Ongeldig verzoek" }, { status: 400 });
     if (parsed.data.action === "create" || parsed.data.action === "join") {
+      if (
+        req.headers.get("X-Arena-Protocol") !== String(ARENA_PROTOCOL_VERSION)
+      )
+        return NextResponse.json(
+          {
+            error:
+              "Het spel is bijgewerkt. Vernieuw de pagina om mee te spelen.",
+            reason: "protocol-mismatch",
+          },
+          { status: 409 },
+        );
       const limit = await checkRateLimit(ARENA_LIMITS.join, user.userId);
       if (!limit.allowed) return rateLimited(limit);
     }

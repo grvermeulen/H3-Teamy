@@ -8,6 +8,7 @@ import { ROOM_CODE_ALPHABET } from "../cityArena/net/room";
 import {
   ArenaZoneSchema,
   ROOM_RULES,
+  ARENA_PROTOCOL_VERSION,
   arenaChannels,
   type ArenaRoomCommand,
   type ArenaRoomTicket,
@@ -193,6 +194,7 @@ async function ticketFor(
           startedAt: round.startedAt.getTime(),
           finishesAt: round.finishesAt.getTime(),
           completedAt: round.completedAt?.getTime() ?? null,
+          scoringVersion: round.scoringVersion === 2 ? 2 : 1,
         }
       : null,
   };
@@ -302,6 +304,12 @@ async function join(
         "Deze deelname is niet meer geldig",
       );
     const room = await lockArenaRoom(tx, previous.roomId, now);
+    if (room.protocolVersion !== ARENA_PROTOCOL_VERSION)
+      throw new ArenaRoomError(
+        "protocol-mismatch",
+        409,
+        "Dit potje gebruikt een oudere spelversie. Open na afloop een nieuw potje.",
+      );
     const fresh = await requireArenaMember(tx, previous.id, owner);
     if (
       (command.action === "join" && room.code !== command.roomCode) ||
@@ -352,6 +360,7 @@ async function join(
       data: {
         code,
         zone: command.zone,
+        protocolVersion: ARENA_PROTOCOL_VERSION,
         expiresAt: new Date(now.getTime() + ROOM_RULES.roomTtlMs),
         hostMemberId:
           role === "controller" || role === "display" ? null : memberId,
@@ -377,6 +386,12 @@ async function join(
         "Dit potje bestaat niet meer",
       );
     room = await lockArenaRoom(tx, found.id, now);
+    if (room.protocolVersion !== ARENA_PROTOCOL_VERSION)
+      throw new ArenaRoomError(
+        "protocol-mismatch",
+        409,
+        "Dit potje gebruikt een oudere spelversie. Open na afloop een nieuw potje.",
+      );
     const members = await liveMembers(tx, room.id, now);
     if (members.length === 0)
       throw new ArenaRoomError(
@@ -510,7 +525,8 @@ export async function commandArenaRoom(
         data: {
           roomId: room.id,
           startedAt,
-          finishesAt: new Date(startedAt.getTime() + ROOM_RULES.matchMs),
+          scoringVersion: 2,
+          finishesAt: new Date(startedAt.getTime() + ROOM_RULES.missionMatchMs),
           participants: {
             create: members.map((entry) => ({
               memberId: entry.id,
