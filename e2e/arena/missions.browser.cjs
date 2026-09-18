@@ -60,6 +60,9 @@ async function visit(page, position, holdMs = 120) {
     await expect
       .poll(() => page.evaluate(() => !!window.__arena?.getState()))
       .toBe(true);
+    await expect
+      .poll(() => page.evaluate(() => window.__arena.getState().tick))
+      .toBeGreaterThan(5);
     await visit(page, point("noor"));
     const offer = page.getByRole("dialog", { name: "Verkeerd bezorgd" });
     await expect(offer).toBeVisible();
@@ -150,6 +153,62 @@ async function visit(page, position, holdMs = 120) {
     await page.screenshot({
       path: path.join(output, "mobile-payout-restored.png"),
     });
+    await page.getByRole("button", { name: "Logboek", exact: true }).click();
+    await page.evaluate(() => {
+      const state = window.__arena.getState();
+      const car = state.vehicles.find(
+        (vehicle) =>
+          !vehicle.wrecked &&
+          !vehicle.boarding &&
+          !state.traffic.some((driver) => driver.vehicleId === vehicle.id),
+      );
+      if (!car) throw new Error("No parked car for exit regression");
+      Object.assign(state.players[0], {
+        vehicleId: car.id,
+        x: car.x,
+        y: car.y,
+        speed: 0,
+      });
+    });
+    await page.keyboard.down("e");
+    await page.waitForTimeout(120);
+    await page.keyboard.up("e");
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.__arena.getState().players[0].vehicleId),
+      )
+      .toBeNull();
+    await visit(page, point("dex"));
+    const shadowOffer = page.getByRole("dialog", { name: "Schaduw op straat" });
+    await expect(shadowOffer).toBeVisible();
+    await shadowOffer.getByRole("button", { name: "Aannemen" }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => window.__arena.getState().players[0].mission?.run?.definitionId,
+        ),
+      )
+      .toBe("M10");
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const state = window.__arena.getState();
+          const id = state.players[0].mission?.actors?.uitkijk?.id;
+          return state.peds.some((ped) => ped.id === id && ped.health > 0);
+        }),
+      )
+      .toBe(true);
+    await visit(page, point("M10:uitkijk"), 0);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => window.__arena.getState().players[0].mission?.run?.stage,
+        ),
+      )
+      .toBe(1);
+    await page.screenshot({
+      path: path.join(output, "shadow-lookout-found.png"),
+    });
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth > innerWidth,
     );
@@ -165,13 +224,17 @@ async function visit(page, position, holdMs = 120) {
           paid: 325,
           restored: 325,
           mobileOverflow: false,
+          exitAfterFocusedButton: true,
+          shadowLookoutFound: true,
           errors,
         },
         null,
         2,
       ),
     );
-    console.log("Mission briefing, acceptance and mobile layout passed");
+    console.log(
+      "Mission payout/save, mobile layout, focused-button exit and shadow lookout passed",
+    );
     await context.close();
   } finally {
     await browser.close();

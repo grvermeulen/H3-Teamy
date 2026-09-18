@@ -24,6 +24,15 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.4.1": {
+    title: "Missies en uitstappen hersteld",
+    steps: [
+      {
+        title: "Weer verder op straat",
+        body: "E blijft werken nadat je een spelknop hebt aangeklikt. Niet-uitvoerbare missieacties blokkeren het uitstappen niet meer. In Schaduw op straat staat de uitkijk nu klaar zodra je hem moet vinden.",
+      },
+    ],
+  },
   "0.4.0": {
     title: "Aan het werk in GTA H3",
     steps: [

@@ -17,12 +17,15 @@ import {
   stepWorldMissions,
   emptyMissionProfile,
   missionUnavailable,
+  missionInteractionLabel,
 } from "./world";
 import { missionHud } from "./hud";
 import type { MissionCommand } from "./types";
 import { ensureMissionActors } from "./actors";
 import { createCollisionGrid } from "../world/collisionGrid";
 import { decodeRoadGraph } from "../world/roadGraph";
+import { stepArena } from "../sim/arena";
+import { createRng } from "../sim/rng";
 
 const index = parseMapIndex(map);
 it("closes an expired briefing instead of leaving its accept button stuck", () => {
@@ -103,6 +106,105 @@ function initial(): ArenaState {
     zoneEnforced: false,
   };
 }
+
+function atMissionStage(
+  id: string,
+  stage: number,
+  alias: string,
+  driving = false,
+): ArenaState {
+  const state = initial();
+  const definition = missionById(id)!;
+  const [x, y] = missionAnchor(`${id}:${alias}`)!;
+  state.zoneKey = state.activeZoneKey = definition.zone;
+  state.players[0] = {
+    ...state.players[0],
+    x,
+    y,
+    vehicleId: driving ? 10 : null,
+    mission: {
+      ...emptyMissionProfile(),
+      run: {
+        ...startMission(definition, state.players[0].id, `test:${id}`, 0),
+        stage,
+      },
+    },
+  };
+  if (driving) state.vehicles = [createVehicle(10, "sedan", [x, y], 0, 0)];
+  return state;
+}
+
+function simulationTick(state: ArenaState, enter = false): ArenaState {
+  return stepArena(
+    state,
+    new Map([[state.players[0].id, createInput({ enter })]]),
+    1 / 30,
+    world,
+    createRng(7),
+  );
+}
+
+describe("reported mission and exit regressions", () => {
+  it("spawns the lookout before the approach objective and completes the actual shadowing mission", () => {
+    let state = atMissionStage("M10", 0, "uitkijk");
+    state = ensureMissionActors(state, world);
+    const id = state.players[0].mission!.actors!.uitkijk.id;
+    expect(state.peds.find((ped) => ped.id === id)?.health).toBe(100);
+    state = simulationTick(state);
+    expect(state.players[0].mission?.run?.stage).toBe(1);
+    for (let i = 0; i < 35 * 30; i++) {
+      const target = state.peds.find((ped) => ped.id === id)!;
+      state.players[0] = { ...state.players[0], x: target.x + 30, y: target.y };
+      state = simulationTick(state);
+    }
+    expect(state.players[0].mission?.run?.stage).toBe(2);
+    for (const [alias, ticks] of [
+      ["observatie-1", 120],
+      ["observatie-2", 120],
+      ["voorraad", 90],
+      ["dex", 1],
+    ] as const) {
+      const [x, y] = missionAnchor(`M10:${alias}`)!;
+      state.players[0] = { ...state.players[0], x, y, speed: 0 };
+      state = simulationTick(state);
+      for (let i = 0; i < ticks; i++) state = simulationTick(state, true);
+    }
+    expect(state.players[0].mission?.run?.status).toBe("completed");
+    expect(state.players[0].mission?.wallet.earned).toBe(700);
+  });
+
+  it.each([
+    ["M10", 2, "observatie-1"],
+    ["M13", 0, "koelstation"],
+    ["M01", 4, "recipient"],
+    ["M02", 2, "klant-1"],
+  ] as const)(
+    "allows exiting at %s:%s when the mission action cannot run",
+    (id, stage, alias) => {
+      const state = atMissionStage(id, stage, alias, true);
+      expect(missionInteractionLabel(state.players[0], state)).toBeNull();
+      const next = simulationTick(state, true);
+      expect(next.players[0].vehicleId).toBeNull();
+    },
+  );
+
+  it("still delivers cargo from the correct stopped mission van", () => {
+    let state = atMissionStage("M02", 2, "klant-1");
+    state = ensureMissionActors(state, world);
+    const player = state.players[0];
+    const van = state.vehicles.find(
+      (vehicle) => vehicle.id === player.mission!.actors!.bus.id,
+    )!;
+    van.x = player.x;
+    van.y = player.y;
+    player.vehicleId = van.id;
+    player.mission!.run!.inventory = ["krat-1", "krat-2", "krat-3"];
+    expect(missionInteractionLabel(player, state)).toBe("Afleveren");
+    const next = simulationTick(state, true);
+    expect(next.players[0].mission?.run?.stage).toBe(3);
+    expect(next.players[0].vehicleId).toBe(van.id);
+  });
+});
 
 function command(state: ArenaState, action: MissionCommand): ArenaState {
   const frame = encodeInput(

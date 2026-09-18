@@ -112,7 +112,14 @@ export function missionScenario(
       behavior,
       behaviorFromStage:
         objective.kind === "follow" ? stage : existing?.behaviorFromStage,
-      fromStage: Math.min(stage, existing?.fromStage ?? stage),
+      fromStage: Math.min(
+        stage,
+        existing?.fromStage ?? stage,
+        parts.find(
+          ({ objective: earlier }) =>
+            "target" in earlier && earlier.target === objective.target,
+        )?.stage ?? stage,
+      ),
       clues: objective.kind === "identify" ? objective.clues : existing?.clues,
       ...(behavior === "route"
         ? {

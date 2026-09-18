@@ -81,7 +81,7 @@ describe("attachKeyboard", () => {
     detach();
   });
 
-  it("ignores keys typed into form fields or pressed on a focused button, and resets on blur", () => {
+  it("ignores form input and native button activation keys, and resets on blur", () => {
     const state = createInputState();
     const detach = attachKeyboard(window, state);
     const input = document.createElement("input");
@@ -89,7 +89,15 @@ describe("attachKeyboard", () => {
     document.body.append(input, button);
     press("KeyW", input);
     press("Space", button);
+    press("Enter", button);
     expect(state.snapshot()).toMatchObject({ move: [0, 0], fire: false });
+    expect(state.snapshot().enter).toBe(false);
+    press("KeyE", input);
+    expect(state.snapshot().enter).toBe(false);
+    press("KeyE", button);
+    expect(state.snapshot().enter).toBe(true);
+    release("KeyE");
+    expect(state.snapshot().enter).toBe(false);
     press("KeyW");
     press("Space");
     expect(state.snapshot()).toMatchObject({ move: [0, -1], fire: true });

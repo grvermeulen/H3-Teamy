@@ -12,7 +12,13 @@ export function optionalMissionAction(
   const profile = player.mission;
   const run = profile?.run;
   const definition = run && missionById(run.definitionId);
-  if (!run || !definition || run.status !== "active" || player.speed > 0.5)
+  if (
+    !run ||
+    !definition ||
+    run.status !== "active" ||
+    player.speed >= 0.5 ||
+    player.vehicleId !== null
+  )
     return null;
   const scenario = missionScenario(definition);
   const targets = missionTargets(definition, state, profile);
@@ -27,9 +33,7 @@ export function optionalMissionAction(
           },
         ]
       : []),
-    ...(pickup &&
-    player.vehicleId === null &&
-    !run.inventory.includes(pickup.alias)
+    ...(pickup && !run.inventory.includes(pickup.alias)
       ? [{ ...pickup, recharge: false }]
       : []),
   ];
