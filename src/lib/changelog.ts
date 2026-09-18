@@ -24,6 +24,15 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.4.4": {
+    title: "Meer zicht tijdens missies",
+    steps: [
+      {
+        title: "Compact missiepaneel",
+        body: "Na het aannemen klapt je missie automatisch in tot een compacte, transparantere balk bovenaan. Je opdracht, afstand en voortgang blijven zichtbaar. Tik op de missienaam om gesprekken, hints en routeknoppen te openen.",
+      },
+    ],
+  },
   "0.4.3": {
     title: "Herkenbare autowrakken",
     steps: [

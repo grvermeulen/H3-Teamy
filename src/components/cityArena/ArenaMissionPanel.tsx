@@ -97,20 +97,24 @@ function Briefing({
   );
 }
 
-/** Contract briefing, current step, hints, dialogue history and once-only payment receipt. */
-export function ArenaMissionPanel({
-  mission,
-  onAction,
-  onRoute,
-}: {
+type MissionPanelProps = {
   mission: MissionHud;
   onAction: Action;
   onRoute: (point: Point | null) => void;
-}): React.JSX.Element {
+};
+
+function MissionPanel({
+  mission,
+  onAction,
+  onRoute,
+}: MissionPanelProps): React.JSX.Element {
   const [journal, setJournal] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const { profile, definition, contact } = mission;
   const run = profile.run;
   const stage = definition && run ? definition.stages[run.stage] : null;
+  const active = Boolean(stage && run?.status === "active");
+  const compact = active && !expanded;
   const receipt = profile.wallet.receipts.find(
     (entry) => entry.contractId === run?.contractId,
   );
@@ -118,26 +122,44 @@ export function ArenaMissionPanel({
     <>
       <section
         aria-label="Missies en geld"
-        className="absolute top-3 left-3 z-10 max-h-[42%] w-[min(20rem,calc(100%-7rem))] overflow-y-auto rounded-lg border border-white/20 bg-slate-950/90 p-3 text-sm text-white shadow-lg"
+        className={`absolute top-3 left-3 z-10 max-h-[42%] w-[min(20rem,calc(100%-8rem))] overflow-y-auto rounded-lg border border-white/20 text-white shadow-lg ${compact ? "bg-slate-950/55 px-2 pb-2 text-xs" : "bg-slate-950/90 p-3 text-sm"}`}
       >
-        <div className="flex items-center justify-between gap-3">
-          <strong className="text-emerald-300">
-            €{profile.wallet.balance}{" "}
-            <span className="text-xs font-normal">
-              · verdiend €{profile.wallet.earned}
-            </span>
-          </strong>
+        {active && (
           <button
-            className={button}
-            aria-expanded={journal}
-            onClick={() => setJournal(!journal)}
+            type="button"
+            aria-label={
+              expanded ? "Missiedetails inklappen" : "Missiedetails uitklappen"
+            }
+            aria-expanded={expanded}
+            onClick={() => setExpanded(!expanded)}
+            className="flex min-h-11 w-full items-center justify-between gap-2 rounded text-left font-bold text-amber-200 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-amber-200"
           >
-            Logboek
+            <span>{definition?.title}</span>
+            <span aria-hidden="true">{expanded ? "▴" : "▾"}</span>
           </button>
-        </div>
+        )}
+        {!compact && (
+          <div className="flex items-center justify-between gap-3">
+            <strong className="text-emerald-300">
+              €{profile.wallet.balance}{" "}
+              <span className="text-xs font-normal">
+                · verdiend €{profile.wallet.earned}
+              </span>
+            </strong>
+            <button
+              className={button}
+              aria-expanded={journal}
+              onClick={() => setJournal(!journal)}
+            >
+              Logboek
+            </button>
+          </div>
+        )}
         {definition && run && stage ? (
-          <div aria-live="polite" className="mt-2">
-            <h3 className="font-bold text-amber-200">{definition.title}</h3>
+          <div aria-live="polite" className={compact ? "" : "mt-2"}>
+            {!active && (
+              <h3 className="font-bold text-amber-200">{definition.title}</h3>
+            )}
             {run.status === "active" ? (
               <>
                 <p className="mt-1">
@@ -149,10 +171,12 @@ export function ArenaMissionPanel({
                     ? ` · ${mission.secondsLeft} s over`
                     : ""}
                 </p>
-                <p className="my-2 text-xs">
-                  <strong>{stage.dialogue[0].speaker}: </strong>
-                  {stage.dialogue[0].text}
-                </p>
+                {!compact && (
+                  <p className="my-2 text-xs">
+                    <strong>{stage.dialogue[0].speaker}: </strong>
+                    {stage.dialogue[0].text}
+                  </p>
+                )}
                 {mission.meters?.map((meter) => (
                   <label key={meter.label} className="my-2 block text-xs">
                     {meter.label}: {Math.floor(meter.value)}/{meter.max}
@@ -163,35 +187,39 @@ export function ArenaMissionPanel({
                     />
                   </label>
                 ))}
-                {stage.hints.slice(0, run.hint).map((hint) => (
-                  <p key={hint} className="my-1 text-xs text-amber-100">
-                    Hint: {hint}
-                  </p>
-                ))}
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    className={button}
-                    onClick={() => onAction({ kind: "hint" })}
-                  >
-                    Hint
-                  </button>
-                  {mission.destination && (
-                    <button
-                      className={button}
-                      onClick={() => onRoute(mission.destination)}
-                    >
-                      Route volgen
-                    </button>
-                  )}
-                  {journal && (
-                    <button
-                      className={button}
-                      onClick={() => onAction({ kind: "abandon" })}
-                    >
-                      Missie stoppen
-                    </button>
-                  )}
-                </div>
+                {!compact && (
+                  <>
+                    {stage.hints.slice(0, run.hint).map((hint) => (
+                      <p key={hint} className="my-1 text-xs text-amber-100">
+                        Hint: {hint}
+                      </p>
+                    ))}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        className={button}
+                        onClick={() => onAction({ kind: "hint" })}
+                      >
+                        Hint
+                      </button>
+                      {mission.destination && (
+                        <button
+                          className={button}
+                          onClick={() => onRoute(mission.destination)}
+                        >
+                          Route volgen
+                        </button>
+                      )}
+                      {journal && (
+                        <button
+                          className={button}
+                          onClick={() => onAction({ kind: "abandon" })}
+                        >
+                          Missie stoppen
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
               </>
             ) : (
               <>
@@ -227,7 +255,8 @@ export function ArenaMissionPanel({
                 ) : null}
               </>
             )}
-            {journal &&
+            {!compact &&
+              journal &&
               definition.stages.slice(0, run.stage + 1).map((entry) => (
                 <div
                   key={entry.id}
@@ -278,5 +307,15 @@ export function ArenaMissionPanel({
       </section>
       {mission.offer && <Briefing offer={mission.offer} onAction={onAction} />}
     </>
+  );
+}
+
+/** Shows the briefing in full and starts each accepted contract with a compact objective HUD. */
+export function ArenaMissionPanel(props: MissionPanelProps): React.JSX.Element {
+  return (
+    <MissionPanel
+      key={props.mission.profile.run?.contractId ?? "idle"}
+      {...props}
+    />
   );
 }
