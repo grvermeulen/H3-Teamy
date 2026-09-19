@@ -41,7 +41,7 @@ const MIB = 1024 * 1024;
 export type RadioLimits = { trackBytes: number; totalBytes: number };
 
 /**
- * Vocal productions use 128 kbps. The eighteen-track dial has a 48 MiB ceiling;
+ * Vocal productions use 128 kbps. The radio library has a 48 MiB ceiling;
  * tracks stream individually rather than loading the complete library.
  */
 export const RADIO_LIMITS: RadioLimits = {

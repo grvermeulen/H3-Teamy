@@ -66,8 +66,134 @@ function piece(
   };
 }
 
-/** Twelve original vocal tracks and fictional radio sketches; no existing song lyrics. */
+/** Original vocal tracks and fictional radio sketches; no existing song lyrics. */
 export const RADIO_EXPANSION: RadioProduction[] = [
+  piece(
+    "beuk",
+    "Radio Beuk",
+    "Nog één ronde",
+    [
+      "152 BPM peak time acid techno workout rave",
+      "heavy tight four on the floor kick with controlled deep sub bass",
+      "resonant 303 acid sequence and metallic warehouse percussion",
+      "commanding rhythmic Dutch female vocal chants",
+      "short builds, full energy drops, no long ambient breakdown",
+    ],
+    [
+      [
+        12,
+        "[Immediate groove] {kick and rolling bass from the first beat, acid filter opens, crisp hats}",
+      ],
+      [
+        18,
+        "[Rhythmic chant]\nVoeten op de vloer\nBlik vooruit\nAlles komt in beweging\nDraai die twijfel uit",
+      ],
+      [
+        30,
+        "[Acid drop] {full pounding drums, elastic sub bass, evolving acid riff, chopped original vocal hook}\nNog één ronde\nNog één keer\nVoel de vloer\nWe gaan weer",
+      ],
+      [
+        15,
+        "[Tension build, keep the pulse]\nHoor mijn hart in de muren\nVoel de slag in mijn hand\nAlle lichten gaan aan\nHeel de ruimte in brand",
+      ],
+      [
+        30,
+        "[Second drop] {harder acid modulation, syncopated bass answers, sharp ride cymbal, continuous driving kick}\nNog één ronde\nNog één keer\nVoel de vloer\nWe gaan weer",
+      ],
+      [
+        35,
+        "[Final workout drive] {extended instrumental acid rave climax, drum fills every eight bars, no slow break}\nNog één ronde\nWe gaan weer",
+      ],
+      [
+        10,
+        "[DJ ending] {strip to bass and drums, decisive final hit and short reverb tail}",
+      ],
+    ],
+  ),
+  piece(
+    "beuk",
+    "Radio Beuk",
+    "Staal en zweet",
+    [
+      "148 BPM bouncy hard dance and donk workout anthem",
+      "punchy kick, rubbery offbeat bass, gritty hoover synth stabs",
+      "playful rhythmic Dutch male lead with female call and response",
+      "crisp claps, shuffled hats, compact festival builds",
+      "heavy physical low end with clear vocals and relentless groove",
+    ],
+    [
+      [
+        10,
+        "[Punchy opening] {immediate bouncy kick and donk bass, short hoover stab call}",
+      ],
+      [
+        20,
+        "[Call and response]\nWie zet de ruimte aan?\nWij zetten alles aan!\nStaal en zweet\nDe vloer die weet\nDat wij hier niet voor stilte staan",
+      ],
+      [
+        30,
+        "[Bounce drop] {rubbery offbeat bass, hoover hook, syncopated stabs, muscular kick}\nStaal en zweet\nDe hele zaal beweegt\nLinks, rechts\nTot de vloer het weet",
+      ],
+      [
+        15,
+        "[Percussive vocal bridge]\nDe klok gaat rond\nDe bas gaat laag\nIk voel de vonken\nDwars door vandaag",
+      ],
+      [
+        35,
+        "[Bigger second drop] {wide hoover response, bass variations, extra ride cymbal and playful vocal chops}\nStaal en zweet\nDe hele zaal beweegt\nLinks, rechts\nTot de vloer het weet",
+      ],
+      [
+        30,
+        "[Final bounce workout] {sustained instrumental dance groove, lively drum fills, no tempo drop}\nWij zetten alles aan!",
+      ],
+      [
+        10,
+        "[Clean ending] {drums and bass resolve together, short final impact}",
+      ],
+    ],
+  ),
+  piece(
+    "beuk",
+    "Radio Beuk",
+    "Door de grens",
+    [
+      "160 BPM euphoric hard trance and fast hard dance workout finale",
+      "powerful clean reverse bass kick, rolling sub bass and bright arpeggios",
+      "expressive Dutch female sung lead with group chorus answers",
+      "original soaring supersaw melody and short piano lift",
+      "uplifting athletic energy, quick transitions, sustained fast drums",
+    ],
+    [
+      [
+        10,
+        "[Fast launch] {reverse bass kick immediately, bright arpeggio rises, strong energetic groove}",
+      ],
+      [
+        20,
+        "[Sung verse]\nMijn schaduw blijft niet achter\nHij rent vandaag met mij\nIk voel de morgen komen\nDe horizon komt vrij",
+      ],
+      [
+        25,
+        "[Anthem chorus and drop]\nDoor de grens van gisteren\nNaar het licht dat voor me ligt\nIk neem de hele ruimte\nMet de wind in mijn gezicht\nDoor de grens van gisteren\nElke stap krijgt nieuw gewicht",
+      ],
+      [
+        15,
+        "[Brief piano lift over pulsing kick]\nHoor de stemmen om me heen\nDeze ronde niet alleen",
+      ],
+      [
+        35,
+        "[Main melodic drop] {full reverse bass, soaring original supersaw lead, rapid arpeggio counter melody, clear sung refrain}\nDoor de grens van gisteren\nNaar het licht dat voor me ligt\nIk neem de hele ruimte\nMet de wind in mijn gezicht",
+      ],
+      [
+        35,
+        "[Extended euphoric finish] {relentless fast groove, melodic variation, soaring pads and vocal fragments, no long silence}\nDeze ronde niet alleen\nHoor de stemmen om me heen",
+      ],
+      [
+        10,
+        "[Resolved ending] {final melodic cadence over kick, short controlled reverb tail}",
+      ],
+    ],
+  ),
   piece(
     "ramen",
     "Radio Ramen",
