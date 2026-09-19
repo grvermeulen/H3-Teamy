@@ -24,6 +24,15 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.4.6": {
+    title: "Nieuwe beukers op de autoradio",
+    steps: [
+      {
+        title: "Radio Beuk gaat een ronde verder",
+        body: "Drie nieuwe originele workout-tracks: Nog één ronde, Staal en zweet en Door de grens. Zet Radio Beuk aan voor stevige acid-rave, stuiterende harddance en snelle melodieuze trance met Nederlandse vocalen.",
+      },
+    ],
+  },
   "0.4.5": {
     title: "Een kleiner logboek",
     steps: [
