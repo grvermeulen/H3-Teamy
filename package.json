@@ -106,7 +106,7 @@
     "osm2geojson-lite": "2.0.1",
     "prettier": "^3.9.8",
     "ts-node": "^10.9.2",
-    "tsx": "^4.23.13",
+    "tsx": "^4.23.15",
     "typescript": "6.0.3",
     "vite": "8.3.0",
     "vitest": "^5.0.0"
