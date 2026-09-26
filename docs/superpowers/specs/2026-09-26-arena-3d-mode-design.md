@@ -73,7 +73,9 @@ footprint the blast circle overlaps.
 
 ### 3.4 State
 
-`ArenaState.structures?: StructureState[]` where `StructureState = { id, damage, destroyedAtTick }`.
+`ArenaState.structures?: StructureState[]` where
+`StructureState = { id, damage, destroyedAtTick, lastHitTick, x, y, radius }` (footprint centre and
+circumradius, used for the rebuild occupancy check; 0 on a client that adopted the row from the wire).
 Only damaged structures are listed. Caps: at most `MAX_STRUCTURES` (48) entries; when full, the
 least-damaged intact entry is dropped first. Damage heals after `STRUCTURE_HEAL_TICKS` (90 s) without
 a hit. A destroyed structure is **rebuilt** after `STRUCTURE_REBUILD_TICKS` (4 min) once nobody
@@ -89,8 +91,8 @@ when it collapses takes 60 damage (people) or 120 (cars). The step emits a `coll
 
 ### 3.6 Wire
 
-Snapshot field `z?: number[][]`, rows `[id, damage, destroyedAtTick | NONE]`, omitted when empty.
-48 rows ≈ 1.2 KB worst case, inside the 8 KB snapshot budget. Clients adopt the host's list
+Snapshot field `z?: number[][]`, rows `[id, damage, destroyedAtTick | NONE, lastHitTick]`, omitted
+when empty. 48 rows ≈ 1.5 KB worst case, inside the 8 KB snapshot budget. Clients adopt the host's list
 wholesale; prediction never changes it.
 
 ## 4. The rocket launcher (Raketwerper)
