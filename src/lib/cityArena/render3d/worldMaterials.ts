@@ -11,11 +11,7 @@ import {
   SpriteMaterial,
   type Texture,
 } from "three";
-import {
-  FURNITURE_FILL,
-  ROAD_CENTRE_LINE,
-  TREE_CANOPY_FILL,
-} from "../render/palette";
+import { FURNITURE_FILL, ROAD_CENTRE_LINE } from "../render/palette";
 import { seedFromString } from "../sim/rng";
 import { LAMP_GLOW } from "./palette3d";
 import {
@@ -32,6 +28,10 @@ export const FACADE_VARIANTS = 3;
 const FACADE_LIT_SHARES: readonly number[] = [0.28, 0.35, 0.42];
 /** Bark brown of a tree trunk. */
 const TRUNK_COLOUR = 0x4a3728;
+/** The lighter canopy: a yellowish olive green that catches the last light. */
+const CANOPY_LIGHT = 0x5e7a2a;
+/** The deeper canopy: a dark blue-green, already in the evening shade. */
+const CANOPY_DEEP = 0x1f4636;
 /** Opacity of the bus shelter's glass back panel. */
 const SHELTER_GLASS_OPACITY = 0.35;
 /** Side of the lamp glow sprite's texture, px. */
@@ -57,7 +57,7 @@ export type WorldMaterials = {
   roadMarking: MeshLambertMaterial;
   /** Tree trunks. */
   treeTrunk: MeshLambertMaterial;
-  /** The two canopy greens, alternated by tree id. */
+  /** The two canopy greens, alternated by tree id: a lighter yellow-green, then a deeper blue-green. */
   canopies: readonly [MeshLambertMaterial, MeshLambertMaterial];
   /** Galvanised street metal: lamp poles, and the bus shelter's frame. */
   lampPole: MeshLambertMaterial;
@@ -151,7 +151,7 @@ export function createWorldMaterials(
     },
     roadMarking: matte(ROAD_CENTRE_LINE),
     treeTrunk: matte(TRUNK_COLOUR),
-    canopies: [matte(TREE_CANOPY_FILL[0]), matte(TREE_CANOPY_FILL[1])],
+    canopies: [matte(CANOPY_LIGHT), matte(CANOPY_DEEP)],
     ...createLampMaterials(),
     bench: matte(FURNITURE_FILL.bench),
     shelterGlass: new MeshLambertMaterial({

@@ -1,11 +1,11 @@
 /**
  * Textures of the 3D city: the 2D map's seamless surface art, loaded as repeating textures, and
- * façades painted on a canvas from a seed.
+ * façades painted on a canvas from a seed, a grid of storey-high modules per canvas.
  *
  * Every texture here repeats once per UV unit, so the geometry decides the scale: ground, road,
  * water and roof UVs are world metres / {@link TEXTURE_REPEAT_M}, the same 8 m per repeat the 2D
  * map paints them at; wall UVs run along the perimeter in metres / {@link FACADE_MODULE_M} and up
- * in storeys.
+ * in storeys, and a façade texture's own `repeat` spreads its grid of modules over that.
  */
 import {
   CanvasTexture,
@@ -15,14 +15,14 @@ import {
   type Texture,
 } from "three";
 import type { RasterContext } from "../render/canvasTypes";
-import { createRng } from "../sim/rng";
+import { createRng, seedFromString } from "../sim/rng";
 import type { GroundKind } from "../world/mapTypes";
 import { WINDOW_COLD, WINDOW_DARK, WINDOW_WARM } from "./palette3d";
 
 /** Ground covered by one repeat of a surface texture, metres (the manifest's `tileMetres`). */
 export const TEXTURE_REPEAT_M = 8;
 
-/** Wall covered by one façade texture across, metres; it is one storey high. */
+/** Wall covered by one façade module across, metres; a module is one storey high. */
 export const FACADE_MODULE_M = 6;
 
 /** A seamless surface texture: the two road surfaces, water, each ground kind and both roofs. */
@@ -108,12 +108,24 @@ export const FACADE_STYLES: readonly FacadeStyle[] = [
   "glass",
 ];
 
-/** Façade canvas width: {@link FACADE_MODULE_M} of wall, about 43 px per metre. */
-const FACADE_WIDTH_PX = 256;
-/** Façade canvas height: one 3.1 m storey at the same scale. */
-const FACADE_HEIGHT_PX = 132;
+/** Façade module width: {@link FACADE_MODULE_M} of wall, about 43 px per metre. */
+const MODULE_WIDTH_PX = 256;
+/** Façade module height: one 3.1 m storey at the same scale. */
+const MODULE_HEIGHT_PX = 132;
+/** Modules across and storeys up on one canvas: a texture covers 24 m × 4 storeys. */
+const MODULES_PER_SIDE = 4;
+/** Modules on one canvas. */
+const MODULE_COUNT = MODULES_PER_SIDE * MODULES_PER_SIDE;
+/** Texture repeat that fits one module to one UV unit across and one storey up. */
+const MODULE_REPEAT = 1 / MODULES_PER_SIDE;
+/** Façade canvas width, px (1024). */
+const CANVAS_WIDTH_PX = MODULE_WIDTH_PX * MODULES_PER_SIDE;
+/** Façade canvas height, px (528). */
+const CANVAS_HEIGHT_PX = MODULE_HEIGHT_PX * MODULES_PER_SIDE;
 /** Windows side by side in one module. */
 const WINDOWS_PER_MODULE = 2;
+/** Fewest lit windows on a canvas with any lit share, so no wall of an evening town is all dark. */
+const MIN_LIT_WINDOWS = 2;
 /** Share of the lit windows lit by a warm bulb rather than a screen or a cold tube. */
 const WARM_WINDOW_SHARE = 0.7;
 /** Width of the frame around a window and of its mullion and transom, px. */
@@ -144,7 +156,7 @@ type FacadeLook = {
   paintWall: (context: RasterContext, rng: () => number) => void;
 };
 
-/** A rectangle on the façade canvas, px. */
+/** A rectangle on a façade module, px. */
 type PixelBox = { x: number; y: number; width: number; height: number };
 
 /** A hex colour number as a CSS colour string. */
@@ -158,12 +170,12 @@ function fillBox(context: RasterContext, colour: string, box: PixelBox): void {
   context.fillRect(box.x, box.y, box.width, box.height);
 }
 
-/** The whole canvas as a box. */
-const FULL_CANVAS: PixelBox = {
+/** One module as a box, in the module's own pixels. */
+const MODULE_BOX: PixelBox = {
   x: 0,
   y: 0,
-  width: FACADE_WIDTH_PX,
-  height: FACADE_HEIGHT_PX,
+  width: MODULE_WIDTH_PX,
+  height: MODULE_HEIGHT_PX,
 };
 
 /** A brick's size including its mortar joint, px; both divide the canvas, so it tiles. */
@@ -179,10 +191,10 @@ const MORTAR = "#7d6d62";
 
 /** Red-brown brick in half-bond courses over light mortar, a few bricks darker. */
 function paintBrick(context: RasterContext, rng: () => number): void {
-  fillBox(context, MORTAR, FULL_CANVAS);
-  for (let row = 0; row * BRICK_COURSE_PX < FACADE_HEIGHT_PX; row++) {
+  fillBox(context, MORTAR, MODULE_BOX);
+  for (let row = 0; row * BRICK_COURSE_PX < MODULE_HEIGHT_PX; row++) {
     const offset = (row % 2) * (BRICK_LENGTH_PX / 2);
-    for (let x = -offset; x < FACADE_WIDTH_PX; x += BRICK_LENGTH_PX) {
+    for (let x = -offset; x < MODULE_WIDTH_PX; x += BRICK_LENGTH_PX) {
       const colour = rng() < DARK_BRICK_SHARE ? BRICK_DARK : BRICK;
       fillBox(context, colour, {
         x,
@@ -207,25 +219,25 @@ const CONCRETE_JOINT = "#4c5055";
 
 /** Pale plaster over a darker plinth. */
 function paintPlaster(context: RasterContext): void {
-  fillBox(context, PLASTER, FULL_CANVAS);
+  fillBox(context, PLASTER, MODULE_BOX);
   fillBox(context, PLASTER_PLINTH, {
-    ...FULL_CANVAS,
-    y: FACADE_HEIGHT_PX - PLINTH_PX,
+    ...MODULE_BOX,
+    y: MODULE_HEIGHT_PX - PLINTH_PX,
     height: PLINTH_PX,
   });
 }
 
 /** Grey concrete panels, a joint between each, over the floor slab's edge. */
 function paintConcrete(context: RasterContext): void {
-  fillBox(context, CONCRETE, FULL_CANVAS);
+  fillBox(context, CONCRETE, MODULE_BOX);
   fillBox(context, CONCRETE_SLAB, {
-    ...FULL_CANVAS,
-    y: FACADE_HEIGHT_PX - SLAB_PX,
+    ...MODULE_BOX,
+    y: MODULE_HEIGHT_PX - SLAB_PX,
     height: SLAB_PX,
   });
-  for (let x = 0; x < FACADE_WIDTH_PX; x += FACADE_WIDTH_PX / 2) {
+  for (let x = 0; x < MODULE_WIDTH_PX; x += MODULE_WIDTH_PX / 2) {
     fillBox(context, CONCRETE_JOINT, {
-      ...FULL_CANVAS,
+      ...MODULE_BOX,
       x,
       width: PANEL_JOINT_PX,
     });
@@ -242,14 +254,14 @@ const GLASS_MULLION = "#18202a";
 
 /** Dark glass between mullions, over an opaque spandrel band at the floor. */
 function paintGlass(context: RasterContext): void {
-  fillBox(context, GLASS, FULL_CANVAS);
+  fillBox(context, GLASS, MODULE_BOX);
   fillBox(context, GLASS_SPANDREL, {
-    ...FULL_CANVAS,
-    y: FACADE_HEIGHT_PX - SPANDREL_PX,
+    ...MODULE_BOX,
+    y: MODULE_HEIGHT_PX - SPANDREL_PX,
     height: SPANDREL_PX,
   });
-  for (let x = 0; x < FACADE_WIDTH_PX; x += MULLION_SPACING_PX) {
-    fillBox(context, GLASS_MULLION, { ...FULL_CANVAS, x, width: MULLION_PX });
+  for (let x = 0; x < MODULE_WIDTH_PX; x += MULLION_SPACING_PX) {
+    fillBox(context, GLASS_MULLION, { ...MODULE_BOX, x, width: MULLION_PX });
   }
 }
 
@@ -283,7 +295,7 @@ const FACADE_LOOKS: Record<FacadeStyle, FacadeLook> = {
 
 /** The panes of a module's windows, each centred in its share of the width. */
 function windowBoxes(shape: WindowShape): PixelBox[] {
-  const bay = FACADE_WIDTH_PX / WINDOWS_PER_MODULE;
+  const bay = MODULE_WIDTH_PX / WINDOWS_PER_MODULE;
   return Array.from({ length: WINDOWS_PER_MODULE }, (_, index) => ({
     x: Math.round(bay * (index + 0.5) - shape.width / 2),
     y: shape.top,
@@ -292,15 +304,52 @@ function windowBoxes(shape: WindowShape): PixelBox[] {
   }));
 }
 
+/** A lit window's colour: mostly a warm bulb, sometimes a screen or a cold tube. */
+function litColour(rng: () => number): number {
+  return rng() < WARM_WINDOW_SHARE ? WINDOW_WARM : WINDOW_COLD;
+}
+
+/** One module's window lights, from a generator seeded for that module alone. */
+function moduleLights(
+  seed: number,
+  moduleIndex: number,
+  litShare: number,
+): (number | null)[] {
+  const rng = createRng(seedFromString(`${seed}:${moduleIndex}`));
+  return Array.from({ length: WINDOWS_PER_MODULE }, () =>
+    rng() < litShare ? litColour(rng) : null,
+  );
+}
+
+/** The numbers 0…count−1 in a seeded order (Fisher–Yates). */
+function shuffledIndices(count: number, rng: () => number): number[] {
+  const order = Array.from({ length: count }, (_, index) => index);
+  for (let index = count - 1; index > 0; index--) {
+    const other = Math.floor(rng() * (index + 1));
+    [order[index], order[other]] = [order[other], order[index]];
+  }
+  return order;
+}
+
 /**
- * Each window's light, drawn first from a fresh seeded generator so the colour map and the glow
- * map agree: a lit colour, or `null` for a dark window.
+ * Every window's light on a canvas, module by module (row-major, left window first): a lit colour,
+ * or `null` for a dark window. Any lit share above zero lights at least {@link MIN_LIT_WINDOWS},
+ * picked in a seeded order. Pure in its arguments, so the colour map and the glow map agree.
  */
-function windowLights(rng: () => number, litShare: number): (number | null)[] {
-  return Array.from({ length: WINDOWS_PER_MODULE }, () => {
-    if (rng() >= litShare) return null;
-    return rng() < WARM_WINDOW_SHARE ? WINDOW_WARM : WINDOW_COLD;
-  });
+function facadeLights(seed: number, litShare: number): (number | null)[] {
+  const lights = Array.from({ length: MODULE_COUNT }, (_, moduleIndex) =>
+    moduleLights(seed, moduleIndex, litShare),
+  ).flat();
+  if (litShare <= 0) return lights;
+  const rng = createRng(seed);
+  let lit = lights.filter((light) => light !== null).length;
+  for (const index of shuffledIndices(lights.length, rng)) {
+    if (lit >= MIN_LIT_WINDOWS) break;
+    if (lights[index] !== null) continue;
+    lights[index] = litColour(rng);
+    lit += 1;
+  }
+  return lights;
 }
 
 /** A window's mullion (vertical, centred) and transom (horizontal, high) bars. */
@@ -345,29 +394,60 @@ function paintWindow(
   });
 }
 
-/** A façade-sized canvas painted by `paint`, as a repeating sRGB texture. */
+/** Runs `paint` once per module, row-major, with the context moved to that module's corner. */
+function forEachModule(
+  context: RasterContext,
+  paint: (moduleIndex: number) => void,
+): void {
+  for (let moduleIndex = 0; moduleIndex < MODULE_COUNT; moduleIndex++) {
+    context.save();
+    context.translate(
+      (moduleIndex % MODULES_PER_SIDE) * MODULE_WIDTH_PX,
+      Math.floor(moduleIndex / MODULES_PER_SIDE) * MODULE_HEIGHT_PX,
+    );
+    paint(moduleIndex);
+    context.restore();
+  }
+}
+
+/** The light of one window of one module in a {@link facadeLights} list. */
+function lightOf(
+  lights: readonly (number | null)[],
+  moduleIndex: number,
+  windowIndex: number,
+): number | null {
+  return lights[moduleIndex * WINDOWS_PER_MODULE + windowIndex];
+}
+
+/** A façade canvas painted by `paint`, as a repeating sRGB texture with one module per UV unit. */
 function facadeCanvasTexture(
   paint: (context: RasterContext) => void,
 ): CanvasTexture {
   const canvas = document.createElement("canvas");
-  canvas.width = FACADE_WIDTH_PX;
-  canvas.height = FACADE_HEIGHT_PX;
+  canvas.width = CANVAS_WIDTH_PX;
+  canvas.height = CANVAS_HEIGHT_PX;
   const context = canvas.getContext("2d");
   if (!context) throw new Error("2D canvas context unavailable for façades");
   paint(context);
-  return repeatingColourMap(new CanvasTexture(canvas));
+  const texture = repeatingColourMap(new CanvasTexture(canvas));
+  texture.repeat.set(MODULE_REPEAT, MODULE_REPEAT);
+  return texture;
 }
 
 /**
- * A seeded canvas texture: one storey (3.1 m) tall, 6 m wide, windows lit by `litShare`.
+ * A seeded canvas texture of façade modules, each one storey (3.1 m) tall and 6 m wide, with
+ * windows lit by `litShare`.
  *
- * Two windows with frames (and sills, except on glass) over the style's wall; each window is lit
- * with probability `litShare`, warm or cold, else dark. The same seed paints the same texture.
+ * The canvas holds 4 × 4 modules (24 m × 4 storeys, 1024 × 528 px) and its `repeat` is 1/4, so
+ * one UV unit is still one module across and one storey up. Each module has two windows with
+ * frames (and sills, except on glass) over the style's wall, and is seeded on its own: each
+ * window is lit with probability `litShare`, warm or cold, else dark, and any share above zero
+ * lights at least two windows per canvas. The same seed paints the same texture.
  *
  * @param style - The wall finish.
  * @param seed - Seeds the lit windows and the wall's variation.
  * @param litShare - Chance in [0, 1] that a window is lit.
- * @returns A 256 × 132 px texture that repeats in both directions.
+ * @returns A texture that repeats in both directions.
  */
 export function createFacadeTexture(
   style: FacadeStyle,
@@ -375,13 +455,20 @@ export function createFacadeTexture(
   litShare: number,
 ): CanvasTexture {
   const look = FACADE_LOOKS[style];
+  const lights = facadeLights(seed, litShare);
   return facadeCanvasTexture((context) => {
-    const rng = createRng(seed);
-    const lights = windowLights(rng, litShare);
-    look.paintWall(context, rng);
-    windowBoxes(look.window).forEach((pane, index) =>
-      paintWindow(context, look, pane, lights[index]),
-    );
+    const wallRng = createRng(seedFromString(`${seed}:wall`));
+    forEachModule(context, (moduleIndex) => {
+      look.paintWall(context, wallRng);
+      windowBoxes(look.window).forEach((pane, windowIndex) =>
+        paintWindow(
+          context,
+          look,
+          pane,
+          lightOf(lights, moduleIndex, windowIndex),
+        ),
+      );
+    });
   });
 }
 
@@ -392,23 +479,25 @@ function createFacadeGlowTexture(
   litShare: number,
 ): CanvasTexture {
   const look = FACADE_LOOKS[style];
+  const lights = facadeLights(seed, litShare);
   return facadeCanvasTexture((context) => {
-    const lights = windowLights(createRng(seed), litShare);
-    fillBox(context, NO_GLOW, FULL_CANVAS);
-    windowBoxes(look.window).forEach((pane, index) => {
-      const light = lights[index];
-      if (light === null) return;
-      fillBox(context, cssHex(light), pane);
-      for (const bar of windowBars(pane)) fillBox(context, NO_GLOW, bar);
+    forEachModule(context, (moduleIndex) => {
+      fillBox(context, NO_GLOW, MODULE_BOX);
+      windowBoxes(look.window).forEach((pane, windowIndex) => {
+        const light = lightOf(lights, moduleIndex, windowIndex);
+        if (light === null) return;
+        fillBox(context, cssHex(light), pane);
+        for (const bar of windowBars(pane)) fillBox(context, NO_GLOW, bar);
+      });
     });
   });
 }
 
 /**
  * A wall material whose lit windows glow at night: the façade texture as `map`, a second canvas
- * holding only the lit panes as `emissiveMap`, emissive white. Vertex colours are on, so the
- * walls geometry must carry a `color` attribute (white leaves the wall as painted; darker
- * scorches it).
+ * holding only the lit panes as `emissiveMap` (same grid and repeat), emissive white. Vertex
+ * colours are on, so the walls geometry must carry a `color` attribute (white leaves the wall as
+ * painted; darker scorches it).
  *
  * @param style - The wall finish.
  * @param seed - Seeds the lit windows and the wall's variation.

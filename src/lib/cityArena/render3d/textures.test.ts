@@ -8,11 +8,13 @@ import {
 } from "three";
 import manifestJson from "../../../../public/arena/sprites/manifest.json";
 import { parseSpriteManifest } from "../render/sprites";
+import type { FakeContext } from "../render/testing/fakeContext";
+import { WINDOW_DARK } from "./palette3d";
 import {
-  createFakeContext,
-  type FakeContext,
-} from "../render/testing/fakeContext";
-import { WINDOW_COLD, WINDOW_DARK, WINDOW_WARM } from "./palette3d";
+  createColourRecordingContext,
+  cssColour,
+  litWindowFills,
+} from "./testing/recordingCanvas";
 import {
   FACADE_STYLES,
   SURFACE_KEYS,
@@ -25,23 +27,8 @@ import {
 
 const manifest = parseSpriteManifest(manifestJson);
 
-/** A hex colour number as the CSS string the painter assigns to `fillStyle`. */
-function css(colour: number): string {
-  return `#${colour.toString(16).padStart(6, "0")}`;
-}
-
-const LIT_FILLS = [css(WINDOW_WARM), css(WINDOW_COLD)];
-
-/** A fake context whose `fillRect` also logs the fill colour, so tests can see what was lit. */
-function colourRecordingContext(): FakeContext {
-  const context = createFakeContext();
-  context.fillRect = (x: number, y: number, width: number, height: number) => {
-    context.calls.push(
-      `fillRect(${String(context.fillStyle)},${x},${y},${width},${height})`,
-    );
-  };
-  return context;
-}
+/** Windows on one façade canvas: 4 × 4 modules of two windows each. */
+const WINDOWS_PER_CANVAS = 32;
 
 /** Stubs jsdom's canvas so each `getContext` hands out a fresh recording context, in order. */
 function stubCanvasContexts(): FakeContext[] {
@@ -50,7 +37,7 @@ function stubCanvasContexts(): FakeContext[] {
     // jsdom's getContext returns null; the fake implements only the RasterContext subset the
     // painter uses, so the cast is unavoidable here (test file only).
     () => {
-      const context = colourRecordingContext();
+      const context = createColourRecordingContext();
       contexts.push(context);
       return context as unknown as CanvasRenderingContext2D;
     },
@@ -58,11 +45,21 @@ function stubCanvasContexts(): FakeContext[] {
   return contexts;
 }
 
-/** The fillRect calls that painted a lit (warm or cold) window. */
-function litFills(context: FakeContext): string[] {
+/** The fills of dark window panes. */
+function darkFills(context: FakeContext): string[] {
   return context.calls.filter((call) =>
-    LIT_FILLS.some((fill) => call.startsWith(`fillRect(${fill},`)),
+    call.startsWith(`fillRect(${cssColour(WINDOW_DARK)},`),
   );
+}
+
+/** Each module's calls (between `save` and `restore`, without the move to its corner), joined. */
+function moduleDrawings(context: FakeContext): string[] {
+  const modules: string[][] = [];
+  for (const call of context.calls) {
+    if (call === "save()") modules.push([]);
+    else if (!call.startsWith("translate(")) modules.at(-1)?.push(call);
+  }
+  return modules.map((calls) => calls.join(";"));
 }
 
 afterEach(() => {
@@ -125,6 +122,17 @@ describe("createFacadeTexture", () => {
     expect(distinct.size).toBeGreaterThan(1);
   });
 
+  it("paints 4 × 4 modules whose lit windows vary from module to module", () => {
+    const contexts = stubCanvasContexts();
+
+    // Plaster has no seeded wall detail, so modules differ only by their windows.
+    createFacadeTexture("plaster", 7, 0.5);
+
+    const modules = moduleDrawings(contexts[0]);
+    expect(modules).toHaveLength(16);
+    expect(new Set(modules).size).toBeGreaterThan(1);
+  });
+
   it.each(FACADE_STYLES)(
     "lights no window in %s at a lit share of 0",
     (style) => {
@@ -132,30 +140,44 @@ describe("createFacadeTexture", () => {
 
       createFacadeTexture(style, 3, 0);
 
-      expect(litFills(contexts[0])).toEqual([]);
-      const dark = contexts[0].calls.filter((call) =>
-        call.startsWith(`fillRect(${css(WINDOW_DARK)},`),
-      );
-      expect(dark).toHaveLength(2);
+      expect(litWindowFills(contexts[0])).toEqual([]);
+      expect(darkFills(contexts[0])).toHaveLength(WINDOWS_PER_CANVAS);
     },
   );
 
-  it("lights both windows at a lit share of 1", () => {
+  it("lights every window at a lit share of 1", () => {
     const contexts = stubCanvasContexts();
 
     createFacadeTexture("plaster", 11, 1);
 
-    expect(litFills(contexts[0])).toHaveLength(2);
+    expect(litWindowFills(contexts[0])).toHaveLength(WINDOWS_PER_CANVAS);
   });
 
-  it("is a 256 × 132 repeating sRGB canvas texture", () => {
+  it.each([0.01, 0.35])(
+    "lights at least two windows for every seed at a lit share of %s",
+    (litShare) => {
+      const contexts = stubCanvasContexts();
+
+      for (let seed = 0; seed < 64; seed++) {
+        createFacadeTexture("glass", seed, litShare);
+      }
+
+      for (const context of contexts) {
+        expect(litWindowFills(context).length).toBeGreaterThanOrEqual(2);
+      }
+    },
+  );
+
+  it("is a 1024 × 528 repeating sRGB canvas texture, a quarter per UV unit", () => {
     stubCanvasContexts();
 
     const texture = createFacadeTexture("glass", 1, 0.35);
 
     expect(texture).toBeInstanceOf(CanvasTexture);
-    expect(texture.image.width).toBe(256);
-    expect(texture.image.height).toBe(132);
+    expect(texture.image.width).toBe(1024);
+    expect(texture.image.height).toBe(528);
+    expect(texture.repeat.x).toBe(0.25);
+    expect(texture.repeat.y).toBe(0.25);
     expect(texture.wrapS).toBe<Wrapping>(RepeatWrapping);
     expect(texture.wrapT).toBe<Wrapping>(RepeatWrapping);
     expect(texture.colorSpace).toBe(SRGBColorSpace);
@@ -166,19 +188,27 @@ describe("createFacadeMaterial", () => {
   it("glows through an emissive map that holds the lit windows only", () => {
     const contexts = stubCanvasContexts();
 
-    const material = createFacadeMaterial("concrete", 5, 1);
+    const material = createFacadeMaterial("concrete", 5, 0.35);
 
     expect(material.map).toBeInstanceOf(CanvasTexture);
     expect(material.emissiveMap).toBeInstanceOf(CanvasTexture);
     expect(material.emissiveMap).not.toBe(material.map);
     expect(material.emissive.getHex()).toBe(0xffffff);
     const [map, glow] = contexts;
-    expect(litFills(glow)).toEqual(litFills(map));
-    expect(
-      glow.calls.some((call) =>
-        call.startsWith(`fillRect(${css(WINDOW_DARK)},`),
-      ),
-    ).toBe(false);
+    expect(litWindowFills(map).length).toBeGreaterThanOrEqual(2);
+    expect(litWindowFills(glow)).toEqual(litWindowFills(map));
+    expect(darkFills(glow)).toEqual([]);
+  });
+
+  it("repeats the emissive map on the same grid as the colour map", () => {
+    stubCanvasContexts();
+
+    const material = createFacadeMaterial("brick", 9, 0.35);
+
+    expect(material.emissiveMap?.repeat.x).toBe(0.25);
+    expect(material.emissiveMap?.repeat.y).toBe(0.25);
+    expect(material.emissiveMap?.wrapS).toBe<Wrapping>(RepeatWrapping);
+    expect(material.emissiveMap?.wrapT).toBe<Wrapping>(RepeatWrapping);
   });
 
   it("leaves the emissive map black at a lit share of 0", () => {
@@ -186,7 +216,7 @@ describe("createFacadeMaterial", () => {
 
     createFacadeMaterial("brick", 5, 0);
 
-    expect(litFills(contexts[1])).toEqual([]);
+    expect(litWindowFills(contexts[1])).toEqual([]);
   });
 
   it("takes vertex colours so a building's walls can be scorched", () => {

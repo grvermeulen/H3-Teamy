@@ -1,7 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AdditiveBlending, Texture } from "three";
-import { createFakeContext } from "../render/testing/fakeContext";
+import {
+  AdditiveBlending,
+  SRGBColorSpace,
+  Texture,
+  type Color,
+  type HSL,
+} from "three";
+import type { FakeContext } from "../render/testing/fakeContext";
 import { LAMP_GLOW } from "./palette3d";
+import {
+  createColourRecordingContext,
+  litWindowFills,
+} from "./testing/recordingCanvas";
 import { FACADE_STYLES, SURFACE_KEYS } from "./textures";
 import {
   FACADE_VARIANTS,
@@ -9,13 +19,24 @@ import {
   disposeWorldMaterials,
 } from "./worldMaterials";
 
-/** Stubs jsdom's canvas with recording fakes; façade textures paint on 2D canvases. */
-function stubCanvas(): void {
+/** Stubs jsdom's canvas with recording fakes, handed out in order; façades paint on 2D canvases. */
+function stubCanvas(): FakeContext[] {
+  const contexts: FakeContext[] = [];
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
     // jsdom's getContext returns null; the fake implements only the RasterContext subset the
     // painter uses, so the cast is unavoidable here (test file only).
-    () => createFakeContext() as unknown as CanvasRenderingContext2D,
+    () => {
+      const context = createColourRecordingContext();
+      contexts.push(context);
+      return context as unknown as CanvasRenderingContext2D;
+    },
   );
+  return contexts;
+}
+
+/** A colour's hue, saturation and lightness as seen on screen (sRGB). */
+function hslOf(colour: Color): HSL {
+  return colour.getHSL({ h: 0, s: 0, l: 0 }, SRGBColorSpace);
 }
 
 afterEach(() => {
@@ -60,13 +81,33 @@ describe("createWorldMaterials", () => {
     expect(materials.lampGlow.map).not.toBeNull();
   });
 
-  it("gives trees two different canopy greens", () => {
+  it("lights at least two windows on every façade variant it seeds", () => {
+    const contexts = stubCanvas();
+
+    createWorldMaterials(() => new Texture());
+
+    // Each façade material paints its colour map, then its glow map.
+    const variants = FACADE_STYLES.length * FACADE_VARIANTS;
+    expect(contexts).toHaveLength(variants * 2);
+    const colourMaps = contexts.filter((_, index) => index % 2 === 0);
+    for (const context of colourMaps) {
+      expect(litWindowFills(context).length).toBeGreaterThanOrEqual(2);
+    }
+  });
+
+  it("gives trees a lighter yellow-green and a deeper blue-green canopy", () => {
     stubCanvas();
 
     const { canopies } = createWorldMaterials(() => new Texture());
 
-    expect(canopies).toHaveLength(2);
-    expect(canopies[0].color.getHex()).not.toBe(canopies[1].color.getHex());
+    const [light, deep] = canopies.map((material) => hslOf(material.color));
+    const degrees = 360;
+    for (const green of [light, deep]) {
+      expect(green.h * degrees).toBeGreaterThan(60);
+      expect(green.h * degrees).toBeLessThan(180);
+    }
+    expect((deep.h - light.h) * degrees).toBeGreaterThan(40);
+    expect(light.l - deep.l).toBeGreaterThan(0.08);
   });
 
   it("makes the bus shelter glass see-through", () => {
