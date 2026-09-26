@@ -20,7 +20,10 @@ import {
 import { rankScoreboard, type ScoreLine } from "@/lib/cityArena/net/scoreboard";
 import type { MatchSeam } from "./matchSeam";
 import { ticketRole } from "@/lib/cityArena/net/roles";
-import { ArenaRequestError } from "@/lib/cityArena/net/roomClient";
+import {
+  ArenaRequestError,
+  shouldReportArenaRequestError,
+} from "@/lib/cityArena/net/roomClient";
 import {
   ROOM_RULES,
   type ArenaRoomTicket,
@@ -302,7 +305,7 @@ export function useMatchClock(
           pendingRef.current = null;
         })
         .catch((caught: unknown) => {
-          if (!(caught instanceof ArenaRequestError && caught.status < 500))
+          if (shouldReportArenaRequestError(caught))
             Sentry.captureException(caught, {
               tags: { area: "arena", kind: "match-post" },
             });
@@ -363,7 +366,7 @@ export function useMatchClock(
         recordingRef.current = { ...recordingRef.current, ticket };
       }
     } catch (caught: unknown) {
-      if (!(caught instanceof ArenaRequestError && caught.status < 500))
+      if (shouldReportArenaRequestError(caught))
         Sentry.captureException(caught, {
           tags: { area: "arena", kind: "match-start" },
         });
