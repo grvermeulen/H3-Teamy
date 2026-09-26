@@ -81,6 +81,23 @@ describe("drawProjectiles", () => {
     expect(context.calls).toContain(`stroke(${EXPLOSION_RING},3)`);
   });
 
+  it("grows an explosion to the reach its effect carries: 4 m for a rocket, not a car's 3 m", () => {
+    const context = createFakeContext();
+    const rocketBlast = {
+      id: 4,
+      kind: "explosion" as const,
+      x: 10,
+      y: 10,
+      angle: 0,
+      bornTick: 0,
+      ttlTicks: 18,
+      radius: 4,
+    };
+    drawEffects(context, camera, viewport, [rocketBlast], 9);
+    // Half way: 4 m × 0.5 × 8 px/m.
+    expect(context.calls).toContain("arc(100,50,16,0,6.28,false)");
+  });
+
   it("draws a rocket as an olive body with fading smoke puffs, and no plain tracer", () => {
     const rocket: BulletState = { ...bullet, id: 2, weapon: "rocket" };
     const context = createFakeContext();

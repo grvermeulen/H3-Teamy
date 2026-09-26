@@ -8,6 +8,7 @@ import { decodeRoadGraph } from "../world/roadGraph";
 import { structureIdOf } from "../world/structureId";
 import type { ArenaWorld } from "./arenaWorld";
 import { applyBlast, blastFalloff, CAR_BLAST, type Blast } from "./blast";
+import { EXPLOSION_RADIUS_M } from "./damage";
 import { createArenaPlayer } from "./roster";
 import { createCop } from "./cops";
 import { createVehicle } from "./vehicle";
@@ -136,6 +137,10 @@ describe("applyBlast — CAR_BLAST (flat, no entity falloff)", () => {
     expect(next.vehicles.find((v) => v.id === 40)?.health).toBe(20);
     expect(next.vehicles.find((v) => v.id === 41)?.health).toBe(100);
     expect(next.events).toContainEqual({ kind: "explosion", x: 0, y: 0 });
+    expect(next.effects.at(-1)).toMatchObject({
+      kind: "explosion",
+      radius: EXPLOSION_RADIUS_M,
+    });
     expect(next.events).toContainEqual(
       expect.objectContaining({
         kind: "kill",
@@ -179,6 +184,8 @@ describe("applyBlast — an explosive projectile (entity falloff on)", () => {
     expect(next.cops.find((c) => c.id === 22)?.health).toBe(100);
     // At the centre, the ped's 40 health takes the full 70 and dies, credited to the shooter.
     expect(next.peds.find((p) => p.id === 10)?.mode).toBe("dead");
+    // The effect carries the blast's reach, so 2D rings it at 4 m rather than a car's 3 m.
+    expect(next.effects.at(-1)).toMatchObject({ kind: "explosion", radius: 4 });
     expect(next.events).toContainEqual(
       expect.objectContaining({
         kind: "kill",

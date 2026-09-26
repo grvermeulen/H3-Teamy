@@ -8,7 +8,12 @@ import { distancePointToPolygon, type Rect } from "../mapBuild/geometry";
 import type { Point } from "../world/projection";
 import type { ArenaWorld } from "./arenaWorld";
 import { damageCop } from "./cops";
-import { damagePlayer, damageVehicle } from "./damage";
+import {
+  damagePlayer,
+  damageVehicle,
+  EXPLOSION_DAMAGE,
+  EXPLOSION_RADIUS_M,
+} from "./damage";
 import { addEffect } from "./effects";
 import { pushEvent } from "./events";
 import { damagePed } from "./peds";
@@ -66,9 +71,9 @@ export type Blast = {
 
 /** A car explosion's blast (spec §5): flat damage to people and cars, falloff on structures. */
 export const CAR_BLAST: Omit<Blast, "x" | "y" | "ownerId"> = {
-  entityRadius: 3,
-  entityDamage: 80,
-  vehicleDamage: 80,
+  entityRadius: EXPLOSION_RADIUS_M,
+  entityDamage: EXPLOSION_DAMAGE,
+  vehicleDamage: EXPLOSION_DAMAGE,
   structureRadius: 6,
   structureDamage: 260,
   entityFalloff: false,
@@ -260,6 +265,7 @@ export function applyBlast(
       y: blast.y,
       angle: 0,
       bornTick: tick,
+      radius: blast.entityRadius,
     }),
   };
   return blastStructures(next, blast, world, tick);

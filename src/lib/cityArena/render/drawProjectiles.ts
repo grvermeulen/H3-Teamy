@@ -222,7 +222,10 @@ function drawImpactDot(
   );
 }
 
-/** Explosion disc that grows to the blast radius while fading out, ringed in orange. */
+/**
+ * Explosion disc that grows to the blast's own reach (a car's 3 m when the effect names none — a
+ * rocket or shell reaches 4 m) while fading out, ringed in orange.
+ */
 function drawExplosion(
   context: RasterContext,
   camera: Camera,
@@ -232,7 +235,7 @@ function drawExplosion(
 ): void {
   context.save();
   context.globalAlpha = 1 - progress;
-  const radius = EXPLOSION_RADIUS_M * progress;
+  const radius = (effect.radius ?? EXPLOSION_RADIUS_M) * progress;
   fillCircle(
     context,
     camera,

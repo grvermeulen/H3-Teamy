@@ -147,6 +147,11 @@ export type EffectState = {
   angle: number;
   bornTick: number;
   ttlTicks: number;
+  /**
+   * An explosion's reach, metres: the blast's radius against people (`applyBlast`). Absent on
+   * other effects, and drawn at a car blast's radius when missing. Effects never cross the wire.
+   */
+  radius?: number;
 };
 
 /** Rounds left for the magazine weapons; pistol and fist are unlimited. */
