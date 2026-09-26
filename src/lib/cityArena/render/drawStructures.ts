@@ -6,11 +6,11 @@
  */
 import { polygonCentroid, rectsIntersect } from "../mapBuild/geometry";
 import { createRng, seedFromString } from "../sim/rng";
-import { structureDamageShare } from "../sim/structures";
+import { MAX_STRUCTURES, structureDamageShare } from "../sim/structures";
 import type { StructureState } from "../sim/types";
 import type { DecodedBuilding, DecodedTile } from "../world/decode";
 import type { Point } from "../world/projection";
-import { structureMaxHealth } from "../world/structureId";
+import { structureMaxHealth, structureTileOf } from "../world/structureId";
 import {
   visibleRect,
   worldToScreen,
@@ -142,14 +142,34 @@ function drawDamageShade(
   fillWorldRing(context, camera, size, building.ring, `rgba(0,0,0,${alpha})`);
 }
 
+/** Key for the tile lookup, matching a structure id's decoded `{ tileX, tileY }`. */
+function tileKey(x: number, y: number): string {
+  return `${x}:${y}`;
+}
+
 /**
- * Draws rubble over destroyed footprints and a dark shade over damaged ones, for every decoded
- * building in view whose structureId has an entry. Pure canvas calls; no raster invalidation.
+ * The building a structure id names, decoded straight from the id (spec §3.1: `id` packs the
+ * tile and the piece's position in it) rather than by scanning every tile's building list.
+ * Undefined when that tile is not resident, or the index is stale (a map version mismatch).
+ */
+function buildingFor(
+  tilesByCoord: ReadonlyMap<string, DecodedTile>,
+  id: number,
+): DecodedBuilding | undefined {
+  const { tileX, tileY, index } = structureTileOf(id);
+  return tilesByCoord.get(tileKey(tileX, tileY))?.buildings[index];
+}
+
+/**
+ * Draws rubble over destroyed footprints and a dark shade over damaged ones, for every entry in
+ * `structures` whose building is resident and in view. Resolves each entry directly by id — at
+ * most {@link MAX_STRUCTURES} lookups — rather than scanning every building of every tile. Pure
+ * canvas calls; no raster invalidation.
  *
  * @param context - The canvas, already in viewport-local pixel space.
  * @param camera - The active camera.
  * @param size - The viewport, in CSS pixels.
- * @param tiles - Every decoded tile that may contribute a building.
+ * @param tiles - Every decoded tile currently resident.
  * @param structures - The sparse structure list; buildings with no entry are undamaged.
  */
 export function drawStructureDamage(
@@ -160,15 +180,15 @@ export function drawStructureDamage(
   structures: readonly StructureState[],
 ): void {
   if (structures.length === 0) return;
-  const byId = new Map(structures.map((entry) => [entry.id, entry]));
+  const tilesByCoord = new Map(
+    tiles.map((tile) => [tileKey(tile.x, tile.y), tile]),
+  );
   const view = visibleRect(camera, size);
-  for (const tile of tiles) {
-    for (const building of tile.buildings) {
-      const entry = byId.get(building.structureId);
-      if (!entry || !rectsIntersect(building.bounds, view)) continue;
-      if (entry.destroyedAtTick !== null)
-        drawRubble(context, camera, size, building, entry);
-      else drawDamageShade(context, camera, size, building, entry);
-    }
+  for (const entry of structures) {
+    const building = buildingFor(tilesByCoord, entry.id);
+    if (!building || !rectsIntersect(building.bounds, view)) continue;
+    if (entry.destroyedAtTick !== null)
+      drawRubble(context, camera, size, building, entry);
+    else drawDamageShade(context, camera, size, building, entry);
   }
 }

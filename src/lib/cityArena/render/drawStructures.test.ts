@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StructureState } from "../sim/types";
 import type { DecodedBuilding, DecodedTile } from "../world/decode";
+import { structureIdOf } from "../world/structureId";
 import { createCamera } from "./camera";
 import {
   DAMAGE_SHADE_MAX_ALPHA,
@@ -25,10 +26,15 @@ function house(structureId: number, x: number, y: number): DecodedBuilding {
   };
 }
 
-function tileWith(buildings: DecodedBuilding[]): DecodedTile {
+/** A tile at grid `(tileX, tileY)` holding `buildings`, its own rectangle wide enough for any fixture. */
+function tileAt(
+  tileX: number,
+  tileY: number,
+  buildings: DecodedBuilding[],
+): DecodedTile {
   return {
-    x: 0,
-    y: 0,
+    x: tileX,
+    y: tileY,
     rect: { minX: -1000, minY: -1000, maxX: 1000, maxY: 1000 },
     roads: [],
     buildings,
@@ -41,6 +47,9 @@ function tileWith(buildings: DecodedBuilding[]): DecodedTile {
 
 const camera = createCamera([0, 0], 4);
 const viewport = { width: 200, height: 200 };
+
+/** The id of the first (only) building in this suite's one resident tile, `(0, 0)`. */
+const STRUCTURE_ID = structureIdOf(0, 0, 0);
 
 function destroyedEntry(id: number): StructureState {
   return {
@@ -61,22 +70,53 @@ describe("drawStructureDamage", () => {
       context,
       camera,
       viewport,
-      [tileWith([house(1, -5, -5)])],
+      [tileAt(0, 0, [house(STRUCTURE_ID, -5, -5)])],
       [],
+    );
+    expect(context.calls).toHaveLength(0);
+  });
+
+  it("skips an entry whose tile is not resident, or whose index is stale", () => {
+    const context = createFakeContext();
+    const tile = tileAt(0, 0, [house(STRUCTURE_ID, -5, -5)]);
+    const unresidentTile = destroyedEntry(structureIdOf(3, 3, 0));
+    const staleIndex = destroyedEntry(structureIdOf(0, 0, 5));
+    drawStructureDamage(
+      context,
+      camera,
+      viewport,
+      [tile],
+      [unresidentTile, staleIndex],
     );
     expect(context.calls).toHaveLength(0);
   });
 
   it("skips buildings whose bounds sit outside the view", () => {
     const context = createFakeContext();
-    const tile = tileWith([house(1, 500, 500)]);
-    drawStructureDamage(context, camera, viewport, [tile], [destroyedEntry(1)]);
+    const tile = tileAt(0, 0, [house(STRUCTURE_ID, 500, 500)]);
+    drawStructureDamage(
+      context,
+      camera,
+      viewport,
+      [tile],
+      [destroyedEntry(STRUCTURE_ID)],
+    );
     expect(context.calls).toHaveLength(0);
   });
 
+  it("resolves a building directly by id, wherever it sits in its tile's list", () => {
+    const other = house(structureIdOf(0, 0, 0), -50, -50);
+    const target = house(structureIdOf(0, 0, 1), -5, -5);
+    const tile = tileAt(0, 0, [other, target]);
+    const entry = destroyedEntry(structureIdOf(0, 0, 1));
+    const context = createFakeContext();
+    drawStructureDamage(context, camera, viewport, [tile], [entry]);
+    expect(context.calls).toContain(`fill(${RUBBLE_FILL})`);
+  });
+
   it("fills a destroyed footprint with rubble once and at least four rubble chunks, deterministically", () => {
-    const tile = tileWith([house(1, -5, -5)]);
-    const entry = destroyedEntry(1);
+    const tile = tileAt(0, 0, [house(STRUCTURE_ID, -5, -5)]);
+    const entry = destroyedEntry(STRUCTURE_ID);
     const first = createFakeContext();
     drawStructureDamage(first, camera, viewport, [tile], [entry]);
     const second = createFakeContext();
@@ -91,10 +131,10 @@ describe("drawStructureDamage", () => {
   });
 
   it("shades a half-damaged, intact building at half the maximum alpha", () => {
-    const tile = tileWith([house(1, -5, -5)]);
+    const tile = tileAt(0, 0, [house(STRUCTURE_ID, -5, -5)]);
     // maxHealth of a 10×10, one-storey footprint is 120 (area 100 × 1 level × 1.2); 60 is half.
     const entry: StructureState = {
-      id: 1,
+      id: STRUCTURE_ID,
       damage: 60,
       destroyedAtTick: null,
       lastHitTick: 5,

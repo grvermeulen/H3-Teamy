@@ -15,6 +15,7 @@ import {
 } from "@/lib/cityArena/net/screenRuntime";
 import { createBrowserArenaSession } from "@/lib/cityArena/world/browserSession";
 import { renderSplitScreen } from "@/lib/cityArena/render/renderSplitScreen";
+import type { Scene } from "@/lib/cityArena/render/renderScene";
 import {
   updateSplitScreen,
   type SplitScreen,
@@ -24,10 +25,71 @@ import { fromUnits } from "@/lib/cityArena/world/projection";
 import { policeCarIds } from "@/lib/cityArena/sim/police";
 import { occupiedVehicle } from "@/lib/cityArena/sim/boarding";
 import type { Point } from "@/lib/cityArena/world/projection";
+import type { ArenaState } from "@/lib/cityArena/sim/types";
+import type { MapZone } from "@/lib/cityArena/world/mapTypes";
+import type { WorldSession } from "@/lib/cityArena/world/worldSession";
 import { loadArenaSettings } from "@/lib/cityArena/storage";
 import type { MatchState } from "@/lib/cityArena/net/matchPhase";
 import type { MatchSeam, MatchPeek } from "./matchSeam";
 import type { ArenaRoom } from "./useArenaRoom";
+
+/** What {@link buildScreenScene} reads from the session. */
+type ScreenSceneSession = Pick<
+  WorldSession,
+  | "index"
+  | "raster"
+  | "overhead"
+  | "tiles"
+  | "landmarks"
+  | "loadedTileRects"
+  | "sprites"
+>;
+
+/**
+ * The shared Scene for the TV/screen view: the same world, players and buildings a 2D player sees
+ * (spec §5), so ruins and damage shading render there too. `localPlayerId` is `-1`: this view drives
+ * no player of its own.
+ */
+export function buildScreenScene(
+  session: ScreenSceneSession,
+  state: ArenaState,
+  zone: MapZone | null,
+  reducedMotion: boolean,
+): Scene {
+  const sprites = session.sprites();
+  return {
+    missionContacts: contactsForMap(session.index()),
+    missionRound: state.zoneEnforced,
+    world: {
+      raster: session.raster,
+      overhead: session.overhead,
+      tiles: session.tiles(),
+      landmarks: session.landmarks(),
+      loadedTileRects: session.loadedTileRects(),
+      rasterBudgetMs: 4,
+    },
+    zone: state.zoneEnforced ? (zone ?? null) : null,
+    players: state.players,
+    localPlayerId: -1,
+    peds: state.peds,
+    cops: state.cops,
+    pickups: state.pickups,
+    vehicles: state.vehicles,
+    bullets: state.bullets,
+    structures: state.structures,
+    effects: reducedMotion ? [] : state.effects,
+    sirenVehicleIds: policeCarIds(state),
+    tick: state.tick,
+    reducedMotion,
+    aimScreen: null,
+    pushIn: 1,
+    vehicleArt: sprites,
+    peopleSprites: sprites.people,
+    itemSprites: sprites.items,
+    playerSprite: sprites.player,
+    basketballSprite: sprites.landmarks?.["basketball-girls"],
+  };
+}
 
 /** Hosts or observes a shared canvas without allocating an anonymous player's avatar. */
 export function useArenaScreenGame(
@@ -172,7 +234,6 @@ export function useArenaScreenGame(
               reduced.matches,
               settings.dynamicCamera,
             );
-            const sprites = session.sprites();
             const names = new Map<number, string>();
             for (const member of current.crew) {
               const id = seats.get(member.clientId);
@@ -181,37 +242,7 @@ export function useArenaScreenGame(
             renderSplitScreen(
               context,
               split,
-              {
-                missionContacts: contactsForMap(session.index()),
-                missionRound: state.zoneEnforced,
-                world: {
-                  raster: session.raster,
-                  overhead: session.overhead,
-                  tiles: session.tiles(),
-                  landmarks: session.landmarks(),
-                  loadedTileRects: session.loadedTileRects(),
-                  rasterBudgetMs: 4,
-                },
-                zone: state.zoneEnforced ? (zone ?? null) : null,
-                players: state.players,
-                localPlayerId: -1,
-                peds: state.peds,
-                cops: state.cops,
-                pickups: state.pickups,
-                vehicles: state.vehicles,
-                bullets: state.bullets,
-                effects: reduced.matches ? [] : state.effects,
-                sirenVehicleIds: policeCarIds(state),
-                tick: state.tick,
-                reducedMotion: reduced.matches,
-                aimScreen: null,
-                pushIn: 1,
-                vehicleArt: sprites,
-                peopleSprites: sprites.people,
-                itemSprites: sprites.items,
-                playerSprite: sprites.player,
-                basketballSprite: sprites.landmarks?.["basketball-girls"],
-              },
+              buildScreenScene(session, state, zone, reduced.matches),
               names,
             );
           }

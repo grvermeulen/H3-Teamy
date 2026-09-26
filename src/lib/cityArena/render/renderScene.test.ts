@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createArenaPlayer } from "../sim/arena";
 import type { BulletState } from "../sim/types";
 import { createVehicle } from "../sim/vehicle";
+import { structureIdOf } from "../world/structureId";
 import { createCamera } from "./camera";
 import type { LandmarkLookup } from "./drawStatic";
 import {
@@ -229,6 +230,8 @@ describe("renderScene police lights", () => {
 
 describe("renderScene structures", () => {
   it("draws ruins right after the ground chunks, before entities", () => {
+    // The id must decode back to this building's own slot — tile (0, 0), index 0.
+    const structureId = structureIdOf(0, 0, 0);
     const tile = {
       x: 0,
       y: 0,
@@ -236,7 +239,7 @@ describe("renderScene structures", () => {
       roads: [],
       buildings: [
         {
-          structureId: 1,
+          structureId,
           ring: [
             [-5, -5],
             [5, -5],
@@ -266,7 +269,7 @@ describe("renderScene structures", () => {
         },
         structures: [
           {
-            id: 1,
+            id: structureId,
             damage: 200,
             destroyedAtTick: 5,
             lastHitTick: 5,
