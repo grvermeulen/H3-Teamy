@@ -172,6 +172,10 @@ export const ArenaSettingsSchema = z.object({
   radio: z.boolean().default(true),
   /** The station tuned in, by id; absent or unknown, the first station plays. */
   radioStation: z.string().optional(),
+  /** "Weergave": the flat top-down sim, or the three.js view over it (spec §7). */
+  view: z.enum(["2d", "3d"]).default("2d"),
+  /** "3D-camera": third person (over the shoulder) or first person; irrelevant in 2D. */
+  camera3d: z.enum(["third", "first"]).default("third"),
 });
 
 /** Parsed settings type, inferred from {@link ArenaSettingsSchema} so the two cannot drift. */
@@ -189,4 +193,6 @@ export const DEFAULT_ARENA_SETTINGS: ArenaSettings = {
   vibrate: true,
   twinStick: true,
   radio: true,
+  view: "2d",
+  camera3d: "third",
 };

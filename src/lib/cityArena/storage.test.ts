@@ -30,6 +30,8 @@ describe("arena settings storage", () => {
       radio: true,
       dynamicCamera: true,
       quality: "auto",
+      view: "2d",
+      camera3d: "third",
     });
   });
 
@@ -45,6 +47,8 @@ describe("arena settings storage", () => {
       radio: true,
       dynamicCamera: true,
       quality: "auto",
+      view: "2d",
+      camera3d: "third",
     });
     expect(loadArenaSettings().lastZone).toBe("rhenen");
   });
@@ -59,6 +63,8 @@ describe("arena settings storage", () => {
       radio: true,
       dynamicCamera: true,
       quality: "auto",
+      view: "2d",
+      camera3d: "third",
     });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(Error),
@@ -81,6 +87,8 @@ describe("arena settings storage", () => {
       radio: true,
       dynamicCamera: true,
       quality: "auto",
+      view: "2d",
+      camera3d: "third",
     });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(Error),
@@ -123,6 +131,8 @@ describe("arena settings storage", () => {
       radio: true,
       dynamicCamera: true,
       quality: "auto",
+      view: "2d",
+      camera3d: "third",
     });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
   });

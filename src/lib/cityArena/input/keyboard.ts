@@ -40,6 +40,9 @@ const SLOT_KEYS: Partial<Record<string, WeaponSlot>> = {
 /** The key that switches the car radio to the next station (Plan 7). */
 const RADIO_KEY = "KeyR";
 
+/** The key that toggles between third and first person in the 3D view (spec §6.3). */
+const TOGGLE_CAMERA_KEY = "KeyV";
+
 /** The keys beyond movement and the held buttons, and who owns the keyboard. */
 export type KeyboardHooks = {
   /** Tab held shows the scorebord; released, it hides it. */
@@ -48,6 +51,8 @@ export type KeyboardHooks = {
   onWeaponSlot?: (slot: WeaponSlot) => void;
   /** R switches the radio to the next station. */
   onRadio?: () => void;
+  /** V toggles third/first person, while the 3D view is active. */
+  onToggleCamera?: () => void;
   /** True while a menu owns the keyboard: game keys are ignored until it is closed. */
   isSuspended?: () => boolean;
 };
@@ -192,6 +197,13 @@ export function attachKeyboard(
       if (event.repeat) return;
       onUserGesture?.();
       hooks.onRadio?.();
+      return;
+    }
+    if (event.code === TOGGLE_CAMERA_KEY) {
+      event.preventDefault();
+      if (event.repeat) return;
+      onUserGesture?.();
+      hooks.onToggleCamera?.();
       return;
     }
     if (KEY_VECTORS[event.code]) {

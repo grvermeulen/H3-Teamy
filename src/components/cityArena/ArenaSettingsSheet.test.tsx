@@ -111,6 +111,37 @@ describe("ArenaSettingsSheet", () => {
     });
   });
 
+  it("shows Weergave and 3D-camera segmented controls, the camera disabled until 3D", () => {
+    const handlers = renderSheet();
+    expect(screen.getByRole("button", { name: "2D" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "3D" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(
+      screen.getByRole("button", { name: "Derde persoon" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Eerste persoon" }),
+    ).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "3D" }));
+    expect(handlers.onChange).toHaveBeenLastCalledWith({ view: "3d" });
+  });
+
+  it("enables the 3D-camera control once the view is 3d, and reports the picked camera", () => {
+    const handlers = renderSheet({
+      settings: { ...DEFAULT_ARENA_SETTINGS, view: "3d" },
+    });
+    const third = screen.getByRole("button", { name: "Derde persoon" });
+    expect(third).not.toBeDisabled();
+    expect(third).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Eerste persoon" }));
+    expect(handlers.onChange).toHaveBeenLastCalledWith({ camera3d: "first" });
+  });
+
   it("offers the way out and the way back, and closes on Escape", () => {
     const handlers = renderSheet();
     fireEvent.click(screen.getByRole("button", { name: "Potje verlaten" }));

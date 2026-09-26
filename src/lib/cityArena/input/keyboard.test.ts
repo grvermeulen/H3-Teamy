@@ -188,6 +188,25 @@ describe("attachKeyboard panels and slots", () => {
     expect(onRadio).toHaveBeenCalledTimes(2);
   });
 
+  it("toggles the 3D camera with V, once per press and not on repeat", () => {
+    const onToggleCamera = vi.fn();
+    const onUserGesture = vi.fn();
+    const detach = attachKeyboard(window, createInputState(), onUserGesture, {
+      onToggleCamera,
+    });
+    press("KeyV");
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { code: "KeyV", repeat: true }),
+    );
+    release("KeyV");
+    press("KeyV");
+    expect(onToggleCamera).toHaveBeenCalledTimes(2);
+    expect(onUserGesture).toHaveBeenCalledTimes(2);
+    detach();
+    press("KeyV");
+    expect(onToggleCamera).toHaveBeenCalledTimes(2);
+  });
+
   it("ignores every game key while a menu owns the keyboard", () => {
     const state = createInputState();
     const onScoreboard = vi.fn();

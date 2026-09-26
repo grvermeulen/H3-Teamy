@@ -437,6 +437,28 @@ describe("useArenaGame", () => {
     });
     expect(result.current.failed).toBe(false);
   });
+
+  it("flips camera3d with V only while the view is 3d", () => {
+    localStorage.clear();
+    const { session } = createControllableSession();
+    mockCreateWorldSession.mockReturnValue(session);
+    const { result } = renderArenaGame();
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyV" }));
+    });
+    expect(result.current.settings.camera3d).toBe("third");
+    act(() => {
+      result.current.updateSettings({ view: "3d" });
+    });
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyV" }));
+    });
+    expect(result.current.settings.camera3d).toBe("first");
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyV" }));
+    });
+    expect(result.current.settings.camera3d).toBe("third");
+  });
 });
 
 describe("nearestLandmarkTo", () => {

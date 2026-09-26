@@ -348,6 +348,7 @@ function useKeyboardBindings(
   runtimeRef: RefObject<Runtime | null>,
   keys: ArenaKeyOptions | undefined,
   onRadio: () => void,
+  onToggleCamera: () => void,
 ): void {
   const suspended = keys?.suspended ?? false;
   const onScoreboard = keys?.onScoreboard;
@@ -368,10 +369,11 @@ function useKeyboardBindings(
           onWeaponSlot: (slot) =>
             runtimeRef.current?.weapons.request(SLOT_WEAPONS[slot]),
           onRadio,
+          onToggleCamera,
           isSuspended: () => suspendedRef.current,
         },
       ),
-    [inputRef, runtimeRef, onScoreboard, onRadio],
+    [inputRef, runtimeRef, onScoreboard, onRadio, onToggleCamera],
   );
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -388,12 +390,20 @@ function useArenaInput(
   runtimeRef: RefObject<Runtime | null>,
   keys: ArenaKeyOptions | undefined,
   onRadio: () => void,
+  onToggleCamera: () => void,
 ): {
   setInputVector(vector: [number, number] | null): void;
   setAimVector(vector: [number, number] | null): void;
   setButton(name: ButtonName, pressed: boolean): void;
 } {
-  useKeyboardBindings(inputRef, canvasRef, runtimeRef, keys, onRadio);
+  useKeyboardBindings(
+    inputRef,
+    canvasRef,
+    runtimeRef,
+    keys,
+    onRadio,
+    onToggleCamera,
+  );
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
@@ -672,9 +682,12 @@ export function useArenaGame({
       reducedMotionRef,
       settingsRef,
     });
-  // The R key is bound once; what it does is decided below, once the settings can be updated.
+  // The R and V keys are bound once; what they do is decided below, once the settings can be
+  // updated.
   const nextStationRef = useRef<() => void>(() => undefined);
   const onRadioKey = useCallback(() => nextStationRef.current(), []);
+  const toggleCameraRef = useRef<() => void>(() => undefined);
+  const onToggleCameraKey = useCallback(() => toggleCameraRef.current(), []);
   const { setInputVector, setAimVector, setButton } = useArenaInput(
     inputRef,
     canvasRef,
@@ -682,6 +695,7 @@ export function useArenaGame({
     runtimeRef,
     keys,
     onRadioKey,
+    onToggleCameraKey,
   );
   const selectWeapon = useCallback(
     (slot: WeaponSlot) =>
@@ -763,6 +777,13 @@ export function useArenaGame({
     (enabled: boolean) => updateSettings({ sound: enabled }),
     [updateSettings],
   );
+  // V is a no-op in 2D (spec §6.3): there is no third/first person to switch between.
+  const toggleCamera = useCallback(() => {
+    if (settingsRef.current.view !== "3d") return;
+    updateSettings({
+      camera3d: settingsRef.current.camera3d === "third" ? "first" : "third",
+    });
+  }, [updateSettings]);
   const nextStation = useCallback(() => {
     const station = runtimeRef.current?.sound.radio?.nextStation();
     if (station) updateSettings({ radioStation: station.id });
@@ -792,6 +813,9 @@ export function useArenaGame({
   useEffect(() => {
     nextStationRef.current = nextStation;
   }, [nextStation]);
+  useEffect(() => {
+    toggleCameraRef.current = toggleCamera;
+  }, [toggleCamera]);
 
   return {
     ...seam,

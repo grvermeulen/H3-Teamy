@@ -234,6 +234,34 @@ describe("CityArenaOverlay", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("toggles between 2D and 3D from the HUD strip, and V flips the camera only in 3D", async () => {
+    renderOverlay(vi.fn());
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    const toggle = screen.getByRole("button", { name: "Wissel naar 3D" });
+    expect(toggle).toHaveTextContent("3D");
+    // V does nothing in 2D: the settings sheet still shows the third-person default.
+    fireEvent.keyDown(window, { code: "KeyV" });
+    fireEvent.click(screen.getByRole("button", { name: "Menu", exact: true }));
+    expect(
+      screen.getByRole("button", { name: "Derde persoon" }),
+    ).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Verder spelen" }));
+
+    fireEvent.click(toggle);
+    expect(
+      screen.getByRole("button", { name: "Wissel naar 2D" }),
+    ).toHaveTextContent("2D");
+    fireEvent.keyDown(window, { code: "KeyV" });
+    fireEvent.click(screen.getByRole("button", { name: "Menu", exact: true }));
+    expect(
+      screen.getByRole("button", { name: "Eerste persoon" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("preloads the death-screen artwork once the overlay mounts", async () => {
     renderOverlay(vi.fn());
     await waitFor(() =>

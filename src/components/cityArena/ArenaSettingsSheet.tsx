@@ -39,6 +39,86 @@ const LAYOUT_OPTIONS: { value: ArenaLayout | "auto"; label: string }[] = [
   { value: "desktop", label: "Computer" },
 ];
 
+/** "Weergave": the flat top-down sim, or the three.js view over it (spec §7). */
+export const VIEW_LABEL = "Weergave";
+/** "3D-camera": third or first person, meaningless (and disabled) outside 3D. */
+export const CAMERA3D_LABEL = "3D-camera";
+
+/** One button in a two-way segmented control, pressed state shown with `aria-pressed`. */
+function SegmentButton<Value extends string>({
+  value,
+  label,
+  active,
+  disabled,
+  onSelect,
+}: {
+  value: Value;
+  label: string;
+  active: boolean;
+  disabled?: boolean;
+  onSelect: (value: Value) => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={() => onSelect(value)}
+      className="min-h-11 flex-1 rounded border border-[var(--arena-line)] px-3 text-sm text-[var(--arena-text)] aria-pressed:border-[var(--arena-amber)] aria-pressed:bg-[var(--arena-amber)] aria-pressed:text-[var(--arena-void)] disabled:opacity-40"
+    >
+      {label}
+    </button>
+  );
+}
+
+/** The "Weergave" (2D/3D) and "3D-camera" segmented controls (spec §7, §6.3). */
+function ViewSettings({
+  settings,
+  onChange,
+}: Pick<ArenaSettingsSheetProps, "settings" | "onChange">): React.JSX.Element {
+  const is3d = settings.view === "3d";
+  return (
+    <fieldset className="border-b border-[var(--arena-line)] py-2">
+      <legend className="arena-label mb-2 text-[var(--arena-dim)]">
+        {VIEW_LABEL}
+      </legend>
+      <div className="flex gap-2">
+        <SegmentButton
+          value="2d"
+          label="2D"
+          active={!is3d}
+          onSelect={(view) => onChange({ view })}
+        />
+        <SegmentButton
+          value="3d"
+          label="3D"
+          active={is3d}
+          onSelect={(view) => onChange({ view })}
+        />
+      </div>
+      <p className="arena-label mb-2 mt-3 text-[var(--arena-dim)]">
+        {CAMERA3D_LABEL}
+      </p>
+      <div className="flex gap-2">
+        <SegmentButton
+          value="third"
+          label="Derde persoon"
+          active={settings.camera3d === "third"}
+          disabled={!is3d}
+          onSelect={(camera3d) => onChange({ camera3d })}
+        />
+        <SegmentButton
+          value="first"
+          label="Eerste persoon"
+          active={settings.camera3d === "first"}
+          disabled={!is3d}
+          onSelect={(camera3d) => onChange({ camera3d })}
+        />
+      </div>
+    </fieldset>
+  );
+}
+
 /** One labelled switch in the sheet. */
 function SettingSwitch({
   label,
@@ -182,6 +262,7 @@ export function ArenaSettingsSheet({
                 <option value="high">Hoog</option>
               </select>
             </label>
+            <ViewSettings settings={settings} onChange={onChange} />
             <p className="arena-label mt-3 text-[var(--arena-dim)]">
               {CONTROLS_LABEL}
             </p>

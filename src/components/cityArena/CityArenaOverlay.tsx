@@ -16,7 +16,7 @@ import { ArenaRoomLocation } from "./ArenaRoomLocation";
 import { ArenaPhaseScreens } from "./ArenaPhaseScreens";
 import { ArenaSettingsSheet, MENU_LABEL } from "./ArenaSettingsSheet";
 import { ArenaTouchTip } from "./ArenaTouchTip";
-import type { ArenaLayout } from "@/lib/cityArena/schemas";
+import type { ArenaLayout, ArenaSettings } from "@/lib/cityArena/schemas";
 import {
   hasSeenArenaTouchTip,
   markArenaTouchTipSeen,
@@ -183,18 +183,81 @@ function ArenaZonePicker({
   );
 }
 
+/** HUD switch between the 2D and 3D view (spec §7); its label names the view a click switches *to*. */
+function ArenaViewToggleButton({
+  view,
+  onToggle,
+}: {
+  view: ArenaSettings["view"];
+  onToggle: () => void;
+}): React.JSX.Element {
+  const target = view === "3d" ? "2d" : "3d";
+  return (
+    <button
+      className="min-h-11 min-w-11 rounded border border-[var(--arena-line)] px-2 text-xs"
+      type="button"
+      aria-label={target === "3d" ? "Wissel naar 3D" : "Wissel naar 2D"}
+      onClick={onToggle}
+    >
+      {target.toUpperCase()}
+    </button>
+  );
+}
+
 /** Props for {@link ArenaHudBar}. */
 type ArenaHudBarProps = {
   hud: ArenaHud;
   showLoadWarning: boolean;
+  view: ArenaSettings["view"];
+  onToggleView: () => void;
+  /** Hides the 3D toggle on a shared/split screen, which 3D does not support (spec §10). */
+  hideViewToggle: boolean;
   onMenu: () => void;
   onClose: () => void;
 };
 
-/** Top strip: zone/street, vitals, an optional load warning, the zone picker, the menu and the close button. */
+/** The HUD's top-right button cluster: the optional 3D toggle, Menu and Sluiten. */
+function ArenaHudActions({
+  view,
+  onToggleView,
+  hideViewToggle,
+  onMenu,
+  onClose,
+}: Pick<
+  ArenaHudBarProps,
+  "view" | "onToggleView" | "hideViewToggle" | "onMenu" | "onClose"
+>): React.JSX.Element {
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      {hideViewToggle ? null : (
+        <ArenaViewToggleButton view={view} onToggle={onToggleView} />
+      )}
+      <button
+        className="min-h-11 min-w-11 rounded border border-[var(--arena-line)] px-2 text-xs"
+        type="button"
+        onClick={onMenu}
+      >
+        {MENU_LABEL}
+      </button>
+      <button
+        className="min-h-11 min-w-11 rounded text-xl"
+        aria-label="Sluiten"
+        type="button"
+        onClick={onClose}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+/** Top strip: zone/street, vitals, an optional load warning, the zone picker, the view toggle, the menu and the close button. */
 function ArenaHudBar({
   hud,
   showLoadWarning,
+  view,
+  onToggleView,
+  hideViewToggle,
   onMenu,
   onClose,
 }: ArenaHudBarProps): React.JSX.Element {
@@ -228,23 +291,13 @@ function ArenaHudBar({
           </span>
         ) : null}
       </div>
-      <div className="flex shrink-0 items-center gap-1">
-        <button
-          className="min-h-11 min-w-11 rounded border border-[var(--arena-line)] px-2 text-xs"
-          type="button"
-          onClick={onMenu}
-        >
-          {MENU_LABEL}
-        </button>
-        <button
-          className="min-h-11 min-w-11 rounded text-xl"
-          aria-label="Sluiten"
-          type="button"
-          onClick={onClose}
-        >
-          ×
-        </button>
-      </div>
+      <ArenaHudActions
+        view={view}
+        onToggleView={onToggleView}
+        hideViewToggle={hideViewToggle}
+        onMenu={onMenu}
+        onClose={onClose}
+      />
     </div>
   );
 }
@@ -482,6 +535,8 @@ export default function CityArenaOverlay({
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const closeMap = useCallback(() => setMapData(null), []);
   const openMap = (): void => setMapData(game.navigationMap());
+  const toggleView = (): void =>
+    game.updateSettings({ view: game.settings.view === "3d" ? "2d" : "3d" });
   const leave = useCallback(() => {
     room.leave();
     onClose();
@@ -515,6 +570,9 @@ export default function CityArenaOverlay({
       <ArenaHudBar
         hud={game.hud}
         showLoadWarning={game.phase === "playing" && game.failed}
+        view={game.settings.view}
+        onToggleView={toggleView}
+        hideViewToggle={entry.role === "hybrid"}
         onMenu={openMenu}
         onClose={onClose}
       />
