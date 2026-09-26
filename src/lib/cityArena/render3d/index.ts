@@ -7,13 +7,9 @@ import type { Scene as ArenaScene } from "../render/renderScene";
 import { lengthOf } from "../sim/vehicle";
 import type { DecodedTile } from "../world/decode";
 import { applyRigPose, rigPose, type CameraMode } from "./cameraRig";
+import { createCast3d, type Cast3d } from "./cast3d";
 import { drawOverlay3d } from "./overlay3d";
-import {
-  createPlaceholderEntities,
-  createPlaceholderWorld,
-  type PlaceholderEntities,
-  type PlaceholderWorld,
-} from "./placeholders";
+import { createPlaceholderWorld, type PlaceholderWorld } from "./placeholders";
 import {
   createRenderer3d,
   viewDistanceFor,
@@ -103,14 +99,17 @@ export function focusOf(scene: ArenaScene): Focus {
   };
 }
 
-/** The renderer and the two layers it draws. */
+/** The renderer and the two layers it draws: the city and everything that moves in it. */
 type View3dParts = {
   renderer: Renderer3d;
   world: PlaceholderWorld;
-  entities: PlaceholderEntities;
+  cast: Cast3d;
 };
 
-/** Places the camera, syncs the layers, renders, then draws the HUD. */
+/**
+ * Places the camera, syncs the city and the cast (characters, vehicles, pickups, effects),
+ * renders — the first-person hands in a pass of their own over the city — then draws the HUD.
+ */
 function renderFrame(
   parts: View3dParts,
   frame: View3dFrame,
@@ -118,7 +117,7 @@ function renderFrame(
 ): void {
   const focus = focusOf(frame.scene);
   const dead = frame.deadSeconds !== null;
-  const { renderer, world, entities } = parts;
+  const { renderer, world, cast } = parts;
   renderer.configure(frame.size, frame.quality);
   applyRigPose(
     renderer.camera,
@@ -140,10 +139,7 @@ function renderFrame(
     viewDistanceFor(frame.quality),
     WORLD_BUILD_BUDGET_MS,
   );
-  entities.update(frame.scene, focus, {
-    hideLocalPlayer: frame.mode === "first" && !dead,
-  });
-  renderer.render();
+  renderer.render(cast.update(frame, focus, renderer.camera));
   drawOverlay3d(overlay, renderer.camera, {
     origin: focus,
     aim: frame.aim,
@@ -153,8 +149,9 @@ function renderFrame(
 }
 
 /**
- * Starts the 3D view on `canvas` (spec §6): renderer, sky, lights and fog, with placeholder
- * city and cast until the real world cells, characters and vehicles are wired in.
+ * Starts the 3D view on `canvas` (spec §6): renderer, sky, lights and fog; the real characters,
+ * vehicles, pickups, effects and first-person hands, in a placeholder city until the real world
+ * cells are wired in.
  *
  * @param canvas - The WebGL canvas stacked under the 2D HUD canvas.
  * @returns The live view.
@@ -165,14 +162,14 @@ export function createView3d(canvas: HTMLCanvasElement): View3dHandle {
   const parts: View3dParts = {
     renderer,
     world: createPlaceholderWorld(),
-    entities: createPlaceholderEntities(),
+    cast: createCast3d(),
   };
-  renderer.scene.add(parts.world.group, parts.entities.group);
+  renderer.scene.add(parts.world.group, parts.cast.object);
   return {
     render: (frame, overlay) => renderFrame(parts, frame, overlay),
     dispose() {
       parts.world.dispose();
-      parts.entities.dispose();
+      parts.cast.dispose();
       renderer.dispose();
     },
   };

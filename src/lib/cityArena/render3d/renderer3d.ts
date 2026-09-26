@@ -12,6 +12,8 @@ import {
   SRGBColorSpace,
   Scene,
   WebGLRenderer,
+  type Camera,
+  type Light,
 } from "three";
 import type { ArenaSettings } from "../schemas";
 import { WebGl2UnavailableError } from "../webgl2";
@@ -84,6 +86,12 @@ export function viewDistanceFor(quality: RenderQuality): number {
   return VIEW_DISTANCE_M[quality];
 }
 
+/**
+ * A second scene drawn over the city once its depth is cleared, so nothing in the city can hide
+ * or cut through it: the first-person hands.
+ */
+export type OverlayPass = { scene: Scene; camera: Camera };
+
 /** A WebGL renderer with its scene and camera. */
 export type Renderer3d = {
   scene: Scene;
@@ -93,8 +101,11 @@ export type Renderer3d = {
     size: { width: number; height: number },
     quality: RenderQuality,
   ): void;
-  /** Renders the scene from the camera, with the sky moved onto it. */
-  render(): void;
+  /**
+   * Renders the scene from the camera, with the sky moved onto it, then `overlay` (if any) over
+   * it with the depth buffer cleared.
+   */
+  render(overlay?: OverlayPass | null): void;
   /** Frees the sky, the renderer and its WebGL context. */
   dispose(): void;
 };
@@ -106,17 +117,27 @@ function webgl2Context(canvas: HTMLCanvasElement): WebGL2RenderingContext {
   return context;
 }
 
+/**
+ * The evening's light (spec §6.5): a hemisphere fill, sky over ground, and the moon. Every call
+ * makes new lights, so a second scene (the first-person hands) can be lit the same way.
+ *
+ * @returns The hemisphere light and the moon's directional light.
+ */
+export function createEveningLights(): Light[] {
+  const moon = new DirectionalLight(MOON_LIGHT, MOON_INTENSITY);
+  moon.position.set(...MOON_DIRECTION);
+  return [
+    new HemisphereLight(AMBIENT_SKY, AMBIENT_GROUND, HEMISPHERE_INTENSITY),
+    moon,
+  ];
+}
+
 /** The evening scene: fog in the horizon colour, a hemisphere fill and the moon. */
 function createEveningScene(): Scene {
   const scene = new Scene();
   scene.background = new Color(FOG_COLOUR);
   scene.fog = new Fog(FOG_COLOUR, 0, VIEW_DISTANCE_M.auto);
-  const moon = new DirectionalLight(MOON_LIGHT, MOON_INTENSITY);
-  moon.position.set(...MOON_DIRECTION);
-  scene.add(
-    new HemisphereLight(AMBIENT_SKY, AMBIENT_GROUND, HEMISPHERE_INTENSITY),
-    moon,
-  );
+  scene.add(...createEveningLights());
   return scene;
 }
 
@@ -156,9 +177,10 @@ export function createRenderer3d(canvas: HTMLCanvasElement): Renderer3d {
       fog.far = viewDistanceFor(quality);
       fog.near = fog.far * FOG_NEAR_SHARE;
     },
-    render() {
+    render(overlay) {
       sky.position.copy(camera.position);
       renderer.render(scene, camera);
+      if (overlay) renderOver(renderer, overlay);
     },
     dispose() {
       disposeObject(sky);
@@ -166,6 +188,14 @@ export function createRenderer3d(canvas: HTMLCanvasElement): Renderer3d {
       renderer.forceContextLoss();
     },
   };
+}
+
+/** Draws `overlay` over what the renderer drew, keeping its colour but not its depth. */
+function renderOver(renderer: WebGLRenderer, overlay: OverlayPass): void {
+  renderer.autoClear = false;
+  renderer.clearDepth();
+  renderer.render(overlay.scene, overlay.camera);
+  renderer.autoClear = true;
 }
 
 /** Resizes the drawing buffer and the camera's aspect only when the size or ratio changed. */

@@ -1,14 +1,10 @@
 /**
- * Stand-ins for the 3D city and its cast until the real world cells (Task 11), characters
- * (Task 12) and vehicles (Task 14) are wired in (Task 16): a tarmac ground plane, grey extruded
- * footprints for the buildings near the player, capsules for people and boxes for cars — enough
- * to drive and walk around. The two layers mirror the shapes of `WorldCells` and `EntitySync`, so
- * swapping them is a one-line change in `index.ts`.
+ * A stand-in for the 3D city until the real world cells (Task 11) are wired in (Task 16): a
+ * tarmac ground plane and grey extruded footprints for the buildings near the player — enough to
+ * drive and walk around. The layer mirrors the shape of `WorldCells`, so swapping it is a
+ * one-line change in `index.ts`.
  */
 import {
-  BoxGeometry,
-  CapsuleGeometry,
-  Color,
   ExtrudeGeometry,
   GridHelper,
   Group,
@@ -20,11 +16,7 @@ import {
   type Material,
   type Object3D,
 } from "three";
-import type { Scene as ArenaScene } from "../render/renderScene";
-import { CAR_BODY_COLOURS } from "../render/palette";
-import { lengthOf, widthOf } from "../sim/vehicle";
 import type { DecodedBuilding, DecodedTile } from "../world/decode";
-import { headingToRotationY } from "./coords";
 import { disposeObject } from "./disposal";
 import type { StructureView } from "./index";
 
@@ -44,23 +36,10 @@ const GRID_CELL_M = 10;
 const GRID_SIZE_M = 600;
 /** The grid floats this far over the ground so the two never z-fight, metres. */
 const GRID_LIFT_M = 0.02;
-/** People and cars farther than this from the player are not drawn, metres. */
-const ENTITY_DRAW_DISTANCE_M = 320;
-/** Capsule people: radius, straight middle and the resulting standing centre height, metres. */
-const PERSON_RADIUS_M = 0.3;
-const PERSON_BODY_M = 1.1;
-const PERSON_CENTRE_M = PERSON_BODY_M / 2 + PERSON_RADIUS_M;
-/** Box cars stand this tall, metres. */
-const CAR_HEIGHT_M = 1.4;
-/** Placeholder colours: dark tarmac, grey buildings, and one tone per kind of person. */
+/** Placeholder colours: dark tarmac and grey buildings. */
 const TARMAC = 0x2b2e33;
 const GRID_LINE = 0x4a515c;
 const BUILDING_GREY = 0x8a8f98;
-const LOCAL_PLAYER_MINT = 0x5ee6b0;
-const OTHER_PLAYER_ORANGE = 0xff9a3c;
-const PED_GREY = 0xa3a8ae;
-const COP_NAVY = 0x1d2f6f;
-const WRECK_BLACK = 0x1c1c1c;
 
 /** Squared distance from `(x, y)` to the nearest point of a rectangle. */
 function distanceSquaredToRect(
@@ -278,204 +257,6 @@ export function createPlaceholderWorld(): PlaceholderWorld {
       disposeObject(group);
       layer.material.dispose();
       layer.built.clear();
-    },
-  };
-}
-
-/** Meshes keyed by entity id, recycled through a free list once their entity is gone. */
-export type MeshPool = {
-  /** Starts a frame: every entity must be acquired again to stay visible. */
-  begin(): void;
-  /** The mesh for `id` this frame, reusing a released one before creating another. */
-  acquire(id: number): Mesh;
-  /** Ends a frame: hides and frees the meshes of entities not acquired since {@link begin}. */
-  end(): void;
-  /** Meshes created so far, in use or free. */
-  created(): number;
-};
-
-/**
- * A pool of meshes by entity id: no geometry or material is created per frame, and a mesh is
- * created only when more entities are on screen than ever before.
- *
- * @param parent - Where new meshes are added.
- * @param make - Creates a mesh when the free list is empty.
- * @returns The pool.
- */
-export function createMeshPool(parent: Group, make: () => Mesh): MeshPool {
-  const active = new Map<number, { mesh: Mesh; frame: number }>();
-  const free: Mesh[] = [];
-  let frame = 0;
-  let created = 0;
-  return {
-    begin() {
-      frame += 1;
-    },
-    acquire(id) {
-      let entry = active.get(id);
-      if (!entry) {
-        let mesh = free.pop();
-        if (!mesh) {
-          mesh = make();
-          parent.add(mesh);
-          created += 1;
-        }
-        entry = { mesh, frame };
-        active.set(id, entry);
-      }
-      entry.frame = frame;
-      entry.mesh.visible = true;
-      return entry.mesh;
-    },
-    end() {
-      for (const [id, entry] of active) {
-        if (entry.frame === frame) continue;
-        entry.mesh.visible = false;
-        free.push(entry.mesh);
-        active.delete(id);
-      }
-    },
-    created: () => created,
-  };
-}
-
-/** The people and cars layer; the same `update` inputs as the real `EntitySync` plus the first-person flag. */
-export type PlaceholderEntities = {
-  group: Group;
-  update(
-    scene: ArenaScene,
-    focus: { x: number; y: number },
-    options: { hideLocalPlayer: boolean },
-  ): void;
-  dispose(): void;
-};
-
-/** The pools and shared materials of {@link createPlaceholderEntities}. */
-type EntityKit = {
-  players: MeshPool;
-  peds: MeshPool;
-  cops: MeshPool;
-  cars: MeshPool;
-  person: Record<"local" | "other" | "ped" | "cop", Material>;
-  carColours: Material[];
-  wreck: Material;
-};
-
-/** Stands (or lays down) a capsule at a world point. */
-function placePerson(
-  mesh: Mesh,
-  x: number,
-  y: number,
-  facing: number,
-  dead: boolean,
-  material: Material,
-): void {
-  mesh.material = material;
-  mesh.position.set(x, dead ? PERSON_RADIUS_M : PERSON_CENTRE_M, y);
-  mesh.rotation.set(0, headingToRotationY(facing), dead ? Math.PI / 2 : 0);
-}
-
-/** True when `(x, y)` is within the entity draw distance of `focus`. */
-function near(focus: { x: number; y: number }, x: number, y: number): boolean {
-  return Math.hypot(x - focus.x, y - focus.y) <= ENTITY_DRAW_DISTANCE_M;
-}
-
-/** Places the players, pedestrians and officers of one frame. */
-function placePeople(
-  kit: EntityKit,
-  scene: ArenaScene,
-  focus: { x: number; y: number },
-  hideLocalPlayer: boolean,
-): void {
-  for (const player of scene.players) {
-    const local = player.id === scene.localPlayerId;
-    if (player.vehicleId !== null || (local && hideLocalPlayer)) continue;
-    if (!near(focus, player.x, player.y)) continue;
-    const mesh = kit.players.acquire(player.id);
-    const material = local ? kit.person.local : kit.person.other;
-    const dead = player.diedAtTick !== null;
-    placePerson(mesh, player.x, player.y, player.facing, dead, material);
-  }
-  for (const ped of scene.peds) {
-    if (!near(focus, ped.x, ped.y)) continue;
-    const mesh = kit.peds.acquire(ped.id);
-    const dead = ped.mode === "dead";
-    placePerson(mesh, ped.x, ped.y, ped.facing, dead, kit.person.ped);
-  }
-  for (const cop of scene.cops) {
-    if (!near(focus, cop.x, cop.y)) continue;
-    const mesh = kit.cops.acquire(cop.id);
-    const dead = cop.diedAtTick !== null;
-    placePerson(mesh, cop.x, cop.y, cop.facing, dead, kit.person.cop);
-  }
-}
-
-/** Places the cars of one frame as boxes at their kind's size. */
-function placeCars(
-  kit: EntityKit,
-  scene: ArenaScene,
-  focus: { x: number; y: number },
-): void {
-  for (const car of scene.vehicles) {
-    if (!near(focus, car.x, car.y)) continue;
-    const mesh = kit.cars.acquire(car.id);
-    mesh.material = car.wrecked
-      ? kit.wreck
-      : kit.carColours[car.colour % kit.carColours.length]!;
-    mesh.scale.set(lengthOf(car.kind), CAR_HEIGHT_M, widthOf(car.kind));
-    mesh.position.set(car.x, CAR_HEIGHT_M / 2, car.y);
-    mesh.rotation.set(0, headingToRotationY(car.heading), 0);
-  }
-}
-
-/**
- * Placeholder people and cars, pooled by entity id: capsules coloured by who they are (you mint,
- * other players orange, pedestrians grey, officers navy) and boxes at each vehicle kind's size,
- * placed from the blended scene every frame.
- *
- * @returns The layer; add its `group` to the scene.
- */
-export function createPlaceholderEntities(): PlaceholderEntities {
-  const group = new Group();
-  const capsule = new CapsuleGeometry(PERSON_RADIUS_M, PERSON_BODY_M);
-  const box = new BoxGeometry(1, 1, 1);
-  const lambert = (colour: number | string): Material =>
-    new MeshLambertMaterial({ color: new Color(colour) });
-  const person = {
-    local: lambert(LOCAL_PLAYER_MINT),
-    other: lambert(OTHER_PLAYER_ORANGE),
-    ped: lambert(PED_GREY),
-    cop: lambert(COP_NAVY),
-  };
-  const personPool = (): MeshPool =>
-    createMeshPool(group, () => new Mesh(capsule, person.ped));
-  const kit: EntityKit = {
-    players: personPool(),
-    peds: personPool(),
-    cops: personPool(),
-    cars: createMeshPool(group, () => new Mesh(box, person.ped)),
-    person,
-    carColours: CAR_BODY_COLOURS.map(lambert),
-    wreck: lambert(WRECK_BLACK),
-  };
-  const pools = [kit.players, kit.peds, kit.cops, kit.cars];
-  return {
-    group,
-    update(scene, focus, options) {
-      for (const pool of pools) pool.begin();
-      placePeople(kit, scene, focus, options.hideLocalPlayer);
-      placeCars(kit, scene, focus);
-      for (const pool of pools) pool.end();
-    },
-    dispose() {
-      capsule.dispose();
-      box.dispose();
-      for (const material of [
-        ...Object.values(person),
-        ...kit.carColours,
-        kit.wreck,
-      ])
-        material.dispose();
     },
   };
 }
