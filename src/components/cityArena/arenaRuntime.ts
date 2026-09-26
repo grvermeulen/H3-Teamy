@@ -1091,6 +1091,24 @@ function aimAtPointer(
   );
 }
 
+/**
+ * `input` with the trigger let go while the player's mission offer is open. The offer is a modal
+ * over the playfield, and a click or pad press meant for "Aannemen" must not fire behind it — in a
+ * room the match runs on. Everything else still flows: accepting the offer travels as input too.
+ *
+ * @param input - This frame's input.
+ * @param player - The local player, whose mission profile holds the open offer.
+ * @returns `input`, without `fire` while an offer is open.
+ */
+export function holdFireDuringOffer(
+  input: WorldInput,
+  player: Pick<ArenaPlayerState, "mission">,
+): WorldInput {
+  return input.fire && player.mission?.offer
+    ? { ...input, fire: false }
+    : input;
+}
+
 /** This frame's live input: the input state and any gamepad, turned by the camera in 3D. */
 function liveInput(
   runtime: Runtime,
@@ -1100,7 +1118,8 @@ function liveInput(
 ): WorldInput {
   if (runtime.inputSuspended) return EMPTY_INPUT;
   const live = readArenaGamepad(input.snapshot());
-  return runtime3d ? input3d(runtime3d, live, dt) : live;
+  const turned = runtime3d ? input3d(runtime3d, live, dt) : live;
+  return holdFireDuringOffer(turned, myPlayer(runtime));
 }
 
 /** Aims, simulates, paints and records metrics for one frame, then runs the throttled refreshes. */

@@ -7,7 +7,13 @@
  * WebGL2 is expected and leaves only a breadcrumb, every other failure goes to Sentry.
  */
 import * as Sentry from "@sentry/nextjs";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import {
   attachMouseLook,
   type LockState,
@@ -275,7 +281,37 @@ export type View3dControls = LockState & {
   active: boolean;
   /** The failure toast, or `null`. */
   notice: string | null;
+  /**
+   * Lets go of the pointer lock without opening the pause menu (`MouseLook.release`), so a menu,
+   * the map or a mission offer gets the mouse; a no-op in 2D. Stable across renders.
+   */
+  release: () => void;
 };
+
+/**
+ * Lets go of the 3D pointer lock each time `open` turns true — a menu, the map or a mission offer
+ * over the playfield needs the mouse to reach its buttons — without the pause menu the player's
+ * own Esc opens.
+ *
+ * @param open - Whether anything modal is open over the playfield.
+ * @param release - {@link View3dControls.release}.
+ */
+export function useReleaseLockWhile(open: boolean, release: () => void): void {
+  useEffect(() => {
+    if (open) release();
+  }, [open, release]);
+}
+
+/** Re-applies the camera mode's pitch range to a running view whenever the mode changes. */
+function usePitchLimits(
+  attachedRef: RefObject<Attached | null>,
+  mode: CameraMode,
+): void {
+  useEffect(() => {
+    const attached = attachedRef.current;
+    attached?.look.setPitchLimits(...attached.module.pitchLimitsFor(mode));
+  }, [attachedRef, mode]);
+}
 
 /**
  * Runs the 3D view while `active` (spec §6): see the module comment. The pitch range follows the
@@ -296,10 +332,7 @@ export function useView3d(options: UseView3dOptions): View3dControls {
     locked: false,
     lockFree: false,
   });
-  useEffect(() => {
-    const attached = attachedRef.current;
-    attached?.look.setPitchLimits(...attached.module.pitchLimitsFor(mode));
-  }, [mode]);
+  usePitchLimits(attachedRef, mode);
   useEffect(() => {
     const layer = layerRef.current;
     const hud = hudCanvasRef.current;
@@ -331,5 +364,6 @@ export function useView3d(options: UseView3dOptions): View3dControls {
     onPauseRef,
     showNotice,
   ]);
-  return { layerRef, active, notice, ...lock };
+  const release = useCallback(() => attachedRef.current?.look.release(), []);
+  return { layerRef, active, notice, release, ...lock };
 }

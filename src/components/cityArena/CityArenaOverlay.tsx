@@ -57,6 +57,7 @@ import {
 } from "./useArenaGame";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
 import { View3dLayer } from "./view3d/View3dLayers";
+import { useReleaseLockWhile } from "./view3d/useView3d";
 
 /** Media query matching phones and other coarse-pointer devices: shows the touch stick. */
 const TOUCH_MEDIA_QUERY = "(max-width: 768px), (pointer: coarse)";
@@ -544,14 +545,14 @@ export default function CityArenaOverlay({
     room.leave();
     onClose();
   }, [room, onClose]);
+  const modalOpen =
+    menuOpen || mapData !== null || Boolean(game.hud.mission?.offer);
   // Escape opens the menu (spec §7); the menu's own trap closes it again, and "Sluiten" is the
   // way out of the overlay.
   // Stood down while the sheet is open: the sheet's own trap owns Tab and Escape until then.
-  useDialogFocusTrap(
-    dialogRef,
-    openMenu,
-    !menuOpen && !mapData && !game.hud.mission?.offer,
-  );
+  useDialogFocusTrap(dialogRef, openMenu, !modalOpen);
+  // In 3D the pointer lock hides the mouse: a menu, the map or an offer needs it back.
+  useReleaseLockWhile(modalOpen, game.view3d.release);
   useLockBodyScroll();
   useWarmDeathArtwork();
 

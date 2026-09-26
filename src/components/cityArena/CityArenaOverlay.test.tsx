@@ -348,6 +348,41 @@ describe("CityArenaOverlay", () => {
     expect(screen.getByRole("dialog", { name: "Menu" })).toBeInTheDocument();
   });
 
+  it("hands the mouse back, without the pause menu, when the map opens over 3D", async () => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    renderOverlay(vi.fn());
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Wissel naar 3D" }));
+    await waitFor(() => expect(mockCreateView3d).toHaveBeenCalledTimes(1));
+    const playfield = screen.getByLabelText("GTA H3 speelveld");
+    stubPointerLock(playfield);
+    act(() => {
+      document.dispatchEvent(new Event("pointerlockchange"));
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Kaart openen", exact: true }),
+    );
+    expect(document.exitPointerLock).toHaveBeenCalledTimes(1);
+    stubPointerLock(null);
+    act(() => {
+      document.dispatchEvent(new Event("pointerlockchange"));
+    });
+    expect(
+      screen.getByRole("dialog", { name: "Route plannen" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Menu" })).toBeNull();
+  });
+
   it("returns to 2D with a toast, and no Sentry error, when the device has no WebGL2", async () => {
     mockCreateView3d.mockImplementationOnce(() => {
       throw new WebGl2UnavailableError();

@@ -262,6 +262,45 @@ describe("attachMouseLook losing the lock", () => {
     expect(onLockLost).toHaveBeenCalledTimes(1);
   });
 
+  it("lets go of a held lock for a menu or an offer without reporting it as the player's", () => {
+    const onLockLost = vi.fn();
+    const onLockChange = vi.fn();
+    const look = attachMouseLook(canvas, { onLockLost, onLockChange });
+    stubPointerLock(canvas);
+    document.dispatchEvent(new Event("pointerlockchange"));
+    look.release();
+    expect(document.exitPointerLock).toHaveBeenCalledTimes(1);
+    stubPointerLock(null);
+    document.dispatchEvent(new Event("pointerlockchange"));
+    expect(onLockChange).toHaveBeenLastCalledWith({
+      locked: false,
+      lockFree: false,
+    });
+    expect(onLockLost).not.toHaveBeenCalled();
+    // Still bound: the next click takes the lock again, and a later Esc is the player's again.
+    click(canvas);
+    expect(canvas.requestPointerLock).toHaveBeenCalledTimes(1);
+    stubPointerLock(canvas);
+    document.dispatchEvent(new Event("pointerlockchange"));
+    stubPointerLock(null);
+    document.dispatchEvent(new Event("pointerlockchange"));
+    expect(onLockLost).toHaveBeenCalledTimes(1);
+    look.detach();
+  });
+
+  it("does nothing on release without a lock, so the player's next Esc still pauses", () => {
+    const onLockLost = vi.fn();
+    const look = attachMouseLook(canvas, { onLockLost });
+    look.release();
+    expect(document.exitPointerLock).not.toHaveBeenCalled();
+    stubPointerLock(canvas);
+    document.dispatchEvent(new Event("pointerlockchange"));
+    stubPointerLock(null);
+    document.dispatchEvent(new Event("pointerlockchange"));
+    expect(onLockLost).toHaveBeenCalledTimes(1);
+    look.detach();
+  });
+
   it("does not ask for the lock again while it already holds it", () => {
     const look = attachMouseLook(canvas);
     stubPointerLock(canvas);

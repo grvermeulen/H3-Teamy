@@ -8,6 +8,7 @@ import {
   VIEW3D_FAILED_TEXT,
   VIEW3D_NOTICE_MS,
   mountView3d,
+  useReleaseLockWhile,
   useView3d,
 } from "./useView3d";
 
@@ -270,6 +271,30 @@ describe("useView3d", () => {
     expect(result.current.locked).toBe(false);
   });
 
+  it("releases the lock for a modal without pausing, and keeps release stable across renders", async () => {
+    mockCreateView3d.mockReturnValue(fakeHandle());
+    const { result, runtimeRef, hud, onPause, on } = renderView3d();
+    const release = result.current.release;
+    // In 2D there is nothing to let go of.
+    release();
+    expect(document.exitPointerLock).not.toHaveBeenCalled();
+    on();
+    await waitFor(() => expect(runtimeRef.current.look).toBeTruthy());
+    stubPointerLock(hud);
+    act(() => {
+      document.dispatchEvent(new Event("pointerlockchange"));
+    });
+    expect(result.current.release).toBe(release);
+    act(() => result.current.release());
+    expect(document.exitPointerLock).toHaveBeenCalledTimes(1);
+    stubPointerLock(null);
+    act(() => {
+      document.dispatchEvent(new Event("pointerlockchange"));
+    });
+    expect(result.current.locked).toBe(false);
+    expect(onPause).not.toHaveBeenCalled();
+  });
+
   it("reports the lock-free fallback when the browser refuses the lock", async () => {
     mockCreateView3d.mockReturnValue(fakeHandle());
     const { result, runtimeRef, hud, on } = renderView3d();
@@ -318,5 +343,22 @@ describe("mountView3d", () => {
     );
     expect(onFailure).not.toHaveBeenCalled();
     expect(onFallback).not.toHaveBeenCalled();
+  });
+});
+
+describe("useReleaseLockWhile", () => {
+  it("releases each time something modal opens, not while it stays open or closes", () => {
+    const release = vi.fn();
+    const { rerender } = renderHook(
+      ({ open }: { open: boolean }) => useReleaseLockWhile(open, release),
+      { initialProps: { open: false } },
+    );
+    expect(release).not.toHaveBeenCalled();
+    rerender({ open: true });
+    rerender({ open: true });
+    expect(release).toHaveBeenCalledTimes(1);
+    rerender({ open: false });
+    rerender({ open: true });
+    expect(release).toHaveBeenCalledTimes(2);
   });
 });

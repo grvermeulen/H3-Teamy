@@ -25,7 +25,10 @@ export type LockState = {
 export type MouseLookHooks = {
   /** The primary click on the target — a user gesture, e.g. to unlock audio. */
   onGesture?: () => void;
-  /** The user let go of a held lock (Esc, focus loss); never fired by {@link MouseLook.detach}. */
+  /**
+   * The user let go of a held lock (Esc, focus loss); never fired by {@link MouseLook.detach} or
+   * {@link MouseLook.release}.
+   */
   onLockLost?: () => void;
   /** The lock or the lock-free fallback turned on or off. */
   onLockChange?: (state: LockState) => void;
@@ -44,6 +47,12 @@ export type MouseLook = {
   setPitchLimits(min: number, max: number): void;
   /** Radians of yaw added since the last call — the chase camera eases only when this is 0 for a while. */
   takeYawDelta(): number;
+  /**
+   * Lets go of the pointer lock if this target holds it — a menu, the map or a mission offer needs
+   * the mouse — without {@link MouseLookHooks.onLockLost}, so no pause menu opens over it. Mouse-look
+   * stays bound: the next click on the target takes the lock again.
+   */
+  release(): void;
   /** Unbinds, releasing the pointer lock if this target holds it (without {@link MouseLookHooks.onLockLost}). */
   detach(): void;
 };
@@ -60,6 +69,8 @@ type LookState = LockState & {
   yawDelta: number;
   pitchMin: number;
   pitchMax: number;
+  /** {@link MouseLook.release} let go of the lock: the unlock it causes is not the player's. */
+  releasing: boolean;
 };
 
 /** An error's name (a `DOMException` is not an `Error` everywhere), else the value itself. */
@@ -155,10 +166,26 @@ function lockListeners(
       if (locked === state.locked) return;
       state.locked = locked;
       if (locked) state.lockFree = false;
+      const released = state.releasing;
+      state.releasing = false;
       hooks.onLockChange?.({ locked, lockFree: state.lockFree });
-      if (!locked) hooks.onLockLost?.();
+      if (!locked && !released) hooks.onLockLost?.();
     },
     onError: () => lockRefused(state, hooks, "pointerlockerror"),
+  };
+}
+
+/** Level and unlocked; lock-free from the start where the browser has no pointer lock at all. */
+function initialLookState(target: HTMLElement): LookState {
+  return {
+    yaw: 0,
+    pitch: 0,
+    yawDelta: 0,
+    pitchMin: DEFAULT_PITCH_MIN_RAD,
+    pitchMax: DEFAULT_PITCH_MAX_RAD,
+    locked: false,
+    lockFree: typeof target.requestPointerLock !== "function",
+    releasing: false,
   };
 }
 
@@ -176,15 +203,7 @@ export function attachMouseLook(
   target: HTMLElement,
   hooks: MouseLookHooks = {},
 ): MouseLook {
-  const state: LookState = {
-    yaw: 0,
-    pitch: 0,
-    yawDelta: 0,
-    pitchMin: DEFAULT_PITCH_MIN_RAD,
-    pitchMax: DEFAULT_PITCH_MAX_RAD,
-    locked: false,
-    lockFree: typeof target.requestPointerLock !== "function",
-  };
+  const state = initialLookState(target);
   const isLocked = (): boolean => document.pointerLockElement === target;
   const onPointerDown = (event: PointerEvent): void => {
     if (event.pointerType !== "mouse" || event.button !== PRIMARY_BUTTON)
@@ -207,6 +226,11 @@ export function attachMouseLook(
     locked: isLocked,
     lockFree: () => state.lockFree,
     claimsClick: () => !state.lockFree && !isLocked(),
+    release() {
+      if (!isLocked()) return;
+      state.releasing = true;
+      document.exitPointerLock();
+    },
     detach() {
       target.removeEventListener("pointerdown", onPointerDown);
       target.removeEventListener("pointermove", onPointerMove);
