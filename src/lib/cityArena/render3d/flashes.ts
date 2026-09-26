@@ -2,7 +2,8 @@
  * The bright moments of a blast: an additive fireball that swells and fades, a shockwave ring racing
  * over the ground, and a flash of real light (spec §6.8). Real lights are expensive, so at most
  * {@link MAX_FLASH_LIGHTS} exist and are lent out: explosions first, muzzle flashes only when one is
- * spare.
+ * spare. The lights stay visible even while dark (intensity 0): three.js keys every lit material's
+ * shader on the number of visible lights, so hiding one would recompile them all (Ruling 21).
  */
 import {
   AdditiveBlending,
@@ -120,7 +121,6 @@ function ringMaterial(): MeshBasicMaterial {
 function createLightSlot(): LightSlot {
   const light = new PointLight(EXPLOSION_LIGHT_COLOUR, 0);
   light.name = "flash-light";
-  light.visible = false;
   return { light, owner: null, age: 0, duration: 1, peak: 0 };
 }
 
@@ -149,7 +149,6 @@ function lend(slot: LightSlot, owner: LightOwner, at: Vector3Like): void {
   slot.light.distance = blast ? EXPLOSION_LIGHT_RANGE_M : MUZZLE_LIGHT_RANGE_M;
   slot.light.intensity = slot.peak;
   slot.light.position.set(at.x, at.y, at.z);
-  slot.light.visible = true;
 }
 
 /** Dims a lit flash along (1 − t)², and hands the light back once it is dark. */
@@ -160,7 +159,6 @@ function dim(slot: LightSlot, dt: number): void {
   if (t >= 1) {
     slot.owner = null;
     slot.light.intensity = 0;
-    slot.light.visible = false;
     return;
   }
   slot.light.intensity = slot.peak * (1 - t) * (1 - t);
@@ -255,7 +253,7 @@ function burn(slot: FireballSlot, dt: number): void {
 
 /**
  * Creates the fireball pool and the {@link MAX_FLASH_LIGHTS} flash lights. The lights stay in the
- * scene and are hidden while dark.
+ * scene and visible at all times; a dark one just has intensity 0.
  *
  * @returns The pool; add `object` to the scene and call `update` once per frame.
  */

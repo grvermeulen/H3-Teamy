@@ -61,12 +61,22 @@ function player(x: number, y: number): ArenaPlayerState {
   return { id: 1, x, y } as ArenaPlayerState;
 }
 
+/** Flash lights giving off light; dark ones stay in the scene at intensity 0. */
 function litLights(root: Object3D): PointLight[] {
   const lit: PointLight[] = [];
   root.traverse((node) => {
-    if (node instanceof PointLight && node.visible) lit.push(node);
+    if (node instanceof PointLight && node.intensity > 0) lit.push(node);
   });
   return lit;
+}
+
+/** Ruling 21: the lit materials' light count, which must never change. */
+function visibleLightCount(root: Object3D): number {
+  let count = 0;
+  root.traverseVisible((node) => {
+    if (node instanceof PointLight) count += 1;
+  });
+  return count;
 }
 
 function burningFireballs(root: Object3D): Mesh[] {
@@ -138,6 +148,20 @@ describe("createEffects3d", () => {
     expect(litLights(effects.object)).toHaveLength(1);
     effects.update(0.05);
     expect(litLights(effects.object)).toHaveLength(0);
+  });
+
+  it("keeps four visible flash lights before, during and after an explosion", () => {
+    const effects = createEffects3d({ maxParticles: 600 });
+    const counts = [visibleLightCount(effects.object)];
+
+    effects.sync(scene({ effects: [EXPLOSION] }));
+    counts.push(visibleLightCount(effects.object));
+    effects.update(0.1);
+    counts.push(visibleLightCount(effects.object));
+    effects.update(0.5);
+    counts.push(visibleLightCount(effects.object));
+
+    expect(counts).toEqual([4, 4, 4, 4]);
   });
 
   it("throws 12 debris chunks from an explosion, at the blast", () => {

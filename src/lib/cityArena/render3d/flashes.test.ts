@@ -21,8 +21,14 @@ function lights(pool: ReturnType<typeof createFlashPool>): PointLight[] {
   return found;
 }
 
+/** Lights giving off light; a dark light keeps its place in the scene at intensity 0. */
 function litLights(pool: ReturnType<typeof createFlashPool>): PointLight[] {
-  return lights(pool).filter((light) => light.visible);
+  return lights(pool).filter((light) => light.intensity > 0);
+}
+
+/** Ruling 21: the renderer's light count never changes, so no material recompiles. */
+function visibleLightCount(pool: ReturnType<typeof createFlashPool>): number {
+  return lights(pool).filter((light) => light.visible).length;
 }
 
 function visibleFireballs(pool: ReturnType<typeof createFlashPool>): Mesh[] {
@@ -35,13 +41,29 @@ function visibleFireballs(pool: ReturnType<typeof createFlashPool>): Mesh[] {
 }
 
 describe("createFlashPool", () => {
-  it("keeps exactly four lights, all dark while nothing happens", () => {
+  it("keeps exactly four lights in the scene, all at intensity 0 while nothing happens", () => {
     const pool = createFlashPool();
 
     expect(MAX_FLASH_LIGHTS).toBe(4);
     expect(lights(pool)).toHaveLength(4);
+    expect(visibleLightCount(pool)).toBe(MAX_FLASH_LIGHTS);
     expect(pool.litCount()).toBe(0);
     expect(litLights(pool)).toHaveLength(0);
+  });
+
+  it("never changes the number of visible lights, before, during or after flashes", () => {
+    const pool = createFlashPool();
+    const counts = [visibleLightCount(pool)];
+
+    for (let blast = 0; blast < 6; blast++) pool.explode(blast, 1, 0);
+    pool.muzzle(50, 1.3, 0);
+    counts.push(visibleLightCount(pool));
+    pool.update(0.1);
+    counts.push(visibleLightCount(pool));
+    pool.update(1);
+    counts.push(visibleLightCount(pool));
+
+    expect(counts).toEqual([4, 4, 4, 4]);
   });
 
   it("lights an explosion orange at full intensity where it happens", () => {
@@ -70,8 +92,8 @@ describe("createFlashPool", () => {
 
     pool.update(0.15);
     expect(pool.litCount()).toBe(0);
-    expect(light.visible).toBe(false);
     expect(light.intensity).toBe(0);
+    expect(light.visible).toBe(true);
   });
 
   it("never lights more than four: a fifth blast takes the oldest light", () => {
