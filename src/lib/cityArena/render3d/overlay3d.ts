@@ -5,13 +5,14 @@
 import { Vector3, type PerspectiveCamera } from "three";
 import type { RasterContext } from "../render/canvasTypes";
 import { drawCrosshair } from "../render/drawProjectiles";
-import { PERSON_CHEST_HEIGHT_M } from "./coords";
+import { AIM_PROJECT_DISTANCE_M, PERSON_CHEST_HEIGHT_M } from "./coords";
 
-/** The crosshair marks where the in-plane shot line is this many metres ahead (spec §6.3). */
-export const AIM_PROJECT_DISTANCE_M = 25;
+export { AIM_PROJECT_DISTANCE_M } from "./coords";
 
 /** Normalised device depth beyond which a projected point lies behind the camera or the far plane. */
 const NDC_DEPTH_LIMIT = 1;
+/** The crosshair stays at least this far inside the screen's edges, CSS pixels. */
+export const CROSSHAIR_EDGE_MARGIN_PX = 24;
 
 /** Reused for every projection, so the per-frame overlay allocates no vectors. */
 const scratch = new Vector3();
@@ -49,12 +50,32 @@ export function crosshairScreen(
   ];
 }
 
+/**
+ * Keeps a screen point at least {@link CROSSHAIR_EDGE_MARGIN_PX} inside the screen, so the reticle
+ * stays in view when the shot line leaves it (looking far down or up).
+ *
+ * @param point - A CSS-pixel point.
+ * @param size - The canvas's CSS size.
+ * @returns The point, clamped.
+ */
+export function clampToScreen(
+  point: [number, number],
+  size: { width: number; height: number },
+): [number, number] {
+  const clampAxis = (value: number, extent: number): number =>
+    Math.min(
+      Math.max(value, CROSSHAIR_EDGE_MARGIN_PX),
+      Math.max(CROSSHAIR_EDGE_MARGIN_PX, extent - CROSSHAIR_EDGE_MARGIN_PX),
+    );
+  return [clampAxis(point[0], size.width), clampAxis(point[1], size.height)];
+}
+
 /** What {@link drawOverlay3d} needs besides the camera. */
 export type Overlay3dInput = {
   /** The local player, world metres. */
   origin: { x: number; y: number };
-  /** The aim heading, radians. */
-  yaw: number;
+  /** The heading the simulation shoots along this frame, radians. */
+  aim: number;
   /** The canvas's CSS size. */
   size: { width: number; height: number };
   /** No crosshair over a body. */
@@ -63,7 +84,7 @@ export type Overlay3dInput = {
 
 /**
  * Draws the 3D view's HUD on the 2D canvas, in CSS pixels: the 2D game's crosshair, placed by
- * {@link crosshairScreen}.
+ * {@link crosshairScreen} and kept on screen by {@link clampToScreen}.
  *
  * @param context - The cleared 2D context, transformed to CSS pixels.
  * @param camera - The camera the frame was rendered with.
@@ -75,6 +96,6 @@ export function drawOverlay3d(
   input: Overlay3dInput,
 ): void {
   if (input.dead) return;
-  const point = crosshairScreen(camera, input.origin, input.yaw, input.size);
-  if (point) drawCrosshair(context, point);
+  const point = crosshairScreen(camera, input.origin, input.aim, input.size);
+  if (point) drawCrosshair(context, clampToScreen(point, input.size));
 }

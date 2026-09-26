@@ -5,6 +5,7 @@ import {
   angleDelta,
   easeYaw,
   nextCarYaw,
+  stickTurnedYaw,
   stickWorldYaw,
   type CarYawInput,
 } from "./cameraYaw";
@@ -95,5 +96,40 @@ describe("stickWorldYaw", () => {
   it("reads a stick pushed up as the camera's forward and right as its right", () => {
     expect(stickWorldYaw(0.7, -Math.PI / 2)).toBeCloseTo(0.7);
     expect(stickWorldYaw(0.7, 0)).toBeCloseTo(0.7 + Math.PI / 2);
+  });
+});
+
+describe("stickTurnedYaw", () => {
+  const still = {
+    aim: null,
+    move: [0, 0] as [number, number],
+    moveIsAnalog: true,
+  };
+
+  it("turns the camera toward a held aim stick", () => {
+    const yaw = stickTurnedYaw(0, { ...still, aim: 0 }, false, 0.1);
+    expect(yaw).toBeGreaterThan(0);
+    expect(yaw).toBeLessThan(Math.PI / 2);
+  });
+
+  it("turns toward a lone movement stick on foot, more for a bigger push", () => {
+    const right = (push: number): number =>
+      stickTurnedYaw(0, { ...still, move: [push, 0] }, false, 0.1);
+    expect(right(1)).toBeGreaterThan(right(0.3));
+    expect(right(0.3)).toBeGreaterThan(0);
+    // Up-left walks forward and to the left: the camera turns left (negative yaw).
+    expect(
+      stickTurnedYaw(0, { ...still, move: [-0.7, -0.7] }, false, 0.1),
+    ).toBeLessThan(0);
+  });
+
+  it("never spins round for a walk backward, the keyboard, a car or a resting stick", () => {
+    expect(stickTurnedYaw(1, { ...still, move: [0, 1] }, false, 0.1)).toBe(1);
+    const keyboard = { ...still, move: [1, 0] as [number, number] };
+    expect(
+      stickTurnedYaw(1, { ...keyboard, moveIsAnalog: false }, false, 0.1),
+    ).toBe(1);
+    expect(stickTurnedYaw(1, keyboard, true, 0.1)).toBe(1);
+    expect(stickTurnedYaw(1, still, false, 0.1)).toBe(1);
   });
 });

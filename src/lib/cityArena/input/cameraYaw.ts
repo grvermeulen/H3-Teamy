@@ -4,6 +4,9 @@
  * stick on touch or a gamepad. Pure, so the runtime only feeds it the clock and the car.
  */
 
+import type { ArenaSettings } from "../schemas";
+import type { WorldInput } from "../sim/types";
+
 /** Seconds the mouse must rest before the chase camera eases behind the car (spec §6.3). */
 export const CHASE_IDLE_S = 1.2;
 /** Rate (per second) at which the third-person chase camera swings behind the heading. */
@@ -13,7 +16,14 @@ const SEAT_EASE_PER_S = 5;
 /** Mouse yaw below this in one frame counts as a resting mouse, radians. */
 const YAW_IDLE_EPSILON_RAD = 1e-4;
 /** Rate (per second) at which the camera turns toward a held aim stick. */
-export const STICK_TURN_PER_S = 3;
+const STICK_TURN_PER_S = 3;
+/**
+ * Rate (per second, at full stick) at which a lone movement stick turns the camera toward where
+ * the player walks, so a touch player without an aim stick can still look around.
+ */
+export const MOVE_FOLLOW_PER_S = 0.8;
+/** The camera follows a walk only this far off its forward, so walking backward never spins it. */
+const MOVE_FOLLOW_MAX_RAD = 0.6 * Math.PI;
 /** A full turn, radians. */
 const TURN = 2 * Math.PI;
 /** A stick's screen angle for "up" (screen y grows downward), which maps to the camera's forward. */
@@ -68,7 +78,7 @@ export type CarYawInput = {
   yawDelta: number;
   /** The car's heading, or `null` on foot. */
   heading: number | null;
-  mode: "third" | "first";
+  mode: ArenaSettings["camera3d"];
   dt: number;
   state: CarLook;
 };
@@ -115,4 +125,32 @@ export function nextCarYaw(input: CarYawInput): {
  */
 export function stickWorldYaw(yaw: number, stickAngle: number): number {
   return yaw + stickAngle - STICK_UP_RAD;
+}
+
+/**
+ * The camera yaw after the sticks have had their say (spec §6.3): a held aim stick turns the camera
+ * toward the aim; on foot without one, an analog movement stick turns it toward the walking
+ * direction (up to {@link MOVE_FOLLOW_MAX_RAD} off forward), scaled by how far it is pushed. The
+ * mouse and the keyboard never turn it here.
+ *
+ * @param yaw - The camera yaw, radians.
+ * @param input - The frame's aim (a stick's screen angle, or `null`) and movement.
+ * @param driving - In a car the chase camera does the following instead.
+ * @param dt - Seconds this frame.
+ * @returns The new yaw.
+ */
+export function stickTurnedYaw(
+  yaw: number,
+  input: Pick<WorldInput, "aim" | "move" | "moveIsAnalog">,
+  driving: boolean,
+  dt: number,
+): number {
+  if (input.aim !== null)
+    return easeYaw(yaw, stickWorldYaw(yaw, input.aim), STICK_TURN_PER_S, dt);
+  const [sx, sy] = input.move;
+  const push = Math.hypot(sx, sy);
+  if (driving || !input.moveIsAnalog || push === 0) return yaw;
+  const walk = stickWorldYaw(yaw, Math.atan2(sy, sx));
+  if (Math.abs(angleDelta(yaw, walk)) > MOVE_FOLLOW_MAX_RAD) return yaw;
+  return easeYaw(yaw, walk, MOVE_FOLLOW_PER_S * push, dt);
 }

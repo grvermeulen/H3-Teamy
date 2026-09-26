@@ -7,7 +7,14 @@ import { createFakeContext } from "@/lib/cityArena/render/testing/fakeContext";
 import type { View3dFrame } from "@/lib/cityArena/render3d";
 import { createInput } from "@/lib/cityArena/sim/types";
 import type { Runtime } from "../arenaRuntime";
-import { input3d, isView3dFrame, paint3d, type Runtime3d } from "./frame3d";
+import {
+  VIEW3D_POPULATION_HALF_M,
+  input3d,
+  paint3d,
+  populationRect3d,
+  view3dRuntime,
+  type Runtime3d,
+} from "./frame3d";
 
 /** A mouse-look stand-in whose next mouse turn the test sets. */
 function fakeLook(yaw = 0): MouseLook & { turn(delta: number): void } {
@@ -57,18 +64,30 @@ function runtime3d(
   } as unknown as Runtime3d & { view3d: { render: ReturnType<typeof vi.fn> } };
 }
 
-describe("isView3dFrame", () => {
-  it("is on only with a view and mouse-look attached and the screen not shared", () => {
+describe("view3dRuntime", () => {
+  it("is the runtime only with a view and mouse-look attached and the screen not shared", () => {
     const runtime = runtime3d();
-    expect(isView3dFrame(runtime)).toBe(true);
-    expect(isView3dFrame({ ...runtime, look: null } as Runtime)).toBe(false);
-    expect(isView3dFrame({ ...runtime, view3d: null } as Runtime)).toBe(false);
+    expect(view3dRuntime(runtime)).toBe(runtime);
+    expect(view3dRuntime({ ...runtime, look: null } as Runtime)).toBeNull();
+    expect(view3dRuntime({ ...runtime, view3d: null } as Runtime)).toBeNull();
     expect(
-      isView3dFrame({
+      view3dRuntime({
         ...runtime,
         sharedScreen: [{ clientId: "a", name: "A" }],
       } as Runtime),
-    ).toBe(false);
+    ).toBeNull();
+  });
+});
+
+describe("populationRect3d", () => {
+  it("keeps the simulation's out-of-sight rect 80 m each way around the player", () => {
+    expect(VIEW3D_POPULATION_HALF_M).toBe(80);
+    expect(populationRect3d({ x: 100, y: -20 })).toEqual({
+      minX: 20,
+      minY: -100,
+      maxX: 180,
+      maxY: 60,
+    });
   });
 });
 
@@ -77,6 +96,7 @@ describe("input3d", () => {
     const runtime = runtime3d(fakeLook(Math.PI / 2));
     const input = input3d(runtime, createInput({ move: [0, -1] }), 1 / 60);
     expect(input.aim).toBeCloseTo(Math.PI / 2);
+    expect(runtime.aim3d).toBeCloseTo(Math.PI / 2);
     expect(input.move[0]).toBeCloseTo(0);
     expect(input.move[1]).toBeCloseTo(1);
   });
@@ -106,8 +126,18 @@ describe("input3d", () => {
     const input = input3d(runtime, createInput({ aim: 0 }), 0.1);
     // Stick right while the camera faces east: aim south, and the camera starts to turn.
     expect(input.aim).toBeCloseTo(Math.PI / 2);
+    expect(runtime.aim3d).toBeCloseTo(Math.PI / 2);
     expect(look.yaw()).toBeGreaterThan(0);
     expect(look.yaw()).toBeLessThan(Math.PI / 2);
+  });
+
+  it("turns the camera toward a lone touch stick's walk, so touch players can look around", () => {
+    const look = fakeLook(0);
+    const runtime = runtime3d(look);
+    input3d(runtime, createInput({ move: [1, 0], moveIsAnalog: true }), 0.1);
+    expect(look.yaw()).toBeGreaterThan(0);
+    // The shot still goes along the camera, not along the walk.
+    expect(runtime.aim3d).toBe(0);
   });
 });
 
@@ -127,6 +157,7 @@ describe("paint3d", () => {
     );
     const runtime = runtime3d(fakeLook(0.4));
     runtime.diedAtMs = 1000;
+    runtime.aim3d = 1.9;
     const scene = { world: { tiles: [] } } as unknown as Scene;
     const rect = { width: 800, height: 600 } as DOMRect;
     const stats = paint3d(
@@ -148,6 +179,7 @@ describe("paint3d", () => {
       scene,
       yaw: 0.4,
       pitch: 0.2,
+      aim: 1.9,
       mode: "third",
       quality: "high",
       deadSeconds: 2.5,

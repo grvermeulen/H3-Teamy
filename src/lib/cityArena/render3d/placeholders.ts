@@ -26,13 +26,7 @@ import { lengthOf, widthOf } from "../sim/vehicle";
 import type { DecodedBuilding, DecodedTile } from "../world/decode";
 import { headingToRotationY } from "./coords";
 import { disposeObject } from "./disposal";
-
-/** A structure's damage as the 3D view reads it (mirrors the simulation's `StructureState`). */
-export type PlaceholderStructure = {
-  id: number;
-  damage: number;
-  destroyedAtTick: number | null;
-};
+import type { StructureView } from "./index";
 
 /** Buildings farther than this from the player are not built, metres (the brief's 200 m). */
 export const PLACEHOLDER_BUILDING_RADIUS_M = 200;
@@ -109,7 +103,7 @@ export type PlaceholderWorld = {
   update(
     focus: { x: number; y: number },
     tiles: readonly DecodedTile[],
-    structures: readonly PlaceholderStructure[],
+    structures: readonly StructureView[],
     viewDistance: number,
     budgetMs: number,
   ): void;
@@ -131,7 +125,7 @@ function sameTiles(
 
 /** The ids of destroyed structures. */
 function destroyedIds(
-  structures: readonly PlaceholderStructure[],
+  structures: readonly StructureView[],
 ): ReadonlySet<number> {
   const ids = new Set<number>();
   for (const structure of structures)
@@ -140,7 +134,7 @@ function destroyedIds(
 }
 
 /** A key that changes exactly when the set of destroyed structures does; `""` while none is. */
-function destroyedKey(structures: readonly PlaceholderStructure[]): string {
+function destroyedKey(structures: readonly StructureView[]): string {
   let key = "";
   for (const structure of structures)
     if (structure.destroyedAtTick !== null) key += `${structure.id},`;

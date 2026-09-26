@@ -14,6 +14,14 @@ import {
   createFakeTarget,
 } from "@/lib/cityArena/render/testing/fakeContext";
 
+/** Stubs `document.pointerLockElement`, which jsdom does not implement. */
+function stubPointerLock(target: Element | null): void {
+  Object.defineProperty(document, "pointerLockElement", {
+    configurable: true,
+    get: () => target,
+  });
+}
+
 /** Opens the overlay and steps past the lobby into the match, which is what these tests cover. */
 function renderOverlay(onClose: () => void): void {
   render(
@@ -104,7 +112,10 @@ vi.mock("@/lib/cityArena/render/canvasTypes", async (importOriginal) => {
       createFakeTarget(width, height),
   };
 });
-vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+vi.mock("@sentry/nextjs", () => ({
+  captureException: vi.fn(),
+  addBreadcrumb: vi.fn(),
+}));
 
 /** jsdom has no WebGL: the 3D view is a stand-in whose creation each test can make fail. */
 const mockCreateView3d = vi.hoisted(() =>
@@ -141,6 +152,7 @@ import {
   ARENA_SETTINGS_KEY,
   ARENA_TOUCH_TIP_KEY,
 } from "@/lib/cityArena/storage";
+import { WebGl2UnavailableError } from "@/lib/cityArena/webgl2";
 import { HEALTH_LABEL } from "./ArenaVitals";
 import CityArenaOverlay from "./CityArenaOverlay";
 
@@ -148,6 +160,12 @@ describe("CityArenaOverlay", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    stubPointerLock(null);
+    document.exitPointerLock = vi.fn();
+    // jsdom has no pointer lock; a desktop browser does, so the click-to-aim hint applies.
+    HTMLCanvasElement.prototype.requestPointerLock = vi.fn(() =>
+      Promise.resolve(),
+    );
     vi.stubGlobal("fetch", fetchImpl);
     // jsdom does not implement matchMedia; the overlay's touch-control detection needs a stub
     // (same pattern as src/components/spaceInvaders/SpaceInvadersGame.test.tsx).
@@ -155,7 +173,8 @@ describe("CityArenaOverlay", () => {
       writable: true,
       configurable: true,
       value: vi.fn().mockImplementation((query: string) => ({
-        matches: false,
+        // A desktop: a fine pointer, no touch controls.
+        matches: query === "(pointer: fine)",
         media: query,
         onchange: null,
         addListener: vi.fn(),
@@ -192,7 +211,9 @@ describe("CityArenaOverlay", () => {
   });
 
   afterEach(() => {
+    stubPointerLock(null);
     cleanup();
+    Reflect.deleteProperty(HTMLCanvasElement.prototype, "requestPointerLock");
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -271,37 +292,64 @@ describe("CityArenaOverlay", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("stacks the WebGL canvas under the playfield in 3D with the click-to-aim hint", async () => {
+  it("stacks the WebGL layer under the playfield in 3D with the click-to-aim hint", async () => {
     renderOverlay(vi.fn());
     await waitFor(() =>
       expect(screen.getByTestId("arena-hud")).toHaveTextContent(
         "Wageningen centrum",
       ),
     );
-    expect(screen.queryByTestId("arena-3d-canvas")).toBeNull();
+    const layer = screen.getByTestId("arena-3d-layer");
+    const playfield = screen.getByLabelText("GTA H3 speelveld");
+    // Under the 2D canvas, which keeps every pointer event; empty in 2D.
+    expect(
+      layer.compareDocumentPosition(playfield) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(layer).toHaveClass("pointer-events-none");
+    expect(layer.children).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Wissel naar 3D" }));
-    const glCanvas = screen.getByTestId("arena-3d-canvas");
-    // Under the 2D canvas, which keeps every pointer event.
-    expect(glCanvas.nextElementSibling).toBe(
-      screen.getByLabelText("GTA H3 speelveld"),
-    );
-    expect(glCanvas).toHaveClass("pointer-events-none");
+    await waitFor(() => expect(mockCreateView3d).toHaveBeenCalledTimes(1));
+    const glCanvas = mockCreateView3d.mock.calls[0]![0] as HTMLCanvasElement;
+    expect(glCanvas.parentElement).toBe(layer);
     expect(
       screen.getByText("Klik om te richten · V wisselt camera"),
     ).toBeInTheDocument();
-    await waitFor(() =>
-      expect(mockCreateView3d).toHaveBeenCalledWith(glCanvas),
-    );
     fireEvent.click(screen.getByRole("button", { name: "Wissel naar 2D" }));
-    expect(screen.queryByTestId("arena-3d-canvas")).toBeNull();
+    expect(layer.children).toHaveLength(0);
     expect(
       screen.queryByText("Klik om te richten · V wisselt camera"),
     ).toBeNull();
   });
 
-  it("returns to 2D with a toast when the device cannot run 3D", async () => {
+  it("opens the menu when the player lets go of the pointer lock in 3D", async () => {
+    renderOverlay(vi.fn());
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Wissel naar 3D" }));
+    await waitFor(() => expect(mockCreateView3d).toHaveBeenCalledTimes(1));
+    const playfield = screen.getByLabelText("GTA H3 speelveld");
+    stubPointerLock(playfield);
+    act(() => {
+      document.dispatchEvent(new Event("pointerlockchange"));
+    });
+    expect(
+      screen.queryByText("Klik om te richten · V wisselt camera"),
+    ).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Menu" })).toBeNull();
+    stubPointerLock(null);
+    act(() => {
+      document.dispatchEvent(new Event("pointerlockchange"));
+    });
+    expect(screen.getByRole("dialog", { name: "Menu" })).toBeInTheDocument();
+  });
+
+  it("returns to 2D with a toast, and no Sentry error, when the device has no WebGL2", async () => {
     mockCreateView3d.mockImplementationOnce(() => {
-      throw new Error("WebGL2 is not available on this device");
+      throw new WebGl2UnavailableError();
     });
     renderOverlay(vi.fn());
     await waitFor(() =>
@@ -316,9 +364,11 @@ describe("CityArenaOverlay", () => {
     expect(
       screen.getByRole("button", { name: "Wissel naar 3D" }),
     ).toBeInTheDocument();
-    expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error), {
-      tags: { area: "arena", kind: "render3d" },
-    });
+    // The world's own boot may report (sprites 404 in jsdom); the 3D fallback must not.
+    expect(Sentry.captureException).not.toHaveBeenCalledWith(
+      expect.anything(),
+      { tags: { area: "arena", kind: "render3d" } },
+    );
   });
 
   it("preloads the death-screen artwork once the overlay mounts", async () => {

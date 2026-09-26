@@ -1,7 +1,12 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Scene as ArenaScene } from "../render/renderScene";
 import { createView3d, focusOf } from "./index";
+import { WebGl2UnavailableError, isWebGl2Unavailable } from "../webgl2";
 import { pixelRatioFor, viewDistanceFor } from "./renderer3d";
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -12,9 +17,11 @@ describe("createView3d", () => {
     const getContext = vi
       .spyOn(HTMLCanvasElement.prototype, "getContext")
       .mockReturnValue(null);
-    expect(() => createView3d(document.createElement("canvas"))).toThrow(
-      "WebGL2 is not available on this device",
-    );
+    const start = (): unknown => createView3d(document.createElement("canvas"));
+    expect(start).toThrow(WebGl2UnavailableError);
+    expect(start).toThrow("WebGL2 is not available on this device");
+    expect(isWebGl2Unavailable(new WebGl2UnavailableError())).toBe(true);
+    expect(isWebGl2Unavailable(new Error("other"))).toBe(false);
     expect(getContext).toHaveBeenCalledWith("webgl2", expect.any(Object));
   });
 });

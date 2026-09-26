@@ -13,6 +13,8 @@ import {
   Scene,
   WebGLRenderer,
 } from "three";
+import type { ArenaSettings } from "../schemas";
+import { WebGl2UnavailableError } from "../webgl2";
 import { disposeObject } from "./disposal";
 import {
   AMBIENT_GROUND,
@@ -23,7 +25,7 @@ import {
 import { SKY_RADIUS_M, createSkyDome } from "./sky";
 
 /** The settings' render quality. */
-export type RenderQuality = "auto" | "low" | "high";
+export type RenderQuality = ArenaSettings["quality"];
 
 /** How far the city is drawn per quality, metres (spec §6.5); fog closes at this distance. */
 const VIEW_DISTANCE_M: Record<RenderQuality, number> = {
@@ -97,10 +99,10 @@ export type Renderer3d = {
   dispose(): void;
 };
 
-/** The WebGL2 context of `canvas`, or a clear error — also the no-WebGL fallback's signal. */
+/** The WebGL2 context of `canvas`, or a {@link WebGl2UnavailableError} — the 2D fallback's signal. */
 function webgl2Context(canvas: HTMLCanvasElement): WebGL2RenderingContext {
   const context = canvas.getContext("webgl2", CONTEXT_ATTRIBUTES);
-  if (!context) throw new Error("WebGL2 is not available on this device");
+  if (!context) throw new WebGl2UnavailableError();
   return context;
 }
 
@@ -124,7 +126,7 @@ function createEveningScene(): Scene {
  *
  * @param canvas - The WebGL canvas under the 2D HUD canvas.
  * @returns The renderer, its scene and camera.
- * @throws When the device offers no WebGL2 context.
+ * @throws {WebGl2UnavailableError} When the device offers no WebGL2 context.
  */
 export function createRenderer3d(canvas: HTMLCanvasElement): Renderer3d {
   const renderer = new WebGLRenderer({

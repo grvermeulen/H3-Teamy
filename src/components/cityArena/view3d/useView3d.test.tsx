@@ -2,18 +2,31 @@ import * as Sentry from "@sentry/nextjs";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { View3dFrame, View3dHandle } from "@/lib/cityArena/render3d";
+import { WebGl2UnavailableError } from "@/lib/cityArena/webgl2";
 import type { Runtime } from "../arenaRuntime";
-import { VIEW3D_FAILED_TEXT, VIEW3D_NOTICE_MS, useView3d } from "./useView3d";
+import {
+  VIEW3D_FAILED_TEXT,
+  VIEW3D_NOTICE_MS,
+  mountView3d,
+  useView3d,
+} from "./useView3d";
 
-// Hoisted so the module factory below can hand it out (Vitest hoists `vi.mock`).
+// Hoisted so the module factory below can hand them out (Vitest hoists `vi.mock`).
 const mockCreateView3d = vi.hoisted(() => vi.fn());
+const mockPitchLimitsFor = vi.hoisted(() =>
+  vi.fn((mode: "third" | "first") =>
+    mode === "third" ? [-0.6, 0.7] : [-0.5, 0.5],
+  ),
+);
 
 vi.mock("@/lib/cityArena/render3d", () => ({
   createView3d: mockCreateView3d,
-  pitchLimitsFor: (mode: "third" | "first") =>
-    mode === "third" ? [-0.6, 0.7] : [-0.5, 0.5],
+  pitchLimitsFor: mockPitchLimitsFor,
 }));
-vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+vi.mock("@sentry/nextjs", () => ({
+  captureException: vi.fn(),
+  addBreadcrumb: vi.fn(),
+}));
 
 /** Stubs `document.pointerLockElement`, which jsdom does not implement. */
 function stubPointerLock(target: Element | null): void {
@@ -31,9 +44,9 @@ function fakeHandle(): View3dHandle & {
   return { render: vi.fn(), dispose: vi.fn() };
 }
 
-/** Renders the hook, switched off, around a runtime whose player faces `facing`. */
-function renderView3d(facing = 1.1) {
-  const runtime = {
+/** A runtime whose player faces `facing`. */
+function fakeRuntime(facing = 1.1): Runtime {
+  return {
     state: {
       players: [{ id: 0, x: 0, y: 0, facing, vehicleId: null }],
       vehicles: [],
@@ -41,26 +54,35 @@ function renderView3d(facing = 1.1) {
     netplay: { kind: "offline", playerId: 0 },
     sound: { unlock: vi.fn() },
   } as unknown as Runtime;
-  const runtimeRef = { current: runtime };
+}
+
+/** The props the tests change between renders. */
+type Props = { active: boolean; mode: "third" | "first"; epoch: number };
+
+/** Renders the hook, switched off, with a layer and a HUD canvas in place. */
+function renderView3d(facing = 1.1) {
+  const runtimeRef = { current: fakeRuntime(facing) };
   const hud = document.createElement("canvas");
   hud.requestPointerLock = vi.fn(() => Promise.resolve());
   const hudCanvasRef = { current: hud };
   const onFallback = vi.fn();
+  const onPause = vi.fn();
   const hook = renderHook(
-    (props: { active: boolean; mode: "third" | "first" }) =>
+    (props: Props) =>
       useView3d({
-        active: props.active,
-        epoch: 0,
-        mode: props.mode,
+        ...props,
         runtimeRef,
         hudCanvasRef,
         onFallback,
+        onPause,
       }),
-    { initialProps: { active: false, mode: "third" } },
+    { initialProps: { active: false, mode: "third", epoch: 0 } as Props },
   );
-  const gl = document.createElement("canvas");
-  hook.result.current.canvasRef.current = gl;
-  return { ...hook, runtime, hud, gl, onFallback };
+  const layer = document.createElement("div");
+  hook.result.current.layerRef.current = layer;
+  const on = (overrides: Partial<Props> = {}): void =>
+    hook.rerender({ active: true, mode: "third", epoch: 0, ...overrides });
+  return { ...hook, runtimeRef, hud, layer, onFallback, onPause, on };
 }
 
 describe("useView3d", () => {
@@ -71,56 +93,110 @@ describe("useView3d", () => {
   });
 
   afterEach(() => {
+    stubPointerLock(null);
     cleanup();
     vi.useRealTimers();
   });
 
-  it("attaches the view and mouse-look to the runtime, behind the player, and frees both in 2D", async () => {
+  it("starts the view on a fresh canvas in the layer, behind the player, and frees both in 2D", async () => {
     const handle = fakeHandle();
     mockCreateView3d.mockReturnValue(handle);
-    const { rerender, runtime, gl } = renderView3d(1.1);
-    rerender({ active: true, mode: "third" });
+    const { rerender, runtimeRef, layer, on } = renderView3d(1.1);
+    on();
+    const runtime = runtimeRef.current;
     await waitFor(() => expect(runtime.view3d).toBeTruthy());
-    expect(mockCreateView3d).toHaveBeenCalledWith(gl);
+    const canvas = mockCreateView3d.mock.calls[0]![0] as HTMLCanvasElement;
+    expect(canvas.parentElement).toBe(layer);
     expect(runtime.look!.yaw()).toBeCloseTo(1.1);
-    rerender({ active: false, mode: "third" });
+    rerender({ active: false, mode: "third", epoch: 0 });
     expect(handle.dispose).toHaveBeenCalledTimes(1);
     expect(runtime.view3d).toBeNull();
     expect(runtime.look).toBeNull();
+    expect(layer.children).toHaveLength(0);
+  });
+
+  it("moves to the new runtime on a new canvas when another boot replaces the runtime", async () => {
+    const first = fakeHandle();
+    const second = fakeHandle();
+    mockCreateView3d.mockReturnValueOnce(first).mockReturnValueOnce(second);
+    const { runtimeRef, layer, on } = renderView3d();
+    on();
+    const oldRuntime = runtimeRef.current;
+    await waitFor(() => expect(oldRuntime.view3d).toBeTruthy());
+    runtimeRef.current = fakeRuntime(2);
+    on({ epoch: 1 });
+    await waitFor(() => expect(runtimeRef.current.view3d).toBeTruthy());
+    const [[firstCanvas], [secondCanvas]] = mockCreateView3d.mock.calls;
+    // The disposed view killed the first canvas's WebGL context: never reuse it.
+    expect(secondCanvas).not.toBe(firstCanvas);
+    expect(first.dispose).toHaveBeenCalledTimes(1);
+    expect(oldRuntime.view3d).toBeNull();
+    expect([...layer.children]).toEqual([secondCanvas]);
+    expect(runtimeRef.current.look!.yaw()).toBeCloseTo(2);
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it("narrows the pitch range when the camera moves behind the eyes", async () => {
     mockCreateView3d.mockReturnValue(fakeHandle());
-    const { rerender, runtime, hud } = renderView3d();
-    rerender({ active: true, mode: "third" });
-    await waitFor(() => expect(runtime.look).toBeTruthy());
+    const { runtimeRef, hud, on } = renderView3d();
+    on();
+    await waitFor(() => expect(runtimeRef.current.look).toBeTruthy());
     stubPointerLock(hud);
     hud.dispatchEvent(new MouseEvent("pointermove", { movementY: -5000 }));
-    expect(runtime.look!.pitch()).toBeCloseTo(0.7);
-    rerender({ active: true, mode: "first" });
-    expect(runtime.look!.pitch()).toBeCloseTo(0.5);
-    rerender({ active: false, mode: "first" });
-    expect(document.exitPointerLock).toHaveBeenCalledTimes(1);
+    expect(runtimeRef.current.look!.pitch()).toBeCloseTo(0.7);
+    on({ mode: "first" });
+    expect(runtimeRef.current.look!.pitch()).toBeCloseTo(0.5);
   });
 
-  it("falls back to 2D with a toast and a Sentry report when WebGL is unavailable", async () => {
+  it("falls back to 2D with a toast but no Sentry error on a device without WebGL2", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    const error = new Error("WebGL2 is not available on this device");
+    mockCreateView3d.mockImplementation(() => {
+      throw new WebGl2UnavailableError();
+    });
+    const { result, runtimeRef, onFallback, on } = renderView3d();
+    on();
+    await waitFor(() => expect(onFallback).toHaveBeenCalledTimes(1));
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+    expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+      expect.objectContaining({ category: "arena", level: "warning" }),
+    );
+    expect(result.current.notice).toBe(VIEW3D_FAILED_TEXT);
+    expect(runtimeRef.current.view3d).toBeUndefined();
+    act(() => {
+      vi.advanceTimersByTime(VIEW3D_NOTICE_MS);
+    });
+    expect(result.current.notice).toBeNull();
+  });
+
+  it("reports any other start failure to Sentry, with the toast and the fallback", async () => {
+    const error = new Error("shader compile failed");
     mockCreateView3d.mockImplementation(() => {
       throw error;
     });
-    const { rerender, result, runtime, onFallback } = renderView3d();
-    rerender({ active: true, mode: "third" });
+    const { result, onFallback, on } = renderView3d();
+    on();
     await waitFor(() => expect(onFallback).toHaveBeenCalledTimes(1));
     expect(Sentry.captureException).toHaveBeenCalledWith(error, {
       tags: { area: "arena", kind: "render3d" },
     });
     expect(result.current.notice).toBe(VIEW3D_FAILED_TEXT);
-    expect(runtime.view3d).toBeUndefined();
-    act(() => {
-      vi.advanceTimersByTime(VIEW3D_NOTICE_MS);
+  });
+
+  it("frees a started view when mouse-look fails to start after it", async () => {
+    const handle = fakeHandle();
+    mockCreateView3d.mockReturnValue(handle);
+    const error = new Error("no pitch limits");
+    mockPitchLimitsFor.mockImplementationOnce(() => {
+      throw error;
     });
-    expect(result.current.notice).toBeNull();
+    const { runtimeRef, onFallback, on } = renderView3d();
+    on();
+    await waitFor(() => expect(onFallback).toHaveBeenCalledTimes(1));
+    expect(handle.dispose).toHaveBeenCalledTimes(1);
+    expect(runtimeRef.current.view3d).toBeUndefined();
+    expect(Sentry.captureException).toHaveBeenCalledWith(error, {
+      tags: { area: "arena", kind: "render3d" },
+    });
   });
 
   it("takes a view whose frame throws off the runtime, reporting and falling back once", async () => {
@@ -130,8 +206,9 @@ describe("useView3d", () => {
       throw error;
     });
     mockCreateView3d.mockReturnValue(handle);
-    const { rerender, runtime, onFallback } = renderView3d();
-    rerender({ active: true, mode: "third" });
+    const { runtimeRef, onFallback, on } = renderView3d();
+    on();
+    const runtime = runtimeRef.current;
     await waitFor(() => expect(runtime.view3d).toBeTruthy());
     const view = runtime.view3d!;
     const overlay = {} as CanvasRenderingContext2D;
@@ -151,24 +228,95 @@ describe("useView3d", () => {
 
   it("never attaches a view switched off before the module arrived", async () => {
     mockCreateView3d.mockReturnValue(fakeHandle());
-    const { rerender, runtime } = renderView3d();
-    rerender({ active: true, mode: "third" });
-    rerender({ active: false, mode: "third" });
+    const { rerender, runtimeRef, layer, on } = renderView3d();
+    on();
+    rerender({ active: false, mode: "third", epoch: 0 });
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
     expect(mockCreateView3d).not.toHaveBeenCalled();
-    expect(runtime.view3d).toBeUndefined();
+    expect(runtimeRef.current.view3d).toBeUndefined();
+    expect(layer.children).toHaveLength(0);
   });
 
-  it("reports whether mouse-look holds the pointer", () => {
-    const { result, hud } = renderView3d();
+  it("follows the pointer lock, pauses when the player lets go, and not when it switches off", async () => {
+    mockCreateView3d.mockReturnValue(fakeHandle());
+    const { result, rerender, runtimeRef, hud, onPause, on } = renderView3d();
+    on();
+    await waitFor(() => expect(runtimeRef.current.look).toBeTruthy());
     expect(result.current.locked).toBe(false);
     stubPointerLock(hud);
     act(() => {
       document.dispatchEvent(new Event("pointerlockchange"));
     });
     expect(result.current.locked).toBe(true);
+    stubPointerLock(null);
+    act(() => {
+      document.dispatchEvent(new Event("pointerlockchange"));
+    });
+    expect(onPause).toHaveBeenCalledTimes(1);
+    stubPointerLock(hud);
+    act(() => {
+      document.dispatchEvent(new Event("pointerlockchange"));
+    });
+    rerender({ active: false, mode: "third", epoch: 0 });
+    expect(document.exitPointerLock).toHaveBeenCalledTimes(1);
+    stubPointerLock(null);
+    act(() => {
+      document.dispatchEvent(new Event("pointerlockchange"));
+    });
+    expect(onPause).toHaveBeenCalledTimes(1);
+    expect(result.current.locked).toBe(false);
+  });
+
+  it("reports the lock-free fallback when the browser refuses the lock", async () => {
+    mockCreateView3d.mockReturnValue(fakeHandle());
+    const { result, runtimeRef, hud, on } = renderView3d();
+    hud.requestPointerLock = vi.fn(() =>
+      Promise.reject(new DOMException("no", "WrongDocumentError")),
+    );
+    on();
+    await waitFor(() => expect(runtimeRef.current.look).toBeTruthy());
+    act(() => {
+      hud.dispatchEvent(
+        new PointerEvent("pointerdown", { pointerType: "mouse", button: 0 }),
+      );
+    });
+    await waitFor(() => expect(result.current.lockFree).toBe(true));
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+});
+
+describe("mountView3d", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("still reports a module that fails after the view was switched off, without a toast", async () => {
+    const error = new Error("Loading chunk render3d failed");
+    const layer = document.createElement("div");
+    const onFailure = vi.fn();
+    const onFallback = vi.fn();
+    const stop = mountView3d({
+      layer,
+      hud: document.createElement("canvas"),
+      runtimeRef: { current: fakeRuntime() },
+      modeRef: { current: "third" },
+      attachedRef: { current: null },
+      callbacks: { onFallback, onPause: vi.fn(), onLockChange: vi.fn() },
+      onFailure,
+      load: () => Promise.reject(error),
+    });
+    expect(layer.children).toHaveLength(1);
+    stop();
+    expect(layer.children).toHaveLength(0);
+    await waitFor(() =>
+      expect(Sentry.captureException).toHaveBeenCalledWith(error, {
+        tags: { area: "arena", kind: "render3d" },
+      }),
+    );
+    expect(onFailure).not.toHaveBeenCalled();
+    expect(onFallback).not.toHaveBeenCalled();
   });
 });

@@ -1,57 +1,71 @@
 "use client";
-import type { RefObject } from "react";
+import { useEffect, useState } from "react";
+import type { View3dControls } from "./useView3d";
 
 /** Shown over the 3D playfield on a mouse until the pointer is locked (spec §7). */
 export const VIEW3D_HINT_TEXT = "Klik om te richten · V wisselt camera";
-
-/** Props for {@link View3dCanvas}. */
-type View3dCanvasProps = {
-  /** Whether the 3D view is on. */
-  shown: boolean;
-  canvasRef: RefObject<HTMLCanvasElement | null>;
-};
+/** Media query of a precise pointer (a mouse): the only kind the click-to-aim hint is for. */
+const FINE_POINTER_QUERY = "(pointer: fine)";
 
 /**
- * The WebGL canvas, stacked under the 2D canvas (spec §6.2). It takes no pointer events: the 2D
- * canvas above keeps every click, move and wheel, so no input binding moves.
+ * Everything the 3D view adds to the playfield, rendered just before the 2D canvas: the layer the
+ * view puts a fresh WebGL canvas into each time it starts (spec §6.2) — under the 2D canvas and
+ * taking no pointer events, so the 2D canvas keeps every click, move and wheel — and, stacked
+ * above the 2D canvas by their z-index, the hint and the toast. The layer is empty in 2D.
  *
- * @param props - Whether to render it, and the ref the 3D view renders into.
- * @returns The canvas, or nothing in 2D.
+ * @param props - The 3D view's controls.
+ * @returns The layer and the messages.
  */
-export function View3dCanvas({
-  shown,
-  canvasRef,
-}: View3dCanvasProps): React.JSX.Element | null {
-  if (!shown) return null;
+export function View3dLayer({
+  layerRef,
+  ...state
+}: View3dControls): React.JSX.Element {
   return (
-    <canvas
-      ref={canvasRef}
-      aria-hidden="true"
-      data-testid="arena-3d-canvas"
-      className="pointer-events-none absolute inset-0 block h-full w-full"
-    />
+    <>
+      <div
+        ref={layerRef}
+        aria-hidden="true"
+        data-testid="arena-3d-layer"
+        className="pointer-events-none absolute inset-0"
+      />
+      <View3dMessages {...state} />
+    </>
   );
 }
 
-/** Props for {@link View3dMessages}. */
-type View3dMessagesProps = {
-  /** Show the click-to-aim hint: 3D, playing, a fine pointer, not yet locked. */
-  hint: boolean;
-  /** The failure toast, or `null`. */
-  notice: string | null;
-};
+/**
+ * True while the primary pointer is precise (a mouse); updates when that changes. Stays `false`
+ * where `matchMedia` is missing (some test environments, old browsers).
+ */
+function useFinePointer(): boolean {
+  const [fine, setFine] = useState(false);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return undefined;
+    const query = window.matchMedia(FINE_POINTER_QUERY);
+    const apply = (): void => setFine(query.matches);
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, []);
+  return fine;
+}
 
 /**
- * The 3D view's messages over the playfield: the click-to-aim hint and the "3D werkt niet op dit
- * apparaat" toast.
+ * The 3D view's messages over the playfield: the click-to-aim hint — while 3D runs on a mouse
+ * that has neither locked the pointer nor fallen back to lock-free aiming — and the "3D werkt
+ * niet op dit apparaat" toast.
  *
- * @param props - Whether to show the hint, and the toast text.
+ * @param props - Whether 3D runs, the pointer-lock state and the toast.
  * @returns The messages, or nothing.
  */
-export function View3dMessages({
-  hint,
+function View3dMessages({
+  active,
   notice,
-}: View3dMessagesProps): React.JSX.Element | null {
+  locked,
+  lockFree,
+}: Omit<View3dControls, "layerRef">): React.JSX.Element | null {
+  const finePointer = useFinePointer();
+  const hint = active && finePointer && !locked && !lockFree;
   if (!hint && !notice) return null;
   return (
     <>

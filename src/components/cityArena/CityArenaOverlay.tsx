@@ -56,7 +56,7 @@ import {
   type ArenaNetplayOptions,
 } from "./useArenaGame";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
-import { View3dCanvas, View3dMessages } from "./view3d/View3dLayers";
+import { View3dLayer } from "./view3d/View3dLayers";
 
 /** Media query matching phones and other coarse-pointer devices: shows the touch stick. */
 const TOUCH_MEDIA_QUERY = "(max-width: 768px), (pointer: coarse)";
@@ -344,18 +344,13 @@ function ArenaPlayfield({
 }: ArenaPlayfieldProps): React.JSX.Element {
   const playing = game.phase === "playing";
   const twinStick = game.settings.twinStick;
-  const show3d = game.settings.view === "3d" && !sharedScreen;
   return (
     <div className="relative min-h-0 flex-1">
-      <View3dCanvas shown={show3d} canvasRef={game.view3d.canvasRef} />
+      <View3dLayer {...game.view3d} />
       <canvas
         ref={canvasRef}
         className="relative block h-full w-full touch-none [@media(pointer:fine)]:cursor-none"
         aria-label="GTA H3 speelveld"
-      />
-      <View3dMessages
-        hint={playing && show3d && !showTouch && !game.view3d.locked}
-        notice={game.view3d.notice}
       />
       <ArenaRadar
         snapshot={game.radar}
@@ -518,6 +513,7 @@ export default function CityArenaOverlay({
   const [mapData, setMapData] = useState<NavigationMapData | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [scoreboardHeld, setScoreboardHeld] = useState(false);
+  const openMenu = useCallback(() => setMenuOpen(true), []);
   const game = useArenaGame({
     zoneKey: zone,
     canvasRef,
@@ -527,6 +523,7 @@ export default function CityArenaOverlay({
     keys: {
       onScoreboard: setScoreboardHeld,
       suspended: menuOpen || mapData !== null,
+      onPause: openMenu,
     },
     sharedScreen:
       entry.role === "hybrid"
@@ -538,7 +535,6 @@ export default function CityArenaOverlay({
   });
   const showTouch = useShowTouchControls(game.settings.forceLayout);
   const tip = useTouchTip(showTouch && game.phase === "playing");
-  const openMenu = useCallback(() => setMenuOpen(true), []);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const closeMap = useCallback(() => setMapData(null), []);
   const openMap = (): void => setMapData(game.navigationMap());

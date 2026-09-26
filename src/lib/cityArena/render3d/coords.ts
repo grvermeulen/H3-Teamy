@@ -14,6 +14,12 @@ export const PERSON_CHEST_HEIGHT_M = 1.3;
 export const EYE_HEIGHT_M = 1.65;
 
 /**
+ * The crosshair marks where the in-plane shot line is this many metres ahead, and the
+ * third-person view converges there (spec §6.3).
+ */
+export const AIM_PROJECT_DISTANCE_M = 25;
+
+/**
  * A world point in three.js coordinates.
  *
  * @param x - Metres east.

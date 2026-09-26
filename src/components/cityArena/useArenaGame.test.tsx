@@ -251,6 +251,14 @@ async function bootArenaWithCanvas(
   return rendered;
 }
 
+/** Stubs `document.pointerLockElement`, which jsdom does not implement. */
+function stubPointerLock(target: Element | null): void {
+  Object.defineProperty(document, "pointerLockElement", {
+    configurable: true,
+    get: () => target,
+  });
+}
+
 /** Grabs the frame-loop's `tick` callback handed to the mocked `requestAnimationFrame`. */
 function getTick(): (timestamp: number) => void {
   return vi.mocked(window.requestAnimationFrame).mock.calls[0][0];
@@ -534,11 +542,16 @@ describe("computeHud and aimAngle", () => {
 describe("debug hooks", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Every test starts from the default (2D) settings, whatever an earlier one stored.
+    localStorage.clear();
+    stubPointerLock(null);
+    document.exitPointerLock = vi.fn();
     vi.stubGlobal("requestAnimationFrame", vi.fn());
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
   });
 
   afterEach(() => {
+    stubPointerLock(null);
     cleanup();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -650,41 +663,40 @@ describe("debug hooks", () => {
   });
 
   it("in 3D paints through the 3D view and aims where the mouse turned the camera", async () => {
-    // Starts in 2D: an earlier test leaves `view: "3d"` in the stored settings.
-    localStorage.clear();
     const handle = { render: vi.fn(), dispose: vi.fn() };
     mockCreateView3d.mockReturnValue(handle);
     const { result, canvas, fakeContext } = await bootArenaWithCanvas({
       debug: true,
     });
-    result.current.view3d.canvasRef.current = document.createElement("canvas");
+    canvas.requestPointerLock = vi.fn(() => Promise.resolve());
+    result.current.view3d.layerRef.current = document.createElement("div");
     await act(async () => {
       result.current.updateSettings({ view: "3d" });
     });
     await waitFor(() => expect(mockCreateView3d).toHaveBeenCalledTimes(1));
     const facing = hookedPlayer()!.facing;
-    Object.defineProperty(document, "pointerLockElement", {
-      configurable: true,
-      get: () => canvas,
-    });
+    // The click that takes the pointer lock aims but does not shoot.
+    canvas.dispatchEvent(
+      new PointerEvent("pointerdown", { pointerType: "mouse", button: 0 }),
+    );
+    expect(canvas.requestPointerLock).toHaveBeenCalledTimes(1);
+    stubPointerLock(canvas);
     canvas.dispatchEvent(new MouseEvent("pointermove", { movementX: 200 }));
     fakeContext.calls.length = 0;
     const tick = getTick();
     act(() => tick(0));
     act(() => tick(FRAME_STEP_MS));
+    expect(window.__arena?.getState()?.bullets).toHaveLength(0);
     const [frame, overlay] = handle.render.mock.calls.at(-1)!;
     expect(overlay).toBe(fakeContext);
     expect(frame.yaw).toBeCloseTo(facing + 0.48);
+    expect(frame.aim).toBeCloseTo(facing + 0.48);
     expect(frame.scene.localPlayerId).toBe(0);
     expect(hookedPlayer()!.facing).toBeCloseTo(facing + 0.48);
     // The 2D renderer stood down: the HUD canvas was only cleared, never filled with the world.
     expect(fakeContext.calls.some((call) => call.startsWith("fill("))).toBe(
       false,
     );
-    Object.defineProperty(document, "pointerLockElement", {
-      configurable: true,
-      get: () => null,
-    });
   });
 });
 

@@ -17,6 +17,7 @@ import {
 import {
   createRenderer3d,
   viewDistanceFor,
+  type RenderQuality,
   type Renderer3d,
 } from "./renderer3d";
 
@@ -44,6 +45,11 @@ export type View3dFrame = {
   /** Mouse-look yaw (world heading) and pitch, radians. */
   yaw: number;
   pitch: number;
+  /**
+   * The heading the simulation shoots along this frame: the yaw, or a camera-relative touch or
+   * gamepad aim stick — the crosshair follows it.
+   */
+  aim: number;
   mode: CameraMode;
   /** Seconds since the previous frame. */
   dt: number;
@@ -51,7 +57,7 @@ export type View3dFrame = {
   nowMs: number;
   /** Seconds since the local player died, or `null` while alive. */
   deadSeconds: number | null;
-  quality: "auto" | "low" | "high";
+  quality: RenderQuality;
   /** The canvas's CSS size. */
   size: { width: number; height: number };
 };
@@ -140,7 +146,7 @@ function renderFrame(
   renderer.render();
   drawOverlay3d(overlay, renderer.camera, {
     origin: focus,
-    yaw: frame.yaw,
+    aim: frame.aim,
     size: frame.size,
     dead,
   });
@@ -152,7 +158,7 @@ function renderFrame(
  *
  * @param canvas - The WebGL canvas stacked under the 2D HUD canvas.
  * @returns The live view.
- * @throws When WebGL2 is unavailable — the caller falls back to 2D.
+ * @throws {WebGl2UnavailableError} When WebGL2 is unavailable — the caller falls back to 2D.
  */
 export function createView3d(canvas: HTMLCanvasElement): View3dHandle {
   const renderer = createRenderer3d(canvas);

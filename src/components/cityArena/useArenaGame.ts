@@ -91,6 +91,8 @@ const DEFAULT_VIEWPORT_WIDTH_PX = 390;
 
 /** Overlay lifecycle phase. */
 export type ArenaPhase = "loading" | "playing" | "error";
+/** Load progress before the first tile arrives. */
+const NO_PROGRESS: LoadProgress = { loaded: 0, total: 0 };
 /** HUD state before the first refresh runs. */
 const INITIAL_HUD: ArenaHud = {
   zoneName: null,
@@ -129,6 +131,8 @@ export type ArenaKeyOptions = {
   onScoreboard?: (held: boolean) => void;
   /** True while the menu is open: game keys are ignored and anything held is released. */
   suspended?: boolean;
+  /** The player let go of the 3D pointer lock (the browser's first Esc): open the menu. */
+  onPause?: () => void;
 };
 /** Hook result consumed by the overlay. */
 export type ArenaGame = MatchSeam & {
@@ -299,10 +303,7 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
   const { zoneKey, canvasRef, runtimeRef, reducedMotionRef, settingsRef } =
     options;
   const [phase, setPhase] = useState<ArenaPhase>("loading");
-  const [progress, setProgress] = useState<LoadProgress>({
-    loaded: 0,
-    total: 0,
-  });
+  const [progress, setProgress] = useState<LoadProgress>(NO_PROGRESS);
   const [failed, setFailed] = useState(false);
   const [zones, setZones] = useState<MapZone[]>([]);
   const [epoch, setEpoch] = useState(0);
@@ -393,6 +394,76 @@ function useKeyboardBindings(
   }, [canvasRef, runtimeRef]);
 }
 
+/**
+ * Binds mouse aim and the left button on the canvas. In 3D the click that takes the pointer lock
+ * belongs to mouse-look (`MouseLook.claimsClick`), so it aims but does not shoot.
+ */
+function usePointerAim(
+  inputRef: RefObject<InputState>,
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  pointerRef: RefObject<PointerAim | null>,
+  runtimeRef: RefObject<Runtime | null>,
+): void {
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    const aim = attachPointerAim(
+      canvas,
+      inputRef.current,
+      () => runtimeRef.current?.sound.unlock(),
+      () => runtimeRef.current?.look?.claimsClick() ?? false,
+    );
+    pointerRef.current = aim;
+    return () => {
+      aim.detach();
+      pointerRef.current = null;
+    };
+  }, [canvasRef, inputRef, pointerRef, runtimeRef]);
+}
+
+/** What {@link useArenaView3d} needs from the game hook. */
+type ArenaView3dOptions = {
+  /** Playing on a screen of its own: split screen and the TV stay 2D. */
+  live: boolean;
+  epoch: number;
+  settings: ArenaSettings;
+  updateSettings: (patch: Partial<ArenaSettings>) => void;
+  runtimeRef: RefObject<Runtime | null>;
+  canvasRef: RefObject<HTMLCanvasElement | null>;
+  onPause?: () => void;
+  /** The V key's action, bound once by the keyboard. */
+  toggleCameraRef: RefObject<() => void>;
+};
+
+/**
+ * The game's 3D view (spec §6): runs while playing in 3D on an unshared screen, falls back to 2D
+ * when it fails, pauses into the menu when the pointer lock is let go, and makes V flip the 3D
+ * camera — a no-op in 2D, where there is no third/first person to switch between (spec §6.3).
+ */
+function useArenaView3d(options: ArenaView3dOptions): View3dControls {
+  const { settings, updateSettings, toggleCameraRef, onPause } = options;
+  const fallbackTo2d = useCallback(
+    () => updateSettings({ view: "2d" }),
+    [updateSettings],
+  );
+  useEffect(() => {
+    toggleCameraRef.current = () => {
+      if (settings.view !== "3d") return;
+      const camera3d = settings.camera3d === "third" ? "first" : "third";
+      updateSettings({ camera3d });
+    };
+  }, [settings, toggleCameraRef, updateSettings]);
+  return useView3d({
+    active: options.live && settings.view === "3d",
+    epoch: options.epoch,
+    mode: settings.camera3d,
+    runtimeRef: options.runtimeRef,
+    hudCanvasRef: options.canvasRef,
+    onFallback: fallbackTo2d,
+    onPause: () => onPause?.(),
+  });
+}
+
 /** Attaches keyboard and mouse aim on mount; returns the setters the touch controls drive. */
 function useArenaInput(
   inputRef: RefObject<InputState>,
@@ -415,18 +486,7 @@ function useArenaInput(
     onRadio,
     onToggleCamera,
   );
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return undefined;
-    const aim = attachPointerAim(canvas, inputRef.current, () =>
-      runtimeRef.current?.sound.unlock(),
-    );
-    pointerRef.current = aim;
-    return () => {
-      aim.detach();
-      pointerRef.current = null;
-    };
-  }, [canvasRef, inputRef, pointerRef, runtimeRef]);
+  usePointerAim(inputRef, canvasRef, pointerRef, runtimeRef);
   const setInputVector = useCallback(
     (vector: [number, number] | null) => {
       if (vector) runtimeRef.current?.sound.unlock();
@@ -789,25 +849,16 @@ export function useArenaGame({
     (enabled: boolean) => updateSettings({ sound: enabled }),
     [updateSettings],
   );
-  const fallbackTo2d = useCallback(
-    () => updateSettings({ view: "2d" }),
-    [updateSettings],
-  );
-  const view3d = useView3d({
-    active: phase === "playing" && settings.view === "3d" && !sharedScreen,
+  const view3d = useArenaView3d({
+    live: phase === "playing" && !sharedScreen,
     epoch,
-    mode: settings.camera3d,
+    settings,
+    updateSettings,
     runtimeRef,
-    hudCanvasRef: canvasRef,
-    onFallback: fallbackTo2d,
+    canvasRef,
+    onPause: keys?.onPause,
+    toggleCameraRef,
   });
-  // V is a no-op in 2D (spec §6.3): there is no third/first person to switch between.
-  const toggleCamera = useCallback(() => {
-    if (settingsRef.current.view !== "3d") return;
-    updateSettings({
-      camera3d: settingsRef.current.camera3d === "third" ? "first" : "third",
-    });
-  }, [updateSettings]);
   const nextStation = useCallback(() => {
     const station = runtimeRef.current?.sound.radio?.nextStation();
     if (station) updateSettings({ radioStation: station.id });
@@ -837,9 +888,6 @@ export function useArenaGame({
   useEffect(() => {
     nextStationRef.current = nextStation;
   }, [nextStation]);
-  useEffect(() => {
-    toggleCameraRef.current = toggleCamera;
-  }, [toggleCamera]);
 
   return {
     ...seam,

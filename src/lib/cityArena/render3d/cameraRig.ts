@@ -4,11 +4,15 @@
  * {@link applyRigPose} touches a three.js camera, and only through the object it is handed.
  */
 import type { PerspectiveCamera, Vector3Tuple } from "three";
-import { EYE_HEIGHT_M, PERSON_CHEST_HEIGHT_M } from "./coords";
-import { AIM_PROJECT_DISTANCE_M } from "./overlay3d";
+import type { ArenaSettings } from "../schemas";
+import {
+  AIM_PROJECT_DISTANCE_M,
+  EYE_HEIGHT_M,
+  PERSON_CHEST_HEIGHT_M,
+} from "./coords";
 
-/** Behind the shoulder, or behind the eyes. */
-export type CameraMode = "third" | "first";
+/** Behind the shoulder, or behind the eyes — the settings' `camera3d`. */
+export type CameraMode = ArenaSettings["camera3d"];
 
 /** What the rig needs to place the camera for one frame. */
 export type RigInput = {

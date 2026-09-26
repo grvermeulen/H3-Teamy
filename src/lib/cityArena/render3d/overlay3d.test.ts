@@ -2,7 +2,12 @@ import { PerspectiveCamera } from "three";
 import { describe, expect, it } from "vitest";
 import { createFakeContext } from "../render/testing/fakeContext";
 import { applyRigPose, rigPose, type RigInput } from "./cameraRig";
-import { crosshairScreen, drawOverlay3d } from "./overlay3d";
+import {
+  CROSSHAIR_EDGE_MARGIN_PX,
+  clampToScreen,
+  crosshairScreen,
+  drawOverlay3d,
+} from "./overlay3d";
 
 const SIZE = { width: 1280, height: 720 };
 
@@ -73,7 +78,7 @@ describe("drawOverlay3d", () => {
     const alive = createFakeContext();
     drawOverlay3d(alive as unknown as CanvasRenderingContext2D, camera, {
       origin: { x: 10, y: 20 },
-      yaw: 0.8,
+      aim: 0.8,
       size: SIZE,
       dead: false,
     });
@@ -81,10 +86,52 @@ describe("drawOverlay3d", () => {
     const dead = createFakeContext();
     drawOverlay3d(dead as unknown as CanvasRenderingContext2D, camera, {
       origin: { x: 10, y: 20 },
-      yaw: 0.8,
+      aim: 0.8,
       size: SIZE,
       dead: true,
     });
     expect(dead.calls).toEqual([]);
+  });
+});
+
+describe("clampToScreen", () => {
+  it("keeps the crosshair a margin inside every edge", () => {
+    const margin = CROSSHAIR_EDGE_MARGIN_PX;
+    expect(clampToScreen([640, 360], SIZE)).toEqual([640, 360]);
+    expect(clampToScreen([-50, -900], SIZE)).toEqual([margin, margin]);
+    expect(clampToScreen([5000, 4000], SIZE)).toEqual([
+      SIZE.width - margin,
+      SIZE.height - margin,
+    ]);
+  });
+
+  it("draws the crosshair at the top edge when looking far down pushes it off screen", () => {
+    const camera = placedCamera({ pitch: -0.6 });
+    const projected = crosshairScreen(camera, { x: 10, y: 20 }, 0.8, SIZE)!;
+    expect(projected[1]).toBeLessThan(0);
+    const context = createFakeContext();
+    drawOverlay3d(context, camera, {
+      origin: { x: 10, y: 20 },
+      aim: 0.8,
+      size: SIZE,
+      dead: false,
+    });
+    const arc = context.calls.find((call) => call.startsWith("arc("))!;
+    expect(arc.split(",")[1]).toBe(String(CROSSHAIR_EDGE_MARGIN_PX));
+  });
+
+  it("follows the aim sent to the simulation, not the camera, for a stick aim", () => {
+    const camera = placedCamera({ mode: "first" });
+    const draw = (aim: number): string => {
+      const context = createFakeContext();
+      drawOverlay3d(context, camera, {
+        origin: { x: 10, y: 20 },
+        aim,
+        size: SIZE,
+        dead: false,
+      });
+      return context.calls.find((call) => call.startsWith("arc("))!;
+    };
+    expect(draw(0.8 + 0.3)).not.toBe(draw(0.8));
   });
 });

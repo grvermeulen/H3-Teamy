@@ -8,12 +8,12 @@
 import { cameraRelativeInput } from "@/lib/cityArena/input/cameraInput";
 import {
   INITIAL_CAR_LOOK,
-  STICK_TURN_PER_S,
-  easeYaw,
   nextCarYaw,
+  stickTurnedYaw,
   stickWorldYaw,
 } from "@/lib/cityArena/input/cameraYaw";
 import type { MouseLook } from "@/lib/cityArena/input/mouseLook";
+import type { Rect } from "@/lib/cityArena/mapBuild/geometry";
 import type { DrawStats } from "@/lib/cityArena/render/drawWorld";
 import { drawFeedback } from "@/lib/cityArena/render/feedback";
 import type { Scene } from "@/lib/cityArena/render/renderScene";
@@ -37,15 +37,42 @@ const MS_PER_SECOND = 1000;
 const NO_RASTER: DrawStats = { missing: 0, rasterised: false, rasterMs: 0 };
 /** Until the simulation's structures reach this branch, the 3D view sees an intact city. */
 const NO_STRUCTURES: readonly StructureView[] = [];
+/**
+ * In 3D the view reaches far past the 2D camera's box, so the simulation's "out of sight" rect —
+ * where pedestrians, traffic and officers may appear and vanish — is this far each way around the
+ * player instead, metres.
+ */
+export const VIEW3D_POPULATION_HALF_M = 80;
 
 /**
- * True when this frame is drawn in 3D: a view and mouse-look are attached and the screen is not
- * shared — split screen and the TV stay 2D (spec §6.2).
+ * The simulation's out-of-sight rect for a 3D frame: a square {@link VIEW3D_POPULATION_HALF_M}
+ * each way around the player.
+ *
+ * @param player - Where the player stands.
+ * @returns The rect the simulation must not spawn or despawn inside.
+ */
+export function populationRect3d(player: { x: number; y: number }): Rect {
+  return {
+    minX: player.x - VIEW3D_POPULATION_HALF_M,
+    minY: player.y - VIEW3D_POPULATION_HALF_M,
+    maxX: player.x + VIEW3D_POPULATION_HALF_M,
+    maxY: player.y + VIEW3D_POPULATION_HALF_M,
+  };
+}
+
+/**
+ * The runtime as a 3D one when this frame is drawn in 3D: a view and mouse-look are attached and
+ * the screen is not shared — split screen and the TV stay 2D (spec §6.2). Asked once per frame.
  *
  * @param runtime - The runtime.
- * @returns Whether to take the 3D input and paint path.
+ * @returns The same runtime, typed for the 3D input and paint path, or `null` for 2D.
  */
-export function isView3dFrame(runtime: Runtime): runtime is Runtime3d {
+export function view3dRuntime(runtime: Runtime): Runtime3d | null {
+  return drawsIn3d(runtime) ? runtime : null;
+}
+
+/** The test behind {@link view3dRuntime}. */
+function drawsIn3d(runtime: Runtime): runtime is Runtime3d {
   return (
     Boolean(runtime.view3d && runtime.look) &&
     !runtime.sharedScreen &&
@@ -57,9 +84,10 @@ export function isView3dFrame(runtime: Runtime): runtime is Runtime3d {
  * The simulation input for a 3D frame (spec §6.3–6.4). The camera yaw is the aim; in a car the
  * yaw eases behind the heading once the mouse rests (and rides along with the car in first
  * person, `nextCarYaw`); a touch or gamepad aim stick is read relative to the camera, which
- * turns toward it. Movement is then rotated into the camera's frame.
+ * turns toward it, and a lone movement stick turns it toward the walk (`stickTurnedYaw`).
+ * Movement is then rotated into the camera's frame.
  *
- * @param runtime - The 3D runtime; its yaw and car-camera memory are updated.
+ * @param runtime - The 3D runtime; its yaw, car-camera memory and sent aim are updated.
  * @param live - This frame's merged keyboard, pointer, stick and gamepad input.
  * @param dt - Seconds since the previous frame.
  * @returns The input to step the world with.
@@ -82,9 +110,9 @@ export function input3d(
   });
   runtime.carLook = next.state;
   const aim = live.aim === null ? next.yaw : stickWorldYaw(next.yaw, live.aim);
-  const yaw =
-    live.aim === null ? next.yaw : easeYaw(next.yaw, aim, STICK_TURN_PER_S, dt);
+  const yaw = stickTurnedYaw(next.yaw, live, car !== null, dt);
   look.setYaw(yaw);
+  runtime.aim3d = aim;
   return cameraRelativeInput(live, yaw, car !== null, aim);
 }
 
@@ -102,6 +130,7 @@ function view3dFrame(
     structures: NO_STRUCTURES,
     yaw: runtime.look.yaw(),
     pitch: runtime.look.pitch(),
+    aim: runtime.aim3d ?? runtime.look.yaw(),
     mode: runtime.camera3d ?? "third",
     dt,
     nowMs,
