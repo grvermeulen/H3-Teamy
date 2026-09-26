@@ -1,6 +1,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import { Prisma, type ArenaRoom, type ArenaRoomMember } from "@prisma/client";
 import { prisma } from "../db";
+import { withPrismaSchemaDriftAsDbUnavailable } from "../prismaSchemaDrift";
 import type { ArenaUser } from "../arenaAuth";
 import type { ArenaDisplayIdentity } from "../arenaDisplayIdentity";
 import { arenaHostPriority, ticketRole } from "../cityArena/net/roles";
@@ -466,13 +467,18 @@ async function join(
   return ticketFor(tx, await maintainHost(tx, room, now), memberId, now);
 }
 
-/** Executes a validated room operation under PostgreSQL locks; cache fallback never grants authority. */
+/**
+ * Executes a validated room operation under PostgreSQL locks; cache fallback never grants authority.
+ *
+ * @throws DbUnavailableError wanneer arena-tabellen ontbreken (P2021/P2022).
+ */
 export async function commandArenaRoom(
   user: ArenaActor,
   command: ArenaRoomCommand,
   now = new Date(),
 ): Promise<ArenaRoomTicket | null> {
-  return prisma.$transaction(async (tx) => {
+  return withPrismaSchemaDriftAsDbUnavailable(() =>
+    prisma.$transaction(async (tx) => {
     if (command.action === "create" || command.action === "join")
       return join(tx, user, command, now);
     const owner = actorOwner(user);
@@ -537,7 +543,8 @@ export async function commandArenaRoom(
       });
     }
     return ticketFor(tx, room, member.id, now);
-  });
+    }),
+  );
 }
 
 /** Resolves current membership before issuing a short-lived, operation-specific Ably token. */
@@ -546,7 +553,8 @@ export async function authorizeArenaToken(
   memberId: string,
   now = new Date(),
 ): Promise<ArenaRoomTicket> {
-  return prisma.$transaction(async (tx) => {
+  return withPrismaSchemaDriftAsDbUnavailable(() =>
+    prisma.$transaction(async (tx) => {
     const member = await requireArenaMember(tx, memberId, owner);
     let room = await lockArenaRoom(tx, member.roomId, now);
     const fresh = await requireArenaMember(tx, memberId, owner);
@@ -558,7 +566,8 @@ export async function authorizeArenaToken(
       );
     room = await maintainHost(tx, room, now);
     return ticketFor(tx, room, memberId, now);
-  });
+    }),
+  );
 }
 
 /** No wildcard, lobby advertisement or player permission to publish host state. */
@@ -585,6 +594,7 @@ export function arenaTokenCapability(
 
 /** Lists bounded, live server-registered rooms without trusting client advertisements. */
 export async function listArenaRooms(now = new Date()): Promise<LobbyRoom[]> {
+  return withPrismaSchemaDriftAsDbUnavailable(async () => {
   const rooms = await prisma.arenaRoom.findMany({
     where: {
       expiresAt: { gt: now },
@@ -616,5 +626,6 @@ export async function listArenaRooms(now = new Date()): Promise<LobbyRoom[]> {
         phase: room.rounds.length ? ("playing" as const) : ("lobby" as const),
       },
     ];
+  });
   });
 }
