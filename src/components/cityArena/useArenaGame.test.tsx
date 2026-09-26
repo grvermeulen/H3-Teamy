@@ -1,6 +1,6 @@
 import { localPlayer } from "@/lib/cityArena/sim/players";
 import * as Sentry from "@sentry/nextjs";
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCamera } from "@/lib/cityArena/render/camera";
@@ -50,6 +50,13 @@ vi.mock("@/lib/cityArena/world/worldSession", () => ({
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
   captureMessage: vi.fn(),
+}));
+
+/** jsdom has no WebGL: the lazily imported 3D view is a stand-in the tests inspect. */
+const mockCreateView3d = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/cityArena/render3d", () => ({
+  createView3d: mockCreateView3d,
+  pitchLimitsFor: () => [-0.6, 0.7],
 }));
 
 import {
@@ -640,6 +647,44 @@ describe("debug hooks", () => {
       "Arena invariant: player 0 position is not finite",
       { level: "warning", tags: { area: "arena", kind: "invariant" } },
     );
+  });
+
+  it("in 3D paints through the 3D view and aims where the mouse turned the camera", async () => {
+    // Starts in 2D: an earlier test leaves `view: "3d"` in the stored settings.
+    localStorage.clear();
+    const handle = { render: vi.fn(), dispose: vi.fn() };
+    mockCreateView3d.mockReturnValue(handle);
+    const { result, canvas, fakeContext } = await bootArenaWithCanvas({
+      debug: true,
+    });
+    result.current.view3d.canvasRef.current = document.createElement("canvas");
+    await act(async () => {
+      result.current.updateSettings({ view: "3d" });
+    });
+    await waitFor(() => expect(mockCreateView3d).toHaveBeenCalledTimes(1));
+    const facing = hookedPlayer()!.facing;
+    Object.defineProperty(document, "pointerLockElement", {
+      configurable: true,
+      get: () => canvas,
+    });
+    canvas.dispatchEvent(new MouseEvent("pointermove", { movementX: 200 }));
+    fakeContext.calls.length = 0;
+    const tick = getTick();
+    act(() => tick(0));
+    act(() => tick(FRAME_STEP_MS));
+    const [frame, overlay] = handle.render.mock.calls.at(-1)!;
+    expect(overlay).toBe(fakeContext);
+    expect(frame.yaw).toBeCloseTo(facing + 0.48);
+    expect(frame.scene.localPlayerId).toBe(0);
+    expect(hookedPlayer()!.facing).toBeCloseTo(facing + 0.48);
+    // The 2D renderer stood down: the HUD canvas was only cleared, never filled with the world.
+    expect(fakeContext.calls.some((call) => call.startsWith("fill("))).toBe(
+      false,
+    );
+    Object.defineProperty(document, "pointerLockElement", {
+      configurable: true,
+      get: () => null,
+    });
   });
 });
 

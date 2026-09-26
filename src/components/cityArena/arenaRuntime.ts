@@ -20,7 +20,9 @@ import type {
   FrameMetrics,
   MetricsSnapshot,
 } from "@/lib/cityArena/debugMetrics";
+import type { CarLook } from "@/lib/cityArena/input/cameraYaw";
 import type { InputState } from "@/lib/cityArena/input/inputState";
+import type { MouseLook } from "@/lib/cityArena/input/mouseLook";
 import type { PointerAim } from "@/lib/cityArena/input/pointerAim";
 import {
   createCamera,
@@ -37,6 +39,7 @@ import {
   type DeathScreenPhase,
 } from "@/lib/cityArena/render/deathScreen";
 import { renderScene, type Scene } from "@/lib/cityArena/render/renderScene";
+import type { View3dHandle } from "@/lib/cityArena/render3d";
 import {
   createArenaNavigation,
   type ArenaNavigation,
@@ -116,6 +119,8 @@ import {
   withCut,
 } from "@/lib/cityArena/render/feedback";
 import { feelTick } from "./arenaFeel";
+import { prepareCanvas } from "./hudCanvas";
+import { input3d, isView3dFrame, paint3d } from "./view3d/frame3d";
 import {
   createArenaSound,
   type ArenaSound,
@@ -254,6 +259,17 @@ export type Runtime = {
   sharedScreen?: { clientId: string; name: string }[];
   split?: SplitScreen;
   inputSuspended?: boolean;
+  /**
+   * The 3D view while it is on (spec §6), attached by `view3d/useView3d.ts`. With it and
+   * {@link look} set and no shared screen, the frame takes the 3D input and paint path.
+   */
+  view3d?: View3dHandle | null;
+  /** Mouse-look driving the 3D camera, attached alongside {@link view3d}. */
+  look?: MouseLook | null;
+  /** The chosen 3D camera; third person when unset. */
+  camera3d?: ArenaSettings["camera3d"];
+  /** What the 3D car camera remembers between frames: mouse idle time and last heading. */
+  carLook?: CarLook;
 };
 
 /**
@@ -409,17 +425,8 @@ function paintCanvas(
   split?: SplitScreen,
   names?: ReadonlyMap<number, string>,
 ): DrawStats {
-  const dpr = Math.min(renderScale === 1 ? 2 : 1, window.devicePixelRatio || 1);
-  const targetWidth = Math.round(rect.width * dpr);
-  const targetHeight = Math.round(rect.height * dpr);
-  if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
-  }
-  const ctx = canvas.getContext("2d");
+  const ctx = prepareCanvas(canvas, rect, renderScale);
   if (!ctx) return { missing: 0, rasterised: false, rasterMs: 0 };
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, rect.width, rect.height);
   const stats = split
     ? renderSplitScreen(ctx, split, scene, names)
     : renderScene(
@@ -1037,6 +1044,54 @@ function refreshThrottled(
   }
 }
 
+/**
+ * Points this frame's aim at the mouse on the canvas — or, on a split screen, in the player's own
+ * view. In 3D the camera aims instead (`view3d/frame3d.ts`), so the pointer's aim is cleared.
+ */
+function aimAtPointer(
+  runtime: Runtime,
+  input: InputState,
+  pointer: [number, number] | null,
+  size: Viewport,
+  in3d: boolean,
+): void {
+  if (in3d) {
+    input.setAim(null);
+    return;
+  }
+  const player = myPlayer(runtime);
+  const ownView = runtime.split?.views.find((view) =>
+    view.ids.includes(player.id),
+  );
+  const aimPoint =
+    pointer && ownView
+      ? [
+          ownView.camera.x +
+            (pointer[0] - ownView.rect.x - ownView.rect.width / 2) /
+              ownView.zoom,
+          ownView.camera.y +
+            (pointer[1] - ownView.rect.y - ownView.rect.height / 2) /
+              ownView.zoom,
+        ]
+      : null;
+  input.setAim(
+    aimPoint
+      ? Math.atan2(aimPoint[1]! - player.y, aimPoint[0]! - player.x)
+      : aimAngle(runtime.camera, size, [player.x, player.y], pointer),
+  );
+}
+
+/** This frame's live input: the input state and any gamepad, turned by the camera in 3D. */
+function liveInput(
+  runtime: Runtime,
+  input: InputState,
+  dt: number,
+): WorldInput {
+  if (runtime.inputSuspended) return EMPTY_INPUT;
+  const live = readArenaGamepad(input.snapshot());
+  return isView3dFrame(runtime) ? input3d(runtime, live, dt) : live;
+}
+
 /** Aims, simulates, paints and records metrics for one frame, then runs the throttled refreshes. */
 function runFrame(
   timestamp: number,
@@ -1065,31 +1120,12 @@ function runFrame(
   const pointer = options.pointerRef.current?.position() ?? null;
   const player = myPlayer(runtime);
   options.inputRef.current.acknowledgeMission(player.mission?.lastCommand ?? 0);
-  const ownView = runtime.split?.views.find((view) =>
-    view.ids.includes(player.id),
-  );
-  const aimPoint =
-    pointer && ownView
-      ? [
-          ownView.camera.x +
-            (pointer[0] - ownView.rect.x - ownView.rect.width / 2) /
-              ownView.zoom,
-          ownView.camera.y +
-            (pointer[1] - ownView.rect.y - ownView.rect.height / 2) /
-              ownView.zoom,
-        ]
-      : null;
-  options.inputRef.current.setAim(
-    aimPoint
-      ? Math.atan2(aimPoint[1]! - player.y, aimPoint[0]! - player.x)
-      : aimAngle(runtime.camera, size, [player.x, player.y], pointer),
-  );
+  const in3d = isView3dFrame(runtime);
+  aimAtPointer(runtime, options.inputRef.current, pointer, size, in3d);
   advanceSimulation(
     runtime,
     dt,
-    runtime.inputSuspended
-      ? EMPTY_INPUT
-      : readArenaGamepad(options.inputRef.current.snapshot()),
+    liveInput(runtime, options.inputRef.current, dt),
     timestamp,
     options.debug,
     size,
@@ -1140,16 +1176,19 @@ function runFrame(
   const zone = runtime.state.zoneKey
     ? findZoneByKey(runtime.session.index(), runtime.state.zoneKey)
     : null;
-  const drawStats = paintCanvas(
-    canvas,
-    rect,
-    runtime.camera,
-    buildScene(runtime, frame, zone, pointer, timestamp),
-    runtime.feedback,
-    runtime.renderScale,
-    runtime.split,
-    names,
-  );
+  const scene = buildScene(runtime, frame, zone, pointer, timestamp);
+  const drawStats = in3d
+    ? paint3d(canvas, rect, runtime, scene, timestamp, dt)
+    : paintCanvas(
+        canvas,
+        rect,
+        runtime.camera,
+        scene,
+        runtime.feedback,
+        runtime.renderScale,
+        runtime.split,
+        names,
+      );
   const drawEnd = performance.now();
   options.metricsRef.current.record({
     frameMs: rawFrameMs,

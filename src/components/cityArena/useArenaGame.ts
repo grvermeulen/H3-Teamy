@@ -62,6 +62,7 @@ import { loadArenaSettings, saveArenaSettings } from "@/lib/cityArena/storage";
 import { computeHud, type ArenaHud } from "./arenaHud";
 import { useMatchSeam, type MatchPeek, type MatchSeam } from "./matchSeam";
 import { useNetplay, type ArenaNetplayOptions } from "./useNetplay";
+import { useView3d, type View3dControls } from "./view3d/useView3d";
 import {
   aimAngle,
   applyTeleport,
@@ -162,6 +163,8 @@ export type ArenaGame = MatchSeam & {
   nextRadioTrack(): void;
   teleportToZone(key: ZoneKey): void;
   debugSnapshot: DebugSnapshot | null;
+  /** The 3D view's WebGL canvas ref, failure toast and pointer-lock state. */
+  view3d: View3dControls;
 };
 
 /**
@@ -225,6 +228,7 @@ async function bootSession(
   runtime.hapticsEnabled = settingsRef.current.vibrate;
   runtime.quality = settingsRef.current.quality;
   runtime.dynamicCamera = settingsRef.current.dynamicCamera;
+  runtime.camera3d = settingsRef.current.camera3d;
   runtimeRef.current = runtime;
   return {
     index,
@@ -247,6 +251,8 @@ type ArenaBootOptions = {
  */
 type ArenaBootResult = {
   phase: ArenaPhase;
+  /** Counts finished boots; a new runtime (another zone) bumps it. */
+  epoch: number;
   progress: LoadProgress;
   failed: boolean;
   zones: MapZone[];
@@ -260,6 +266,8 @@ type BootSetters = {
   setProgress: (progress: LoadProgress) => void;
   setFailed: (failed: boolean) => void;
   setPhase: (phase: ArenaPhase) => void;
+  /** Called once the booted runtime is playing. */
+  onBooted: () => void;
 };
 
 /**
@@ -283,6 +291,7 @@ async function finishBoot(
   setters.setProgress(tileProgress);
   setters.setFailed(session.hasFailures());
   setters.setPhase("playing");
+  setters.onBooted();
 }
 
 /** Boots the world session for `zoneKey`: loads the map, spawns the player, disposes on unmount. */
@@ -296,6 +305,7 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
   });
   const [failed, setFailed] = useState(false);
   const [zones, setZones] = useState<MapZone[]>([]);
+  const [epoch, setEpoch] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -319,6 +329,7 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
           setProgress,
           setFailed,
           setPhase,
+          onBooted: () => setEpoch((count) => count + 1),
         }),
       )
       .catch((error: unknown) => {
@@ -338,7 +349,7 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
     // renders, so a media-query-driven reducedMotion change never re-runs this effect.
   }, [canvasRef, runtimeRef, zoneKey, reducedMotionRef, settingsRef]);
 
-  return { phase, progress, failed, zones, setProgress, setFailed };
+  return { phase, epoch, progress, failed, zones, setProgress, setFailed };
 }
 
 /** Binds the keyboard and the wheel, with the menu able to take the keyboard away. */
@@ -643,6 +654,7 @@ function applySettings(runtime: Runtime | null, settings: ArenaSettings): void {
   runtime.hapticsEnabled = settings.vibrate;
   runtime.quality = settings.quality;
   runtime.dynamicCamera = settings.dynamicCamera;
+  runtime.camera3d = settings.camera3d;
   runtime.sound.radio?.setEnabled(settings.radio);
   runtime.sound.radio?.tune(settings.radioStation ?? "");
 }
@@ -674,7 +686,7 @@ export function useArenaGame({
     setRadar,
   } = useArenaGameState(settings.sound);
   useReducedMotionSync(reducedMotion, reducedMotionRef, runtimeRef);
-  const { phase, progress, failed, zones, setProgress, setFailed } =
+  const { phase, epoch, progress, failed, zones, setProgress, setFailed } =
     useArenaBoot({
       zoneKey,
       canvasRef,
@@ -777,6 +789,18 @@ export function useArenaGame({
     (enabled: boolean) => updateSettings({ sound: enabled }),
     [updateSettings],
   );
+  const fallbackTo2d = useCallback(
+    () => updateSettings({ view: "2d" }),
+    [updateSettings],
+  );
+  const view3d = useView3d({
+    active: phase === "playing" && settings.view === "3d" && !sharedScreen,
+    epoch,
+    mode: settings.camera3d,
+    runtimeRef,
+    hudCanvasRef: canvasRef,
+    onFallback: fallbackTo2d,
+  });
   // V is a no-op in 2D (spec §6.3): there is no third/first person to switch between.
   const toggleCamera = useCallback(() => {
     if (settingsRef.current.view !== "3d") return;
@@ -841,5 +865,6 @@ export function useArenaGame({
     navigationMap,
     setDestination,
     debugSnapshot,
+    view3d,
   };
 }

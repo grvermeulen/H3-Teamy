@@ -56,6 +56,7 @@ import {
   type ArenaNetplayOptions,
 } from "./useArenaGame";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
+import { View3dCanvas, View3dMessages } from "./view3d/View3dLayers";
 
 /** Media query matching phones and other coarse-pointer devices: shows the touch stick. */
 const TOUCH_MEDIA_QUERY = "(max-width: 768px), (pointer: coarse)";
@@ -343,12 +344,18 @@ function ArenaPlayfield({
 }: ArenaPlayfieldProps): React.JSX.Element {
   const playing = game.phase === "playing";
   const twinStick = game.settings.twinStick;
+  const show3d = game.settings.view === "3d" && !sharedScreen;
   return (
     <div className="relative min-h-0 flex-1">
+      <View3dCanvas shown={show3d} canvasRef={game.view3d.canvasRef} />
       <canvas
         ref={canvasRef}
-        className="block h-full w-full touch-none [@media(pointer:fine)]:cursor-none"
+        className="relative block h-full w-full touch-none [@media(pointer:fine)]:cursor-none"
         aria-label="GTA H3 speelveld"
+      />
+      <View3dMessages
+        hint={playing && show3d && !showTouch && !game.view3d.locked}
+        notice={game.view3d.notice}
       />
       <ArenaRadar
         snapshot={game.radar}

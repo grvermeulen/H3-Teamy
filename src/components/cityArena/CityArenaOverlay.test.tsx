@@ -106,6 +106,15 @@ vi.mock("@/lib/cityArena/render/canvasTypes", async (importOriginal) => {
 });
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
+/** jsdom has no WebGL: the 3D view is a stand-in whose creation each test can make fail. */
+const mockCreateView3d = vi.hoisted(() =>
+  vi.fn(() => ({ render: vi.fn(), dispose: vi.fn() })),
+);
+vi.mock("@/lib/cityArena/render3d", () => ({
+  createView3d: mockCreateView3d,
+  pitchLimitsFor: () => [-0.6, 0.7],
+}));
+
 /** These tests are about the playfield, not the netcode, so the room is a connected stub. */
 /** One object for the life of the file, so the memos keyed on `room.crew` keep their identity. */
 vi.mock("./useArenaRoom", () => {
@@ -260,6 +269,56 @@ describe("CityArenaOverlay", () => {
     expect(
       screen.getByRole("button", { name: "Eerste persoon" }),
     ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("stacks the WebGL canvas under the playfield in 3D with the click-to-aim hint", async () => {
+    renderOverlay(vi.fn());
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    expect(screen.queryByTestId("arena-3d-canvas")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Wissel naar 3D" }));
+    const glCanvas = screen.getByTestId("arena-3d-canvas");
+    // Under the 2D canvas, which keeps every pointer event.
+    expect(glCanvas.nextElementSibling).toBe(
+      screen.getByLabelText("GTA H3 speelveld"),
+    );
+    expect(glCanvas).toHaveClass("pointer-events-none");
+    expect(
+      screen.getByText("Klik om te richten · V wisselt camera"),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(mockCreateView3d).toHaveBeenCalledWith(glCanvas),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Wissel naar 2D" }));
+    expect(screen.queryByTestId("arena-3d-canvas")).toBeNull();
+    expect(
+      screen.queryByText("Klik om te richten · V wisselt camera"),
+    ).toBeNull();
+  });
+
+  it("returns to 2D with a toast when the device cannot run 3D", async () => {
+    mockCreateView3d.mockImplementationOnce(() => {
+      throw new Error("WebGL2 is not available on this device");
+    });
+    renderOverlay(vi.fn());
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Wissel naar 3D" }));
+    expect(
+      await screen.findByText("3D werkt niet op dit apparaat"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Wissel naar 3D" }),
+    ).toBeInTheDocument();
+    expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error), {
+      tags: { area: "arena", kind: "render3d" },
+    });
   });
 
   it("preloads the death-screen artwork once the overlay mounts", async () => {
