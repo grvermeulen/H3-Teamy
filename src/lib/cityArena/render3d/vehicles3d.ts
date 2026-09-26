@@ -39,6 +39,7 @@ export type Vehicle3dInput = {
   speed: number;
   /** Steering in −1..1, positive to the right. */
   steer: number;
+  /** Burnt out: every part turns charred and the lights go dark. */
   wrecked: boolean;
   /** The police are driving it with the lights on. */
   siren: boolean;
@@ -52,11 +53,19 @@ export type Vehicle3dInput = {
   dt: number;
 };
 
-/** A vehicle in the 3D scene. */
+/**
+ * A vehicle in the 3D scene. Each frame the caller places `object` and sets its `rotation.y` to
+ * `headingToRotationY(heading)` before calling `update`: the tank's turret derives the hull's
+ * heading from that rotation.
+ */
 export type Vehicle3d = {
-  /** The model; local forward +X, origin at the footprint centre on the ground. */
+  /**
+   * The model; local forward +X, origin at the footprint centre on the ground. Set its
+   * `rotation.y` to `headingToRotationY(heading)` before each `update` — the turret aims relative
+   * to it.
+   */
   object: Object3D;
-  /** Moves the wheels, lights and turret, and dresses a wreck. */
+  /** Moves the wheels, lights and turret, and dresses a wreck; call after turning `object`. */
   update(input: Vehicle3dInput): void;
   /** Frees the geometry; the materials are shared and stay. Detach `object` yourself. */
   dispose(): void;
@@ -128,11 +137,13 @@ function disposeGeometries(root: Object3D): void {
 }
 
 /**
- * Creates a vehicle for the 3D scene.
+ * Creates a vehicle for the 3D scene. Every frame, set the returned `object`'s position and its
+ * `rotation.y` to `headingToRotationY(heading)` before calling `update`: the tank's turret derives
+ * the hull's heading from `object.rotation.y`, so a stale rotation aims it wrong.
  *
  * @param kind - The vehicle kind.
  * @param colour - `VehicleState.colour`; ignored by kinds with a fixed livery.
- * @returns The vehicle; call `update` every frame after placing its `object`.
+ * @returns The vehicle; call `update` every frame after placing and turning its `object`.
  */
 export function createVehicle3d(kind: VehicleKind, colour: number): Vehicle3d {
   const model = buildVehicleModel(kind, colour);
