@@ -5,6 +5,7 @@ import {
   resolveVehiclePairs,
 } from "../sim/collisions";
 import { driveStep } from "../sim/driveInput";
+import { pruneEffects } from "../sim/effects";
 import { stepPlayer } from "../sim/player";
 import { landmarkSpeedFactor } from "../sim/landmarkBonuses";
 import { playerById, replacePlayer } from "../sim/players";
@@ -15,7 +16,10 @@ import { withoutStructures } from "../world/collisionView";
 /** Predicts only the controlled player's motion; combat, AI and other bodies remain authoritative. */
 export const predictLocal: typeof stepArena = (state, inputs, dt, world) => {
   const command = inputs.entries().next().value;
-  const next = { ...state, tick: state.tick + 1, events: [] };
+  const tick = state.tick + 1;
+  // Effects are the client's own (`clientFeedback.ts`); they expire here as the host's do there.
+  const effects = pruneEffects(state.effects, tick);
+  const next = { ...state, tick, events: [], effects };
   if (!command) return next;
   const [id, input] = command;
   const player = playerById(state, id);

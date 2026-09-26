@@ -547,3 +547,54 @@ describe("clientLoop host filter", () => {
     loop.stop();
   });
 });
+
+describe("clientLoop made-up feedback", () => {
+  /** A rocket in flight 30 m east of the origin. */
+  const rocket = {
+    id: 7000,
+    ownerId: 0,
+    ignoreVehicleId: null,
+    x: 30,
+    y: 0,
+    directionX: 1,
+    directionY: 0,
+    speedMps: 45,
+    rangeLeftM: 40,
+    damage: 60,
+    weapon: "rocket" as const,
+  };
+
+  it("bangs where a host rocket vanished on the next tick, and lets the fireball burn out", () => {
+    const hub = createMemoryHub();
+    const felt: ArenaState[] = [];
+    const loop = createClientLoop({
+      transport: createMemoryTransport(hub, "me"),
+      roomCode: ROOM,
+      world,
+      playerId: 0,
+      state: boot(50),
+      random: createRng(50),
+      serverTimeMs: () => 0,
+      onTick: (state) => felt.push(state),
+    });
+    const host = boot(50);
+    loop.onSnapshot(encodeSnapshot({ ...host, tick: 3 }, 0, {}));
+    loop.onSnapshot(
+      encodeSnapshot({ ...host, tick: 6, bullets: [rocket] }, 0, {}),
+    );
+    loop.onSnapshot(encodeSnapshot({ ...host, tick: 9 }, 0, {}));
+    loop.advance(STEP_MS);
+    const tick = felt.at(-1)!;
+    expect(tick.events).toContainEqual({ kind: "explosion", x: 30, y: 0 });
+    expect(tick.effects).toContainEqual(
+      expect.objectContaining({ kind: "explosion", x: 30, y: 0, radius: 4 }),
+    );
+    loop.advance(STEP_MS);
+    expect(felt.at(-1)!.events).toEqual([]);
+    for (let step = 0; step < 20; step += 1) loop.advance(STEP_MS);
+    expect(
+      loop.view().effects.filter((effect) => effect.kind === "explosion"),
+    ).toEqual([]);
+    loop.stop();
+  });
+});

@@ -10,7 +10,12 @@ import { checkInvariants } from "../sim/invariants";
 import { playersOf } from "../sim/players";
 import { createRng } from "../sim/rng";
 import { destroyedStructureIds, damageStructure } from "../sim/structures";
-import { createInput } from "../sim/types";
+import {
+  createInput,
+  type ArenaEvent,
+  type ArenaState,
+  type BulletState,
+} from "../sim/types";
 import { createMemoryHub } from "./memoryTransport";
 import { HOST_TICK_HZ, SNAPSHOT_HZ } from "./hostLoop";
 import { PLAYER_MAX_HEALTH } from "../sim/damage";
@@ -330,6 +335,7 @@ describe("bot match structure collapse", () => {
   /** A fresh match with the collapse scripted at {@link COLLAPSE_TICK}. */
   function startCollapseMatch(
     world: ArenaWorld,
+    onBotTick?: (botIndex: number, state: ArenaState) => void,
   ): ReturnType<typeof startBotMatch> {
     return startBotMatch({
       hub: createMemoryHub(),
@@ -340,8 +346,40 @@ describe("bot match structure collapse", () => {
       seed: 23,
       bots: BOTS,
       step: collapseAt(world),
+      onBotTick,
     });
   }
+
+  it("makes every bot feel the collapse once, where the building stood, and never again", () => {
+    const felt: ArenaEvent[][] = Array.from({ length: BOTS }, () => []);
+    const match = startCollapseMatch(worldWithBuilding(), (botIndex, state) =>
+      felt[botIndex]!.push(
+        ...state.events.filter((event) => event.kind === "collapse"),
+      ),
+    );
+    // Well past adoption: every later snapshot repeats the ruin, which must not bang again.
+    for (
+      let tick = 0;
+      tick < COLLAPSE_TICK + TICKS_PER_SNAPSHOT * 20;
+      tick += 1
+    )
+      match.tick();
+    for (const events of felt) {
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        kind: "collapse",
+        structureId: buildingId,
+      });
+      const collapse = events[0] as { x: number; y: number };
+      expect(collapse.x).toBeCloseTo(0, 5);
+      expect(collapse.y).toBeCloseTo(
+        (BUILDING_NEAR_EDGE_M + BUILDING_FAR_EDGE_M) / 2,
+        5,
+      );
+    }
+    // The host's own collapse is its real event; the made-up ones are the bots' alone.
+    expect(felt.flat()).toHaveLength(BOTS);
+  });
 
   it("propagates a live collapse to every bot within 10 snapshots", () => {
     const match = startCollapseMatch(worldWithBuilding());
@@ -384,5 +422,98 @@ describe("bot match structure collapse", () => {
     // Clearing the far edge, not merely reaching the near one, proves the client predicted its
     // way all the way through the rubble rather than stopping at what used to be the wall.
     expect(finalY).toBeGreaterThan(BUILDING_FAR_EDGE_M);
+  });
+});
+
+describe("bot match explosions", () => {
+  /** The host tick a rocket is launched on, well clear of everyone. */
+  const LAUNCH_TICK = 30;
+  /** Metres of range the rocket has left: gone at its range end within a few snapshots. */
+  const RANGE_LEFT_M = 9;
+  /** Where it flies, 200 m off the fixture's only road, so it hits nothing and bursts in the air. */
+  const LAUNCH_AT: [number, number] = [300, 200];
+
+  /** Launches one rocket from the first seated player at {@link LAUNCH_TICK}, then steps for real. */
+  const launchRocket: typeof stepArena = (
+    state,
+    inputs,
+    dt,
+    stepWorld,
+    random,
+  ) => {
+    const stepped = stepArena(state, inputs, dt, stepWorld, random);
+    if (stepped.tick !== LAUNCH_TICK) return stepped;
+    const rocket: BulletState = {
+      id: stepped.nextId,
+      ownerId: playersOf(stepped)[0]!.id,
+      ignoreVehicleId: null,
+      x: LAUNCH_AT[0],
+      y: LAUNCH_AT[1],
+      directionX: 0,
+      directionY: 1,
+      speedMps: 45,
+      rangeLeftM: RANGE_LEFT_M,
+      damage: 60,
+      weapon: "rocket",
+    };
+    return {
+      ...stepped,
+      nextId: stepped.nextId + 1,
+      bullets: [...stepped.bullets, rocket],
+    };
+  };
+
+  it("gives every bot the host's rocket blast: an explosion event and a fireball on the same tick", () => {
+    const blasts: ArenaState[][] = Array.from({ length: BOTS }, () => []);
+    const hostBlasts: ArenaEvent[] = [];
+    const match = startBotMatch({
+      hub: createMemoryHub(),
+      index,
+      graph,
+      world,
+      zone,
+      seed: 31,
+      bots: BOTS,
+      // Nobody moves or shoots: the rocket is the only thing that can explode.
+      script: () => createInput({}),
+      step: (state, inputs, dt, stepWorld, random) => {
+        const next = launchRocket(state, inputs, dt, stepWorld, random);
+        hostBlasts.push(
+          ...next.events.filter((event) => event.kind === "explosion"),
+        );
+        return next;
+      },
+      onBotTick: (botIndex, state) => {
+        if (state.events.some((event) => event.kind === "explosion"))
+          blasts[botIndex]!.push(state);
+      },
+    });
+    for (let tick = 0; tick < LAUNCH_TICK + 60; tick += 1) match.tick();
+    expect(hostBlasts).toHaveLength(1);
+    const real = hostBlasts[0] as { x: number; y: number };
+    for (const states of blasts) {
+      expect(states).toHaveLength(1);
+      const felt = states[0]!;
+      const event = felt.events.find(
+        (candidate) => candidate.kind === "explosion",
+      ) as { x: number; y: number } | undefined;
+      // Where the rocket was last seen: at most one snapshot interval of flight short of the blast.
+      const flightPerSnapshotM =
+        (45 * (HOST_TICK_HZ / SNAPSHOT_HZ)) / HOST_TICK_HZ;
+      expect(
+        Math.hypot(event!.x - real.x, event!.y - real.y),
+      ).toBeLessThanOrEqual(flightPerSnapshotM + 0.01);
+      expect(felt.effects).toContainEqual(
+        expect.objectContaining({
+          kind: "explosion",
+          radius: 4,
+          x: event!.x,
+          y: event!.y,
+        }),
+      );
+      expect(
+        felt.effects.find((effect) => effect.kind === "explosion")!.id,
+      ).toBeLessThan(0);
+    }
   });
 });

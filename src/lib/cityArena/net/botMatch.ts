@@ -66,6 +66,11 @@ export type BotMatchOptions = {
    * `stepArena`, same as {@link HostLoop}.
    */
   step?: typeof stepArena;
+  /**
+   * Called after every tick a bot predicts, with the state it hands its sound and haptics — the
+   * events made up from the host's snapshots included. Omitted, bots have no feel.
+   */
+  onBotTick?: (botIndex: number, state: ArenaState) => void;
 };
 
 /**
@@ -82,6 +87,42 @@ export function defaultBotScript(tick: number, botIndex: number): WorldInput {
     weaponNext: phase % 45 === 0,
     aim: (phase % 360) * (Math.PI / 180),
   });
+}
+
+/**
+ * Seats one bot with the host and starts its client loop on its own transport.
+ *
+ * @returns The bot, or `null` once the host has no seat left.
+ */
+function seatBot(
+  options: BotMatchOptions,
+  host: HostLoop,
+  botIndex: number,
+  serverTimeMs: () => number,
+): BotClient | null {
+  const clientId = `bot-${botIndex}`;
+  const playerId = host.addMember(clientId);
+  if (playerId === null) return null;
+  const onBotTick = options.onBotTick;
+  const loop = createClientLoop({
+    transport: createMemoryTransport(options.hub, clientId),
+    roomCode: BOT_ROOM_CODE,
+    world: options.world,
+    playerId,
+    // Bots start from the host's world as it stands when they are seated, which is what a real
+    // late joiner gets from the next full snapshot.
+    state: host.state(),
+    random: createRng(options.seed + 100 + botIndex),
+    serverTimeMs,
+    onTick: onBotTick ? (state) => onBotTick(botIndex, state) : undefined,
+  });
+  return {
+    clientId,
+    playerId,
+    loop,
+    state: () => loop.state(),
+    view: () => loop.view(),
+  };
 }
 
 /**
@@ -111,28 +152,9 @@ export function startBotMatch(options: BotMatchOptions): BotMatch {
 
   const bots: BotClient[] = [];
   for (let botIndex = 0; botIndex < options.bots; botIndex += 1) {
-    const clientId = `bot-${botIndex}`;
-    const playerId = host.addMember(clientId);
-    if (playerId === null) break;
-    const transport = createMemoryTransport(hub, clientId);
-    const loop = createClientLoop({
-      transport,
-      roomCode: BOT_ROOM_CODE,
-      world,
-      playerId,
-      // Bots start from the host's world as it stands when they are seated, which is what a real
-      // late joiner gets from the next full snapshot.
-      state: host.state(),
-      random: createRng(seed + 100 + botIndex),
-      serverTimeMs: () => serverTimeMs,
-    });
-    bots.push({
-      clientId,
-      playerId,
-      loop,
-      state: () => loop.state(),
-      view: () => loop.view(),
-    });
+    const bot = seatBot(options, host, botIndex, () => serverTimeMs);
+    if (!bot) break;
+    bots.push(bot);
   }
 
   let tickCount = 0;
