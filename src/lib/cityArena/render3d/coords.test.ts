@@ -3,6 +3,7 @@ import { Vector3 } from "three";
 import {
   directionFromYawPitch,
   headingToRotationY,
+  setWorldPosition,
   worldToThree,
   yawFromThreeDirection,
 } from "./coords";
@@ -11,6 +12,14 @@ describe("worldToThree", () => {
   it("puts the world's y on three's z and the height on three's y", () => {
     expect(worldToThree(3, 4, 1)).toEqual([3, 1, 4]);
     expect(worldToThree(-2, 7)).toEqual([-2, 0, 7]);
+  });
+
+  it("has an in-place twin that moves an existing position the same way", () => {
+    const position = new Vector3(9, 9, 9);
+    setWorldPosition(position, 3, 4, 1);
+    expect(position.toArray()).toEqual(worldToThree(3, 4, 1));
+    setWorldPosition(position, -2, 7);
+    expect(position.toArray()).toEqual(worldToThree(-2, 7));
   });
 });
 

@@ -5,7 +5,7 @@
  * has Y up, so world `(x, y)` lands on three's `(x, height, y)`: seen from above with the camera's
  * top toward −z, the 3D city lies exactly as the 2D map does, with no mirror to undo.
  */
-import type { Vector3Tuple } from "three";
+import type { Vector3, Vector3Tuple } from "three";
 
 /** Height above the ground at which the flat simulation's bullets travel, metres. */
 export const PERSON_CHEST_HEIGHT_M = 1.3;
@@ -29,6 +29,24 @@ export const AIM_PROJECT_DISTANCE_M = 25;
  */
 export function worldToThree(x: number, y: number, height = 0): Vector3Tuple {
   return [x, height, y];
+}
+
+/**
+ * Moves a three.js position to a world point in place — {@link worldToThree} without the new
+ * tuple, for code that places objects every frame.
+ *
+ * @param target - The position to overwrite, e.g. an `Object3D`'s `position`.
+ * @param x - Metres east.
+ * @param y - Metres south.
+ * @param height - Metres above the ground.
+ */
+export function setWorldPosition(
+  target: Pick<Vector3, "set">,
+  x: number,
+  y: number,
+  height = 0,
+): void {
+  target.set(x, height, y);
 }
 
 /**
