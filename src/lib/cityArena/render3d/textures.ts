@@ -108,9 +108,13 @@ export const FACADE_STYLES: readonly FacadeStyle[] = [
   "glass",
 ];
 
-/** Façade module width: {@link FACADE_MODULE_M} of wall, about 43 px per metre. */
+/*
+ * Façade painters measure in design px, 256 × 132 per module (about 43 per metre); each canvas
+ * scales them down to its own resolution, so every `_PX` size below is a design px.
+ */
+/** Façade module width: {@link FACADE_MODULE_M} of wall, in design px. */
 const MODULE_WIDTH_PX = 256;
-/** Façade module height: one 3.1 m storey at the same scale. */
+/** Façade module height: one 3.1 m storey, in design px. */
 const MODULE_HEIGHT_PX = 132;
 /** Modules across and storeys up on one canvas: a texture covers 24 m × 4 storeys. */
 const MODULES_PER_SIDE = 4;
@@ -118,10 +122,17 @@ const MODULES_PER_SIDE = 4;
 const MODULE_COUNT = MODULES_PER_SIDE * MODULES_PER_SIDE;
 /** Texture repeat that fits one module to one UV unit across and one storey up. */
 const MODULE_REPEAT = 1 / MODULES_PER_SIDE;
-/** Façade canvas width, px (1024). */
+/** Façade canvas width in design px (1024). */
 const CANVAS_WIDTH_PX = MODULE_WIDTH_PX * MODULES_PER_SIDE;
-/** Façade canvas height, px (528). */
+/** Façade canvas height in design px (528). */
 const CANVAS_HEIGHT_PX = MODULE_HEIGHT_PX * MODULES_PER_SIDE;
+/** Colour map pixels per design px: a module is 128 × 66 px, the canvas 512 × 264 px. */
+const COLOUR_MAP_SCALE = 0.5;
+/**
+ * Glow map pixels per design px, half the colour map's again (256 × 132 px): the lit panes are
+ * big flat rectangles, which linear filtering keeps clean.
+ */
+const GLOW_MAP_SCALE = 0.25;
 /** Windows side by side in one module. */
 const WINDOWS_PER_MODULE = 2;
 /** Fewest lit windows on a canvas with any lit share, so no wall of an evening town is all dark. */
@@ -419,15 +430,20 @@ function lightOf(
   return lights[moduleIndex * WINDOWS_PER_MODULE + windowIndex];
 }
 
-/** A façade canvas painted by `paint`, as a repeating sRGB texture with one module per UV unit. */
+/**
+ * A façade canvas at `scale` pixels per design px, painted by `paint` in design px, as a repeating
+ * sRGB texture with one module per UV unit.
+ */
 function facadeCanvasTexture(
+  scale: number,
   paint: (context: RasterContext) => void,
 ): CanvasTexture {
   const canvas = document.createElement("canvas");
-  canvas.width = CANVAS_WIDTH_PX;
-  canvas.height = CANVAS_HEIGHT_PX;
+  canvas.width = CANVAS_WIDTH_PX * scale;
+  canvas.height = CANVAS_HEIGHT_PX * scale;
   const context = canvas.getContext("2d");
   if (!context) throw new Error("2D canvas context unavailable for façades");
+  context.scale(scale, scale);
   paint(context);
   const texture = repeatingColourMap(new CanvasTexture(canvas));
   texture.repeat.set(MODULE_REPEAT, MODULE_REPEAT);
@@ -438,8 +454,9 @@ function facadeCanvasTexture(
  * A seeded canvas texture of façade modules, each one storey (3.1 m) tall and 6 m wide, with
  * windows lit by `litShare`.
  *
- * The canvas holds 4 × 4 modules (24 m × 4 storeys, 1024 × 528 px) and its `repeat` is 1/4, so
- * one UV unit is still one module across and one storey up. Each module has two windows with
+ * The canvas holds 4 × 4 modules (24 m × 4 storeys; 512 × 264 px, 128 × 66 per module) and its
+ * `repeat` is 1/4, so one UV unit is still one module across and one storey up. Each module has
+ * two windows with
  * frames (and sills, except on glass) over the style's wall, and is seeded on its own: each
  * window is lit with probability `litShare`, warm or cold, else dark, and any share above zero
  * lights at least two windows per canvas. The same seed paints the same texture.
@@ -456,7 +473,7 @@ export function createFacadeTexture(
 ): CanvasTexture {
   const look = FACADE_LOOKS[style];
   const lights = facadeLights(seed, litShare);
-  return facadeCanvasTexture((context) => {
+  return facadeCanvasTexture(COLOUR_MAP_SCALE, (context) => {
     const wallRng = createRng(seedFromString(`${seed}:wall`));
     forEachModule(context, (moduleIndex) => {
       look.paintWall(context, wallRng);
@@ -472,7 +489,10 @@ export function createFacadeTexture(
   });
 }
 
-/** The glow map matching {@link createFacadeTexture}: black but for the lit panes. */
+/**
+ * The glow map matching {@link createFacadeTexture}: black but for the lit panes, at half the
+ * colour map's resolution (256 × 132 px) on the same grid and repeat.
+ */
 function createFacadeGlowTexture(
   style: FacadeStyle,
   seed: number,
@@ -480,7 +500,7 @@ function createFacadeGlowTexture(
 ): CanvasTexture {
   const look = FACADE_LOOKS[style];
   const lights = facadeLights(seed, litShare);
-  return facadeCanvasTexture((context) => {
+  return facadeCanvasTexture(GLOW_MAP_SCALE, (context) => {
     forEachModule(context, (moduleIndex) => {
       fillBox(context, NO_GLOW, MODULE_BOX);
       windowBoxes(look.window).forEach((pane, windowIndex) => {

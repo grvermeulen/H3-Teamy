@@ -168,14 +168,16 @@ describe("createFacadeTexture", () => {
     },
   );
 
-  it("is a 1024 × 528 repeating sRGB canvas texture, a quarter per UV unit", () => {
-    stubCanvasContexts();
+  it("is a 512 × 264 repeating sRGB canvas texture, a quarter per UV unit", () => {
+    const contexts = stubCanvasContexts();
 
     const texture = createFacadeTexture("glass", 1, 0.35);
 
     expect(texture).toBeInstanceOf(CanvasTexture);
-    expect(texture.image.width).toBe(1024);
-    expect(texture.image.height).toBe(528);
+    expect(texture.image.width).toBe(512);
+    expect(texture.image.height).toBe(264);
+    // Painted in 256 × 132 design px per module, scaled to 128 × 66 px.
+    expect(contexts[0].calls[0]).toBe("scale(0.5,0.5)");
     expect(texture.repeat.x).toBe(0.25);
     expect(texture.repeat.y).toBe(0.25);
     expect(texture.wrapS).toBe<Wrapping>(RepeatWrapping);
@@ -200,11 +202,14 @@ describe("createFacadeMaterial", () => {
     expect(darkFills(glow)).toEqual([]);
   });
 
-  it("repeats the emissive map on the same grid as the colour map", () => {
-    stubCanvasContexts();
+  it("repeats a half-resolution emissive map on the colour map's grid", () => {
+    const contexts = stubCanvasContexts();
 
     const material = createFacadeMaterial("brick", 9, 0.35);
 
+    expect(material.emissiveMap?.image.width).toBe(256);
+    expect(material.emissiveMap?.image.height).toBe(132);
+    expect(contexts[1].calls[0]).toBe("scale(0.25,0.25)");
     expect(material.emissiveMap?.repeat.x).toBe(0.25);
     expect(material.emissiveMap?.repeat.y).toBe(0.25);
     expect(material.emissiveMap?.wrapS).toBe<Wrapping>(RepeatWrapping);
