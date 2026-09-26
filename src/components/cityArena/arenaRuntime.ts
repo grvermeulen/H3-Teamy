@@ -400,6 +400,7 @@ function buildScene(
     pickups: state.pickups,
     vehicles: frame.vehicles,
     bullets: frame.bullets,
+    structures: state.structures,
     effects: runtime.reducedMotion
       ? []
       : runtime.renderScale === 1

@@ -7,7 +7,11 @@
  * implementation rather than a mock. The only thing missing against a live match is Ably itself.
  */
 
-import { createArenaState, type ArenaWorld } from "../sim/arena";
+import {
+  createArenaState,
+  type ArenaWorld,
+  type stepArena,
+} from "../sim/arena";
 import { createRng } from "../sim/rng";
 import { createInput, type ArenaState, type WorldInput } from "../sim/types";
 import type { MapZone } from "../world/mapTypes";
@@ -56,6 +60,12 @@ export type BotMatchOptions = {
   bots: number;
   /** The input a bot holds on a given tick; the default walks, turns, fires and boards. */
   script?: (tick: number, botIndex: number) => WorldInput;
+  /**
+   * The host's step; injectable so a test can script a one-off event (e.g. a structure collapse)
+   * at a specific tick without steering the whole match through real combat. Defaults to
+   * `stepArena`, same as {@link HostLoop}.
+   */
+  step?: typeof stepArena;
 };
 
 /**
@@ -96,6 +106,7 @@ export function startBotMatch(options: BotMatchOptions): BotMatch {
     state: createArenaState({ index, graph, seed, zone }, createRng(seed)),
     random: createRng(seed + 1),
     serverTimeMs: () => serverTimeMs,
+    step: options.step,
   });
 
   const bots: BotClient[] = [];

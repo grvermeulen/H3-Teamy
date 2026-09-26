@@ -8,7 +8,7 @@ describe("ArenaVitals", () => {
   });
 
   it("shows the drunkenness meter only after a beer", () => {
-    const ammo = { uzi: 0, shotgun: 0, rifle: 0, bat: 0 };
+    const ammo = { uzi: 0, shotgun: 0, rifle: 0, bat: 0, rocket: 0 };
     const { rerender } = render(
       <ArenaVitals health={100} weapon="pistol" ammo={ammo} speedMps={null} />,
     );
@@ -30,7 +30,7 @@ describe("ArenaVitals", () => {
       <ArenaVitals
         health={70}
         weapon="pistol"
-        ammo={{ uzi: 60, shotgun: 8, rifle: 0, bat: 0 }}
+        ammo={{ uzi: 60, shotgun: 8, rifle: 0, bat: 0, rocket: 0 }}
         speedMps={null}
       />,
     );
@@ -39,12 +39,26 @@ describe("ArenaVitals", () => {
     expect(screen.queryByTestId("arena-speed")).toBeNull();
   });
 
+  it("names the rocket launcher and counts its rockets", () => {
+    render(
+      <ArenaVitals
+        health={100}
+        weapon="rocket"
+        ammo={{ uzi: 0, shotgun: 0, rifle: 0, bat: 0, rocket: 3 }}
+        speedMps={null}
+      />,
+    );
+    expect(screen.getByTestId("arena-weapon")).toHaveTextContent(
+      "Raketwerper 3",
+    );
+  });
+
   it("shows rounds left and the speed in km/u while driving", () => {
     render(
       <ArenaVitals
         health={20}
         weapon="uzi"
-        ammo={{ uzi: 42, shotgun: 8, rifle: 0, bat: 0 }}
+        ammo={{ uzi: 42, shotgun: 8, rifle: 0, bat: 0, rocket: 0 }}
         speedMps={12}
       />,
     );

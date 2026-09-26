@@ -48,13 +48,19 @@ export function firstRingHit(
   return best;
 }
 
-/** First building outline crossed by from→to (water never stops bullets), or `null`. */
-export function firstBuildingHit(
+/** A building crossing, with the structure id of the building it hit. */
+export type BuildingHitDetail = { point: Point; structureId: number | null };
+
+/**
+ * Nearest building outline crossed by from→to, with the structure id of the building hit (`null`
+ * for a building tagged without one, e.g. a test fixture). Water never stops the ray.
+ */
+export function firstBuildingHitDetail(
   collision: Pick<CollisionGrid, "query">,
   from: Point,
   to: Point,
-): Point | null {
-  let best: Point | null = null;
+): BuildingHitDetail | null {
+  let best: BuildingHitDetail | null = null;
   let bestDistance = Infinity;
   for (const obstacle of collision.query(boundsOf([from, to]))) {
     if (obstacle.kind !== "building") continue;
@@ -63,8 +69,17 @@ export function firstBuildingHit(
     const distance = Math.hypot(hit[0] - from[0], hit[1] - from[1]);
     if (distance < bestDistance) {
       bestDistance = distance;
-      best = hit;
+      best = { point: hit, structureId: obstacle.structure?.id ?? null };
     }
   }
   return best;
+}
+
+/** First building outline crossed by from→to (water never stops bullets), or `null`. */
+export function firstBuildingHit(
+  collision: Pick<CollisionGrid, "query">,
+  from: Point,
+  to: Point,
+): Point | null {
+  return firstBuildingHitDetail(collision, from, to)?.point ?? null;
 }

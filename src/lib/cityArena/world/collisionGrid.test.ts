@@ -7,10 +7,12 @@ import {
   nearestPointOnRing,
   nearestPointOnSegment,
   pushCircleOutOfRing,
+  type Obstacle,
 } from "./collisionGrid";
 import { HULL_CIRCLE_OFFSET_M, HULL_CIRCLE_RADIUS_M } from "../sim/vehicle";
 import { createRoadCorridors } from "./roadCorridor";
 import type { RoadGraph } from "./roadGraph";
+import { structureIdOf } from "./structureId";
 
 const square: Point[] = [
   [10, 10],
@@ -38,7 +40,10 @@ function tileWith(
     trees: [],
     furniture: [],
     roads: [],
-    buildings: buildings.map((ring) => ({
+    // Tile coordinates here can go negative (to exercise the grid's cell math), which
+    // `structureIdOf` rejects; the fixture's building identity does not depend on them.
+    buildings: buildings.map((ring, index) => ({
+      structureId: structureIdOf(0, 0, index),
       ring,
       bounds: bounds(ring),
       levels: 2,
@@ -198,6 +203,47 @@ describe("createCollisionGrid", () => {
       );
     },
   );
+
+  it("tags a building obstacle with its structure id and max health", () => {
+    const grid = createCollisionGrid();
+    grid.insertTile(tileWith([square]));
+    const [obstacle] = grid.query({ minX: 0, minY: 0, maxX: 30, maxY: 30 });
+    // 10x10 footprint, 2 levels: 100 * 2 * 1.2 = 240.
+    expect(obstacle.structure).toEqual({
+      id: structureIdOf(0, 0, 0),
+      maxHealth: 240,
+    });
+  });
+
+  it("does not tag water or tree obstacles as structures", () => {
+    const grid = createCollisionGrid();
+    grid.insertTile(
+      tileWith(
+        [],
+        [
+          [
+            [100, 100],
+            [110, 100],
+            [110, 110],
+          ],
+        ],
+      ),
+    );
+    const [water] = grid.query({ minX: 95, minY: 95, maxX: 120, maxY: 120 });
+    expect(water.structure).toBeUndefined();
+  });
+
+  it("resolveCircleSkipping lets a circle pass through obstacles the predicate marks", () => {
+    const grid = createCollisionGrid();
+    grid.insertTile(tileWith([square]));
+    const skipBuildings = (obstacle: Obstacle): boolean =>
+      obstacle.kind === "building";
+    expect(grid.resolveCircleSkipping([20.1, 15], 0.4, skipBuildings)).toEqual([
+      20.1, 15,
+    ]);
+    const pushed = grid.resolveCircleSkipping([20.1, 15], 0.4, () => false);
+    expect(pushed[0]).toBeCloseTo(20.4);
+  });
 });
 
 /** A river band y ∈ [−6, 6] spanning x ∈ [−100, 100]. */

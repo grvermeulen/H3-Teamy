@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
+import { boundsOf } from "../mapBuild/geometry";
 import { createCollisionGrid } from "../world/collisionGrid";
+import { structureIdOf } from "../world/structureId";
 import type { MapIndex, MapZone } from "../world/mapTypes";
+import type { Point } from "../world/projection";
 import { decodeRoadGraph } from "../world/roadGraph";
-import type { ArenaWorld } from "../sim/arena";
+import { stepArena, type ArenaWorld } from "../sim/arena";
 import { checkInvariants } from "../sim/invariants";
 import { playersOf } from "../sim/players";
 import { createRng } from "../sim/rng";
+import { destroyedStructureIds, damageStructure } from "../sim/structures";
+import { createInput } from "../sim/types";
 import { createMemoryHub } from "./memoryTransport";
+import { HOST_TICK_HZ, SNAPSHOT_HZ } from "./hostLoop";
 import { PLAYER_MAX_HEALTH } from "../sim/damage";
 import { playerDistance, startBotMatch } from "./botMatch";
 
@@ -215,5 +221,168 @@ describe("bot match when the host stops", () => {
         bot: bot.clientId,
         ahead: bot.state().tick > 300,
       }).toEqual({ bot: bot.clientId, ahead: true });
+  });
+});
+
+/**
+ * Task 5's acceptance beyond movement and combat convergence: a live structure collapse must
+ * reach every bot over the wire, through the real `applySnapshot` path, within the budget spec
+ * §3.6 implies — and the client's own predicted movement, the actual path a networked player
+ * takes (`predictLocal`, via the real client loop), must be able to walk through the footprint
+ * once the wire says the building is gone. Controller Ruling 29: an earlier version of this test
+ * only checked a `withoutStructures` view built for the assertion itself, which the client never
+ * actually uses — it passed even while `predictLocal` still collided with the rubble, rubber-
+ * banding every non-host player at every ruin. The second test below drives the bot's own client
+ * loop directly instead.
+ */
+describe("bot match structure collapse", () => {
+  /** The footprint's near and far edge, metres north of the origin. */
+  const BUILDING_NEAR_EDGE_M = 10;
+  const BUILDING_FAR_EDGE_M = 30;
+  /** How wide the footprint is, either side of the origin's x. */
+  const BUILDING_HALF_WIDTH_M = 10;
+  /**
+   * A footprint just north of the fixture's shared spawn point — every player in this zone/graph
+   * fixture spawns at the origin (`spawnPointIn` clusters new players on the first one) — clear of
+   * the parked cars `createArenaState` lines up along the road at y ≈ -3.3 east of the origin, so a
+   * bot walking straight into it hits nothing but the building.
+   */
+  const buildingRing: Point[] = [
+    [-BUILDING_HALF_WIDTH_M, BUILDING_NEAR_EDGE_M],
+    [BUILDING_HALF_WIDTH_M, BUILDING_NEAR_EDGE_M],
+    [BUILDING_HALF_WIDTH_M, BUILDING_FAR_EDGE_M],
+    [-BUILDING_HALF_WIDTH_M, BUILDING_FAR_EDGE_M],
+  ];
+  const buildingId = structureIdOf(0, 0, 0);
+  /** The host tick the building is fully damaged on. */
+  const COLLAPSE_TICK = 5;
+  const TICKS_PER_SNAPSHOT = HOST_TICK_HZ / SNAPSHOT_HZ;
+
+  /** A world like the shared fixture, plus one destructible building. */
+  function worldWithBuilding(): ArenaWorld {
+    const collision = createCollisionGrid();
+    collision.insertTile({
+      x: 0,
+      y: 0,
+      rect: { minX: -2000, minY: -2000, maxX: 2000, maxY: 2000 },
+      trees: [],
+      furniture: [],
+      roads: [],
+      ground: [],
+      water: [],
+      buildings: [
+        {
+          structureId: buildingId,
+          ring: buildingRing,
+          bounds: boundsOf(buildingRing),
+          levels: 1,
+        },
+      ],
+    });
+    return { collision, index, graph };
+  }
+
+  /**
+   * Runs the real step every tick, then — once, at {@link COLLAPSE_TICK} — fully damages the
+   * building in one hit. Standing in for "someone blew it up": this acceptance is about the wire
+   * and the client's reaction, not about aiming a rocket through the whole combat pipeline.
+   */
+  function collapseAt(world: ArenaWorld): typeof stepArena {
+    return (state, inputs, dt, stepWorld, random) => {
+      const stepped = stepArena(state, inputs, dt, stepWorld, random);
+      if (stepped.tick !== COLLAPSE_TICK) return stepped;
+      const obstacle = world.collision
+        .query(boundsOf(buildingRing))
+        .find((candidate) => candidate.structure?.id === buildingId);
+      if (!obstacle?.structure)
+        throw new Error("test building obstacle missing from the grid");
+      return damageStructure(
+        stepped,
+        { obstacle, amount: obstacle.structure.maxHealth, killerId: null },
+        stepped.tick,
+      );
+    };
+  }
+
+  /** True once every bot's own state lists {@link buildingId} as destroyed. */
+  function allBotsSeeItDestroyed(
+    match: ReturnType<typeof startBotMatch>,
+  ): boolean {
+    return match.bots.every((bot) =>
+      (bot.state().structures ?? []).some(
+        (entry) => entry.id === buildingId && entry.destroyedAtTick !== null,
+      ),
+    );
+  }
+
+  /** Ticks `match` until every bot has adopted the collapse, or `deadline` runs out. */
+  function tickUntilConverged(
+    match: ReturnType<typeof startBotMatch>,
+    deadline: number,
+  ): number | null {
+    for (let tick = 1; tick <= deadline; tick += 1) {
+      match.tick();
+      if (allBotsSeeItDestroyed(match)) return tick;
+    }
+    return null;
+  }
+
+  /** A fresh match with the collapse scripted at {@link COLLAPSE_TICK}. */
+  function startCollapseMatch(
+    world: ArenaWorld,
+  ): ReturnType<typeof startBotMatch> {
+    return startBotMatch({
+      hub: createMemoryHub(),
+      index,
+      graph,
+      world,
+      zone,
+      seed: 23,
+      bots: BOTS,
+      step: collapseAt(world),
+    });
+  }
+
+  it("propagates a live collapse to every bot within 10 snapshots", () => {
+    const match = startCollapseMatch(worldWithBuilding());
+    const seenAtTick = tickUntilConverged(
+      match,
+      COLLAPSE_TICK + TICKS_PER_SNAPSHOT * 10,
+    );
+
+    expect(seenAtTick).not.toBeNull();
+    expect(seenAtTick! - COLLAPSE_TICK).toBeLessThanOrEqual(
+      TICKS_PER_SNAPSHOT * 10,
+    );
+    for (const bot of match.bots)
+      expect({
+        bot: bot.clientId,
+        destroyed: destroyedStructureIds(bot.state()).has(buildingId),
+      }).toEqual({ bot: bot.clientId, destroyed: true });
+  });
+
+  /**
+   * The regression this task exists to close: a networked client that only *learns* a building is
+   * gone (the test above) but still bounces off its own predicted copy of the rubble would
+   * rubber-band at every ruin. Driving the bot's own client loop directly — bypassing
+   * `match.tick()`, so no further host snapshot can paper over the bug by re-adopting the host's
+   * unaffected position — isolates exactly the collision path `predictLocal` takes.
+   */
+  it("lets a bot's own predicted movement walk through a collapsed building's footprint", () => {
+    const match = startCollapseMatch(worldWithBuilding());
+    const seenAtTick = tickUntilConverged(
+      match,
+      COLLAPSE_TICK + TICKS_PER_SNAPSHOT * 10,
+    );
+    expect(seenAtTick).not.toBeNull();
+
+    const bot = match.bots[0]!;
+    bot.loop.setInput(createInput({ move: [0, 1] }));
+    for (let second = 0; second < 10; second += 1) bot.loop.advance(1000);
+    const finalY = bot.state().players.find((p) => p.id === bot.playerId)!.y;
+
+    // Clearing the far edge, not merely reaching the near one, proves the client predicted its
+    // way all the way through the rubble rather than stopping at what used to be the wall.
+    expect(finalY).toBeGreaterThan(BUILDING_FAR_EDGE_M);
   });
 });

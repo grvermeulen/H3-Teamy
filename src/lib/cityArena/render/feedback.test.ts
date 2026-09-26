@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createArenaPlayer } from "../sim/roster";
 import type { ArenaEvent, ArenaPlayerState } from "../sim/types";
 import {
+  COLLAPSE_SHAKE_RADIUS_M,
   CUT_FADE_TICKS,
   HIT_MARKER_TICKS,
   INITIAL_FEEDBACK,
@@ -85,6 +86,32 @@ describe("stepFeedback", () => {
     expect(next.shake).toBeLessThan(SHAKE_EXPLOSION_PX);
     expect(next.shake).toBeGreaterThan(0);
     expect(quiet(shaken, 20).shake).toBe(0);
+  });
+
+  it("shakes for a collapse out to 60 m, farther than a plain explosion's 30 m", () => {
+    const beyondExplosion: ArenaEvent = {
+      kind: "collapse",
+      structureId: 1,
+      x: SHAKE_RADIUS_M + 10,
+      y: 0,
+      killerId: null,
+    };
+    expect(SHAKE_RADIUS_M + 10).toBeLessThan(COLLAPSE_SHAKE_RADIUS_M);
+    const shaken = stepFeedback(
+      settled(),
+      frame({ events: [beyondExplosion] }),
+    );
+    expect(shaken.shake).toBe(SHAKE_EXPLOSION_PX);
+    const beyondCollapse: ArenaEvent = {
+      kind: "collapse",
+      structureId: 2,
+      x: COLLAPSE_SHAKE_RADIUS_M + 5,
+      y: 0,
+      killerId: null,
+    };
+    expect(
+      stepFeedback(settled(), frame({ events: [beyondCollapse] })).shake,
+    ).toBe(0);
   });
 
   it("never shakes under reduced motion, though the vignette still plays", () => {

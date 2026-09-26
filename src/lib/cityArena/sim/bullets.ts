@@ -1,6 +1,6 @@
 import type { CollisionGrid } from "../world/collisionGrid";
 import type { Point } from "../world/projection";
-import { firstBuildingHit } from "../world/raycast";
+import { firstBuildingHitDetail } from "../world/raycast";
 import { PLAYER_RADIUS_M } from "./player";
 import type { BulletState, VehicleState, WeaponKind } from "./types";
 import { lengthOf, widthOf, worldToLocal } from "./vehicle";
@@ -21,7 +21,7 @@ export type PlayerTarget = { id: number; x: number; y: number };
 
 /** What a bullet can hit. */
 export type BulletTarget =
-  | { kind: "building" }
+  | { kind: "building"; structureId: number | null }
   | { kind: "vehicle"; vehicleId: number }
   | { kind: "player"; playerId: number };
 
@@ -191,18 +191,24 @@ function sweep(
   };
 }
 
-/** Resolves one bullet for this tick: the survivor (or `null`) and the hit (or `null`). */
+/** Resolves one bullet for this tick: the survivor, the hit, or — for a bullet that ran out of
+ * range without hitting anything — its state at the point it expired, each `| null`. */
 function resolveBullet(
   bullet: BulletState,
   dt: number,
   world: BulletWorld,
-): { bullet: BulletState | null; hit: BulletHit | null } {
+): {
+  bullet: BulletState | null;
+  hit: BulletHit | null;
+  expired: BulletState | null;
+} {
   const from: Point = [bullet.x, bullet.y];
   const { to, travelled } = sweep(bullet, dt);
-  const building = firstBuildingHit(world.collision, from, to);
+  const building = firstBuildingHitDetail(world.collision, from, to);
   const buildingT =
     building && travelled > 0
-      ? Math.hypot(building[0] - from[0], building[1] - from[1]) / travelled
+      ? Math.hypot(building.point[0] - from[0], building.point[1] - from[1]) /
+        travelled
       : null;
   const entity = nearestCandidate([
     ...vehicleCandidates(bullet, from, to, world.vehicles),
@@ -213,30 +219,52 @@ function resolveBullet(
       from[0] + (to[0] - from[0]) * entity.t,
       from[1] + (to[1] - from[1]) * entity.t,
     ];
-    return { bullet: null, hit: { bullet, point, target: entity.target } };
+    return {
+      bullet: null,
+      hit: { bullet, point, target: entity.target },
+      expired: null,
+    };
   }
   if (building)
     return {
       bullet: null,
-      hit: { bullet, point: building, target: { kind: "building" } },
+      hit: {
+        bullet,
+        point: building.point,
+        target: { kind: "building", structureId: building.structureId },
+      },
+      expired: null,
     };
   const rangeLeftM = bullet.rangeLeftM - travelled;
-  if (rangeLeftM <= 0) return { bullet: null, hit: null };
-  return { bullet: { ...bullet, x: to[0], y: to[1], rangeLeftM }, hit: null };
+  if (rangeLeftM <= 0)
+    return {
+      bullet: null,
+      hit: null,
+      expired: { ...bullet, x: to[0], y: to[1], rangeLeftM: 0 },
+    };
+  return {
+    bullet: { ...bullet, x: to[0], y: to[1], rangeLeftM },
+    hit: null,
+    expired: null,
+  };
 }
 
-/** Sweeps every bullet by `dt`; bullets that hit something or run out of range are dropped. */
+/** Sweeps every bullet by `dt`; a bullet that hits something is dropped in favour of the hit, and
+ * one that runs out of range without hitting anything is dropped in favour of `expired` (so an
+ * explosive weapon can still detonate at its end point — `combat.ts`). */
 export function stepBullets(
   bullets: BulletState[],
   dt: number,
   world: BulletWorld,
-): { bullets: BulletState[]; hits: BulletHit[] } {
+): { bullets: BulletState[]; hits: BulletHit[]; expired: BulletState[] } {
   const survivors: BulletState[] = [];
   const hits: BulletHit[] = [];
+  const expired: BulletState[] = [];
   for (const bullet of bullets) {
     const result = resolveBullet(bullet, dt, world);
     if (result.bullet) survivors.push(result.bullet);
     if (result.hit) hits.push(result.hit);
+    if (result.expired) expired.push(result.expired);
   }
-  return { bullets: survivors, hits };
+  return { bullets: survivors, hits, expired };
 }

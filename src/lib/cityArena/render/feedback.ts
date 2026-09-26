@@ -51,6 +51,9 @@ export const HIT_MARKER_TICKS = 6;
 export const LOW_HEALTH = 25;
 /** How close an explosion must be to shake this screen. */
 export const SHAKE_RADIUS_M = 30;
+/** How close a building collapse must be to shake this screen (spec §5): farther than a plain
+ *  explosion, since a falling building is felt across more of the block. */
+export const COLLAPSE_SHAKE_RADIUS_M = 60;
 /** Share of the shake left after each tick. */
 const SHAKE_DECAY = 0.75;
 /** Ticks per heartbeat. */
@@ -68,13 +71,19 @@ export const INITIAL_FEEDBACK: FeedbackState = {
   cutFade: 0,
 };
 
+/** The shake radius for a blast kind: a collapse is felt farther than a plain explosion. */
+function shakeRadiusFor(kind: "explosion" | "collapse"): number {
+  return kind === "explosion" ? SHAKE_RADIUS_M : COLLAPSE_SHAKE_RADIUS_M;
+}
+
 /** The strongest shake this tick's events call for, or 0. */
 function shakeFrom(frame: FeedbackFrame, hit: boolean): number {
   let shake = hit ? SHAKE_HIT_PX : 0;
   for (const event of frame.events) {
-    if (event.kind !== "explosion") continue;
+    if (event.kind !== "explosion" && event.kind !== "collapse") continue;
+    const radius = shakeRadiusFor(event.kind);
     const near =
-      Math.hypot(event.x - frame.me.x, event.y - frame.me.y) <= SHAKE_RADIUS_M;
+      Math.hypot(event.x - frame.me.x, event.y - frame.me.y) <= radius;
     if (near) shake = Math.max(shake, SHAKE_EXPLOSION_PX);
   }
   return shake;

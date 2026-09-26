@@ -51,6 +51,20 @@ describe("feelTick", () => {
     expect(feel.feedback.health).toBe(70);
   });
 
+  it("feels a nearby building collapse as a heavy pulse and a shake, and hears it", () => {
+    const feel = runtime();
+    feelTick(feel, stateWith(100, []));
+    const collapse: ArenaState["events"] = [
+      { kind: "collapse", structureId: 1, x: 5, y: 0, killerId: null },
+    ];
+    feelTick(feel, stateWith(100, collapse));
+    expect(feel.sound.handleEvents).toHaveBeenLastCalledWith(collapse);
+    expect(
+      vi.mocked(feel.haptics.fire).mock.calls.map(([kind]) => kind),
+    ).toEqual(["explosion"]);
+    expect(feel.feedback.shake).toBeGreaterThan(0);
+  });
+
   it("keeps the sound but nothing else when this client has no player in the state", () => {
     const feel = runtime();
     feel.netplay = { kind: "offline", playerId: 99 };

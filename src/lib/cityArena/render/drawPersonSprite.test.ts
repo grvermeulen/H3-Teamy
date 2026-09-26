@@ -7,8 +7,10 @@ import {
   drawPersonStrip,
   walkFrameAt,
 } from "./drawPersonSprite";
+import { ROCKET_TUBE } from "./palette";
 import type { PersonSprite, PropSprite } from "./sprites";
 import { createFakeContext } from "./testing/fakeContext";
+import { ROCKET_LAUNCHER_ITEM } from "./vectorItems";
 
 describe("walkFrameAt", () => {
   it("rests on the first frame while standing and below the walking speed", () => {
@@ -82,5 +84,20 @@ describe("drawHeldItem", () => {
       `drawImage(${String(rifle.image)},-1.8,1.1,11,2.2)`,
       "restore()",
     ]);
+  });
+
+  it("paints a vector item in the same hand when there is no art for it", () => {
+    const context = createFakeContext();
+    drawHeldItem(context, ROCKET_LAUNCHER_ITEM, 10, 20, 4, 0);
+    expect(context.calls.slice(0, 3)).toEqual([
+      "save()",
+      "translate(10,20)",
+      "rotate(0)",
+    ]);
+    expect(context.calls).toContain(`fill(${ROCKET_TUBE})`);
+    expect(context.calls.at(-1)).toBe("restore()");
+    expect(context.calls.some((call) => call.startsWith("drawImage("))).toBe(
+      false,
+    );
   });
 });

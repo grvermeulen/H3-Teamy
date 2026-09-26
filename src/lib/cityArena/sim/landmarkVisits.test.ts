@@ -208,6 +208,7 @@ describe("landmark visits", () => {
         input,
         tick,
         random,
+        world.collision,
       );
     };
     const normal = fire();

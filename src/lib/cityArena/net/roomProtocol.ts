@@ -1,6 +1,14 @@
 import { z } from "zod";
-/** Mission actors and receipts require the same wire/content version on every participant. */
-export const ARENA_PROTOCOL_VERSION = 3;
+/**
+ * Mission actors and receipts require the same wire/content version on every participant.
+ *
+ * Bumped to 4 for Task 5 (structures and rockets on the wire): the player row widens from 22 to
+ * 23 columns. The snapshot decoder itself stays tolerant of both widths (`wireValidation.ts`), but
+ * a stale tab's own outdated validator does not know width 23 or the new `z` key — it would reject
+ * every snapshot it *receives* from an updated host. Refusing the stale tab cleanly at join/create
+ * is better than letting it into a room where it silently rejects everything once inside.
+ */
+export const ARENA_PROTOCOL_VERSION = 4;
 
 /** Server time windows for room liveness and channel authorization. */
 export const ROOM_RULES = {

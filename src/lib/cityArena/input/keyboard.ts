@@ -28,13 +28,17 @@ const KEY_BUTTONS: Partial<Record<string, ButtonName>> = {
   KeyQ: "weaponNext",
 };
 
-/** The number keys that pick a weapon directly (spec §7; 4 and 5 for Plan 9's rifle and bat). */
+/**
+ * The number keys that pick a weapon directly (spec §7; 4 and 5 for Plan 9's rifle and bat, 6 for
+ * the rocket launcher).
+ */
 const SLOT_KEYS: Partial<Record<string, WeaponSlot>> = {
   Digit1: 1,
   Digit2: 2,
   Digit3: 3,
   Digit4: 4,
   Digit5: 5,
+  Digit6: 6,
 };
 
 /** The key that switches the car radio to the next station (Plan 7). */
@@ -47,7 +51,7 @@ const TOGGLE_CAMERA_KEY = "KeyV";
 export type KeyboardHooks = {
   /** Tab held shows the scorebord; released, it hides it. */
   onScoreboard?: (held: boolean) => void;
-  /** 1, 2 and 3 pick a weapon directly. */
+  /** The number keys 1–6 pick a weapon directly. */
   onWeaponSlot?: (slot: WeaponSlot) => void;
   /** R switches the radio to the next station. */
   onRadio?: () => void;
@@ -171,7 +175,7 @@ function publishButtons(pressedButtons: Set<string>, state: InputState): void {
 }
 
 /**
- * Binds WASD/arrows, the Space/E/F/Enter/Q buttons, 1/2/3, R and Tab to the input state and the
+ * Binds WASD/arrows, the Space/E/F/Enter/Q buttons, 1–6, R and Tab to the input state and the
  * hooks; returns the detach function.
  */
 export function attachKeyboard(

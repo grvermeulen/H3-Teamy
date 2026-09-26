@@ -1,14 +1,16 @@
-import type { PickupState } from "../sim/types";
+import type { PickupKind, PickupState } from "../sim/types";
 import {
   PICKUP_BACKDROP,
   PICKUP_BAT,
   PICKUP_HEALTH,
   PICKUP_HEALTH_CROSS,
   PICKUP_RIFLE,
+  PICKUP_ROCKET,
   PICKUP_SHOTGUN,
   PICKUP_UZI,
 } from "./palette";
-import type { ItemSprites, PropSprite } from "./sprites";
+import type { ItemSprites } from "./sprites";
+import { itemArtFor, paintItem, type ItemArt } from "./vectorItems";
 import {
   visibleRect,
   worldToScreen,
@@ -34,25 +36,32 @@ export function pickupBob(pickup: PickupState, tick: number): number {
   return Math.sin((tick + pickup.id) * 0.15) * PICKUP_BOB_M;
 }
 
-/** Colour used by a pickup diamond. */
-export function pickupColour(kind: PickupState["kind"]): string {
-  if (kind === "health") return PICKUP_HEALTH;
-  if (kind === "rifle") return PICKUP_RIFLE;
-  if (kind === "bat") return PICKUP_BAT;
-  return kind === "uzi" ? PICKUP_UZI : PICKUP_SHOTGUN;
+/** Pickup colours by kind; a table, so a new kind cannot borrow another's colour. */
+const PICKUP_COLOURS: Record<PickupKind, string> = {
+  uzi: PICKUP_UZI,
+  shotgun: PICKUP_SHOTGUN,
+  health: PICKUP_HEALTH,
+  rifle: PICKUP_RIFLE,
+  bat: PICKUP_BAT,
+  rocket: PICKUP_ROCKET,
+};
+
+/** Colour used by a pickup diamond and its radar mark. */
+export function pickupColour(kind: PickupKind): string {
+  return PICKUP_COLOURS[kind];
 }
 
-/** The item's art, a metre long over a dark disc, turning slowly. */
+/** The item's art (or its vector stand-in), a metre long over a dark disc, turning slowly. */
 function drawItemIcon(
   context: RasterContext,
-  sprite: PropSprite,
+  art: ItemArt,
   x: number,
   y: number,
   zoom: number,
   turn: number,
 ): void {
   const length = PICKUP_ICON_LENGTH_M * zoom;
-  const width = (length * sprite.widthMetres) / sprite.lengthMetres;
+  const width = (length * art.widthMetres) / art.lengthMetres;
   context.save();
   context.translate(x, y);
   context.beginPath();
@@ -60,13 +69,13 @@ function drawItemIcon(
   context.fillStyle = PICKUP_BACKDROP;
   context.fill();
   context.rotate(turn);
-  context.drawImage(sprite.image, -length / 2, -width / 2, length, width);
+  paintItem(context, art, -length / 2, -width / 2, length, width);
   context.restore();
 }
 
 /**
- * Draws one pickup: its item's art as an icon once that has loaded, else the rotating diamond
- * it was before, with a cross for health.
+ * Draws one pickup: its item's art as an icon once that has loaded (the rocket launcher's vector
+ * stand-in until it has art), else the rotating diamond it was before, with a cross for health.
  */
 export function drawPickup(
   context: RasterContext,
@@ -81,11 +90,11 @@ export function drawPickup(
     pickup.x,
     pickup.y + (reducedMotion ? 0 : pickupBob(pickup, tick)),
   ]);
-  const sprite = items?.[pickup.kind];
-  if (sprite) {
+  const art = itemArtFor(items, pickup.kind);
+  if (art) {
     drawItemIcon(
       context,
-      sprite,
+      art,
       x,
       y,
       camera.zoom,

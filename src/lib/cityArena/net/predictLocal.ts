@@ -8,7 +8,9 @@ import { driveStep } from "../sim/driveInput";
 import { stepPlayer } from "../sim/player";
 import { landmarkSpeedFactor } from "../sim/landmarkBonuses";
 import { playerById, replacePlayer } from "../sim/players";
+import { destroyedStructureIds } from "../sim/structures";
 import { forwardSpeed, NO_CONTROLS, stepVehicle } from "../sim/vehicle";
+import { withoutStructures } from "../world/collisionView";
 
 /** Predicts only the controlled player's motion; combat, AI and other bodies remain authoritative. */
 export const predictLocal: typeof stepArena = (state, inputs, dt, world) => {
@@ -18,6 +20,13 @@ export const predictLocal: typeof stepArena = (state, inputs, dt, world) => {
   const [id, input] = command;
   const player = playerById(state, id);
   if (!player || player.health <= 0) return next;
+  // Mirrors stepArena's own collision view (spec §3.5): a collapsed building must not block this
+  // client's own predicted movement, or the next snapshot's wholesale adoption would just push
+  // the player straight back out of rubble the host already lets everyone walk through.
+  const collision = withoutStructures(
+    world.collision,
+    destroyedStructureIds(state),
+  );
   const car = occupiedVehicle(state, player);
   if (car) {
     const drive =
@@ -28,7 +37,7 @@ export const predictLocal: typeof stepArena = (state, inputs, dt, world) => {
       car,
       drive?.controls ?? NO_CONTROLS,
       dt,
-      world.collision,
+      collision,
     ).vehicle;
     for (const obstacle of state.vehicles) {
       if (
@@ -62,7 +71,7 @@ export const predictLocal: typeof stepArena = (state, inputs, dt, world) => {
       player,
       input,
       dt,
-      world.collision,
+      collision,
       landmarkSpeedFactor(player, next.tick),
     ),
   };

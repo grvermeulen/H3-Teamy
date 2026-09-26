@@ -98,7 +98,7 @@ describe("applyEntityHit", () => {
         {
           bullet: bulletFrom(0, 20),
           point: [4.6, 0],
-          target: { kind: "building" },
+          target: { kind: "building", structureId: null },
         },
         4,
       ),
