@@ -128,28 +128,20 @@ const SHOT_TONES: Record<WeaponKind, ShotTone> = {
   bat: { frequency: 70, duration: 0.05, type: "triangle" },
   rifle: { frequency: 140, duration: 0.12, type: "sawtooth" },
   cannon: { frequency: 55, duration: 0.3, type: "sawtooth" },
-  // A falling whoosh: the rocket leaving the tube, not a bang — the bang comes on impact.
+  // The rocket's only voice, clips or not: a falling whoosh as it leaves the tube. The bang is
+  // its detonation's explosion event, so the launch must not borrow the explosion clip.
   rocket: { frequency: 320, endFrequency: 70, duration: 0.4, type: "sawtooth" },
 };
 
-/** Gain boost on the explosion clip when it voices a launch (the tank's shell or a rocket). */
-const LAUNCH_CLIP_GAIN = 1.25;
-
-/**
- * True for the weapons whose launch has no recording of its own and borrows the explosion clip,
- * boosted: the tank's cannon and the rocket launcher.
- */
-function launchesWithExplosion(
-  weapon: WeaponKind,
-): weapon is "cannon" | "rocket" {
-  return weapon === "cannon" || weapon === "rocket";
-}
+/** Gain boost on the explosion clip when it voices the tank's cannon. */
+const CANNON_CLIP_GAIN = 1.25;
 
 /** The recorded clip for an event, or null for one that only the synthesiser voices. */
 function clipFor(event: ArenaEvent): ClipName | null {
   if (event.kind === "shot") {
-    if (event.weapon === "fist") return null;
-    return launchesWithExplosion(event.weapon) ? "explosion" : event.weapon;
+    if (event.weapon === "fist" || event.weapon === "rocket") return null;
+    // The cannon has no recording of its own; the explosion clip is the bang it deserves.
+    return event.weapon === "cannon" ? "explosion" : event.weapon;
   }
   if (event.kind === "explosion") return "explosion";
   if (event.kind === "pickup" || event.kind === "beer") return "pickup";
@@ -287,8 +279,8 @@ export function createArenaSound(
     const clip = clipFor(event);
     if (clip !== null) {
       const played =
-        event.kind === "shot" && launchesWithExplosion(event.weapon)
-          ? player?.play(clip, 1, LAUNCH_CLIP_GAIN)
+        event.kind === "shot" && event.weapon === "cannon"
+          ? player?.play(clip, 1, CANNON_CLIP_GAIN)
           : player?.play(clip);
       if (played) return;
     }

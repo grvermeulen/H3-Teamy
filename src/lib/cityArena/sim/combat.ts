@@ -9,8 +9,9 @@ import {
   replacePlayer,
 } from "./players";
 import type { Rect } from "../mapBuild/geometry";
-import type { Obstacle } from "../world/collisionGrid";
+import type { CollisionGrid, Obstacle } from "../world/collisionGrid";
 import type { Point } from "../world/projection";
+import { firstBuildingHitDetail } from "../world/raycast";
 import {
   MAX_BULLETS,
   createShots,
@@ -50,28 +51,61 @@ import { activeBonus, BONUS_BALANCE } from "./landmarkBonuses";
 import { firesCannon, lengthOf } from "./vehicle";
 import type { ArenaWorld } from "./arenaWorld";
 
+/**
+ * How far ahead of a shooter on foot a rocket leaves the tube, metres (Ruling 24): past the
+ * shooter's own 0.4 m circle, as the tank's shell leaves the end of its barrel.
+ */
+export const ROCKET_MUZZLE_M = 0.8;
+
 /** What the trigger fires and from where: the tank's cannon from its muzzle at the wheel of a tank, otherwise what the player carries from where they stand. */
 type Trigger = { weapon: WeaponKind; origin: Point };
 
+/** The point `distance` metres from `from` along `angle`. */
+function pointAhead(from: Point, angle: number, distance: number): Point {
+  return [
+    from[0] + Math.cos(angle) * distance,
+    from[1] + Math.sin(angle) * distance,
+  ];
+}
+
+/**
+ * Where a shot fired on foot leaves from: the shooter's centre, except a rocket, which leaves the
+ * tube {@link ROCKET_MUZZLE_M} ahead — unless a building is nearer than that, when it leaves from
+ * the shooter so it strikes the wall instead of being born on its far side.
+ */
+function footOrigin(
+  player: ArenaPlayerState,
+  angle: number,
+  collision: Pick<CollisionGrid, "query">,
+): Point {
+  const centre: Point = [player.x, player.y];
+  if (player.weapon !== "rocket") return centre;
+  const muzzle = pointAhead(centre, angle, ROCKET_MUZZLE_M);
+  return firstBuildingHitDetail(collision, centre, muzzle) ? centre : muzzle;
+}
+
 /**
  * The trigger for this tick. A tank's driver fires the cannon, whatever they hold, and the shell
- * leaves the barrel's end so it never starts inside a car parked against the hull.
+ * leaves the barrel's end so it never starts inside a car parked against the hull; any other
+ * driver fires what they carry from their seat, and a player on foot from {@link footOrigin}.
  */
 function triggerOf(
   state: ArenaState,
   player: ArenaPlayerState,
   angle: number,
+  collision: Pick<CollisionGrid, "query">,
 ): Trigger {
   const car = occupiedVehicle(state, player);
-  if (!car || car.wrecked || !firesCannon(car.kind))
+  if (!car)
+    return {
+      weapon: player.weapon,
+      origin: footOrigin(player, angle, collision),
+    };
+  if (car.wrecked || !firesCannon(car.kind))
     return { weapon: player.weapon, origin: [player.x, player.y] };
-  const muzzle = lengthOf(car.kind) / 2;
   return {
     weapon: "cannon",
-    origin: [
-      player.x + Math.cos(angle) * muzzle,
-      player.y + Math.sin(angle) * muzzle,
-    ],
+    origin: pointAhead([player.x, player.y], angle, lengthOf(car.kind) / 2),
   };
 }
 
@@ -168,18 +202,23 @@ function fireShots(
   return { shots, effects, nextId: muzzleId + 1 };
 }
 
-/** Fires while the trigger is held, the cooldown has passed and there is ammo; drive-bys fire from the car and ignore it. */
+/**
+ * Fires while the trigger is held, the cooldown has passed and there is ammo; drive-bys fire from
+ * the car and ignore it. `collision` (this tick's view) keeps a rocket from leaving its muzzle on
+ * the far side of a wall.
+ */
 export function applyFire(
   state: ArenaState,
   player: ArenaPlayerState,
   input: WorldInput,
   tick: number,
   random: () => number,
+  collision: Pick<CollisionGrid, "query">,
 ): ArenaState {
   const angle = input.aim ?? player.facing;
   if (state.vehicles.some((vehicle) => vehicle.boarding?.ownerId === player.id))
     return state;
-  const trigger = triggerOf(state, player, angle);
+  const trigger = triggerOf(state, player, angle, collision);
   if (!canFire(state, player, input, trigger.weapon, tick)) return state;
   const { shots, effects, nextId } = fireShots(
     state,

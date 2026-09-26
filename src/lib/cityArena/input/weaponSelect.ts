@@ -4,8 +4,9 @@
  *
  * The simulation switches weapons on the rising edge of `weaponNext`, and the wire carries that
  * one bit, so a direct pick is made here on the client: press and release `weaponNext` a tick at
- * a time until the player is holding what was asked for, and give up after a full lap so a
- * weapon with no ammo — which the simulation skips — cannot leave the player cycling forever.
+ * a time until the player is holding what was asked for. A weapon with no ammo is skipped by the
+ * simulation, so a pick for one gives up as soon as the cycle comes back round to the weapon held
+ * when it started: the player ends where they began, not wherever a fixed press count stops.
  */
 
 import type { WeaponKind, WorldInput } from "../sim/types";
@@ -24,7 +25,10 @@ export const SLOT_WEAPONS: Record<WeaponSlot, WeaponKind> = {
   6: "rocket",
 };
 
-/** Presses a request may take before it is given up on: two laps of the rack. */
+/**
+ * Backstop on the presses one pick may take, two laps of the rack: it only ends a pick whose held
+ * weapon never comes back round, e.g. a player who cannot switch at all.
+ */
 const MAX_PRESSES = WEAPON_ORDER.length * 2;
 
 /** Turns picks and wheel notches into the `weaponNext` edges the simulation understands. */
@@ -50,13 +54,27 @@ export type WeaponSelector = {
  */
 export function createWeaponSelector(): WeaponSelector {
   let target: WeaponKind | null = null;
+  /** The weapon held when the pending pick started, captured on its first tick. */
+  let origin: WeaponKind | null = null;
+  /** Whether the cycle has moved off `origin` since the pick started. */
+  let left = false;
   let presses = 0;
   let pressing = false;
+
+  /** True once the pick is over: the target is in hand, or the cycle is back where it began. */
+  function pickDone(held: WeaponKind): boolean {
+    if (target === null) return false;
+    origin ??= held;
+    if (held !== origin) left = true;
+    return held === target || (left && held === origin);
+  }
 
   return {
     request(weapon: WeaponKind): void {
       if (target === weapon) return;
       target = weapon;
+      origin = null;
+      left = false;
       presses = MAX_PRESSES;
     },
     cycle(): void {
@@ -66,7 +84,7 @@ export function createWeaponSelector(): WeaponSelector {
       target = null;
     },
     apply(input: WorldInput, held: WeaponKind): WorldInput {
-      if (target !== null && held === target) {
+      if (pickDone(held)) {
         target = null;
         presses = 0;
         pressing = false;

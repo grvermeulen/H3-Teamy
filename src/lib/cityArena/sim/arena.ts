@@ -190,6 +190,7 @@ export function stepArena(
       worldInputs.get(player.id) ?? EMPTY_INPUT,
       tick,
       random,
+      live.collision,
     );
   next = stepCops(next, live, dt, tick, random);
   next = stepPeds(next, live, dt, tick, random);
