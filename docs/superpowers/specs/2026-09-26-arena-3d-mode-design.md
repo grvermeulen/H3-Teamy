@@ -144,6 +144,8 @@ switched on, so the 2D game's bundle does not grow by three.js.
 | `overlay3d.ts`   | on the 2D canvas above: crosshair, hit marker, other players' markers, prompts — pure projection maths                                                          |
 | `viewmodel.ts`   | first-person hands + weapon with recoil and sway                                                                                                                |
 
+Implemented files: see docs/tech/arena/3D-MODE.md.
+
 ### 6.2 Canvas stacking
 
 The WebGL canvas sits **under** the existing 2D canvas. In 3D mode the 2D canvas is cleared each
