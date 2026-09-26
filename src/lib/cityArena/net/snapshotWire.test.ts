@@ -8,7 +8,6 @@ import { MAX_STRUCTURES } from "../sim/structures";
 import { createRng } from "../sim/rng";
 import type { ArenaState, StructureState } from "../sim/types";
 import { createVehicle, VEHICLE_KINDS } from "../sim/vehicle";
-import { MAX_WIRE_SNAPSHOT_BYTES } from "./wireValidation";
 import {
   MAX_SNAPSHOT_BYTES,
   decodeSnapshot,
@@ -222,28 +221,17 @@ describe("snapshot size with structures at cap (Task 5 tripwire)", () => {
   }
 
   /**
-   * MEASURED (task-5-report.md, NEEDS_CONTEXT): the existing every-cap fixture (8 players,
-   * MAX_VEHICLES, MAX_PEDS) alone already spends 7607 of the 8192-byte {@link MAX_SNAPSHOT_BYTES}
-   * budget. Adding 48 structures at their own worst case costs a further ~1254 bytes — matching
-   * spec §3.6's own "≈ 1.5 KB worst case" estimate — for a total of 8861 bytes, 669 over budget.
-   * The spec's estimate did not check against every other cap being simultaneously maxed in the
-   * same snapshot. Per the task brief this is reported rather than silently fixed (no shrinking
-   * the wire row below spec §3.6's four columns, no quietly bumping the constant): skipped until a
-   * controller decides whether to raise the budget or accept the combined worst case as
-   * unrealistic. The real, enforced ceiling — {@link MAX_WIRE_SNAPSHOT_BYTES} from
-   * `wireValidation.ts`, well inside Ably's 64 KB message limit — is asserted below instead.
+   * MEASURED (task-5-report.md, Controller Ruling 28): the existing every-cap fixture (8 players,
+   * MAX_VEHICLES, MAX_PEDS) alone spends 7607 bytes. Adding 48 structures at their own worst case
+   * costs a further ~1254 bytes — matching spec §3.6's own "≈ 1.5 KB worst case" estimate — for a
+   * total of 8861 bytes. {@link MAX_SNAPSHOT_BYTES} was raised from 8192 to 9216 for this
+   * (see its doc comment), so this now fits with ~355 bytes to spare; a typical snapshot is
+   * unaffected, since `z` is omitted whenever no structure is damaged.
    */
-  it.skip("keeps a world at every cap, plus 48 structures, inside the size budget", () => {
+  it("keeps a world at every cap, plus 48 structures, inside the size budget", () => {
     const bytes = snapshotBytes(
       encodeSnapshot(everyCapPlusStructures(), 1, {}),
     );
     expect(bytes).toBeLessThan(MAX_SNAPSHOT_BYTES);
-  });
-
-  it("stays well inside the hard, Ably-facing wire limit even at every cap plus 48 structures", () => {
-    const bytes = snapshotBytes(
-      encodeSnapshot(everyCapPlusStructures(), 1, {}),
-    );
-    expect(bytes).toBeLessThan(MAX_WIRE_SNAPSHOT_BYTES);
   });
 });

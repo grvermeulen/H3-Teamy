@@ -43,11 +43,19 @@ import {
 } from "./wire";
 
 /**
- * Ceiling for one encoded snapshot, well inside Ably's 64 KB message limit (spec §6.4).
- * The test asserting it is a tripwire: adding a field to the hot path should have to justify
- * itself here rather than quietly cost every client bandwidth.
+ * Ceiling for one encoded snapshot, well inside Ably's 64 KB message limit (spec §6.4) — the real,
+ * hard ceiling for the wire is {@link MAX_WIRE_SNAPSHOT_BYTES} in `wireValidation.ts`; this is a
+ * tighter, self-imposed bandwidth-discipline budget. The test asserting it is a tripwire: adding a
+ * field to the hot path should have to justify itself here rather than quietly cost every client
+ * bandwidth.
+ *
+ * Raised from 8192 to 9216 for Task 5 (Controller Ruling 28): the structure list (`z`) costs up to
+ * ~1.25 KB at `MAX_STRUCTURES`, and the existing every-cap-at-once fixture (8 players,
+ * `MAX_VEHICLES`, `MAX_PEDS`) plus 48 structures measures 8861 bytes — over the old budget but
+ * comfortably under this one. A typical snapshot is unaffected: `z` is omitted whenever no
+ * structure is damaged, which is the common case.
  */
-export const MAX_SNAPSHOT_BYTES = 8192;
+export const MAX_SNAPSHOT_BYTES = 9216;
 
 /** Weapons in wire order; the index travels, not the name, so new kinds are only appended. */
 const WEAPONS: readonly WeaponKind[] = [
