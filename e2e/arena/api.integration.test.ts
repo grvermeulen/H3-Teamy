@@ -22,6 +22,7 @@ import { POST as sessionPost } from "../../src/app/api/arena/session/route";
 import { POST as matchPost } from "../../src/app/api/arena/matches/route";
 import { GET as tokenGet } from "../../src/app/api/arena/realtime-token/route";
 import {
+  ARENA_PROTOCOL_VERSION,
   arenaChannels,
   type ArenaRoomTicket,
 } from "../../src/lib/cityArena/net/roomProtocol";
@@ -35,7 +36,7 @@ function request(path: string, body?: unknown): NextRequest {
       cookie: `anon_id=${accountId}`,
       origin: "http://localhost",
       "Content-Type": "application/json",
-      "X-Arena-Protocol": "3",
+      "X-Arena-Protocol": String(ARENA_PROTOCOL_VERSION),
       "x-forwarded-for": "127.0.0.1",
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),

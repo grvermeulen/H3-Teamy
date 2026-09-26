@@ -8,6 +8,7 @@ import { MAX_STRUCTURES } from "../sim/structures";
 import { createRng } from "../sim/rng";
 import type { ArenaState, StructureState } from "../sim/types";
 import { createVehicle, VEHICLE_KINDS } from "../sim/vehicle";
+import { structureIdOf } from "../world/structureId";
 import {
   MAX_SNAPSHOT_BYTES,
   decodeSnapshot,
@@ -149,7 +150,7 @@ describe("decoding a snapshot from an older peer (Task 5 tolerance)", () => {
     expect(view.players[0]!.ammo.rocket).toBe(0);
   });
 
-  it("defaults a bullet's weapon to the wire's first entry for a row that predates it (length 7)", () => {
+  it("defaults a bullet's weapon to pistol for a row that predates it (length 7)", () => {
     const base = boot(6);
     const state: ArenaState = {
       ...base,
@@ -208,7 +209,10 @@ describe("snapshot size with structures at cap (Task 5 tripwire)", () => {
     const capStructures: StructureState[] = Array.from(
       { length: MAX_STRUCTURES },
       (_, index) => ({
-        id: 9000 + index,
+        // A real structure id packs a tile and a position within it (`world/structureId.ts`) and
+        // is 7-9 digits, not the 4-digit placeholder this fixture used before — the digit count
+        // affects the measured byte count below.
+        id: structureIdOf(63, 63, 65535 - index),
         damage: 1800,
         destroyedAtTick: 123456,
         lastHitTick: 123456,
@@ -221,12 +225,12 @@ describe("snapshot size with structures at cap (Task 5 tripwire)", () => {
   }
 
   /**
-   * MEASURED (task-5-report.md, Controller Ruling 28): the existing every-cap fixture (8 players,
-   * MAX_VEHICLES, MAX_PEDS) alone spends 7607 bytes. Adding 48 structures at their own worst case
-   * costs a further ~1254 bytes — matching spec §3.6's own "≈ 1.5 KB worst case" estimate — for a
-   * total of 8861 bytes. {@link MAX_SNAPSHOT_BYTES} was raised from 8192 to 9216 for this
-   * (see its doc comment), so this now fits with ~355 bytes to spare; a typical snapshot is
-   * unaffected, since `z` is omitted whenever no structure is damaged.
+   * MEASURED (Controller Ruling 28/29): the existing every-cap fixture (8 players, MAX_VEHICLES,
+   * MAX_PEDS) alone spends 7607 bytes. Adding 48 structures at their own worst case — realistic
+   * 9-digit ids (`structureIdOf`, not a 4-digit placeholder), max damage, six-digit ticks — costs a
+   * further ~1494 bytes, for a total of 9101 bytes. {@link MAX_SNAPSHOT_BYTES} was raised from 8192
+   * to 9216 for this (see its doc comment), so this now fits with ~115 bytes to spare; a typical
+   * snapshot is unaffected, since `z` is omitted whenever no structure is damaged.
    */
   it("keeps a world at every cap, plus 48 structures, inside the size budget", () => {
     const bytes = snapshotBytes(
