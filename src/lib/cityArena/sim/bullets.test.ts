@@ -15,6 +15,7 @@ import {
 import type { BulletState } from "./types";
 import { createVehicle } from "./vehicle";
 import { WEAPONS } from "./weapons";
+import { structureIdOf } from "../world/structureId";
 
 const square: Point[] = [
   [10, -5],
@@ -33,7 +34,8 @@ function tileWith(buildings: Point[][]): DecodedTile {
     trees: [],
     furniture: [],
     roads: [],
-    buildings: buildings.map((ring) => ({
+    buildings: buildings.map((ring, index) => ({
+      structureId: structureIdOf(0, 0, index),
       ring,
       bounds: boundsOf(ring),
       levels: 2,
@@ -154,7 +156,7 @@ describe("stepBullets", () => {
     }
     expect(lastHits[0]).toMatchObject({
       point: [10, 0],
-      target: { kind: "building" },
+      target: { kind: "building", structureId: structureIdOf(0, 0, 0) },
     });
     expect(bullets).toEqual([]);
   });

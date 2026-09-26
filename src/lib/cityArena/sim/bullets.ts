@@ -1,6 +1,6 @@
 import type { CollisionGrid } from "../world/collisionGrid";
 import type { Point } from "../world/projection";
-import { firstBuildingHit } from "../world/raycast";
+import { firstBuildingHitDetail } from "../world/raycast";
 import { PLAYER_RADIUS_M } from "./player";
 import type { BulletState, VehicleState, WeaponKind } from "./types";
 import { lengthOf, widthOf, worldToLocal } from "./vehicle";
@@ -21,7 +21,7 @@ export type PlayerTarget = { id: number; x: number; y: number };
 
 /** What a bullet can hit. */
 export type BulletTarget =
-  | { kind: "building" }
+  | { kind: "building"; structureId: number | null }
   | { kind: "vehicle"; vehicleId: number }
   | { kind: "player"; playerId: number };
 
@@ -199,10 +199,11 @@ function resolveBullet(
 ): { bullet: BulletState | null; hit: BulletHit | null } {
   const from: Point = [bullet.x, bullet.y];
   const { to, travelled } = sweep(bullet, dt);
-  const building = firstBuildingHit(world.collision, from, to);
+  const building = firstBuildingHitDetail(world.collision, from, to);
   const buildingT =
     building && travelled > 0
-      ? Math.hypot(building[0] - from[0], building[1] - from[1]) / travelled
+      ? Math.hypot(building.point[0] - from[0], building.point[1] - from[1]) /
+        travelled
       : null;
   const entity = nearestCandidate([
     ...vehicleCandidates(bullet, from, to, world.vehicles),
@@ -218,7 +219,11 @@ function resolveBullet(
   if (building)
     return {
       bullet: null,
-      hit: { bullet, point: building, target: { kind: "building" } },
+      hit: {
+        bullet,
+        point: building.point,
+        target: { kind: "building", structureId: building.structureId },
+      },
     };
   const rangeLeftM = bullet.rangeLeftM - travelled;
   if (rangeLeftM <= 0) return { bullet: null, hit: null };
