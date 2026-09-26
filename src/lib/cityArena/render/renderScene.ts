@@ -35,9 +35,9 @@ import {
   type DrawStats,
   type WorldDrawSource,
 } from "./drawWorld";
+import { itemArtFor } from "./vectorItems";
 import {
   itemKeyForWeapon,
-  itemSpriteFor,
   type ItemSprites,
   type PersonSprite,
   type PersonSprites,
@@ -197,7 +197,7 @@ function drawPlayerLook(
       scene.tick,
       dead
         ? undefined
-        : itemSpriteFor(scene.itemSprites, itemKeyForWeapon(player.weapon)),
+        : itemArtFor(scene.itemSprites, itemKeyForWeapon(player.weapon)),
     );
     const bonus = activeBonus(player, scene.tick);
     if (bonus) {

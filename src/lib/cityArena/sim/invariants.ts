@@ -15,6 +15,7 @@ import type { ArenaPlayerState, ArenaState } from "./types";
 import { healthMaxOf } from "./vehicle";
 import { PICKUP_RESPAWN_TICKS } from "./pickups";
 import { MAX_STRUCTURES } from "./structures";
+import { MAGAZINE_WEAPONS } from "./weapons";
 
 /** Records `message` when `condition` is false. */
 function check(
@@ -53,7 +54,7 @@ function checkPlayer(
   );
   check(
     violations,
-    player.ammo.uzi >= 0 && player.ammo.shotgun >= 0,
+    MAGAZINE_WEAPONS.every((kind) => player.ammo[kind] >= 0),
     `${who} ammo negative`,
   );
   check(

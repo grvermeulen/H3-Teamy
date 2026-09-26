@@ -65,6 +65,29 @@ describe("createArenaSound", () => {
     expect(context.oscillators).toHaveLength(1);
   });
 
+  it("launches a rocket on the cannon's clip, and a falling whoosh without it", () => {
+    const player = playerWith(["explosion"]);
+    const { factory } = createFakeAudioContext();
+    const sound = createArenaSound(factory, true, () => player);
+    sound.unlock();
+    sound.handleEvents([
+      { kind: "shot", weapon: "rocket", ownerId: 0, x: 0, y: 0 },
+    ]);
+    expect(player.play).toHaveBeenCalledWith("explosion", 1, 1.25);
+    const { context, factory: bare } = createFakeAudioContext();
+    const silent = createArenaSound(bare, true, () => playerWith([]));
+    silent.unlock();
+    silent.handleEvents([
+      { kind: "shot", weapon: "rocket", ownerId: 0, x: 0, y: 0 },
+    ]);
+    expect(context.oscillators).toHaveLength(1);
+    const [start, ramp] = context.oscillators[0].operations.filter(
+      (operation) => operation.kind === "set" || operation.kind === "ramp",
+    );
+    expect(ramp).toMatchObject({ kind: "ramp" });
+    expect(ramp.value).toBeLessThan(start.value!);
+  });
+
   it("maps events to short voices and ignores unknown future events", () => {
     const { context, factory } = createFakeAudioContext();
     const sound = createArenaSound(factory, true);

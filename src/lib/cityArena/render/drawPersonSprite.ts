@@ -1,6 +1,7 @@
 import { PLAYER_RADIUS_M } from "../sim/player";
 import type { RasterContext } from "./canvasTypes";
-import type { PersonSprite, PropSprite } from "./sprites";
+import type { PersonSprite } from "./sprites";
+import { paintItem, type ItemArt } from "./vectorItems";
 
 /**
  * The character art faces *down* its own image: the generator drew every figure head at the top
@@ -89,7 +90,7 @@ export function drawPersonStrip(
  * its real size, scaled as the figure is: a pistol is a few pixels, a rifle a stick.
  *
  * @param context - The canvas, in screen space.
- * @param sprite - The item's art.
+ * @param art - The item's art, or its vector stand-in.
  * @param x - Screen x of the person.
  * @param y - Screen y of the person.
  * @param radius - The collision circle's screen radius, which sets the scale.
@@ -97,20 +98,21 @@ export function drawPersonStrip(
  */
 export function drawHeldItem(
   context: RasterContext,
-  sprite: PropSprite,
+  art: ItemArt,
   x: number,
   y: number,
   radius: number,
   facing: number,
 ): void {
   const scale = radius / PLAYER_RADIUS_M;
-  const length = sprite.lengthMetres * scale;
-  const width = sprite.widthMetres * scale;
+  const length = art.lengthMetres * scale;
+  const width = art.widthMetres * scale;
   context.save();
   context.translate(x, y);
   context.rotate(facing);
-  context.drawImage(
-    sprite.image,
+  paintItem(
+    context,
+    art,
     HAND_FORWARD_M * scale - length * GRIP_SHARE,
     HAND_RIGHT_M * scale - width / 2,
     length,

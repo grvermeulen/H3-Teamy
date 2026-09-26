@@ -88,7 +88,7 @@ const chaseWorld: ArenaWorld = {
 };
 const step = 1 / 30;
 const SPAWN_XS = [0, 100, 200, 300];
-const FULL_AMMO = { uzi: 60, shotgun: 8, rifle: 0, bat: 0 };
+const FULL_AMMO = { uzi: 60, shotgun: 8, rifle: 0, bat: 0, rocket: 0 };
 
 function boot(seed = 1): ArenaState {
   return createArenaState({ index, graph, seed, zone }, createRng(seed));
@@ -204,7 +204,7 @@ describe("createArenaState", () => {
       id: 0,
       health: 100,
       weapon: "pistol",
-      ammo: { uzi: 0, shotgun: 0, rifle: 0, bat: 0 },
+      ammo: { uzi: 0, shotgun: 0, rifle: 0, bat: 0, rocket: 0 },
       vehicleId: null,
       diedAtTick: null,
     });
@@ -645,12 +645,36 @@ describe("stepArena firing and death", () => {
     expect(checkInvariants(fired)).toEqual([]);
   });
 
+  it("fires a rocket that travels 1.5 m per tick and costs one of the four", () => {
+    const state = boot();
+    const me: ArenaPlayerState = {
+      ...localPlayer(state),
+      weapon: "rocket",
+      ammo: { ...FULL_AMMO, rocket: 4 },
+    };
+    const armed: ArenaState = { ...state, players: [me], vehicles: [] };
+    const trigger = createInput({ fire: true, aim: 0 });
+    const fired = run(armed, trigger, 1);
+    expect(fired.bullets).toHaveLength(1);
+    expect(fired.bullets[0]).toMatchObject({ weapon: "rocket", damage: 60 });
+    expect(fired.bullets[0].x).toBeCloseTo(me.x + 1.5);
+    expect(run(armed, trigger, 2).bullets[0].x).toBeCloseTo(me.x + 3);
+    expect(localPlayer(fired)).toMatchObject({
+      weapon: "rocket",
+      nextShotTick: 51,
+    });
+    expect(localPlayer(fired).ammo.rocket).toBe(3);
+    expect(fired.events).toContainEqual(
+      expect.objectContaining({ kind: "shot", weapon: "rocket" }),
+    );
+  });
+
   it("falls back to the pistol when a magazine runs dry", () => {
     const state = boot();
     const lastShell: ArenaPlayerState = {
       ...localPlayer(state),
       weapon: "shotgun",
-      ammo: { uzi: 0, shotgun: 1, rifle: 0, bat: 0 },
+      ammo: { uzi: 0, shotgun: 1, rifle: 0, bat: 0, rocket: 0 },
     };
     const fired = run(
       { ...state, players: [lastShell] },
@@ -727,7 +751,7 @@ describe("stepArena firing and death", () => {
       diedAtTick: null,
       weapon: "pistol",
       invulnerableUntilTick: alive.tick + 60,
-      ammo: { uzi: 0, shotgun: 0, rifle: 0, bat: 0 },
+      ammo: { uzi: 0, shotgun: 0, rifle: 0, bat: 0, rocket: 0 },
     });
     expect(SPAWN_XS).toContain(localPlayer(alive).x);
   });

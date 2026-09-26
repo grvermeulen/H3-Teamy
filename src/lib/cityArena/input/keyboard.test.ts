@@ -155,7 +155,7 @@ describe("attachKeyboard panels and slots", () => {
     document.removeEventListener("keydown", trap, true);
   });
 
-  it("picks a weapon with 1, 2 and 3, once per press", () => {
+  it("picks a weapon with the number keys, 6 for the rocket launcher, once per press", () => {
     const onWeaponSlot = vi.fn();
     const detach = attachKeyboard(window, createInputState(), undefined, {
       onWeaponSlot,
@@ -165,7 +165,8 @@ describe("attachKeyboard panels and slots", () => {
       new KeyboardEvent("keydown", { code: "Digit2", repeat: true }),
     );
     press("Digit3");
-    expect(onWeaponSlot.mock.calls.map(([slot]) => slot)).toEqual([2, 3]);
+    press("Digit6");
+    expect(onWeaponSlot.mock.calls.map(([slot]) => slot)).toEqual([2, 3, 6]);
     detach();
   });
 

@@ -7,7 +7,11 @@ import {
   MAX_PICKUPS,
   MAX_VEHICLES,
 } from "../sim/limits";
-import type { Snapshot } from "./snapshotWire";
+import {
+  MAX_WIRE_PICKUP_INDEX,
+  MAX_WIRE_WEAPON_INDEX,
+  type Snapshot,
+} from "./snapshotWire";
 import { VEHICLE_KINDS } from "../sim/vehicle";
 import type { InputFrame } from "./wire";
 import { MISSION_COMMANDS } from "./wire";
@@ -136,7 +140,7 @@ export function isSnapshot(value: unknown): value is Snapshot {
       (row) =>
         !integer(row[3], 0, 255) ||
         !integer(row[5], 0, 100) ||
-        !integer(row[6], 0, 6) ||
+        !integer(row[6], 0, MAX_WIRE_WEAPON_INDEX) ||
         !integer(row[7], 0, 10_000) ||
         !integer(row[8], 0, 10_000) ||
         !integer(row[9], -1, MAX_TICK) ||
@@ -185,7 +189,9 @@ export function isSnapshot(value: unknown): value is Snapshot {
     return false;
   if (
     snapshot.k.some(
-      (row) => !integer(row[1], 0, 4) || !integer(row[4], -1, MAX_TICK),
+      (row) =>
+        !integer(row[1], 0, MAX_WIRE_PICKUP_INDEX) ||
+        !integer(row[4], -1, MAX_TICK),
     )
   )
     return false;

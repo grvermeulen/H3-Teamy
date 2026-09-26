@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_INPUT, type WeaponKind } from "../sim/types";
+import { WEAPON_ORDER } from "../sim/weapons";
 import { SLOT_WEAPONS, createWeaponSelector } from "./weaponSelect";
 
 /** The rack in the order the simulation cycles it. */
@@ -15,6 +16,7 @@ function simulate(
   start: WeaponKind,
   ticks: number,
   empty: WeaponKind[] = [],
+  rack: readonly WeaponKind[] = RACK,
 ) {
   let held = start;
   let wasPressed = false;
@@ -24,7 +26,7 @@ function simulate(
     trace.push(input.weaponNext);
     if (input.weaponNext && !wasPressed) {
       let next = held;
-      do next = RACK[(RACK.indexOf(next) + 1) % RACK.length]!;
+      do next = rack[(rack.indexOf(next) + 1) % rack.length]!;
       while (empty.includes(next) && next !== held);
       held = next;
     }
@@ -62,9 +64,18 @@ describe("createWeaponSelector", () => {
     const selector = createWeaponSelector();
     selector.request("shotgun");
     const { trace } = simulate(selector, "pistol", 40, ["shotgun"]);
-    // Two laps of the six-weapon rack: twelve presses, a tick each with a release between.
-    expect(trace.slice(0, 24).filter(Boolean)).toHaveLength(12);
-    expect(trace.slice(24).some(Boolean)).toBe(false);
+    // Two laps of the seven-weapon rack: fourteen presses, a tick each with a release between.
+    expect(trace.slice(0, 28).filter(Boolean)).toHaveLength(14);
+    expect(trace.slice(28).some(Boolean)).toBe(false);
+  });
+
+  it("reaches the rocket launcher on slot 6, at the end of the real rack", () => {
+    expect(SLOT_WEAPONS[6]).toBe("rocket");
+    const selector = createWeaponSelector();
+    selector.request(SLOT_WEAPONS[6]);
+    expect(simulate(selector, "fist", 16, [], WEAPON_ORDER).held).toBe(
+      "rocket",
+    );
   });
 
   it("does nothing for the weapon already held", () => {

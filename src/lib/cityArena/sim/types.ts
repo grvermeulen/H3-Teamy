@@ -78,7 +78,9 @@ export type WeaponKind =
   | "bat"
   | "rifle"
   /** The tank's gun; never carried, fired from the driver's seat of a tank. */
-  | "cannon";
+  | "cannon"
+  /** The rocket launcher (Raketwerper): carried, its rockets detonate like the tank's shell. */
+  | "rocket";
 
 /** Car kinds (spec §5). */
 export type VehicleKind =
@@ -148,7 +150,7 @@ export type EffectState = {
 };
 
 /** Rounds left for the magazine weapons; pistol and fist are unlimited. */
-export type MagazineWeapon = "uzi" | "shotgun" | "rifle" | "bat";
+export type MagazineWeapon = "uzi" | "shotgun" | "rifle" | "bat" | "rocket";
 /** Rounds carried per magazine weapon; the bat's are swings before it breaks. */
 export type AmmoState = Record<MagazineWeapon, number>;
 
@@ -187,8 +189,9 @@ export type ArenaPlayerState = PlayerState & {
 /** Buttons whose previous held state the simulation remembers for edge detection. */
 export type HeldButtons = { enter: boolean; weaponNext: boolean };
 
-/** Kinds of pickups: magazine ammunition or health. */
-export type PickupKind = "uzi" | "shotgun" | "health" | "rifle" | "bat";
+/** Kinds of pickups: magazine ammunition (rockets included) or health. */
+export type PickupKind =
+  "uzi" | "shotgun" | "health" | "rifle" | "bat" | "rocket";
 
 /** A pickup spot; taken pickups wait for their respawn timer. */
 export type PickupState = {

@@ -1,6 +1,6 @@
 /**
- * Picking a weapon directly (spec §7: 1/2/3 and the mouse wheel) on top of an input model that
- * only knows "next weapon".
+ * Picking a weapon directly (spec §7: the number keys 1–6 and the mouse wheel) on top of an input
+ * model that only knows "next weapon".
  *
  * The simulation switches weapons on the rising edge of `weaponNext`, and the wire carries that
  * one bit, so a direct pick is made here on the client: press and release `weaponNext` a tick at
@@ -9,9 +9,10 @@
  */
 
 import type { WeaponKind, WorldInput } from "../sim/types";
+import { WEAPON_ORDER } from "../sim/weapons";
 
 /** The number keys, and what they reach for. */
-export type WeaponSlot = 1 | 2 | 3 | 4 | 5;
+export type WeaponSlot = 1 | 2 | 3 | 4 | 5 | 6;
 
 /** Which weapon each slot picks; fists are what you have when the rest is empty, not a pick. */
 export const SLOT_WEAPONS: Record<WeaponSlot, WeaponKind> = {
@@ -20,10 +21,11 @@ export const SLOT_WEAPONS: Record<WeaponSlot, WeaponKind> = {
   3: "shotgun",
   4: "rifle",
   5: "bat",
+  6: "rocket",
 };
 
-/** Presses a request may take before it is given up on: two laps of the six-weapon rack. */
-const MAX_PRESSES = 12;
+/** Presses a request may take before it is given up on: two laps of the rack. */
+const MAX_PRESSES = WEAPON_ORDER.length * 2;
 
 /** Turns picks and wheel notches into the `weaponNext` edges the simulation understands. */
 export type WeaponSelector = {

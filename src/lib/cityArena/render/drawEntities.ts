@@ -6,7 +6,8 @@ import type { MapZone } from "../world/mapTypes";
 import { zoneCentreMetres, zoneRadiusMetres } from "../world/zone";
 import { worldToScreen, type Camera, type Viewport } from "./camera";
 import type { RasterContext } from "./canvasTypes";
-import type { PersonSprite, PropSprite } from "./sprites";
+import type { PersonSprite } from "./sprites";
+import type { ItemArt } from "./vectorItems";
 import {
   PLAYER_DEAD_FILL,
   PLAYER_DEAD_RING,
@@ -110,7 +111,7 @@ export function drawPlayer(
   style: PlayerStyle = DEFAULT_PLAYER_STYLE,
   sprite?: PersonSprite,
   tick = 0,
-  held?: PropSprite,
+  held?: ItemArt,
 ): void {
   const [x, y] = worldToScreen(camera, viewport, [player.x, player.y]);
   const radius = Math.max(MIN_PLAYER_RADIUS_PX, PLAYER_RADIUS_M * camera.zoom);

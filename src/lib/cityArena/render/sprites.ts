@@ -54,8 +54,9 @@ export const PROP_KEYS = [
 export type PropKey = (typeof PROP_KEYS)[number];
 
 /**
- * The items the manifest may carry: the five pickup kinds, which are also the five weapons a
- * hand can hold (a fist holds nothing) — so a pickup's kind and a weapon's kind are the key.
+ * The items the manifest may carry: the pistol, the pickup kinds and the weapons a hand can hold
+ * (a fist holds nothing) — so a pickup's kind and a weapon's kind are the key. The rocket has no
+ * art yet; `vectorItems.ts` stands in for it until it does.
  */
 export const ITEM_KEYS = [
   "pistol",
@@ -64,6 +65,7 @@ export const ITEM_KEYS = [
   "rifle",
   "bat",
   "health",
+  "rocket",
 ] as const;
 
 /** A key of {@link ITEM_KEYS}. */

@@ -176,6 +176,12 @@ export const PICKUP_SHOTGUN = "#f97316";
 export const PICKUP_RIFLE = "#0ea5e9";
 /** Bat pickup diamond. */
 export const PICKUP_BAT = "#a16207";
+/** Rocket pickup on the radar: the warhead's red, unlike any other mark there. */
+export const PICKUP_ROCKET = "#ef4444";
+/** The rocket launcher's vector stand-in: an olive tube… */
+export const ROCKET_TUBE = "#556b2f";
+/** …with the rocket's red tip showing at the muzzle. */
+export const ROCKET_TIP = "#dc2626";
 /** Health pickup diamond. */
 export const PICKUP_HEALTH = "#22c55e";
 /** Health pickup cross. */

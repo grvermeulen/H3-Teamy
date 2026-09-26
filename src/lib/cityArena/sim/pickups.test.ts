@@ -4,6 +4,7 @@ import type { MapIndex, MapZone } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
 import { createArenaState } from "./arena";
 import {
+  PICKUP_ROUNDS,
   applyPickupToPlayer,
   canTakePickup,
   placePickups,
@@ -124,6 +125,24 @@ describe("placePickups", () => {
       "uzi",
     ]);
   });
+
+  it("places exactly one rocket launcher, after the bats, where the zone has room", () => {
+    const roomy: MapZone = {
+      ...zone,
+      landmarks: [],
+      spawnNodes: Array.from({ length: 16 }, (_, node): [number, number] => [
+        node * 200,
+        0,
+      ]),
+    };
+    const pickups = placePickups(index, roomy, graph, createRng(7), [], 1);
+    const kinds = pickups.map((pickup) => pickup.kind);
+    expect(kinds.filter((kind) => kind === "rocket")).toHaveLength(1);
+    expect(kinds).toHaveLength(13);
+    expect(kinds.at(-1)).toBe("rocket");
+    expect(kinds.slice(-3, -1)).toEqual(["bat", "bat"]);
+    expect(pickups.at(-1)?.id).toBe(13);
+  });
 });
 
 describe("taking pickups", () => {
@@ -133,14 +152,17 @@ describe("taking pickups", () => {
     expect(canTakePickup(player, pickupAt("health", 0))).toBe(false);
     expect(
       canTakePickup(
-        { ...player, ammo: { uzi: 120, shotgun: 0, rifle: 0, bat: 0 } },
+        {
+          ...player,
+          ammo: { uzi: 120, shotgun: 0, rifle: 0, bat: 0, rocket: 0 },
+        },
         pickupAt("uzi", 0),
       ),
     ).toBe(false);
     const armed = applyPickupToPlayer(player, pickupAt("shotgun", 0));
     expect(armed).toMatchObject({
       weapon: "shotgun",
-      ammo: { uzi: 0, shotgun: 8, rifle: 0, bat: 0 },
+      ammo: { uzi: 0, shotgun: 8, rifle: 0, bat: 0, rocket: 0 },
     });
     const kept = applyPickupToPlayer(
       { ...armed, weapon: "shotgun" },
@@ -148,12 +170,23 @@ describe("taking pickups", () => {
     );
     expect(kept).toMatchObject({
       weapon: "shotgun",
-      ammo: { uzi: 60, shotgun: 8, rifle: 0, bat: 0 },
+      ammo: { uzi: 60, shotgun: 8, rifle: 0, bat: 0, rocket: 0 },
     });
     expect(
       applyPickupToPlayer({ ...player, health: 30 }, pickupAt("health", 0))
         .health,
     ).toBe(80);
+  });
+
+  it("grants four rockets and arms a pistol holder, up to the twelve carried", () => {
+    const player = { ...localPlayer(lonePlayer()), weapon: "pistol" as const };
+    expect(PICKUP_ROUNDS.rocket).toBe(4);
+    const armed = applyPickupToPlayer(player, pickupAt("rocket", 0));
+    expect(armed.weapon).toBe("rocket");
+    expect(armed.ammo.rocket).toBe(4);
+    expect(canTakePickup(armed, pickupAt("rocket", 0))).toBe(true);
+    const full = { ...armed, ammo: { ...armed.ammo, rocket: 12 } };
+    expect(canTakePickup(full, pickupAt("rocket", 0))).toBe(false);
   });
 
   it("takes an active pickup and respawns it after 600 ticks", () => {
@@ -164,7 +197,7 @@ describe("taking pickups", () => {
     const taken = stepPickups(state, 5);
     expect(localPlayer(taken)).toMatchObject({
       weapon: "uzi",
-      ammo: { uzi: 60, shotgun: 0, rifle: 0, bat: 0 },
+      ammo: { uzi: 60, shotgun: 0, rifle: 0, bat: 0, rocket: 0 },
     });
     expect(taken.pickups[0].takenAtTick).toBe(5);
     expect(taken.events).toEqual([
