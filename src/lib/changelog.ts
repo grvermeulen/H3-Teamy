@@ -24,6 +24,27 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.5.0": {
+    title: "GTA H3 in 3D",
+    steps: [
+      {
+        title: "Speel de stad in 3D",
+        body: "Schakel om met de 3D-knop in de HUD of via Menu → Weergave. Druk op V om te wisselen tussen derde en eerste persoon en klik om met de muis te richten. Zonder muisvergrendeling werkt richten ook gewoon.",
+      },
+      {
+        title: "Gebouwen kun je opblazen",
+        body: "Genoeg schade en een gebouw stort in tot puin. Na een paar minuten wordt het herbouwd. Iedereen in de kamer ziet dezelfde instorting en hetzelfde puin, in 2D en in 3D.",
+      },
+      {
+        title: "Raketwerper",
+        body: "Nieuw wapen op toets 6, één exemplaar te vinden per wijk. Ook de granaten van de tank ontploffen nu net zo hard.",
+      },
+      {
+        title: "Missiebakens ook in 3D",
+        body: "Bakens en de routelint naar je missie blijven zichtbaar in de 3D-weergave, zodat je nooit de weg kwijtraakt.",
+      },
+    ],
+  },
   "0.4.6": {
     title: "Nieuwe beukers op de autoradio",
     steps: [
