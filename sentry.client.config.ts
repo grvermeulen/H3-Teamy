@@ -4,6 +4,10 @@ import {
   shouldDropBrowserExtensionNoiseEvent,
 } from "@/lib/sentryBrowserExtensionNoise";
 import { shouldDropBenignClientFetchNoiseEvent } from "@/lib/sentryBenignClientFetchNoise";
+import {
+  BENIGN_POINTER_LOCK_WRONG_DOCUMENT_IGNORE_RE,
+  shouldDropBenignPointerLockNoiseEvent,
+} from "@/lib/sentryBenignPointerLockNoise";
 
 /**
  * Parseert traces sample rate (0–1) uit env; default 0.1 voor productie.
@@ -20,13 +24,19 @@ function parseTracesSampleRate(): number {
 Sentry.init({
   dsn: "https://31454117718e26c4a62047b74d633fe0@o4509873010049024.ingest.de.sentry.io/4509873018634320",
 
-  ignoreErrors: [BROWSER_EXTENSION_RUNTIME_SEND_MESSAGE_IGNORE_RE],
+  ignoreErrors: [
+    BROWSER_EXTENSION_RUNTIME_SEND_MESSAGE_IGNORE_RE,
+    BENIGN_POINTER_LOCK_WRONG_DOCUMENT_IGNORE_RE,
+  ],
 
   beforeSend(event, hint) {
     if (shouldDropBrowserExtensionNoiseEvent(event, hint)) {
       return null;
     }
     if (shouldDropBenignClientFetchNoiseEvent(event, hint)) {
+      return null;
+    }
+    if (shouldDropBenignPointerLockNoiseEvent(event, hint)) {
       return null;
     }
     return event;
