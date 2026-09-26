@@ -5,14 +5,20 @@
  * target of your current objective. Pure: no three.js here.
  *
  * Working out which jobs are open and where the targets are takes the mission catalogue and
- * allocates, so it runs when your mission profile or the contact list changes and otherwise every
- * {@link MARKER_REFRESH_TICKS}; in between, a frame only moves the beacons of targets that walk or
- * drive, and allocates nothing.
+ * allocates, so it runs when the contact list or something the markers read from your mission
+ * changes (its stage, progress, inventory, completed jobs, bound actors — not the clocks the
+ * simulation moves every tick) and otherwise every {@link MARKER_REFRESH_TICKS}; in between, a
+ * frame only moves the beacons of targets that walk or drive, and allocates nothing.
  */
 import { missionById } from "../missions/catalog";
 import { MISSION_CONTACTS, type MissionContact } from "../missions/contacts";
 import { missionScenario } from "../missions/scenarios";
-import type { MissionProfile, MissionTarget } from "../missions/types";
+import type {
+  MissionProfile,
+  MissionRun,
+  MissionTarget,
+  ObjectiveProgress,
+} from "../missions/types";
 import {
   emptyMissionProfile,
   missionAnchor,
@@ -34,6 +40,16 @@ export const OBJECTIVE_COLOUR = 0xfde047;
 export const OPTIONAL_OBJECTIVE_COLOUR = 0x67e8f9;
 /** Radix of a CSS hex colour. */
 const HEX_RADIX = 16;
+/** Seed and step of the running hash behind {@link missionSignature}. */
+const SIGNATURE_SEED = 17;
+const SIGNATURE_STEP = 31;
+/** A run's statuses, numbered for the hash. */
+const RUN_STATUSES: readonly MissionRun["status"][] = [
+  "active",
+  "completed",
+  "failed",
+  "abandoned",
+];
 /** A contact list when the scene has none. */
 const NO_CONTACTS: readonly MissionContact[] = [];
 
@@ -91,7 +107,10 @@ type MarkerState = {
   objectives: Objective[];
   beacons: BeaconSpot[];
   primed: boolean;
-  profile: MissionProfile | undefined;
+  /** The profile last looked at, and what the markers read from it: its signature and job. */
+  profileSeen: MissionProfile | undefined;
+  signature: number;
+  definitionId: string | null;
   round: boolean;
   refreshedTick: number;
 };
@@ -212,16 +231,63 @@ function followObjectives(
   }
 }
 
+/** Folds a number into a running hash. */
+function fold(hash: number, value: number): number {
+  return (hash * SIGNATURE_STEP + value) | 0;
+}
+
+/** Folds an objective's progress into a hash: what is done, collected and passed. */
+function foldProgress(hash: number, progress: ObjectiveProgress): number {
+  let next = fold(hash, progress.done ? 1 : 0);
+  next = fold(fold(next, progress.collected.length), progress.gate);
+  for (const child of progress.children) next = foldProgress(next, child);
+  return next;
+}
+
+/**
+ * A number that changes when anything the markers read from a mission profile does — the run's
+ * status, stage, progress and inventory, the jobs completed, the actors bound — but not with the
+ * run's clocks, which the simulation moves every tick. Allocates nothing.
+ */
+function missionSignature(profile: MissionProfile | undefined): number {
+  if (!profile) return 0;
+  let hash = fold(SIGNATURE_SEED, profile.completed.length);
+  for (const alias in profile.actors)
+    hash = fold(hash, profile.actors[alias].id);
+  const run = profile.run;
+  if (!run) return hash;
+  hash = fold(hash, RUN_STATUSES.indexOf(run.status));
+  hash = fold(fold(hash, run.stage), run.inventory.length);
+  return foldProgress(hash, run.objective);
+}
+
+/** Takes note of your profile; true when something the markers read from it has changed. */
+function profileMoved(
+  state: MarkerState,
+  profile: MissionProfile | undefined,
+): boolean {
+  if (profile === state.profileSeen) return false;
+  state.profileSeen = profile;
+  const signature = missionSignature(profile);
+  const definitionId = profile?.run?.definitionId ?? null;
+  const moved =
+    signature !== state.signature || definitionId !== state.definitionId;
+  state.signature = signature;
+  state.definitionId = definitionId;
+  return moved;
+}
+
 /** True when the open jobs and targets must be worked out again this frame. */
 function refreshDue(
   state: MarkerState,
   player: ArenaPlayerState | undefined,
   scene: MissionMarkerScene,
 ): boolean {
+  const moved = profileMoved(state, player?.mission);
   const age = scene.tick - state.refreshedTick;
   return (
     !state.primed ||
-    player?.mission !== state.profile ||
+    moved ||
     (scene.missionRound ?? false) !== state.round ||
     age < 0 ||
     age >= MARKER_REFRESH_TICKS
@@ -251,7 +317,6 @@ function refresh(
     ...state.objectives.map((objective) => objective.spot),
   ];
   state.primed = true;
-  state.profile = player?.mission;
   state.round = round;
   state.refreshedTick = scene.tick;
 }
@@ -269,7 +334,9 @@ export function createMissionMarkers(): MissionMarkers {
     objectives: [],
     beacons: [],
     primed: false,
-    profile: undefined,
+    profileSeen: undefined,
+    signature: 0,
+    definitionId: null,
     round: false,
     refreshedTick: 0,
   };
@@ -277,14 +344,15 @@ export function createMissionMarkers(): MissionMarkers {
     update(scene) {
       const list = scene.missionContacts ?? NO_CONTACTS;
       const player = localPlayer(scene);
-      const moved = !sameContacts(state.list, list);
-      if (moved) {
+      const restood = !sameContacts(state.list, list);
+      if (restood) {
         state.list = list;
         state.standing = standContacts(list);
         state.contacts = state.standing.map((standing) => standing.spot);
       }
-      if (moved || refreshDue(state, player, scene))
-        refresh(state, player, scene);
+      // Always asked, so the profile it has seen stays current.
+      const due = refreshDue(state, player, scene);
+      if (restood || due) refresh(state, player, scene);
       else followObjectives(state.objectives, scene);
     },
     get contacts() {

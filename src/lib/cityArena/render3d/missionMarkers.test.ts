@@ -178,6 +178,22 @@ describe("createMissionMarkers: objectives", () => {
     expect([objective.x, objective.y]).toEqual([44, 53]);
   });
 
+  it("works nothing out again while only the run's clock moves on, but does for a new stage", () => {
+    const markers = createMissionMarkers();
+    const profile = running("M01");
+    markers.update(sceneOf({ players: [you(profile)] }));
+    const beacons = markers.beacons;
+
+    // The simulation hands over a fresh profile every tick while a job runs.
+    const ticked = { ...profile, run: { ...profile.run!, lastTick: 1 } };
+    markers.update(sceneOf({ players: [you(ticked)], tick: TICK + 1 }));
+    expect(markers.beacons).toBe(beacons);
+
+    const staged = { ...ticked, run: { ...ticked.run!, stage: 1 } };
+    markers.update(sceneOf({ players: [you(staged)], tick: TICK + 2 }));
+    expect(markers.beacons).not.toBe(beacons);
+  });
+
   it("drops the objective's beacon when the job is over", () => {
     const markers = createMissionMarkers();
     markers.update(sceneOf({ players: [you(running("M01"))] }));
