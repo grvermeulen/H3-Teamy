@@ -143,7 +143,9 @@ function clipFor(event: ArenaEvent): ClipName | null {
     // The cannon has no recording of its own; the explosion clip is the bang it deserves.
     return event.weapon === "cannon" ? "explosion" : event.weapon;
   }
-  if (event.kind === "explosion") return "explosion";
+  // A building collapse gets the same bang as any other explosion (spec §5).
+  if (event.kind === "explosion" || event.kind === "collapse")
+    return "explosion";
   if (event.kind === "pickup" || event.kind === "beer") return "pickup";
   if (event.kind === "impact") return "impact";
   return null;
@@ -272,7 +274,11 @@ export function createArenaSound(
   }
 
   function handleEvent(event: ArenaEvent): void {
-    if (event.kind === "shot" || event.kind === "explosion")
+    if (
+      event.kind === "shot" ||
+      event.kind === "explosion" ||
+      event.kind === "collapse"
+    )
       radioPlayer?.duck();
     // A clip that played is the whole sound; the oscillator branches below are the fallback for
     // a clip that has not landed, and stay for as long as that can be true.
@@ -295,7 +301,7 @@ export function createArenaSound(
         gain,
         tone.endFrequency,
       );
-    } else if (event.kind === "explosion") {
+    } else if (event.kind === "explosion" || event.kind === "collapse") {
       playTone(95, 0.35, "sawtooth", 0.35, 35);
     } else if (event.kind === "pickup" || event.kind === "beer") {
       playTone(520, 0.08, "sine", 0.16);

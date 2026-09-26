@@ -65,6 +65,24 @@ describe("createArenaSound", () => {
     expect(context.oscillators).toHaveLength(1);
   });
 
+  it("voices a building collapse with the explosion clip, and the same fallback tone", () => {
+    const player = playerWith(["explosion"]);
+    const { factory } = createFakeAudioContext();
+    const sound = createArenaSound(factory, true, () => player);
+    sound.unlock();
+    sound.handleEvents([
+      { kind: "collapse", structureId: 1, x: 0, y: 0, killerId: null },
+    ]);
+    expect(player.play).toHaveBeenCalledWith("explosion");
+    const { context, factory: bare } = createFakeAudioContext();
+    const silent = createArenaSound(bare, true, () => playerWith([]));
+    silent.unlock();
+    silent.handleEvents([
+      { kind: "collapse", structureId: 1, x: 0, y: 0, killerId: null },
+    ]);
+    expect(context.oscillators).toHaveLength(1);
+  });
+
   it("launches a rocket with a falling whoosh, never the explosion clip, even when it has loaded", () => {
     const player = playerWith(["explosion", "shotgun", "pistol"]);
     const { context, factory } = createFakeAudioContext();

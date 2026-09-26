@@ -144,6 +144,12 @@ export const IMPACT_FILL = "#f5f5f5";
 export const EXPLOSION_FILL = "rgba(255,140,0,0.8)";
 /** Explosion ring. */
 export const EXPLOSION_RING = "#ff5722";
+/** Rocket body. */
+export const ROCKET_BODY_FILL = "#5f6b2e";
+/** Rocket smoke puff. */
+export const ROCKET_SMOKE_FILL = "#c9c9c9";
+/** Outline that gives the tank's cannon shell a heavier look. */
+export const SHELL_OUTLINE_STROKE = "#4a3418";
 /** Mouse crosshair. */
 export const CROSSHAIR_STROKE = "rgba(255,255,255,0.9)";
 /** Body of a player waiting to respawn. */

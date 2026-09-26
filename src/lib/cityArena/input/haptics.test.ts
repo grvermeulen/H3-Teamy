@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { createArenaPlayer } from "../sim/roster";
 import type { ArenaEvent, ArenaPlayerState } from "../sim/types";
 import {
+  COLLAPSE_FEEL_RADIUS_M,
   EXPLOSION_FEEL_RADIUS_M,
   HAPTIC_MIN_GAP_MS,
   createHaptics,
@@ -109,6 +110,27 @@ describe("hapticPulses", () => {
       x: EXPLOSION_FEEL_RADIUS_M + 1,
       y: 0,
     };
+    expect(hapticPulses([near, far], player, 100)).toEqual([
+      { kind: "explosion", strength: 1 },
+    ]);
+  });
+
+  it("feels a building collapse as a heavy pulse, out to 60 m", () => {
+    const near: ArenaEvent = {
+      kind: "collapse",
+      structureId: 1,
+      x: 10,
+      y: 0,
+      killerId: null,
+    };
+    const far: ArenaEvent = {
+      kind: "collapse",
+      structureId: 2,
+      x: COLLAPSE_FEEL_RADIUS_M + 5,
+      y: 0,
+      killerId: null,
+    };
+    expect(COLLAPSE_FEEL_RADIUS_M).toBeGreaterThan(EXPLOSION_FEEL_RADIUS_M);
     expect(hapticPulses([near, far], player, 100)).toEqual([
       { kind: "explosion", strength: 1 },
     ]);

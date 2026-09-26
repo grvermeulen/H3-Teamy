@@ -10,6 +10,7 @@ import {
   MUZZLE_FILL,
   PED_FILL,
   PICKUP_UZI,
+  PLACEHOLDER_FILL,
   PLAYER_FILL,
   PLAYER_OTHER_FILL,
   POLICE_LIGHT_BLUE,
@@ -22,6 +23,7 @@ import {
   type Scene,
 } from "./renderScene";
 import { CANOPY_LAYER } from "./drawScenery";
+import { RUBBLE_FILL } from "./drawStructures";
 import { createStaticRaster } from "./staticRaster";
 import { createFakeContext, createFakeTarget } from "./testing/fakeContext";
 
@@ -222,6 +224,65 @@ describe("renderScene police lights", () => {
     expect(
       context.calls.filter((call) => call === `fill(${POLICE_LIGHT_BLUE})`),
     ).toHaveLength(1);
+  });
+});
+
+describe("renderScene structures", () => {
+  it("draws ruins right after the ground chunks, before entities", () => {
+    const tile = {
+      x: 0,
+      y: 0,
+      rect: { minX: -1000, minY: -1000, maxX: 1000, maxY: 1000 },
+      roads: [],
+      buildings: [
+        {
+          structureId: 1,
+          ring: [
+            [-5, -5],
+            [5, -5],
+            [5, 5],
+            [-5, 5],
+          ] as [number, number][],
+          bounds: { minX: -5, minY: -5, maxX: 5, maxY: 5 },
+          levels: 1,
+        },
+      ],
+      ground: [],
+      water: [],
+      trees: [],
+      furniture: [],
+    };
+    const context = createFakeContext();
+    renderScene(
+      context,
+      viewport,
+      sceneWith({
+        world: {
+          raster: createStaticRaster(() => null),
+          overhead: createStaticRaster(() => null),
+          tiles: [tile],
+          landmarks: new Map(),
+          loadedTileRects: [tile.rect],
+        },
+        structures: [
+          {
+            id: 1,
+            damage: 200,
+            destroyedAtTick: 5,
+            lastHitTick: 5,
+            x: 0,
+            y: 0,
+            radius: 7,
+          },
+        ],
+      }),
+    );
+    const chunkFill = context.calls.indexOf(`fill(${PLACEHOLDER_FILL})`);
+    const rubble = context.calls.indexOf(`fill(${RUBBLE_FILL})`);
+    const player = context.calls.indexOf(`fill(${PLAYER_FILL})`);
+    expect(chunkFill).toBeGreaterThan(-1);
+    expect(rubble).toBeGreaterThan(chunkFill);
+    expect(rubble).toBeLessThan(player);
   });
 });
 

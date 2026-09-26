@@ -8,6 +8,7 @@ import type {
   EffectState,
   PedState,
   PickupState,
+  StructureState,
   VehicleState,
 } from "../sim/types";
 import type { MapZone } from "../world/mapTypes";
@@ -23,6 +24,7 @@ import {
   playerLook,
 } from "./drawEntities";
 import { drawBullets, drawCrosshair, drawEffects } from "./drawProjectiles";
+import { drawStructureDamage } from "./drawStructures";
 import { drawPeople } from "./drawPeople";
 import { drawNavigation } from "./drawNavigation";
 import type { Point } from "../world/projection";
@@ -68,6 +70,8 @@ export type Scene = {
   vehicles: VehicleState[];
   bullets: BulletState[];
   effects: EffectState[];
+  /** Damaged or destroyed buildings (spec §3.4); drawn as ruins and damage shading over the chunks. */
+  structures?: readonly StructureState[];
   /** Cars the police are driving: their lights flash, and near this player the siren sounds. */
   sirenVehicleIds?: ReadonlySet<number>;
   tick: number;
@@ -243,6 +247,13 @@ export function renderScene(
     context.translate(scene.shake.x, scene.shake.y);
   }
   const stats = drawVisibleChunks(context, camera, size, scene.world);
+  drawStructureDamage(
+    context,
+    camera,
+    size,
+    scene.world.tiles,
+    scene.structures ?? [],
+  );
   if (scene.zone) drawZoneRing(context, camera, size, scene.zone);
   if (scene.navigation) drawNavigation(context, camera, size, scene.navigation);
   drawPickups(
