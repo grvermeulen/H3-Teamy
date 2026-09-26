@@ -11,8 +11,10 @@ import {
 } from "./players";
 import type { MapIndex } from "../world/mapTypes";
 import type { Point } from "../world/projection";
+import { withoutStructures } from "../world/collisionView";
 import { findZone } from "../world/zone";
 import { pruneEffects } from "./effects";
+import { destroyedStructureIds, stepStructures } from "./structures";
 import { applyPopulation, populateZone } from "./populate";
 import { manageCops, stepCops } from "./cops";
 import { stepPeds } from "./peds";
@@ -149,8 +151,15 @@ export function stepArena(
     Boolean(state.players[0].mission?.offer);
   const tick = state.tick + (paused ? 0 : 1);
   let next: ArenaState = { ...state, tick, events: [] };
+  // A destroyed building is removed from collision for the whole tick through this view, built
+  // once up front (spec §3.5): every stage below reads `live` instead of `world`, so cars drive
+  // over rubble, people walk through the gap and bullets pass. The grid itself is never mutated.
+  const live: ArenaWorld = {
+    ...world,
+    collision: withoutStructures(world.collision, destroyedStructureIds(state)),
+  };
   if (!paused) {
-    next = applyPopulation(next, world, tick, random);
+    next = applyPopulation(next, live, tick, random);
     next = stepPickups(next, tick);
   }
   for (const player of orderedPlayers(next))
@@ -158,12 +167,12 @@ export function stepArena(
       next,
       player.id,
       inputs.get(player.id) ?? EMPTY_INPUT,
-      world,
+      live,
       tick,
       random,
     );
   if (paused) return next;
-  next = ensureMissionActors(next, world);
+  next = ensureMissionActors(next, live);
   const worldInputs = new Map(
     [...inputs].map(([id, input]) => [
       id,
@@ -172,8 +181,8 @@ export function stepArena(
         : input,
     ]),
   );
-  next = moveEntities(next, worldInputs, dt, world, tick, random);
-  next = stepBoarding(next, world);
+  next = moveEntities(next, worldInputs, dt, live, tick, random);
+  next = stepBoarding(next, live);
   for (const player of orderedPlayers(next))
     next = applyFire(
       next,
@@ -182,20 +191,21 @@ export function stepArena(
       tick,
       random,
     );
-  next = stepCops(next, world, dt, tick, random);
-  next = stepPeds(next, world, dt, tick, random);
-  next = stepMissionActors(next, world, random);
-  next = advanceBullets(next, dt, world, tick);
-  next = applyExplosions(next, world, tick);
+  next = stepCops(next, live, dt, tick, random);
+  next = stepPeds(next, live, dt, tick, random);
+  next = stepMissionActors(next, live, random);
+  next = advanceBullets(next, dt, live, tick);
+  next = applyExplosions(next, live, tick);
+  next = stepStructures(next, tick);
   next = applyZoneRule(next, world.index, tick);
   next = soberUp(next);
   next = stepLandmarkBonuses(next);
   next = stepWorldMissions(next, state, inputs, world.index);
   next = applyWanted(next, tick);
-  next = manageCops(next, world, tick, random);
-  next = managePoliceCars(next, world, tick, random);
+  next = manageCops(next, live, tick, random);
+  next = managePoliceCars(next, live, tick, random);
   for (const player of orderedPlayers(next))
-    next = ejectIfDead(next, player, world);
+    next = ejectIfDead(next, player, live);
   // zoneKey labels the HUD for whoever holds this state, so it follows the lowest-id player. An
   // empty roster is legal between a leave and the next join, and simply leaves the label alone.
   const anchor = orderedPlayers(next)[0];

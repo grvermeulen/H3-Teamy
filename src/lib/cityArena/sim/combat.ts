@@ -8,6 +8,8 @@ import {
   playerById,
   replacePlayer,
 } from "./players";
+import { boundsOf } from "../mapBuild/geometry";
+import type { Obstacle } from "../world/collisionGrid";
 import type { Point } from "../world/projection";
 import {
   MAX_BULLETS,
@@ -16,6 +18,7 @@ import {
   type BulletHit,
   type PlayerTarget,
 } from "./bullets";
+import { BULLET_STRUCTURE_FACTOR, damageStructure } from "./structures";
 import {
   EXPLOSION_DAMAGE,
   LETHAL_DAMAGE,
@@ -237,10 +240,57 @@ function withHitEvent(
   };
 }
 
-/** Applies one bullet hit to a pedestrian, car or player on foot. */
-function applyHit(state: ArenaState, hit: BulletHit, tick: number): ArenaState {
+/** The building obstacle a hit's structure id names, found by querying the collision view around
+ * the impact point (the raycast that produced the hit already knows it crossed this building's
+ * outline, so the id always resolves to an obstacle whose bounding box contains `point`). */
+function structureObstacle(
+  world: ArenaWorld,
+  point: Point,
+  structureId: number,
+): Obstacle | null {
+  const rect = boundsOf([point]);
+  return (
+    world.collision
+      .query(rect)
+      .find((obstacle) => obstacle.structure?.id === structureId) ?? null
+  );
+}
+
+/** Bullet damage to the building it hit, unless the weapon is melee or the id cannot be resolved
+ * (spec §3.3: a bullet deals a quarter of its damage to the structure). */
+function applyBuildingHit(
+  state: ArenaState,
+  hit: BulletHit,
+  world: ArenaWorld,
+  tick: number,
+): ArenaState {
+  const structureId =
+    hit.target.kind === "building" ? hit.target.structureId : null;
+  if (structureId === null || isMelee(hit.bullet.weapon)) return state;
+  const obstacle = structureObstacle(world, hit.point, structureId);
+  if (!obstacle) return state;
+  return damageStructure(
+    state,
+    {
+      obstacle,
+      amount: hit.bullet.damage * BULLET_STRUCTURE_FACTOR,
+      killerId: hit.bullet.ownerId,
+    },
+    tick,
+  );
+}
+
+/** Applies one bullet hit to a pedestrian, car, player on foot or building. */
+function applyHit(
+  state: ArenaState,
+  hit: BulletHit,
+  tick: number,
+  world: ArenaWorld,
+): ArenaState {
   const entity = applyEntityHit(state, hit, tick);
   if (entity) return entity;
+  if (hit.target.kind === "building")
+    return applyBuildingHit(state, hit, world, tick);
   if (hit.target.kind === "vehicle") {
     const vehicleId = hit.target.vehicleId;
     const vehicles = state.vehicles.map((vehicle) =>
@@ -311,7 +361,7 @@ export function advanceBullets(
   });
   let next: ArenaState = { ...state, bullets: swept.bullets };
   for (const hit of swept.hits) {
-    const struck = applyHit(next, hit, tick);
+    const struck = applyHit(next, hit, tick, world);
     next = {
       ...struck,
       nextId: struck.nextId + 1,

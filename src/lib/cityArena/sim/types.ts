@@ -309,7 +309,31 @@ export type ArenaEvent =
   | { kind: "wanted"; playerId: number; level: number }
   | { kind: "zone"; playerId: number; phase: "warning" | "damage" }
   /** A beer ordered at the brewery, for the sound and the haptics. */
-  | { kind: "beer"; playerId: number; x: number; y: number };
+  | { kind: "beer"; playerId: number; x: number; y: number }
+  /** A building fell (spec §3.5): sound, haptics and the collapse animation key on this. */
+  | {
+      kind: "collapse";
+      structureId: number;
+      x: number;
+      y: number;
+      killerId: number | null;
+    };
+
+/**
+ * Damage and lifecycle of one building the simulation has touched (spec §3.4). Buildings nobody has
+ * hit have no entry and are implicitly at full health; only damaged or destroyed ones are listed,
+ * up to `MAX_STRUCTURES` (`sim/structures.ts`).
+ */
+export type StructureState = {
+  id: number;
+  damage: number;
+  destroyedAtTick: number | null;
+  lastHitTick: number;
+  /** Footprint centre and circumradius, metres; 0 on a client that adopted the row from the wire. */
+  x: number;
+  y: number;
+  radius: number;
+};
 
 /** Full arena simulation state: plain, JSON-serialisable data. */
 export type ArenaState = {
@@ -333,4 +357,6 @@ export type ArenaState = {
   /** Zone selected when the out-of-zone rule was enabled; population may move independently. */
   enforcedZoneKey?: ZoneKey | null;
   zoneEnforced: boolean;
+  /** Damaged or destroyed buildings (spec §3.4); absent or missing ids are at full health. */
+  structures?: StructureState[];
 };

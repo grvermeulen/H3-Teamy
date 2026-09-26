@@ -14,6 +14,7 @@ import {
 import type { ArenaPlayerState, ArenaState } from "./types";
 import { healthMaxOf } from "./vehicle";
 import { PICKUP_RESPAWN_TICKS } from "./pickups";
+import { MAX_STRUCTURES } from "./structures";
 
 /** Records `message` when `condition` is false. */
 function check(
@@ -250,6 +251,17 @@ function checkProjectiles(state: ArenaState, violations: string[]): void {
     );
 }
 
+/** The sparse structure list: capped, and every id unique. */
+function checkStructures(state: ArenaState, violations: string[]): void {
+  const structures = state.structures ?? [];
+  check(violations, structures.length <= MAX_STRUCTURES, "too many structures");
+  check(
+    violations,
+    new Set(structures.map((entry) => entry.id)).size === structures.length,
+    "two structures share an id",
+  );
+}
+
 /** Every broken invariant of a state (empty when healthy); pure, so tests run it after each step. */
 export function checkInvariants(state: ArenaState): string[] {
   const violations: string[] = [];
@@ -280,5 +292,6 @@ export function checkInvariants(state: ArenaState): string[] {
   checkProjectiles(state, violations);
   checkPeople(state, violations, ids);
   checkPopulation(state, violations, ids);
+  checkStructures(state, violations);
   return violations;
 }
