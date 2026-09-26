@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AdditiveBlending,
+  AlwaysDepth,
+  LessEqualDepth,
+  PointsMaterial,
   SRGBColorSpace,
   Texture,
   type Color,
@@ -15,8 +18,10 @@ import {
 import { FACADE_STYLES, SURFACE_KEYS } from "./textures";
 import {
   FACADE_VARIANTS,
+  GROUND_RENDER_ORDER,
   createWorldMaterials,
   disposeWorldMaterials,
+  type GroundLayer,
 } from "./worldMaterials";
 
 /** Stubs jsdom's canvas with recording fakes, handed out in order; façades paint on 2D canvases. */
@@ -108,6 +113,58 @@ describe("createWorldMaterials", () => {
     }
     expect((deep.h - light.h) * degrees).toBeGreaterThan(40);
     expect(light.l - deep.l).toBeGreaterThan(0.08);
+  });
+
+  it("draws each lamp halo as a sized, additive point sprite", () => {
+    stubCanvas();
+
+    const { lampGlow } = createWorldMaterials(() => new Texture());
+
+    expect(lampGlow).toBeInstanceOf(PointsMaterial);
+    expect(lampGlow.sizeAttenuation).toBe(true);
+    expect(lampGlow.size).toBeGreaterThan(1);
+  });
+
+  it("paints the ground layers over each other instead of depth-testing them", () => {
+    stubCanvas();
+
+    const { surfaces, roadMarking } = createWorldMaterials(() => new Texture());
+
+    const ground = [
+      surfaces.urban,
+      surfaces.field,
+      surfaces.grass,
+      surfaces.forest,
+      surfaces.water,
+      surfaces.pavement,
+      surfaces.road,
+      roadMarking,
+    ];
+    for (const material of ground) {
+      expect(material.depthFunc).toBe(AlwaysDepth);
+      expect(material.depthWrite).toBe(true);
+    }
+    expect(surfaces.roofTiles.depthFunc).toBe(LessEqualDepth);
+    expect(surfaces.roofFlat.depthFunc).toBe(LessEqualDepth);
+  });
+
+  it("orders the ground layers as the 2D map paints them, below everything else", () => {
+    const paintOrder: GroundLayer[] = [
+      "urban",
+      "field",
+      "grass",
+      "forest",
+      "water",
+      "pavement",
+      "road",
+      "marking",
+    ];
+
+    const orders = paintOrder.map((layer) => GROUND_RENDER_ORDER[layer]);
+
+    expect([...orders].sort((left, right) => left - right)).toEqual(orders);
+    expect(new Set(orders).size).toBe(orders.length);
+    expect(Math.max(...orders)).toBeLessThan(0);
   });
 
   it("makes the bus shelter glass see-through", () => {

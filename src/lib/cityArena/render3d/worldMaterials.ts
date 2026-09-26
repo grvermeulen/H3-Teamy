@@ -4,11 +4,12 @@
  */
 import {
   AdditiveBlending,
+  AlwaysDepth,
   DataTexture,
   DoubleSide,
   LinearFilter,
   MeshLambertMaterial,
-  SpriteMaterial,
+  PointsMaterial,
   type Texture,
 } from "three";
 import { FURNITURE_FILL, ROAD_CENTRE_LINE } from "../render/palette";
@@ -38,10 +39,50 @@ const SHELTER_GLASS_OPACITY = 0.35;
 const GLOW_TEXTURE_PX = 64;
 /** Exponent of the glow's falloff from centre to rim; higher is a tighter core. */
 const GLOW_FALLOFF_POWER = 2;
+/**
+ * Size of a lamp's halo point: three.js scales a point by 1 / depth, so on screen it spans about
+ * `size × tan(fov / 2)` metres — some 3 m at a 60–70° field of view.
+ */
+const LAMP_GLOW_SIZE = 5;
 /** Channels per pixel of the glow texture (RGBA). */
 const RGBA_CHANNELS = 4;
 /** A full 8-bit channel. */
 const MAX_BYTE = 255;
+
+/**
+ * The flat layers of the ground, in the order the 2D map paints them: the urban ground (the
+ * backdrop and urban polygons), fields, grass, woods, water, pavements, road surfaces, then the
+ * centre-line markings on top.
+ */
+export type GroundLayer =
+  | "urban"
+  | "field"
+  | "grass"
+  | "forest"
+  | "water"
+  | "pavement"
+  | "road"
+  | "marking";
+
+/**
+ * The `renderOrder` of each ground layer's meshes. Coplanar layers cannot be told apart by depth
+ * at street distances (a 2 cm step is below the depth buffer's resolution a few hundred metres
+ * out, and grass and wood polygons overlap on the same plane), so the ground is painted like the
+ * 2D map instead: its materials pass the depth test always and still write depth, and these
+ * orders — below anything else in the scene — draw the layers first, bottom to top. Everything
+ * drawn later (walls, trees, people, a sinking ruin) is depth-tested against the painted ground
+ * as usual. Keep other opaque objects above −100 and parent groups at `renderOrder` 0.
+ */
+export const GROUND_RENDER_ORDER: Readonly<Record<GroundLayer, number>> = {
+  urban: -100,
+  field: -99,
+  grass: -98,
+  forest: -97,
+  water: -96,
+  pavement: -95,
+  road: -94,
+  marking: -93,
+};
 
 /** Every material the city builder draws with; all are shared across cells. */
 export type WorldMaterials = {
@@ -63,8 +104,8 @@ export type WorldMaterials = {
   lampPole: MeshLambertMaterial;
   /** A lamp head, emissive in the lamp colour so it shines without a light. */
   lampHead: MeshLambertMaterial;
-  /** The additive halo sprite around a lamp head; it writes no depth. */
-  lampGlow: SpriteMaterial;
+  /** The additive halo around a lamp head, drawn as one point sprite per lamp; no depth writes. */
+  lampGlow: PointsMaterial;
   /** Weathered wooden benches. */
   bench: MeshLambertMaterial;
   /** The bus shelter's see-through glass back panel, visible from both sides. */
@@ -105,6 +146,32 @@ function createGlowTexture(): DataTexture {
   return texture;
 }
 
+/** The surface materials the ground layers are drawn with (roofs stay depth-tested). */
+const GROUND_SURFACES: readonly SurfaceKey[] = [
+  "urban",
+  "field",
+  "grass",
+  "forest",
+  "water",
+  "pavement",
+  "road",
+];
+
+/** Makes a ground material paint over whatever ground was drawn before it (see GROUND_RENDER_ORDER). */
+function paintInLayerOrder<T extends MeshLambertMaterial>(material: T): T {
+  material.depthFunc = AlwaysDepth;
+  return material;
+}
+
+/** The surface materials, the ground layers among them painted in layer order. */
+function createGroundAwareSurfaces(
+  load: (url: string) => Texture,
+): Record<SurfaceKey, MeshLambertMaterial> {
+  const surfaces = createSurfaceMaterials(load);
+  for (const key of GROUND_SURFACES) paintInLayerOrder(surfaces[key]);
+  return surfaces;
+}
+
 /** A plain matte material in one colour. */
 function matte(colour: number | string): MeshLambertMaterial {
   return new MeshLambertMaterial({ color: colour });
@@ -121,9 +188,11 @@ function createLampMaterials(): Pick<
       color: LAMP_GLOW,
       emissive: LAMP_GLOW,
     }),
-    lampGlow: new SpriteMaterial({
+    lampGlow: new PointsMaterial({
       map: createGlowTexture(),
       color: LAMP_GLOW,
+      size: LAMP_GLOW_SIZE,
+      sizeAttenuation: true,
       blending: AdditiveBlending,
       transparent: true,
       depthWrite: false,
@@ -142,14 +211,14 @@ export function createWorldMaterials(
   load: (url: string) => Texture,
 ): WorldMaterials {
   return {
-    surfaces: createSurfaceMaterials(load),
+    surfaces: createGroundAwareSurfaces(load),
     facades: {
       brick: createFacadeVariants("brick"),
       plaster: createFacadeVariants("plaster"),
       concrete: createFacadeVariants("concrete"),
       glass: createFacadeVariants("glass"),
     },
-    roadMarking: matte(ROAD_CENTRE_LINE),
+    roadMarking: paintInLayerOrder(matte(ROAD_CENTRE_LINE)),
     treeTrunk: matte(TRUNK_COLOUR),
     canopies: [matte(CANOPY_LIGHT), matte(CANOPY_DEEP)],
     ...createLampMaterials(),
@@ -167,7 +236,7 @@ export function createWorldMaterials(
 /** Every material in a set, each once. */
 function listWorldMaterials(
   materials: WorldMaterials,
-): (MeshLambertMaterial | SpriteMaterial)[] {
+): (MeshLambertMaterial | PointsMaterial)[] {
   return [
     ...Object.values(materials.surfaces),
     ...FACADE_STYLES.flatMap((style) => materials.facades[style]),
