@@ -1,12 +1,18 @@
 import { describe, expect, it } from "vitest";
+import { boundsOf } from "../mapBuild/geometry";
 import { createCollisionGrid } from "../world/collisionGrid";
+import { withoutStructures } from "../world/collisionView";
+import { structureIdOf } from "../world/structureId";
 import type { MapIndex, MapZone } from "../world/mapTypes";
+import type { Point } from "../world/projection";
 import { decodeRoadGraph } from "../world/roadGraph";
-import type { ArenaWorld } from "../sim/arena";
+import { stepArena, type ArenaWorld } from "../sim/arena";
 import { checkInvariants } from "../sim/invariants";
 import { playersOf } from "../sim/players";
 import { createRng } from "../sim/rng";
+import { destroyedStructureIds, damageStructure } from "../sim/structures";
 import { createMemoryHub } from "./memoryTransport";
+import { HOST_TICK_HZ, SNAPSHOT_HZ } from "./hostLoop";
 import { PLAYER_MAX_HEALTH } from "../sim/damage";
 import { playerDistance, startBotMatch } from "./botMatch";
 
@@ -215,5 +221,141 @@ describe("bot match when the host stops", () => {
         bot: bot.clientId,
         ahead: bot.state().tick > 300,
       }).toEqual({ bot: bot.clientId, ahead: true });
+  });
+});
+
+/**
+ * Task 5's acceptance beyond movement and combat convergence: a live structure collapse must
+ * reach every bot over the wire, through the real `applySnapshot` path, within the budget spec
+ * §3.6 implies — and the client's own collision view, built from the structure ids it decoded,
+ * must actually open the footprint once the wire says the building is gone.
+ */
+describe("bot match structure collapse", () => {
+  /** A footprint far from the spawn line at y = 0, so it never overlaps a bot's path. */
+  const buildingRing: Point[] = [
+    [2000, 2000],
+    [2020, 2000],
+    [2020, 2020],
+    [2000, 2020],
+  ];
+  const buildingId = structureIdOf(0, 0, 0);
+  /** The host tick the building is fully damaged on. */
+  const COLLAPSE_TICK = 5;
+
+  /** A world like the shared fixture, plus one destructible building. */
+  function worldWithBuilding(): ArenaWorld {
+    const collision = createCollisionGrid();
+    collision.insertTile({
+      x: 0,
+      y: 0,
+      rect: { minX: 0, minY: 0, maxX: 4000, maxY: 4000 },
+      trees: [],
+      furniture: [],
+      roads: [],
+      ground: [],
+      water: [],
+      buildings: [
+        {
+          structureId: buildingId,
+          ring: buildingRing,
+          bounds: boundsOf(buildingRing),
+          levels: 1,
+        },
+      ],
+    });
+    return { collision, index, graph };
+  }
+
+  /**
+   * Runs the real step every tick, then — once, at {@link COLLAPSE_TICK} — fully damages the
+   * building in one hit. Standing in for "someone blew it up": this acceptance is about the wire
+   * and the client's reaction, not about aiming a rocket through the whole combat pipeline.
+   */
+  function collapseAt(world: ArenaWorld): typeof stepArena {
+    return (state, inputs, dt, stepWorld, random) => {
+      const stepped = stepArena(state, inputs, dt, stepWorld, random);
+      if (stepped.tick !== COLLAPSE_TICK) return stepped;
+      const obstacle = world.collision
+        .query(boundsOf(buildingRing))
+        .find((candidate) => candidate.structure?.id === buildingId);
+      if (!obstacle?.structure)
+        throw new Error("test building obstacle missing from the grid");
+      return damageStructure(
+        stepped,
+        { obstacle, amount: obstacle.structure.maxHealth, killerId: null },
+        stepped.tick,
+      );
+    };
+  }
+
+  /** True once every bot's own state lists {@link buildingId} as destroyed. */
+  function allBotsSeeItDestroyed(
+    match: ReturnType<typeof startBotMatch>,
+  ): boolean {
+    return match.bots.every((bot) =>
+      (bot.state().structures ?? []).some(
+        (entry) => entry.id === buildingId && entry.destroyedAtTick !== null,
+      ),
+    );
+  }
+
+  /** Ticks `match` until every bot has adopted the collapse, or `deadline` runs out. */
+  function tickUntilConverged(
+    match: ReturnType<typeof startBotMatch>,
+    deadline: number,
+  ): number | null {
+    for (let tick = 1; tick <= deadline; tick += 1) {
+      match.tick();
+      if (allBotsSeeItDestroyed(match)) return tick;
+    }
+    return null;
+  }
+
+  /** Asserts one bot's own decoded state reflects the collapse and opens the footprint to movement. */
+  function expectBotConverged(
+    bot: ReturnType<typeof startBotMatch>["bots"][number],
+    world: ArenaWorld,
+  ): void {
+    const destroyed = destroyedStructureIds(bot.state());
+    expect({
+      bot: bot.clientId,
+      destroyed: destroyed.has(buildingId),
+    }).toEqual({ bot: bot.clientId, destroyed: true });
+
+    const view = withoutStructures(world.collision, destroyed);
+    const stillBlocking = view
+      .query(boundsOf(buildingRing))
+      .filter((candidate) => candidate.structure?.id === buildingId);
+    expect({ bot: bot.clientId, stillBlocked: stillBlocking.length }).toEqual({
+      bot: bot.clientId,
+      stillBlocked: 0,
+    });
+  }
+
+  it("propagates a live collapse to every bot within 10 snapshots and opens the footprint", () => {
+    const world = worldWithBuilding();
+    const hub = createMemoryHub();
+    const match = startBotMatch({
+      hub,
+      index,
+      graph,
+      world,
+      zone,
+      seed: 23,
+      bots: BOTS,
+      step: collapseAt(world),
+    });
+
+    const ticksPerSnapshot = HOST_TICK_HZ / SNAPSHOT_HZ;
+    const seenAtTick = tickUntilConverged(
+      match,
+      COLLAPSE_TICK + ticksPerSnapshot * 10,
+    );
+
+    expect(seenAtTick).not.toBeNull();
+    expect(seenAtTick! - COLLAPSE_TICK).toBeLessThanOrEqual(
+      ticksPerSnapshot * 10,
+    );
+    for (const bot of match.bots) expectBotConverged(bot, world);
   });
 });

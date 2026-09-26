@@ -19,6 +19,7 @@ import type {
   CopState,
   PedState,
   PickupState,
+  StructureState,
   VehicleState,
 } from "../sim/types";
 import type {
@@ -26,6 +27,7 @@ import type {
   SnapshotCop,
   SnapshotPed,
   SnapshotPlayer,
+  SnapshotStructure,
   SnapshotView,
 } from "./snapshotWire";
 
@@ -128,7 +130,27 @@ function patchBullet(
     ignoreVehicleId: local?.ignoreVehicleId ?? null,
     speedMps: local?.speedMps ?? ASSUMED_BULLET_SPEED_MPS,
     rangeLeftM: local?.rangeLeftM ?? ASSUMED_BULLET_RANGE_M,
-    weapon: local?.weapon ?? "pistol",
+    weapon: row.weapon,
+  };
+}
+
+/**
+ * One structure from the snapshot, adopted wholesale (spec §3.6: prediction never changes it).
+ * Footprint centre and radius are not on the wire, so a client keeps its own for an id it already
+ * knew, or 0 for one it has never seen — matching how the host treats a fresh entry.
+ */
+function patchStructure(
+  row: SnapshotStructure,
+  local: StructureState | undefined,
+): StructureState {
+  return {
+    id: row.id,
+    damage: row.damage,
+    destroyedAtTick: row.destroyedAtTick,
+    lastHitTick: row.lastHitTick,
+    x: local?.x ?? 0,
+    y: local?.y ?? 0,
+    radius: local?.radius ?? 0,
   };
 }
 
@@ -152,6 +174,7 @@ export function applySnapshot(
   const peds = byId(state.peds);
   const cops = byId(state.cops);
   const bullets = byId(state.bullets);
+  const structures = byId(state.structures ?? []);
 
   const nextVehicles: VehicleState[] = view.vehicles.map((row) => ({
     ...row,
@@ -197,6 +220,9 @@ export function applySnapshot(
     cops: view.cops.map((row) => patchCop(row, cops.get(row.id), view.tick)),
     bullets: view.bullets.map((row) => patchBullet(row, bullets.get(row.id))),
     pickups: nextPickups,
+    structures: view.structures.map((row) =>
+      patchStructure(row, structures.get(row.id)),
+    ),
     traffic: state.traffic.filter(
       (driver) =>
         liveVehicleIds.has(driver.vehicleId) &&

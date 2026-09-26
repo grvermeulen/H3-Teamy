@@ -190,3 +190,127 @@ describe("applySnapshot", () => {
     expect(checkInvariants(folded)).toEqual([]);
   });
 });
+
+describe("adopting structures from the host (Task 5)", () => {
+  it("adopts a structure the client has never seen with x, y and radius at 0", () => {
+    const host = run(boot(20), 5);
+    const withStructure: ArenaState = {
+      ...host,
+      structures: [
+        {
+          id: 3,
+          damage: 300,
+          destroyedAtTick: null,
+          lastHitTick: host.tick,
+          x: 55,
+          y: 66,
+          radius: 8,
+        },
+      ],
+    };
+    const folded = fold(withStructure, boot(20));
+    expect(folded.structures).toEqual([
+      {
+        id: 3,
+        damage: 300,
+        destroyedAtTick: null,
+        lastHitTick: host.tick,
+        x: 0,
+        y: 0,
+        radius: 0,
+      },
+    ]);
+  });
+
+  it("keeps the client's own footprint metadata for a structure id it already knew", () => {
+    const host = run(boot(21), 5);
+    const client: ArenaState = {
+      ...host,
+      structures: [
+        {
+          id: 3,
+          damage: 10,
+          destroyedAtTick: null,
+          lastHitTick: 1,
+          x: 55,
+          y: 66,
+          radius: 8,
+        },
+      ],
+    };
+    const hostWithMoreDamage: ArenaState = {
+      ...host,
+      structures: [
+        {
+          id: 3,
+          damage: 300,
+          destroyedAtTick: null,
+          lastHitTick: host.tick,
+          x: 0,
+          y: 0,
+          radius: 0,
+        },
+      ],
+    };
+    const folded = fold(hostWithMoreDamage, client);
+    expect(folded.structures).toEqual([
+      {
+        id: 3,
+        damage: 300,
+        destroyedAtTick: null,
+        lastHitTick: host.tick,
+        x: 55,
+        y: 66,
+        radius: 8,
+      },
+    ]);
+  });
+
+  it("drops a structure the host no longer lists, e.g. healed or rebuilt", () => {
+    const host = run(boot(22), 5);
+    const client: ArenaState = {
+      ...host,
+      structures: [
+        {
+          id: 3,
+          damage: 10,
+          destroyedAtTick: null,
+          lastHitTick: 1,
+          x: 1,
+          y: 2,
+          radius: 3,
+        },
+      ],
+    };
+    const folded = fold(host, client);
+    expect(folded.structures).toEqual([]);
+  });
+
+  it("produces a state the invariant checker accepts with damaged and destroyed structures", () => {
+    const host = run(boot(23), 30);
+    const withStructures: ArenaState = {
+      ...host,
+      structures: [
+        {
+          id: 1,
+          damage: 50,
+          destroyedAtTick: null,
+          lastHitTick: host.tick,
+          x: 10,
+          y: 10,
+          radius: 5,
+        },
+        {
+          id: 2,
+          damage: 480,
+          destroyedAtTick: host.tick,
+          lastHitTick: host.tick,
+          x: 20,
+          y: 20,
+          radius: 6,
+        },
+      ],
+    };
+    expect(checkInvariants(fold(withStructures, boot(23)))).toEqual([]);
+  });
+});
