@@ -18,9 +18,6 @@ import { characterMaterials } from "./characterRig";
 import { block, mergeParts, type Vec3 } from "./lowPoly";
 import { createWeaponModel } from "./weapons3d";
 
-/** Anything a 3D pickup can render: the simulation's pickups plus the rocket launcher. */
-export type ModelPickup = PickupKind | "rocket";
-
 /** Height the item floats at, metres. */
 const FLOAT_HEIGHT_M = 1.0;
 /** How fast the item spins, radians per second of sim time. */
@@ -38,8 +35,6 @@ const GLOW_SEGMENTS = 20;
 const GLOW_HEIGHT_M = 0.02;
 /** Opacity of the additive glow. */
 const GLOW_OPACITY = 0.55;
-/** Glow colour for the rocket launcher: `render/radar.ts` has no pickup of that kind. */
-const ROCKET_GLOW_COLOUR = "#ff5a1f";
 
 /** Edge length of the health pickup's box, metres. */
 const HEALTH_BOX_M = 0.22;
@@ -95,14 +90,9 @@ function glowMaterial(colour: string): MeshBasicMaterial {
   return material;
 }
 
-/** The glow colour of a pickup kind, from the 2D pickup palette. */
-function glowColour(kind: ModelPickup): string {
-  return kind === "rocket" ? ROCKET_GLOW_COLOUR : pickupColour(kind);
-}
-
-/** The pickup's ground glow: a flat additive disc just above the ground. */
-function createGlow(kind: ModelPickup): Mesh {
-  const mesh = new Mesh(glowGeometry(), glowMaterial(glowColour(kind)));
+/** The pickup's ground glow: a flat additive disc just above the ground, in its 2D colour. */
+function createGlow(kind: PickupKind): Mesh {
+  const mesh = new Mesh(glowGeometry(), glowMaterial(pickupColour(kind)));
   mesh.name = "pickupGlow";
   mesh.position.y = GLOW_HEIGHT_M;
   return mesh;
@@ -176,7 +166,7 @@ function createHealthModel(): Object3D {
 }
 
 /** The item a pickup shows: the health box, or the matching weapon's model. */
-function itemModel(kind: ModelPickup): Object3D {
+function itemModel(kind: PickupKind): Object3D {
   return kind === "health" ? createHealthModel() : createWeaponModel(kind);
 }
 
@@ -187,7 +177,7 @@ function itemModel(kind: ModelPickup): Object3D {
  * @param kind - The pickup's kind.
  * @returns A pickup; call `update` every sim tick and `dispose` when it is removed from the scene.
  */
-export function createPickup3d(kind: ModelPickup): Pickup3d {
+export function createPickup3d(kind: PickupKind): Pickup3d {
   const object = new Group();
   object.name = `pickup:${kind}`;
   const item = new Group();

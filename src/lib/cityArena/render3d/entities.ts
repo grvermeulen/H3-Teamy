@@ -46,7 +46,6 @@ import {
 } from "./entityShots";
 import type { Pickup3d } from "./pickups3d";
 import type { Vehicle3d, Vehicle3dInput } from "./vehicles3d";
-import type { ModelWeapon } from "./weapons3d";
 
 /** Characters farther than this from the camera focus are not drawn, metres. */
 export const CHARACTER_DRAW_DISTANCE_M = 180;
@@ -78,7 +77,7 @@ export type EntityView = {
 export type LocalCharacter = {
   /** In the scene, alive and on foot: the only time the hands show. */
   onFoot: boolean;
-  weapon: ModelWeapon;
+  weapon: WeaponKind;
   /** Tick of the latest shot or swing, or `null` before the first. */
   firedTick: number | null;
   /** Smoothed ground speed, m/s. */

@@ -7,13 +7,12 @@ import {
   type LineSegments,
   type Object3D,
 } from "three";
-import type { BulletState, WeaponKind } from "../sim/types";
+import type { BulletState } from "../sim/types";
 import { WEAPONS } from "../sim/weapons";
 import { PERSON_CHEST_HEIGHT_M, headingToRotationY } from "./coords";
 import { createParticleSystem } from "./particles";
 import {
   createProjectiles3d,
-  isRocket,
   ROCKET_LENGTH_M,
   TRACER_LENGTH_M,
 } from "./projectiles3d";
@@ -32,9 +31,6 @@ const ROUND: BulletState = {
   damage: 20,
   weapon: "pistol",
 };
-
-/** Ruling 2: the sim's weapon union gains "rocket" on another track. */
-const ROCKET_WEAPON = "rocket" as WeaponKind;
 
 function setup() {
   const fire = createParticleSystem(256, true);
@@ -60,14 +56,6 @@ function visibleNamed(root: Object3D, name: string): Object3D[] {
   });
   return found;
 }
-
-describe("isRocket", () => {
-  it("recognises the rocket launcher's round and nothing else", () => {
-    expect(isRocket("rocket")).toBe(true);
-    expect(isRocket("cannon")).toBe(false);
-    expect(isRocket("pistol")).toBe(false);
-  });
-});
 
 describe("createProjectiles3d", () => {
   it("draws a gun round as a 3 m tracer at chest height, back along its flight", () => {
@@ -114,7 +102,7 @@ describe("createProjectiles3d", () => {
     const { projectiles } = setup();
 
     projectiles.sync([
-      { ...ROUND, weapon: ROCKET_WEAPON, directionX: 0, directionY: 1 },
+      { ...ROUND, weapon: "rocket", directionX: 0, directionY: 1 },
     ]);
 
     expect(segmentCount(projectiles.object)).toBe(0);
@@ -133,7 +121,7 @@ describe("createProjectiles3d", () => {
 
   it("trails smoke behind a rocket, evenly by distance flown", () => {
     const { projectiles, smoke } = setup();
-    const rocket = { ...ROUND, weapon: ROCKET_WEAPON };
+    const rocket: BulletState = { ...ROUND, weapon: "rocket" };
     projectiles.sync([rocket]);
     const before = smoke.alive();
 
@@ -148,7 +136,7 @@ describe("createProjectiles3d", () => {
 
   it("puts the rocket back in the pool when it is gone and reuses it", () => {
     const { projectiles } = setup();
-    const rocket = { ...ROUND, weapon: ROCKET_WEAPON };
+    const rocket: BulletState = { ...ROUND, weapon: "rocket" };
     projectiles.sync([rocket]);
     const [first] = visibleNamed(projectiles.object, "rocket");
 
@@ -174,7 +162,7 @@ describe("createProjectiles3d", () => {
 
   it("frees its geometry and materials", () => {
     const { projectiles } = setup();
-    projectiles.sync([{ ...ROUND, weapon: ROCKET_WEAPON }]);
+    projectiles.sync([{ ...ROUND, weapon: "rocket" }]);
     const lines = tracers(projectiles.object);
     const geometry = vi.spyOn(lines.geometry, "dispose");
     const body = visibleNamed(projectiles.object, "rocket-body")[0] as Mesh;

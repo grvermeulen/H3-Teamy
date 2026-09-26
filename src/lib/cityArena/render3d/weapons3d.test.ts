@@ -1,19 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { Box3, Mesh, Vector3 } from "three";
-import {
-  createWeaponModel,
-  isTwoHanded,
-  muzzleTipOf,
-  type ModelWeapon,
-} from "./weapons3d";
+import type { WeaponKind } from "../sim/types";
+import { createWeaponModel, isTwoHanded, muzzleTipOf } from "./weapons3d";
 
-function sizeOf(kind: ModelWeapon): Vector3 {
+function sizeOf(kind: WeaponKind): Vector3 {
   return new Box3()
     .setFromObject(createWeaponModel(kind))
     .getSize(new Vector3());
 }
 
-const CARRIED: ModelWeapon[] = [
+const CARRIED: WeaponKind[] = [
   "pistol",
   "uzi",
   "shotgun",
@@ -54,7 +50,7 @@ describe("createWeaponModel", () => {
   });
 
   it("puts each gun's muzzle at the front end of its barrel", () => {
-    const tips: [ModelWeapon, number[]][] = [
+    const tips: [WeaponKind, number[]][] = [
       ["pistol", [0.158, 0.06, 0]],
       ["uzi", [0.245, 0.065, 0]],
       ["shotgun", [0.66, 0.078, 0]],
@@ -84,8 +80,8 @@ describe("createWeaponModel", () => {
 
   it("marks the long guns and the launcher as two-handed", () => {
     expect(
-      ["shotgun", "rifle", "rocket"].every((kind) =>
-        isTwoHanded(kind as ModelWeapon),
+      (["shotgun", "rifle", "rocket"] as const).every((kind) =>
+        isTwoHanded(kind),
       ),
     ).toBe(true);
     expect(isTwoHanded("pistol")).toBe(false);

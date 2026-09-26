@@ -3,13 +3,9 @@
  * its weapon in the right hand and lying down when dead.
  */
 import { Group, type Bone, type Object3D } from "three";
+import type { WeaponKind } from "../sim/types";
 import { LOOKS, type CharacterLook } from "./characterLooks";
-import {
-  createPose,
-  poseInto,
-  type HeldWeapon,
-  type PoseInput,
-} from "./characterPose";
+import { createPose, poseInto, type PoseInput } from "./characterPose";
 import {
   BONES,
   buildCharacterMesh,
@@ -37,9 +33,9 @@ const GRIP_OFFSET: [number, number, number] = [0.004, -0.052, 0];
 
 /** Swaps the model in a hand as the held weapon changes. */
 function createWeaponSlot(hand: Bone): {
-  hold(weapon: HeldWeapon | null): void;
+  hold(weapon: WeaponKind | null): void;
 } {
-  let held: HeldWeapon | null = null;
+  let held: WeaponKind | null = null;
   let model: Object3D | null = null;
   return {
     hold(weapon) {

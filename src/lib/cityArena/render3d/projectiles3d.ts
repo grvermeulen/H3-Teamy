@@ -26,17 +26,6 @@ const TRAIL_SEED = 0x7a11;
 const MAX_STEPS_PER_FRAME = 12;
 
 /**
- * Whether a round is the rocket launcher's. Ruling 2: the simulation's weapon union gains
- * `"rocket"` on another track, so the comparison is on the string until the tracks merge.
- *
- * @param weapon - The round's weapon.
- * @returns True for a rocket.
- */
-export function isRocket(weapon: string): boolean {
-  return weapon === "rocket";
-}
-
-/**
  * One kind of puff a trail lays: whether it glows (fire) or hangs (smoke), and on which steps —
  * every step, every second step, …
  */
@@ -227,7 +216,7 @@ function createFleet(parent: Group, kit: ProjectileKit): Fleet {
 
 /** What a bullet looks like in flight: a model with a trail, a tracer, or nothing (melee). */
 function lookOf(bullet: BulletState): ProjectileLook | "tracer" | null {
-  if (isRocket(bullet.weapon)) return "rocket";
+  if (bullet.weapon === "rocket") return "rocket";
   if (bullet.weapon === "cannon") return "shell";
   return isMelee(bullet.weapon) ? null : "tracer";
 }

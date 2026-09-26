@@ -9,6 +9,7 @@ import {
   type BufferAttribute,
   type Object3D,
 } from "three";
+import type { WeaponKind } from "../sim/types";
 import { LOOKS } from "./characterLooks";
 import { screenFootprint, type ScreenBox } from "./testing/screenFootprint";
 import {
@@ -17,7 +18,7 @@ import {
   type ViewModel,
   type ViewModelInput,
 } from "./viewmodel";
-import { muzzleTipOf, type ModelWeapon } from "./weapons3d";
+import { muzzleTipOf } from "./weapons3d";
 
 const FRAME_S = 1 / 60;
 
@@ -64,7 +65,7 @@ const LANDSCAPES = [16 / 9, 4 / 3, 21 / 9];
 
 /** A view model placed on a first-person camera of `aspect`, settled with `weapon` in hand. */
 function placed(
-  weapon: ModelWeapon,
+  weapon: WeaponKind,
   aspect: number,
 ): { model: ViewModel; camera: PerspectiveCamera } {
   const camera = new PerspectiveCamera(FIRST_PERSON_FOV_DEG, aspect, 0.01, 5);
@@ -220,7 +221,7 @@ describe("createViewModel", () => {
   });
 
   it("keeps fists and every gun inside the lower-right quadrant", () => {
-    const held: ModelWeapon[] = ["fist", "pistol", "uzi", "shotgun", "rifle"];
+    const held: WeaponKind[] = ["fist", "pistol", "uzi", "shotgun", "rifle"];
     for (const weapon of [...held, "rocket" as const]) {
       const { model, camera } = placed(weapon, 16 / 9);
       const box = screenFootprint(model.object, camera);

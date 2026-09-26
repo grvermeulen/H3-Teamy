@@ -175,7 +175,7 @@ function publishButtons(pressedButtons: Set<string>, state: InputState): void {
 }
 
 /**
- * Binds WASD/arrows, the Space/E/F/Enter/Q buttons, 1–6, R and Tab to the input state and the
+ * Binds WASD/arrows, the Space/E/F/Enter/Q buttons, 1–6, R, V and Tab to the input state and the
  * hooks; returns the detach function.
  */
 export function attachKeyboard(

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { Group } from "three";
-import { createPickup3d, type ModelPickup } from "./pickups3d";
+import { Color, Group, type Mesh, type MeshBasicMaterial } from "three";
+import { pickupColour } from "../render/drawPickups";
+import type { PickupKind } from "../sim/types";
+import { createPickup3d } from "./pickups3d";
 
-/** Every kind a 3D pickup can render, including the rocket launcher the sim doesn't have yet. */
-const KINDS: ModelPickup[] = [
+/** Every pickup kind the simulation spawns. */
+const KINDS: PickupKind[] = [
   "uzi",
   "shotgun",
   "health",
@@ -69,6 +71,16 @@ describe("createPickup3d", () => {
       const pickup = createPickup3d(kind);
       expect(pickup.object.getObjectByName("pickupGlow")).toBeDefined();
     }
+  });
+
+  it.each(KINDS)("colours the %s glow like its 2D pickup", (kind) => {
+    const glow = createPickup3d(kind).object.getObjectByName(
+      "pickupGlow",
+    ) as Mesh;
+    const material = glow.material as MeshBasicMaterial;
+    expect(material.color.getHex()).toBe(
+      new Color(pickupColour(kind)).getHex(),
+    );
   });
 
   it("detaches from its parent on dispose", () => {

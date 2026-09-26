@@ -16,11 +16,8 @@ import {
   type Vec3,
 } from "./lowPoly";
 
-/** Anything a 3D model can hold: the simulation's weapons plus the rocket launcher. */
-export type ModelWeapon = WeaponKind | "rocket";
-
 /** Weapons held with both hands. */
-const TWO_HANDED: ReadonlySet<ModelWeapon> = new Set<ModelWeapon>([
+const TWO_HANDED: ReadonlySet<WeaponKind> = new Set<WeaponKind>([
   "shotgun",
   "rifle",
   "rocket",
@@ -32,7 +29,7 @@ const TWO_HANDED: ReadonlySet<ModelWeapon> = new Set<ModelWeapon>([
  * @param kind - The weapon.
  * @returns `true` for the shotgun, rifle and rocket launcher.
  */
-export function isTwoHanded(kind: ModelWeapon): boolean {
+export function isTwoHanded(kind: WeaponKind): boolean {
   return TWO_HANDED.has(kind);
 }
 
@@ -113,7 +110,7 @@ const TEN_SIDED: Partial<RodSpec> = { sides: 10 };
  * - bat: knob, taped handle and a barrel that swells toward the end;
  * - rocket: olive tube with a flared back and rings, red-nosed warhead, two grips and a sight.
  */
-const WEAPON_PARTS: Partial<Record<ModelWeapon, readonly WeaponPart[]>> = {
+const WEAPON_PARTS: Partial<Record<WeaponKind, readonly WeaponPart[]>> = {
   pistol: [
     box([0.19, 0.036, 0.028], [0.055, 0.058, 0], GUNMETAL, SOFT),
     box([0.12, 0.02, 0.026], [0.05, 0.032, 0], GRIP_BLACK),
@@ -170,7 +167,7 @@ const WEAPON_PARTS: Partial<Record<ModelWeapon, readonly WeaponPart[]>> = {
 };
 
 /** Weapons that are swung, not fired, or never carried: nothing flashes at their front. */
-const NO_MUZZLE: ReadonlySet<ModelWeapon> = new Set<ModelWeapon>([
+const NO_MUZZLE: ReadonlySet<WeaponKind> = new Set<WeaponKind>([
   "fist",
   "bat",
   "cannon",
@@ -183,7 +180,7 @@ const NO_MUZZLE: ReadonlySet<ModelWeapon> = new Set<ModelWeapon>([
  * @param kind - The weapon.
  * @returns `[x, y, z]` metres, or `null` for fists, the bat and the tank's cannon.
  */
-export function muzzleTipOf(kind: ModelWeapon): Vec3 | null {
+export function muzzleTipOf(kind: WeaponKind): Vec3 | null {
   const parts = WEAPON_PARTS[kind];
   if (!parts || NO_MUZZLE.has(kind)) return null;
   let tip: Vec3 | null = null;
@@ -200,10 +197,10 @@ function partGeometry(part: WeaponPart): BufferGeometry {
   return part.shape === "block" ? block(part) : rod(part);
 }
 
-const geometryCache = new Map<ModelWeapon, BufferGeometry>();
+const geometryCache = new Map<WeaponKind, BufferGeometry>();
 
 /** The merged geometry of a weapon, built once; `null` for bare fists and the tank's cannon. */
-function weaponGeometry(kind: ModelWeapon): BufferGeometry | null {
+function weaponGeometry(kind: WeaponKind): BufferGeometry | null {
   const cached = geometryCache.get(kind);
   if (cached) return cached;
   const parts = WEAPON_PARTS[kind];
@@ -221,7 +218,7 @@ function weaponGeometry(kind: ModelWeapon): BufferGeometry | null {
  * @param kind - The weapon.
  * @returns A group, grip at its origin and barrel along +X.
  */
-export function createWeaponModel(kind: ModelWeapon): Object3D {
+export function createWeaponModel(kind: WeaponKind): Object3D {
   const model = new Group();
   model.name = `weapon:${kind}`;
   const geometry = weaponGeometry(kind);

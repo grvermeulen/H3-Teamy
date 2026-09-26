@@ -18,6 +18,7 @@ import {
   type Object3D,
   type PerspectiveCamera,
 } from "three";
+import type { WeaponKind } from "../sim/types";
 import { LOOKS } from "./characterLooks";
 import { RUN_SPEED_MPS, RUN_STRIDE_M, WALK_STRIDE_M } from "./characterPose";
 import { characterMaterials } from "./characterRig";
@@ -26,11 +27,11 @@ import {
   type FireballMaterial,
 } from "./fireballMaterial";
 import { block, mergeParts, shade, type Vec3 } from "./lowPoly";
-import { createWeaponModel, muzzleTipOf, type ModelWeapon } from "./weapons3d";
+import { createWeaponModel, muzzleTipOf } from "./weapons3d";
 
 /** What the view model follows each frame. */
 export type ViewModelInput = {
-  weapon: ModelWeapon;
+  weapon: WeaponKind;
   /** Tick of the local player's latest shot or swing, or `null` before the first. */
   firedTick: number | null;
   /** The current simulation tick. */
@@ -135,7 +136,7 @@ const FISTS: ViewLayout = {
  * The first-person layout of every weapon, set for the first-person camera's 70° field of view:
  * grips in the lower right, barrels running in toward the crosshair.
  */
-const LAYOUTS: Record<ModelWeapon, ViewLayout> = {
+const LAYOUTS: Record<WeaponKind, ViewLayout> = {
   fist: FISTS,
   cannon: FISTS,
   pistol: {
@@ -264,10 +265,10 @@ type PreparedLayout = {
   strike: { grip: Vector3; aim: Quaternion } | null;
 };
 
-const preparedLayouts = new Map<ModelWeapon, PreparedLayout>();
+const preparedLayouts = new Map<WeaponKind, PreparedLayout>();
 
 /** The prepared layout of a weapon, built on first use. */
-function preparedLayout(weapon: ModelWeapon): PreparedLayout {
+function preparedLayout(weapon: WeaponKind): PreparedLayout {
   const cached = preparedLayouts.get(weapon);
   if (cached) return cached;
   const { grip, aim, support, leftFist, strike } = LAYOUTS[weapon];
@@ -286,7 +287,7 @@ function preparedLayout(weapon: ModelWeapon): PreparedLayout {
 
 /** Mutable per-frame state. */
 type ViewState = {
-  weapon: ModelWeapon | null;
+  weapon: WeaponKind | null;
   model: Object3D | null;
   lastFiredTick: number | null;
   /** 1 on a shot, falling to 0 over {@link VIEW_RECOIL_RECOVERY_S}. */
@@ -317,7 +318,7 @@ type ViewParts = {
 function syncWeapon(
   state: ViewState,
   parts: ViewParts,
-  weapon: ModelWeapon,
+  weapon: WeaponKind,
 ): void {
   if (weapon === state.weapon) return;
   state.model?.removeFromParent();

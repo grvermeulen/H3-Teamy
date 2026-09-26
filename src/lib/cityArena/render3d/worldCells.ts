@@ -9,6 +9,7 @@
  * distance, or work the budget left for later.
  */
 import { Group, type Quaternion } from "three";
+import type { StructureState } from "../sim/types";
 import type { DecodedTile } from "../world/decode";
 import { structureMaxHealth } from "../world/structureId";
 import {
@@ -43,14 +44,13 @@ export const REFRESH_DISTANCE_M = 16;
 const FURNITURE_KEY_STEP_M = 0.1;
 
 /**
- * What the city needs to know about a damaged or destroyed building; the simulation's structure
- * state has these fields (and more).
+ * What the 3D view needs to know about a damaged or destroyed building: the part of the
+ * simulation's structure state that decides its shading and whether it stands.
  */
-export type StructureView = {
-  id: number;
-  damage: number;
-  destroyedAtTick: number | null;
-};
+export type StructureView = Pick<
+  StructureState,
+  "id" | "damage" | "destroyedAtTick"
+>;
 
 /** The streamed city. */
 export type WorldCells = {

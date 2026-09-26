@@ -9,11 +9,9 @@
  * arm inward, − the left); X rolls it sideways (− lifts the right arm out, + the left).
  */
 import { SIM_STEP_S } from "../sim/player";
+import type { WeaponKind } from "../sim/types";
 import { BONES, PELVIS_HEIGHT_M, type BoneName } from "./characterRig";
-import { isTwoHanded, type ModelWeapon } from "./weapons3d";
-
-/** What a character can hold. */
-export type HeldWeapon = ModelWeapon;
+import { isTwoHanded } from "./weapons3d";
 
 /** Everything a pose depends on. */
 export type PoseInput = {
@@ -22,7 +20,7 @@ export type PoseInput = {
   /** Distance walked so far, metres; phases the gait. */
   phaseM: number;
   aiming: boolean;
-  weapon: HeldWeapon | null;
+  weapon: WeaponKind | null;
   dead: boolean;
   /** Simulation tick; drives breathing. */
   tick: number;
@@ -297,7 +295,7 @@ const GUN_STANCES = {
 } satisfies Record<string, GunStance>;
 
 /** The stance for a gun, aimed or carried. */
-function gunStance(weapon: HeldWeapon, aiming: boolean): GunStance {
+function gunStance(weapon: WeaponKind, aiming: boolean): GunStance {
   if (weapon === "rocket") {
     return aiming ? GUN_STANCES.rocketAim : GUN_STANCES.rocketCarry;
   }
@@ -323,7 +321,7 @@ function writeBlade(out: MutablePose, yaw: number): void {
 function writeGunArms(
   out: MutablePose,
   input: PoseInput,
-  weapon: HeldWeapon,
+  weapon: WeaponKind,
 ): void {
   const { upper, elbow, drop, chestYaw, left } = gunStance(
     weapon,
