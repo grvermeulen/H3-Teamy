@@ -5,8 +5,8 @@
 import { Group, type Bone, type Object3D } from "three";
 import { LOOKS, type CharacterLook } from "./characterLooks";
 import {
-  poseFor,
-  rotationOf,
+  createPose,
+  poseInto,
   type HeldWeapon,
   type PoseInput,
 } from "./characterPose";
@@ -101,12 +101,19 @@ export function createCharacter(
   object.add(body);
   const lift = (proportionsOf(spec).shoulderWidth / 2) * LYING_LIFT_SHARE;
   const slot = createWeaponSlot(bones.handR);
+  const pose = createPose();
   return {
     object,
     update(input) {
-      const pose = poseFor(input);
-      for (const name of BONES)
-        bones[name].rotation.set(...rotationOf(pose.rotations, name));
+      poseInto(input, pose);
+      for (let index = 0; index < BONES.length; index += 1) {
+        const rotation = pose.rotations[BONES[index]];
+        mesh.skeleton.bones[index].rotation.set(
+          rotation[0],
+          rotation[1],
+          rotation[2],
+        );
+      }
       bones.pelvis.position.y = pose.pelvisHeight;
       layDown(body, pose.lying, pose.pelvisHeight, lift);
       slot.hold(input.weapon);

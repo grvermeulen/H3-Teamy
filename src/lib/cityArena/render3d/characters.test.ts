@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { Group, SkinnedMesh, Vector3, type Object3D } from "three";
 import { createCharacter } from "./characters";
-import type { PoseInput } from "./characterPose";
+import { poseInto, type PoseInput } from "./characterPose";
+
+vi.mock("./characterPose", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./characterPose")>();
+  return { ...actual, poseInto: vi.fn(actual.poseInto) };
+});
 
 const REST: PoseInput = {
   speed: 0,
@@ -36,6 +41,16 @@ describe("createCharacter", () => {
     character.object.rotation.y = 1;
     character.update(REST);
     expect(character.object.rotation.y).toBe(1);
+  });
+
+  it("poses into one pose it owns, frame after frame", () => {
+    const character = createCharacter("ped4");
+    vi.mocked(poseInto).mockClear();
+    character.update(REST);
+    character.update({ ...REST, speed: 1.4, phaseM: 0.3 });
+    const [first, second] = vi.mocked(poseInto).mock.calls;
+    expect(first[1]).toBe(second[1]);
+    expect(createCharacter("ped4")).not.toBe(character);
   });
 
   it("raises the right hand to aim", () => {

@@ -4,7 +4,7 @@
  * painted for a night map seen from above, the 3D view is lit at dusk.
  */
 import { Color, SRGBColorSpace } from "three";
-import { pedLook } from "../sim/peds";
+import { pedLookName } from "../sim/peds";
 
 /** Every look a 3D character can wear. */
 export type CharacterLook =
@@ -224,7 +224,7 @@ export const LOOKS: Record<CharacterLook, LookSpec> = {
  * @returns Its look.
  */
 export function pedLookOf(pedId: number): CharacterLook {
-  return `ped${pedLook(pedId) + 1}` as CharacterLook;
+  return pedLookName(pedId) as CharacterLook;
 }
 
 /** Vest hue (turns) for another player when the caller gives none: a clear blue. */

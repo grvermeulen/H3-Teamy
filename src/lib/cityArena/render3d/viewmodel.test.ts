@@ -149,6 +149,18 @@ describe("createViewModel", () => {
     expect(found).toBe(true);
   });
 
+  it("never bends the layout it shares with other view models while striking", () => {
+    const before = createViewModel();
+    runFor(before, 0.5, { ...STILL, weapon: "bat" });
+    const restPose = poseOf(before);
+    const swinger = createViewModel();
+    runFor(swinger, 0.5, { ...STILL, weapon: "bat" });
+    swinger.update({ ...STILL, weapon: "bat", firedTick: 100 });
+    const after = createViewModel();
+    runFor(after, 0.5, { ...STILL, weapon: "bat" });
+    expect(poseOf(after)).toEqual(restPose);
+  });
+
   it("dispose detaches it", () => {
     const model = createViewModel();
     const parent = new Mesh();

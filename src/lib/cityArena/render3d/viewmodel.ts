@@ -205,12 +205,47 @@ function createArm(side: "L" | "R"): { group: Group; mesh: Mesh } {
   return { group, mesh };
 }
 
+/** A weapon's barrel axis in its own space. */
+const WEAPON_FORWARD = new Vector3(1, 0, 0);
+
 /** The rotation that turns the weapon's +X toward `aim`. */
 function aimQuaternion(aim: Vec3): Quaternion {
   return new Quaternion().setFromUnitVectors(
-    new Vector3(1, 0, 0),
+    WEAPON_FORWARD,
     new Vector3(...aim).normalize(),
   );
+}
+
+/**
+ * A layout with its points and turns built once and shared by every view model, so placing the
+ * hands each frame allocates nothing. Read-only: copy from it, never write to it.
+ */
+type PreparedLayout = {
+  grip: Vector3;
+  aim: Quaternion;
+  support: Vector3 | null;
+  leftFist: Vector3 | null;
+  strike: { grip: Vector3; aim: Quaternion } | null;
+};
+
+const preparedLayouts = new Map<ModelWeapon, PreparedLayout>();
+
+/** The prepared layout of a weapon, built on first use. */
+function preparedLayout(weapon: ModelWeapon): PreparedLayout {
+  const cached = preparedLayouts.get(weapon);
+  if (cached) return cached;
+  const { grip, aim, support, leftFist, strike } = LAYOUTS[weapon];
+  const prepared: PreparedLayout = {
+    grip: new Vector3(...grip),
+    aim: aimQuaternion(aim),
+    support: support ? new Vector3(...support) : null,
+    leftFist: leftFist ? new Vector3(...leftFist) : null,
+    strike: strike
+      ? { grip: new Vector3(...strike.grip), aim: aimQuaternion(strike.aim) }
+      : null,
+  };
+  preparedLayouts.set(weapon, prepared);
+  return prepared;
 }
 
 /** Mutable per-frame state. */
@@ -251,28 +286,31 @@ function syncShot(state: ViewState, input: ViewModelInput): void {
   if (input.tick - input.firedTick <= FRESH_SHOT_TICKS) state.kick = 1;
 }
 
-/** Places the weapon and both hands for the layout, blending toward a strike by `strike`. */
+/**
+ * Places the weapon and both hands for the layout, blending toward a strike by `strike`. Writes
+ * only into the parts' own position and quaternion, so it allocates nothing.
+ */
 function placeHands(
   parts: ViewParts,
-  layout: ViewLayout,
+  layout: PreparedLayout,
   strike: number,
 ): void {
-  const grip = new Vector3(...layout.grip);
-  const turn = aimQuaternion(layout.aim);
+  const { holder, right, left } = parts;
+  holder.position.copy(layout.grip);
+  holder.quaternion.copy(layout.aim);
   if (layout.strike) {
-    grip.lerp(new Vector3(...layout.strike.grip), strike);
-    turn.slerp(aimQuaternion(layout.strike.aim), strike);
+    holder.position.lerp(layout.strike.grip, strike);
+    holder.quaternion.slerp(layout.strike.aim, strike);
   }
-  parts.holder.position.copy(grip);
-  parts.holder.quaternion.copy(turn);
-  parts.right.position.copy(grip);
-  parts.left.visible = layout.support !== null || layout.leftFist !== undefined;
+  right.position.copy(holder.position);
+  left.visible = layout.support !== null || layout.leftFist !== null;
   if (layout.support) {
-    parts.left.position.copy(
-      new Vector3(...layout.support).applyQuaternion(turn).add(grip),
-    );
+    left.position
+      .copy(layout.support)
+      .applyQuaternion(holder.quaternion)
+      .add(holder.position);
   } else if (layout.leftFist) {
-    parts.left.position.set(...layout.leftFist);
+    left.position.copy(layout.leftFist);
   }
 }
 
@@ -339,9 +377,8 @@ export function createViewModel(): ViewModel {
     update(input) {
       syncWeapon(state, parts, input.weapon);
       syncShot(state, input);
-      const layout = LAYOUTS[input.weapon];
-      placeHands(parts, layout, state.kick);
-      placeRig(rig, state, layout, input.speed);
+      placeHands(parts, preparedLayout(input.weapon), state.kick);
+      placeRig(rig, state, LAYOUTS[input.weapon], input.speed);
       advance(state, input);
     },
     dispose() {

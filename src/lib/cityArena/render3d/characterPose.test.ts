@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  createPose,
   poseFor,
+  poseInto,
   RUN_STRIDE_M,
   WALK_STRIDE_M,
   type BoneRotations,
@@ -233,5 +235,55 @@ describe("poseFor dead", () => {
     });
     expect(pose.lying).toBe(true);
     expect(pose.pelvisHeight).toBeCloseTo(PELVIS_HEIGHT_M);
+  });
+});
+
+describe("poseInto", () => {
+  const SEQUENCES: [string, PoseInput, PoseInput][] = [
+    [
+      "an aimed rifle, then rest",
+      { ...REST, aiming: true, weapon: "rifle" },
+      REST,
+    ],
+    [
+      "dead, then walking",
+      { ...REST, dead: true },
+      { ...REST, speed: 1.4, phaseM: 0.5 },
+    ],
+    [
+      "a bat mid-swing, then fists up",
+      { ...REST, aiming: true, weapon: "bat", recoil: 0.5 },
+      { ...REST, aiming: true, weapon: "fist" },
+    ],
+    [
+      "a shouldered launcher, then dead",
+      { ...REST, aiming: true, weapon: "rocket" },
+      { ...REST, dead: true },
+    ],
+  ];
+
+  it.each(SEQUENCES)("leaves nothing stale from %s", (_, first, second) => {
+    const out = createPose();
+    poseInto(first, out);
+    expect(poseInto(second, out)).toBe(out);
+    expect(out).toEqual(poseFor(second));
+  });
+
+  it("clears a bone the new pose does not set", () => {
+    const out = createPose();
+    poseInto({ ...REST, aiming: true, weapon: "rifle" }, out);
+    expect(out.rotations.handL).not.toEqual([0, 0, 0]);
+    poseInto(REST, out);
+    expect(out.rotations.handL).toEqual([0, 0, 0]);
+  });
+
+  it("writes into the same rotation arrays every time", () => {
+    const out = createPose();
+    const chest = out.rotations.chest;
+    const upperArmR = out.rotations.upperArmR;
+    poseInto({ ...REST, speed: 5.5, phaseM: 1 }, out);
+    poseInto({ ...REST, dead: true }, out);
+    expect(out.rotations.chest).toBe(chest);
+    expect(out.rotations.upperArmR).toBe(upperArmR);
   });
 });

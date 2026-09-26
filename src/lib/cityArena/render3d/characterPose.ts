@@ -9,7 +9,7 @@
  * arm inward, − the left); X rolls it sideways (− lifts the right arm out, + the left).
  */
 import { SIM_STEP_S } from "../sim/player";
-import { PELVIS_HEIGHT_M, type BoneName } from "./characterRig";
+import { BONES, PELVIS_HEIGHT_M, type BoneName } from "./characterRig";
 import { isTwoHanded, type ModelWeapon } from "./weapons3d";
 
 /** What a character can hold. */
@@ -42,6 +42,16 @@ export type Pose = {
   /** Height of the pelvis bone above the ground along the character's own up axis, metres. */
   pelvisHeight: number;
   /** The character lies on the ground (dead): the caller tips it over onto its side. */
+  lying: boolean;
+};
+
+/**
+ * A pose written in place by {@link poseInto}: every bone owns one rotation array for the life of
+ * the pose, so posing a character each frame allocates nothing.
+ */
+export type MutablePose = {
+  rotations: Record<BoneName, Euler3>;
+  pelvisHeight: number;
   lying: boolean;
 };
 
@@ -91,25 +101,9 @@ const RUN_BOB_M = 0.08;
 /** Upward kick of a gun arm at full recoil, radians. */
 const RECOIL_KICK_RAD = 0.3;
 
-const ZERO: Euler3 = [0, 0, 0];
-
 /** Linear blend of two numbers. */
 function mix(from: number, to: number, share: number): number {
   return from + (to - from) * share;
-}
-
-/** Linear blend of two rotations. */
-function mixEuler(from: Euler3, to: Euler3, share: number): Euler3 {
-  return [
-    mix(from[0], to[0], share),
-    mix(from[1], to[1], share),
-    mix(from[2], to[2], share),
-  ];
-}
-
-/** A right-side rotation as seen on the left: roll and turn change sign. */
-function mirror([x, y, z]: Euler3): Euler3 {
-  return [-x, -y, z];
 }
 
 /** Clamps to 0…1. */
@@ -117,17 +111,55 @@ function unit(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
+/** Writes one bone's rotation. */
+function setRotation(
+  out: MutablePose,
+  bone: BoneName,
+  x: number,
+  y: number,
+  z: number,
+): void {
+  const rotation = out.rotations[bone];
+  rotation[0] = x;
+  rotation[1] = y;
+  rotation[2] = z;
+}
+
+/** Writes one bone's rotation from a stored one. */
+function setEuler(out: MutablePose, bone: BoneName, euler: Euler3): void {
+  setRotation(out, bone, euler[0], euler[1], euler[2]);
+}
+
+/** Writes one bone's rotation blended between two stored ones. */
+function setMixed(
+  out: MutablePose,
+  bone: BoneName,
+  from: Euler3,
+  to: Euler3,
+  share: number,
+): void {
+  setRotation(
+    out,
+    bone,
+    mix(from[0], to[0], share),
+    mix(from[1], to[1], share),
+    mix(from[2], to[2], share),
+  );
+}
+
 /** Phase angle, swing amount (0…1) and running share (0…1) of the gait. */
 type Gait = { angle: number; amount: number; run: number };
 
-/** The gait at a speed and distance walked; the stride lengthens above {@link RUN_SPEED_MPS}. */
-function gaitOf(speed: number, phaseM: number): Gait {
+/** Scratch gait, overwritten by every {@link poseInto} call so posing allocates nothing. */
+const GAIT: Gait = { angle: 0, amount: 0, run: 0 };
+
+/** Writes the gait at a speed and distance walked; the stride lengthens above {@link RUN_SPEED_MPS}. */
+function gaitInto(speed: number, phaseM: number, gait: Gait): Gait {
   const stride = speed > RUN_SPEED_MPS ? RUN_STRIDE_M : WALK_STRIDE_M;
-  return {
-    angle: (2 * Math.PI * phaseM) / stride,
-    amount: unit(speed / FULL_SWING_SPEED_MPS),
-    run: unit((speed - RUN_STYLE_FROM_MPS) / RUN_STYLE_SPAN_MPS),
-  };
+  gait.angle = (2 * Math.PI * phaseM) / stride;
+  gait.amount = unit(speed / FULL_SWING_SPEED_MPS);
+  gait.run = unit((speed - RUN_STYLE_FROM_MPS) / RUN_STYLE_SPAN_MPS);
+  return gait;
 }
 
 /** Breathing, −1…1 over {@link BREATH_PERIOD_S}. */
@@ -135,30 +167,38 @@ function breathOf(tick: number): number {
   return Math.sin((2 * Math.PI * tick * SIM_STEP_S) / BREATH_PERIOD_S);
 }
 
+/** The thigh, shin and foot bones of each leg. */
+const LEG_BONES = {
+  L: ["upperLegL", "lowerLegL", "footL"],
+  R: ["upperLegR", "lowerLegR", "footR"],
+} as const;
+
 /** One leg for a thigh swing: the knee bends while the thigh is behind, the foot stays level. */
-function legRotations(swing: number, gait: Gait): [Euler3, Euler3, Euler3] {
+function writeLeg(
+  out: MutablePose,
+  [thigh, shin, foot]: (typeof LEG_BONES)["L" | "R"],
+  swing: number,
+  gait: Gait,
+): void {
   const backShare = Math.max(0, -swing / LEG_SWING_RAD);
   const knee = -(
     KNEE_SOFT_RAD * gait.amount +
     mix(KNEE_BACK_WALK_RAD, KNEE_BACK_RUN_RAD, gait.run) * backShare
   );
-  return [
-    [0, 0, swing],
-    [0, 0, knee],
-    [0, 0, -(swing + knee) * FOOT_LEVELLING],
-  ];
+  setRotation(out, thigh, 0, 0, swing);
+  setRotation(out, shin, 0, 0, knee);
+  setRotation(out, foot, 0, 0, -(swing + knee) * FOOT_LEVELLING);
 }
 
 /** Both legs, half a cycle apart. */
-function legs(gait: Gait): BoneRotations {
+function writeLegs(out: MutablePose, gait: Gait): void {
   const swing = LEG_SWING_RAD * gait.amount * Math.sin(gait.angle);
-  const [upperLegL, lowerLegL, footL] = legRotations(swing, gait);
-  const [upperLegR, lowerLegR, footR] = legRotations(-swing, gait);
-  return { upperLegL, lowerLegL, footL, upperLegR, lowerLegR, footR };
+  writeLeg(out, LEG_BONES.L, swing, gait);
+  writeLeg(out, LEG_BONES.R, -swing, gait);
 }
 
 /** Arms swinging against the legs, elbows bending more as the character runs. */
-function freeArms(gait: Gait, breath: number): BoneRotations {
+function writeFreeArms(out: MutablePose, gait: Gait, breath: number): void {
   const swing =
     LEG_SWING_RAD *
     gait.amount *
@@ -170,27 +210,21 @@ function freeArms(gait: Gait, breath: number): BoneRotations {
     gait.amount,
   );
   const spread = ARM_SPREAD_RAD + BREATH_SPREAD_RAD * breath;
-  const upperArmR: Euler3 = [-spread, 0, swing];
-  const lowerArmR: Euler3 = [0, 0, elbow];
-  return {
-    upperArmR,
-    lowerArmR,
-    upperArmL: mirror([-spread, 0, -swing]),
-    lowerArmL: lowerArmR,
-  };
+  setRotation(out, "upperArmR", -spread, 0, swing);
+  setRotation(out, "lowerArmR", 0, 0, elbow);
+  setRotation(out, "upperArmL", spread, 0, -swing);
+  setRotation(out, "lowerArmL", 0, 0, elbow);
 }
 
 /** Pelvis sway, running lean, chest counter-twist and breathing. */
-function torso(gait: Gait, breath: number): BoneRotations {
+function writeTorso(out: MutablePose, gait: Gait, breath: number): void {
   const twist = TWIST_RAD * gait.amount * Math.sin(gait.angle);
   const lean = RUN_LEAN_RAD * gait.run;
   const chestPitch = BREATH_RAD * breath;
-  return {
-    pelvis: [0, -twist, 0],
-    spine: [0, 0, -lean],
-    chest: [0, twist, chestPitch],
-    head: [0, -twist / 2, lean / 2 - chestPitch],
-  };
+  setRotation(out, "pelvis", 0, -twist, 0);
+  setRotation(out, "spine", 0, 0, -lean);
+  setRotation(out, "chest", 0, twist, chestPitch);
+  setRotation(out, "head", 0, -twist / 2, lean / 2 - chestPitch);
 }
 
 /**
@@ -279,27 +313,33 @@ const SUPPORT_WRIST_SHARE = 0.6;
 /** How much of the chest's turn the head undoes to keep looking ahead, 0…1. */
 const HEAD_COUNTER_SHARE = 0.85;
 
+/** Turns the chest by `yaw` and the head back most of the way, so the character looks ahead. */
+function writeBlade(out: MutablePose, yaw: number): void {
+  setRotation(out, "chest", 0, yaw, 0);
+  setRotation(out, "head", 0, -yaw * HEAD_COUNTER_SHARE, 0);
+}
+
 /** Gun arms: the wrist keeps the barrel level; recoil kicks the arm up. */
-function gunArms(input: PoseInput, weapon: HeldWeapon): BoneRotations {
+function writeGunArms(
+  out: MutablePose,
+  input: PoseInput,
+  weapon: HeldWeapon,
+): void {
   const { upper, elbow, drop, chestYaw, left } = gunStance(
     weapon,
     input.aiming,
   );
-  const arms: BoneRotations = {
-    upperArmR: [upper[0], upper[1], upper[2] + RECOIL_KICK_RAD * input.recoil],
-    lowerArmR: [0, 0, elbow],
-    handR: [0, 0, -(upper[2] + elbow) - drop],
-  };
-  if (chestYaw !== 0) {
-    arms.chest = [0, chestYaw, 0];
-    arms.head = [0, -chestYaw * HEAD_COUNTER_SHARE, 0];
-  }
+  const kick = RECOIL_KICK_RAD * input.recoil;
+  setRotation(out, "upperArmR", upper[0], upper[1], upper[2] + kick);
+  setRotation(out, "lowerArmR", 0, 0, elbow);
+  setRotation(out, "handR", 0, 0, -(upper[2] + elbow) - drop);
+  if (chestYaw !== 0) writeBlade(out, chestYaw);
   if (left) {
-    arms.upperArmL = left.upper;
-    arms.lowerArmL = [0, 0, left.elbow];
-    arms.handL = [0, 0, -(left.upper[2] + left.elbow) * SUPPORT_WRIST_SHARE];
+    const wrist = -(left.upper[2] + left.elbow) * SUPPORT_WRIST_SHARE;
+    setEuler(out, "upperArmL", left.upper);
+    setRotation(out, "lowerArmL", 0, 0, left.elbow);
+    setRotation(out, "handL", 0, 0, wrist);
   }
-  return arms;
 }
 
 /** Both arms and the chest's turn while holding a bat two-handed. */
@@ -344,29 +384,30 @@ const BAT_LOW = {
 };
 
 /** Bat arms: low when idle; wound up to aim, swinging through as recoil peaks. */
-function batArms(input: PoseInput): BoneRotations {
+function writeBatArms(out: MutablePose, input: PoseInput): void {
   if (!input.aiming && input.recoil === 0) {
-    return {
-      upperArmR: BAT_LOW.upper,
-      lowerArmR: [0, 0, BAT_LOW.elbow],
-      handR: [0, 0, BAT_LOW.handR],
-    };
+    setEuler(out, "upperArmR", BAT_LOW.upper);
+    setRotation(out, "lowerArmR", 0, 0, BAT_LOW.elbow);
+    setRotation(out, "handR", 0, 0, BAT_LOW.handR);
+    return;
   }
   const { windUp, swung } = BAT_STANCES;
   const share = input.recoil;
-  const upperL = mixEuler(windUp.upperL, swung.upperL, share);
   const elbowL = mix(windUp.elbowL, swung.elbowL, share);
-  const chestYaw = mix(windUp.chestYaw, swung.chestYaw, share);
-  return {
-    chest: [0, chestYaw, 0],
-    head: [0, -chestYaw * HEAD_COUNTER_SHARE, 0],
-    upperArmR: mixEuler(windUp.upperR, swung.upperR, share),
-    lowerArmR: [0, 0, mix(windUp.elbowR, swung.elbowR, share)],
-    handR: [0, 0, mix(windUp.handR, swung.handR, share)],
-    upperArmL: upperL,
-    lowerArmL: [0, 0, elbowL],
-    handL: [0, 0, -(upperL[2] + elbowL) * SUPPORT_WRIST_SHARE],
-  };
+  const upperLPitch = mix(windUp.upperL[2], swung.upperL[2], share);
+  writeBlade(out, mix(windUp.chestYaw, swung.chestYaw, share));
+  setMixed(out, "upperArmR", windUp.upperR, swung.upperR, share);
+  setRotation(out, "lowerArmR", 0, 0, mix(windUp.elbowR, swung.elbowR, share));
+  setRotation(out, "handR", 0, 0, mix(windUp.handR, swung.handR, share));
+  setMixed(out, "upperArmL", windUp.upperL, swung.upperL, share);
+  setRotation(out, "lowerArmL", 0, 0, elbowL);
+  setRotation(
+    out,
+    "handL",
+    0,
+    0,
+    -(upperLPitch + elbowL) * SUPPORT_WRIST_SHARE,
+  );
 }
 
 /** Fists up to guard and the right one thrown on recoil. */
@@ -377,25 +418,26 @@ const FIST_STANCES = {
   punchLower: [0, 0, 0.05] as Euler3,
 };
 
-/** Unarmed arms when aiming or punching. */
-function fistArms(input: PoseInput): BoneRotations {
+/** Unarmed arms when aiming or punching; the left guard mirrors the right. */
+function writeFistArms(out: MutablePose, input: PoseInput): void {
   const { guardUpper, guardLower, punchUpper, punchLower } = FIST_STANCES;
-  return {
-    upperArmR: mixEuler(guardUpper, punchUpper, input.recoil),
-    lowerArmR: mixEuler(guardLower, punchLower, input.recoil),
-    upperArmL: mirror(guardUpper),
-    lowerArmL: guardLower,
-  };
+  setMixed(out, "upperArmR", guardUpper, punchUpper, input.recoil);
+  setMixed(out, "lowerArmR", guardLower, punchLower, input.recoil);
+  setRotation(out, "upperArmL", -guardUpper[0], -guardUpper[1], guardUpper[2]);
+  setEuler(out, "lowerArmL", guardLower);
 }
 
-/** Arm overrides for what the character holds, or none when its arms swing freely. */
-function heldArms(input: PoseInput): BoneRotations {
+/** Arm overrides for what the character holds; free arms are left as they swing. */
+function writeHeldArms(out: MutablePose, input: PoseInput): void {
   const weapon = input.weapon;
   const readied = input.aiming || input.recoil > 0;
   if (weapon === null || weapon === "fist" || weapon === "cannon") {
-    return readied ? fistArms(input) : {};
+    if (readied) writeFistArms(out, input);
+  } else if (weapon === "bat") {
+    writeBatArms(out, input);
+  } else {
+    writeGunArms(out, input, weapon);
   }
-  return weapon === "bat" ? batArms(input) : gunArms(input, weapon);
 }
 
 /** On its side in the recovery position: arms forward, the upper leg drawn up. */
@@ -413,42 +455,68 @@ const DEAD_ROTATIONS: BoneRotations = {
   footR: [0, 0, 0.3],
 };
 
+/** Every bone back to its bind rotation, then the stored rotations of `rotations` on top. */
+function resetRotations(out: MutablePose, rotations: BoneRotations): void {
+  for (let index = 0; index < BONES.length; index += 1) {
+    const bone = BONES[index];
+    const stored = rotations[bone];
+    if (stored) setEuler(out, bone, stored);
+    else setRotation(out, bone, 0, 0, 0);
+  }
+}
+
+/** No stored rotations: every bone at its bind rotation. */
+const BIND_POSE: BoneRotations = {};
+
 /**
- * The pose of a character this frame.
+ * A fresh pose, every bone at its bind rotation, for {@link poseInto} to write into.
+ *
+ * @returns A new mutable pose with one rotation array per bone.
+ */
+export function createPose(): MutablePose {
+  const rotations = {} as Record<BoneName, Euler3>;
+  for (const bone of BONES) rotations[bone] = [0, 0, 0];
+  return { rotations, pelvisHeight: PELVIS_HEIGHT_M, lying: false };
+}
+
+/**
+ * Writes this frame's pose into `out` without allocating: every bone is rewritten, so nothing
+ * from the previous pose survives. Call it every frame with one pose per character.
+ *
+ * @param input - Speed, gait phase, aim, weapon, death, tick and recoil.
+ * @param out - The pose to overwrite, from {@link createPose}.
+ * @returns `out`.
+ */
+export function poseInto(input: PoseInput, out: MutablePose): MutablePose {
+  if (input.dead) {
+    resetRotations(out, DEAD_ROTATIONS);
+    out.pelvisHeight = PELVIS_HEIGHT_M;
+    out.lying = true;
+    return out;
+  }
+  resetRotations(out, BIND_POSE);
+  const gait = gaitInto(input.speed, input.phaseM, GAIT);
+  const breath = breathOf(input.tick);
+  writeTorso(out, gait, breath);
+  writeLegs(out, gait);
+  writeFreeArms(out, gait, breath);
+  writeHeldArms(out, input);
+  const bob =
+    mix(WALK_BOB_M, RUN_BOB_M, gait.run) *
+    gait.amount *
+    Math.sin(gait.angle) ** 2;
+  out.pelvisHeight = PELVIS_HEIGHT_M - bob;
+  out.lying = false;
+  return out;
+}
+
+/**
+ * The pose of a character, freshly allocated: a convenience over {@link poseInto} for tests and
+ * one-off use. Per-frame code should keep one pose and call {@link poseInto}.
  *
  * @param input - Speed, gait phase, aim, weapon, death, tick and recoil.
  * @returns Bone rotations, the pelvis height and whether it lies on the ground.
  */
 export function poseFor(input: PoseInput): Pose {
-  if (input.dead) {
-    return {
-      rotations: { ...DEAD_ROTATIONS },
-      pelvisHeight: PELVIS_HEIGHT_M,
-      lying: true,
-    };
-  }
-  const gait = gaitOf(input.speed, input.phaseM);
-  const breath = breathOf(input.tick);
-  const rotations: BoneRotations = {
-    ...torso(gait, breath),
-    ...legs(gait),
-    ...freeArms(gait, breath),
-    ...heldArms(input),
-  };
-  const bob =
-    mix(WALK_BOB_M, RUN_BOB_M, gait.run) *
-    gait.amount *
-    Math.sin(gait.angle) ** 2;
-  return { rotations, pelvisHeight: PELVIS_HEIGHT_M - bob, lying: false };
-}
-
-/**
- * A bone's rotation in a pose.
- *
- * @param rotations - The pose's rotations.
- * @param bone - The bone.
- * @returns Its rotation, or no rotation when the pose leaves it out.
- */
-export function rotationOf(rotations: BoneRotations, bone: BoneName): Euler3 {
-  return rotations[bone] ?? ZERO;
+  return poseInto(input, createPose());
 }
