@@ -35,7 +35,7 @@ export type Runtime3d = Runtime & { view3d: View3dHandle; look: MouseLook };
 const MS_PER_SECOND = 1000;
 /** The 3D view draws no raster chunks, so its paint reports none. */
 const NO_RASTER: DrawStats = { missing: 0, rasterised: false, rasterMs: 0 };
-/** Until the simulation's structures reach this branch, the 3D view sees an intact city. */
+/** An untouched city: the simulation lists no damaged or destroyed building yet. */
 const NO_STRUCTURES: readonly StructureView[] = [];
 /**
  * In 3D the view reaches far past the 2D camera's box, so the simulation's "out of sight" rect —
@@ -127,7 +127,7 @@ function view3dFrame(
   return {
     scene,
     tiles: scene.world.tiles,
-    structures: NO_STRUCTURES,
+    structures: runtime.state.structures ?? NO_STRUCTURES,
     yaw: runtime.look.yaw(),
     pitch: runtime.look.pitch(),
     aim: runtime.aim3d ?? runtime.look.yaw(),

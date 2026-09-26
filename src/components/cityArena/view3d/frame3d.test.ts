@@ -5,7 +5,7 @@ import { INITIAL_FEEDBACK } from "@/lib/cityArena/render/feedback";
 import type { Scene } from "@/lib/cityArena/render/renderScene";
 import { createFakeContext } from "@/lib/cityArena/render/testing/fakeContext";
 import type { View3dFrame } from "@/lib/cityArena/render3d";
-import { createInput } from "@/lib/cityArena/sim/types";
+import { createInput, type StructureState } from "@/lib/cityArena/sim/types";
 import type { Runtime } from "../arenaRuntime";
 import {
   VIEW3D_POPULATION_HALF_M,
@@ -185,5 +185,32 @@ describe("paint3d", () => {
       deadSeconds: 2.5,
       size: { width: 800, height: 600 },
     });
+  });
+
+  it("hands the 3D view the simulation's structures, and an intact city while it has none", () => {
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      createFakeContext() as unknown as CanvasRenderingContext2D,
+    );
+    const runtime = runtime3d();
+    const scene = { world: { tiles: [] } } as unknown as Scene;
+    const rect = { width: 800, height: 600 } as DOMRect;
+    const paint = (): View3dFrame => {
+      paint3d(document.createElement("canvas"), rect, runtime, scene, 0, 0);
+      return runtime.view3d.render.mock.calls.at(-1)![0] as View3dFrame;
+    };
+    expect(paint().structures).toEqual([]);
+    const structures: StructureState[] = [
+      {
+        id: 4,
+        damage: 120,
+        destroyedAtTick: 9,
+        lastHitTick: 9,
+        x: 0,
+        y: 0,
+        radius: 0,
+      },
+    ];
+    runtime.state = { ...runtime.state, structures };
+    expect(paint().structures).toBe(structures);
   });
 });

@@ -4,8 +4,10 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCamera } from "@/lib/cityArena/render/camera";
+import { RUBBLE_FILL } from "@/lib/cityArena/render/drawStructures";
 import { CROSSHAIR_STROKE } from "@/lib/cityArena/render/palette";
 import { NO_SPRITES } from "@/lib/cityArena/render/sprites";
+import type { View3dFrame } from "@/lib/cityArena/render3d";
 import { createStaticRaster } from "@/lib/cityArena/render/staticRaster";
 import {
   createFakeContext,
@@ -30,11 +32,15 @@ import {
 import { createRng } from "@/lib/cityArena/sim/rng";
 import { createVehicle } from "@/lib/cityArena/sim/vehicle";
 import { nextWeapon, SPAWN_AMMO } from "@/lib/cityArena/sim/weapons";
+import { boundsOf } from "@/lib/cityArena/mapBuild/geometry";
+import type { StructureState } from "@/lib/cityArena/sim/types";
 import { createCollisionGrid } from "@/lib/cityArena/world/collisionGrid";
+import type { DecodedTile } from "@/lib/cityArena/world/decode";
 import type { LoadProgress } from "@/lib/cityArena/world/mapLoader";
 import type { MapIndex, MapLandmark } from "@/lib/cityArena/world/mapTypes";
 import type { Point } from "@/lib/cityArena/world/projection";
 import { decodeRoadGraph } from "@/lib/cityArena/world/roadGraph";
+import { structureIdOf } from "@/lib/cityArena/world/structureId";
 import type {
   WorldReady,
   WorldSession,
@@ -272,20 +278,98 @@ function hasCrosshairStroke(fakeContext: FakeContext): boolean {
 
 /**
  * Calls `tick` with timestamps `FRAME_STEP_MS` apart, starting after `fromMs`, until `isDone`
- * reports true or `MAX_RESPAWN_FRAMES` frames have run — whichever comes first, so a regression
- * that stops the state from ever satisfying `isDone` fails the caller's own assertion instead of
+ * reports true or `maxFrames` frames have run — whichever comes first, so a regression that
+ * stops the state from ever satisfying `isDone` fails the caller's own assertion instead of
  * hanging the test.
  */
 function driveFramesUntil(
   tick: (timestamp: number) => void,
   fromMs: number,
   isDone: () => boolean,
+  maxFrames = MAX_RESPAWN_FRAMES,
 ): void {
   let timestamp = fromMs;
-  for (let frame = 0; frame < MAX_RESPAWN_FRAMES && !isDone(); frame++) {
+  for (let frame = 0; frame < maxFrames && !isDone(); frame++) {
     timestamp += FRAME_STEP_MS;
     act(() => tick(timestamp));
   }
+}
+
+/** Half the side of the square shed the destruction tests shoot down, metres. */
+const SHED_HALF_M = 2;
+/** How far ahead of the player the shed's centre stands, metres: well inside pistol range. */
+const SHED_DISTANCE_M = 8;
+/** The shed's structure id: the first building of tile (0, 0). */
+const SHED_ID = structureIdOf(0, 0, 0);
+/**
+ * Frames the destruction tests may shoot for. A pistol round brings a quarter of its 20 damage to
+ * a building, 2.5 times a second, and the smallest building has 120 health: 24 hits, about 96
+ * frames of 0.1 s.
+ */
+const MAX_SHOOTING_FRAMES = 200;
+/** Simulation ticks in one 0.1 s frame. */
+const TICKS_PER_FRAME = 3;
+/** Ticks the trigger is held for: every one of {@link MAX_SHOOTING_FRAMES} frames' worth. */
+const SHOOTING_TICKS = MAX_SHOOTING_FRAMES * TICKS_PER_FRAME;
+
+/**
+ * Stands a one-storey shed {@link SHED_DISTANCE_M} ahead of the local player, on the line they
+ * face, in both the session's collision grid (which the simulation's rounds hit) and its tiles
+ * (which the renderers draw footprints from).
+ */
+function placeShedAhead(session: WorldSession): void {
+  const player = hookedPlayer()!;
+  const centreX = player.x + Math.cos(player.facing) * SHED_DISTANCE_M;
+  const centreY = player.y + Math.sin(player.facing) * SHED_DISTANCE_M;
+  const ring: Point[] = [
+    [centreX - SHED_HALF_M, centreY - SHED_HALF_M],
+    [centreX + SHED_HALF_M, centreY - SHED_HALF_M],
+    [centreX + SHED_HALF_M, centreY + SHED_HALF_M],
+    [centreX - SHED_HALF_M, centreY + SHED_HALF_M],
+  ];
+  const tile: DecodedTile = {
+    x: 0,
+    y: 0,
+    rect: { minX: -2000, minY: -2000, maxX: 2000, maxY: 2000 },
+    roads: [],
+    buildings: [
+      { structureId: SHED_ID, ring, bounds: boundsOf(ring), levels: 1 },
+    ],
+    ground: [],
+    water: [],
+    trees: [],
+    furniture: [],
+  };
+  session.collision.insertTile(tile);
+  session.tiles = () => [tile];
+}
+
+/** True when `structures` lists the shed as destroyed. */
+function shedDestroyed(
+  structures:
+    readonly Pick<StructureState, "id" | "destroyedAtTick">[] | undefined,
+): boolean {
+  return (structures ?? []).some(
+    (entry) => entry.id === SHED_ID && entry.destroyedAtTick !== null,
+  );
+}
+
+/**
+ * Holds the trigger through the debug seam — with no aim, the rounds fly along the player's
+ * facing, straight at the shed — and drives frames from `fromMs` until the simulation has brought
+ * it down.
+ */
+function shootDownShed(
+  tick: (timestamp: number) => void,
+  fromMs: number,
+): void {
+  window.__arena?.dispatch({ fire: true }, SHOOTING_TICKS);
+  driveFramesUntil(
+    tick,
+    fromMs,
+    () => shedDestroyed(window.__arena?.getState()?.structures),
+    MAX_SHOOTING_FRAMES,
+  );
 }
 
 /** The local player behind the test hook, or undefined when the hook is not installed. */
@@ -697,6 +781,58 @@ describe("debug hooks", () => {
     expect(fakeContext.calls.some((call) => call.startsWith("fill("))).toBe(
       false,
     );
+  });
+
+  it("in 3D hands the view a building the player shot down, as destroyed", async () => {
+    const handle = { render: vi.fn(), dispose: vi.fn() };
+    mockCreateView3d.mockReturnValue(handle);
+    const { session, resolveReady } = createControllableSession();
+    mockCreateWorldSession.mockReturnValue(session);
+    const { result } = renderArenaGameWithCanvas({ debug: true });
+    await bootReady(resolveReady);
+    result.current.view3d.layerRef.current = document.createElement("div");
+    await act(async () => {
+      result.current.updateSettings({ view: "3d" });
+    });
+    await waitFor(() => expect(mockCreateView3d).toHaveBeenCalledTimes(1));
+    placeShedAhead(session);
+    const tick = getTick();
+    act(() => tick(0));
+    const [before] = handle.render.mock.calls.at(-1)! as [View3dFrame];
+    expect(shedDestroyed(before.structures)).toBe(false);
+
+    shootDownShed(tick, 0);
+    expect(shedDestroyed(window.__arena?.getState()?.structures)).toBe(true);
+    act(() => tick((MAX_SHOOTING_FRAMES + 1) * FRAME_STEP_MS));
+
+    const [after] = handle.render.mock.calls.at(-1)! as [View3dFrame];
+    expect(shedDestroyed(after.structures)).toBe(true);
+    expect(after.structures).toBe(window.__arena?.getState()?.structures);
+    expect(window.__arena?.getViolations()).toBe(0);
+  });
+
+  it("in 2D draws the rubble of a building the player shot down", async () => {
+    const { session, resolveReady } = createControllableSession();
+    mockCreateWorldSession.mockReturnValue(session);
+    const { canvas, fakeContext } = renderArenaGameWithCanvas({
+      debug: true,
+    });
+    // jsdom lays nothing out; a 0 × 0 canvas would show no world at all.
+    vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    await bootReady(resolveReady);
+    placeShedAhead(session);
+    const tick = getTick();
+    act(() => tick(0));
+    expect(fakeContext.calls).not.toContain(`fill(${RUBBLE_FILL})`);
+
+    shootDownShed(tick, 0);
+    expect(shedDestroyed(window.__arena?.getState()?.structures)).toBe(true);
+    fakeContext.calls.length = 0;
+    act(() => tick((MAX_SHOOTING_FRAMES + 1) * FRAME_STEP_MS));
+
+    expect(fakeContext.calls).toContain(`fill(${RUBBLE_FILL})`);
   });
 });
 
