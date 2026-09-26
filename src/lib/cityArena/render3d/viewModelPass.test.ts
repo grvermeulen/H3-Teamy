@@ -5,7 +5,11 @@ import {
   PerspectiveCamera,
 } from "three";
 import { describe, expect, it, vi } from "vitest";
-import type { ViewModel, ViewModelInput } from "./viewmodel";
+import {
+  VIEW_MODEL_SCALE,
+  type ViewModel,
+  type ViewModelInput,
+} from "./viewmodel";
 import { VIEW_MODEL_NEAR_M, createViewModelPass } from "./viewModelPass";
 
 const HANDS: ViewModelInput = {
@@ -72,6 +76,24 @@ describe("createViewModelPass", () => {
       new PerspectiveCamera(60, 4 / 3, VIEW_MODEL_NEAR_M, camera.far)
         .projectionMatrix.elements,
     );
+  });
+
+  it("sizes the hands and moves them out with a wider screen, keeping their spot on it", () => {
+    const viewModel = fakeViewModel();
+    const pass = createViewModelPass(() => viewModel);
+    const city = cityCamera();
+    pass.update(city, HANDS);
+    expect(viewModel.object.scale.toArray()).toEqual([
+      VIEW_MODEL_SCALE,
+      VIEW_MODEL_SCALE,
+      VIEW_MODEL_SCALE,
+    ]);
+    const wide = viewModel.object.position.x;
+    city.aspect = 4 / 3;
+    city.updateProjectionMatrix();
+    pass.update(city, HANDS);
+    expect(viewModel.object.position.x).toBeLessThan(wide);
+    expect(viewModel.object.position.x).toBeGreaterThan(0);
   });
 
   it("frees the view model on dispose", () => {

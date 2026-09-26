@@ -8,6 +8,7 @@
 import { Group, type Object3D } from "three";
 import type { Scene } from "../render/renderScene";
 import { burst, type BurstTargets } from "./bursts";
+import { MUZZLE_MATCH_M } from "./entityShots";
 import { createDebrisPool } from "./debris";
 import { createFlashPool } from "./flashes";
 import { createParticleSystem, type ParticleSystem } from "./particles";
@@ -42,8 +43,15 @@ export type Effects3d = {
    * @param scene - The frame's scene.
    * @param focus - The camera focus in world metres, for the vehicle smoke's range; defaults to the
    *   local player's position.
+   * @param ownMuzzleHidden - First person: your own muzzle flashes light the street but draw no
+   *   flame — at chest height just ahead of the eye it would fill the view, and the view model
+   *   flashes at its own barrel instead.
    */
-  sync(scene: EffectsScene, focus?: { x: number; y: number }): void;
+  sync(
+    scene: EffectsScene,
+    focus?: { x: number; y: number },
+    ownMuzzleHidden?: boolean,
+  ): void;
   /** Advances every particle, chunk, fireball and flash light by `dt` seconds. */
   update(dt: number): void;
   /** Frees every geometry and material; detach `object` yourself. */
@@ -54,6 +62,24 @@ export type Effects3d = {
 function localFocus(scene: EffectsScene): { x: number; y: number } | null {
   const own = scene.players.find((player) => player.id === scene.localPlayerId);
   return own ? { x: own.x, y: own.y } : null;
+}
+
+/**
+ * Whether a muzzle flash is the local player's own: the simulation lights it at the shooter, so
+ * one within {@link MUZZLE_MATCH_M} of you is yours.
+ */
+function isOwnMuzzle(
+  scene: EffectsScene,
+  effect: EffectsScene["effects"][number],
+): boolean {
+  if (effect.kind !== "muzzle") return false;
+  for (const player of scene.players) {
+    if (player.id !== scene.localPlayerId) continue;
+    const dx = effect.x - player.x;
+    const dy = effect.y - player.y;
+    return dx * dx + dy * dy <= MUZZLE_MATCH_M * MUZZLE_MATCH_M;
+  }
+  return false;
 }
 
 function createTargets(maxParticles: number): BurstTargets {
@@ -93,9 +119,14 @@ export function createEffects3d(options: { maxParticles: number }): Effects3d {
   return {
     object,
     smoke,
-    sync(scene, focus) {
+    sync(scene, focus, ownMuzzleHidden = false) {
       for (const effect of scene.effects)
-        if (seen.firstSeen(effect.id)) burst(targets, effect);
+        if (seen.firstSeen(effect.id))
+          burst(
+            targets,
+            effect,
+            !(ownMuzzleHidden && isOwnMuzzle(scene, effect)),
+          );
       seen.endFrame();
       projectiles.sync(scene.bullets);
       vehicleSmoke.sync(scene.vehicles, focus ?? localFocus(scene), clock);

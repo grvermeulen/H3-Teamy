@@ -149,6 +149,8 @@ type Frame = {
   readonly steerSample: SteerSample;
   readonly pickupInput: { taken: boolean; tick: number };
   dt: number;
+  /** The scene's tick. */
+  tick: number;
   focus: { x: number; y: number };
   view: EntityView;
 };
@@ -192,7 +194,10 @@ function driverOf(
   return undefined;
 }
 
-/** A new character slot for `id`: a freed model of the look, or a fresh one. */
+/**
+ * A new character slot for `id`: a freed model of the look, or a fresh one. A vest hue belongs to
+ * one player only, so a hued model is a one-off, disposed when that player leaves.
+ */
 function claimCharacter(
   frame: Frame,
   pool: CharacterPool,
@@ -200,7 +205,7 @@ function claimCharacter(
   look: CharacterLook,
   vestHue?: number,
 ): CharacterSlot {
-  const variant = vestHue === undefined ? look : `${look}:${vestHue}`;
+  const variant = vestHue === undefined ? look : null;
   const state: CharacterState = {
     look,
     motion: createMotion(),
@@ -249,21 +254,23 @@ function placeCharacter(
 
 /**
  * The tick of a shot the player fired: their next-shot tick moving on (every trigger pull,
- * including a swing, which leaves no muzzle flash), else a muzzle flash at their gun. The dead
- * fire nothing, and the memory restarts with them, since a respawn resets the next-shot tick.
+ * including a swing, which leaves no muzzle flash), else — for another player — a muzzle flash
+ * at their gun. Your own shots are always read from your own next-shot tick, which this client
+ * knows first hand: a flash near you may be the officer beside you, and must not kick your hands.
+ * The dead fire nothing, and the memory restarts with them, since a respawn resets the tick.
  */
 function playerShotTick(
   frame: Frame,
   state: CharacterState,
   player: ArenaPlayerState,
-  tick: number,
+  local: boolean,
   dead: boolean,
 ): number | null {
   const previous = state.nextShotTick;
   state.nextShotTick = dead ? null : player.nextShotTick;
   if (dead) return null;
-  const pulled = previous !== null && player.nextShotTick > previous;
-  return pulled ? tick : muzzleTickNear(frame.muzzles, player.x, player.y);
+  if (previous !== null && player.nextShotTick > previous) return frame.tick;
+  return local ? null : muzzleTickNear(frame.muzzles, player.x, player.y);
 }
 
 /** Copies the local player's weapon, last shot and speed for the view model. */
@@ -300,7 +307,7 @@ function syncPlayer(
     frame.dt,
     Math.abs(player.speed),
   );
-  const fired = playerShotTick(frame, state, player, scene.tick, dead);
+  const fired = playerShotTick(frame, state, player, local, dead);
   registerShot(state.shots, fired, frame.dt);
   frame.pose.weapon = player.weapon;
   frame.pose.aiming = !dead && holdsGun(player.weapon);
@@ -480,6 +487,7 @@ function createFrame(factories: EntityFactories, group: Group): Frame {
     },
     pickupInput: { taken: false, tick: 0 },
     dt: 0,
+    tick: 0,
     focus: { x: 0, y: 0 },
     view: { firstPerson: false, aim: 0 },
   };
@@ -517,6 +525,7 @@ export function createEntitySync(factories: EntityFactories): EntitySync {
     local: frame.local,
     update(scene, dt, cameraFocus, view) {
       frame.dt = dt;
+      frame.tick = scene.tick;
       frame.focus = cameraFocus;
       frame.view = view;
       for (const pool of pools) pool.begin();

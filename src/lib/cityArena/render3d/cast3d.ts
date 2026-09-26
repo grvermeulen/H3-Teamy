@@ -134,7 +134,7 @@ export function createCast3d(
       view.aim = frame.aim;
       entities.update(frame.scene, frame.dt, focus, view);
       fx = fxFor(object, fx, frame.quality);
-      fx.effects.sync(frame.scene, focus);
+      fx.effects.sync(frame.scene, focus, view.firstPerson);
       fx.effects.update(frame.dt);
       fx.destruction.update(frame.dt);
       return hands.update(camera, handsInput(handsScratch, entities, frame));

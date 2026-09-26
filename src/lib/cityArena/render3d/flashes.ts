@@ -3,7 +3,9 @@
  * over the ground, and a flash of real light (spec §6.8). Real lights are expensive, so at most
  * {@link MAX_FLASH_LIGHTS} exist and are lent out: explosions first, muzzle flashes only when one is
  * spare. The lights stay visible even while dark (intensity 0): three.js keys every lit material's
- * shader on the number of visible lights, so hiding one would recompile them all (Ruling 21).
+ * shader on the number of visible lights, so hiding one would recompile them all (Ruling 21). A
+ * light lent this frame is not dimmed until the next update, so even a muzzle's 0.05 s flash
+ * lights the frame it fires in when frames run longer than that.
  */
 import {
   AdditiveBlending,
@@ -78,6 +80,8 @@ type LightSlot = {
   age: number;
   duration: number;
   peak: number;
+  /** Lent since the last update: that update leaves it at its peak for the frame to draw. */
+  fresh: boolean;
 };
 
 type FireballSlot = {
@@ -121,7 +125,7 @@ function ringMaterial(): MeshBasicMaterial {
 function createLightSlot(): LightSlot {
   const light = new PointLight(EXPLOSION_LIGHT_COLOUR, 0);
   light.name = "flash-light";
-  return { light, owner: null, age: 0, duration: 1, peak: 0 };
+  return { light, owner: null, age: 0, duration: 1, peak: 0, fresh: false };
 }
 
 /** The slot a new flash may take: a dark one, else — for a blast — a muzzle's, else the oldest blast's. */
@@ -143,6 +147,7 @@ function lend(slot: LightSlot, owner: LightOwner, at: Vector3Like): void {
   const blast = owner === "explosion";
   slot.owner = owner;
   slot.age = 0;
+  slot.fresh = true;
   slot.duration = blast ? EXPLOSION_LIGHT_S : MUZZLE_LIGHT_S;
   slot.peak = blast ? EXPLOSION_LIGHT_INTENSITY : MUZZLE_LIGHT_INTENSITY;
   slot.light.color.setHex(blast ? EXPLOSION_LIGHT_COLOUR : MUZZLE_LIGHT_COLOUR);
@@ -151,9 +156,16 @@ function lend(slot: LightSlot, owner: LightOwner, at: Vector3Like): void {
   slot.light.position.set(at.x, at.y, at.z);
 }
 
-/** Dims a lit flash along (1 − t)², and hands the light back once it is dark. */
+/**
+ * Dims a lit flash along (1 − t)², and hands the light back once it is dark; a light lent since
+ * the last update keeps its peak for this frame.
+ */
 function dim(slot: LightSlot, dt: number): void {
   if (slot.owner === null) return;
+  if (slot.fresh) {
+    slot.fresh = false;
+    return;
+  }
   slot.age += dt;
   const t = slot.age / slot.duration;
   if (t >= 1) {

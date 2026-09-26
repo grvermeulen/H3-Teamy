@@ -26,6 +26,14 @@ const STILL: Omit<Particle, "life"> = {
   drag: 0,
 };
 
+/**
+ * The update of the frame the particles were spawned in: it draws them at birth and ages nothing,
+ * however long the frame, so the steps after it are what the physics tests measure.
+ */
+function drawBirth(system: ReturnType<typeof createParticleSystem>): void {
+  system.update(1);
+}
+
 function attribute(
   system: ReturnType<typeof createParticleSystem>,
   name: string,
@@ -39,6 +47,7 @@ describe("createParticleSystem", () => {
     system.spawn({ ...STILL, maxLife: 0.5 });
     system.spawn({ ...STILL, maxLife: 1 });
     expect(system.alive()).toBe(2);
+    drawBirth(system);
 
     system.update(0.4);
     expect(system.alive()).toBe(2);
@@ -52,6 +61,7 @@ describe("createParticleSystem", () => {
     const system = createParticleSystem(4, true);
     for (let index = 0; index < 6; index++) system.spawn(STILL);
     expect(system.alive()).toBe(4);
+    drawBirth(system);
 
     system.update(1.1);
     expect(system.alive()).toBe(0);
@@ -66,6 +76,7 @@ describe("createParticleSystem", () => {
     system.spawn({ ...STILL, x: 1, maxLife: 0.2 });
     system.spawn({ ...STILL, x: 2, maxLife: 1 });
     system.spawn({ ...STILL, x: 3, maxLife: 0.2 });
+    drawBirth(system);
 
     system.update(0.3);
 
@@ -78,6 +89,7 @@ describe("createParticleSystem", () => {
   it("pulls a particle down by its gravity and moves it by its velocity", () => {
     const system = createParticleSystem(2, true);
     system.spawn({ ...STILL, y: 10, vx: 2, gravity: 9.8 });
+    drawBirth(system);
 
     system.update(0.1);
 
@@ -89,6 +101,7 @@ describe("createParticleSystem", () => {
   it("lets a negative gravity lift warm smoke", () => {
     const system = createParticleSystem(2, false);
     system.spawn({ ...STILL, gravity: -1 });
+    drawBirth(system);
 
     system.update(0.5);
 
@@ -98,6 +111,7 @@ describe("createParticleSystem", () => {
   it("bleeds speed by its drag rate", () => {
     const system = createParticleSystem(2, false);
     system.spawn({ ...STILL, vx: 10, drag: 2, maxLife: 5 });
+    drawBirth(system);
 
     system.update(1);
 
@@ -120,6 +134,7 @@ describe("createParticleSystem", () => {
   it("hands the shader each particle's life share, size and linear colour", () => {
     const system = createParticleSystem(2, false);
     system.spawn({ ...STILL, maxLife: 2, size: 1.5, colour: 0xff0000 });
+    drawBirth(system);
 
     system.update(0.5);
 
@@ -128,6 +143,20 @@ describe("createParticleSystem", () => {
     const colour = attribute(system, "aColour");
     expect(colour.getX(0)).toBeCloseTo(1);
     expect(colour.getY(0)).toBeCloseTo(0);
+  });
+
+  it("draws a particle on the frame it is born, even when that frame outlasts its life", () => {
+    const system = createParticleSystem(4, true);
+    system.spawn({ ...STILL, x: 5, maxLife: 0.05 });
+
+    system.update(1 / 18);
+
+    expect(system.alive()).toBe(1);
+    expect(system.object.geometry.drawRange.count).toBe(1);
+    expect(attribute(system, "aLife").getX(0)).toBe(0);
+    expect(attribute(system, "position").getX(0)).toBe(5);
+    system.update(1 / 18);
+    expect(system.alive()).toBe(0);
   });
 
   it("uploads the buffers after an update that moved something", () => {

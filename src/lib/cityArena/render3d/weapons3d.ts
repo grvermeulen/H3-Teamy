@@ -169,6 +169,32 @@ const WEAPON_PARTS: Partial<Record<ModelWeapon, readonly WeaponPart[]>> = {
   ],
 };
 
+/** Weapons that are swung, not fired, or never carried: nothing flashes at their front. */
+const NO_MUZZLE: ReadonlySet<ModelWeapon> = new Set<ModelWeapon>([
+  "fist",
+  "bat",
+  "cannon",
+]);
+
+/**
+ * Where a gun's muzzle is: the front end of its frontmost rod (barrel, or the launcher's
+ * warhead), in the model's own space — grip at the origin, barrel along +X.
+ *
+ * @param kind - The weapon.
+ * @returns `[x, y, z]` metres, or `null` for fists, the bat and the tank's cannon.
+ */
+export function muzzleTipOf(kind: ModelWeapon): Vec3 | null {
+  const parts = WEAPON_PARTS[kind];
+  if (!parts || NO_MUZZLE.has(kind)) return null;
+  let tip: Vec3 | null = null;
+  for (const part of parts) {
+    if (part.shape !== "rod") continue;
+    const front = part.at[0] + part.length / 2;
+    if (!tip || front > tip[0]) tip = [front, part.at[1], part.at[2]];
+  }
+  return tip;
+}
+
 /** The geometry of one part. */
 function partGeometry(part: WeaponPart): BufferGeometry {
   return part.shape === "block" ? block(part) : rod(part);

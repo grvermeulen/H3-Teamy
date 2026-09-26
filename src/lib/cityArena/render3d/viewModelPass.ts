@@ -4,12 +4,14 @@
  * closer than its 0.1 m (costing the whole city depth precision) and would still poke through a
  * wall the player stands against. So they live in a small lit scene of their own, seen through a
  * camera that copies the city camera but clips at 1 cm, and are drawn after the city with the
- * depth buffer cleared — always whole, always on top.
+ * depth buffer cleared — always whole, always on top. The hands are sized and placed for the
+ * camera's lens every frame, so they keep their corner of the screen on any screen shape.
  */
 import { PerspectiveCamera, Scene } from "three";
 import { createEveningLights, type OverlayPass } from "./renderer3d";
 import {
   createViewModel,
+  placeViewModel,
   type ViewModel,
   type ViewModelInput,
 } from "./viewmodel";
@@ -73,6 +75,7 @@ export function createViewModelPass(
     update(city, input) {
       if (!input) return null;
       followCamera(camera, city);
+      placeViewModel(viewModel.object, camera);
       viewModel.update(input);
       return pass;
     },

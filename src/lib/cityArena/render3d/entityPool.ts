@@ -1,7 +1,8 @@
 /**
  * Scene objects kept per entity id and recycled through free lists by variant (a look, or a
  * vehicle's kind and colour), so the 3D cast creates a model only when more of a variant are on
- * screen than ever before.
+ * screen than ever before. A one-off object (no variant, e.g. another player in their own vest
+ * hue) is never asked for again, so it is destroyed as soon as its entity leaves.
  */
 import type { Object3D } from "three";
 
@@ -15,8 +16,11 @@ export type Poolable = {
 /** One entity's object with the per-entity memory the caller keeps beside it. */
 export type PoolSlot<T extends Poolable, S> = {
   item: T;
-  /** What the object was built as; a freed object serves only the same variant again. */
-  variant: string;
+  /**
+   * What the object was built as; a freed object serves only the same variant again. `null` for
+   * a one-off, destroyed when freed.
+   */
+  variant: string | null;
   state: S;
   /** The frame it was last seen in. */
   seenFrame: number;
@@ -31,8 +35,14 @@ export type EntityPool<T extends Poolable, S> = {
   /**
    * Gives `id` a slot, shown under the parent: a freed object of `variant` if there is one, else
    * a new one from `create`. An object `id` already held (of another variant) is freed first.
+   * A `null` variant is a one-off: always new, and destroyed rather than kept once freed.
    */
-  claim(id: number, variant: string, create: () => T, state: S): PoolSlot<T, S>;
+  claim(
+    id: number,
+    variant: string | null,
+    create: () => T,
+    state: S,
+  ): PoolSlot<T, S>;
   /** Ends a frame: frees the objects of entities not seen since {@link begin}. */
   end(): void;
   /** Objects in use. */
@@ -95,6 +105,10 @@ export function createEntityPool<T extends Poolable, S>(
   let frame = 0;
   const release = (slot: PoolSlot<T, S>, id: number): void => {
     active.delete(id);
+    if (slot.variant === null) {
+      destroy(slot.item);
+      return;
+    }
     slot.item.object.visible = false;
     slot.item.object.removeFromParent();
     free.put(slot.variant, slot.item);
@@ -115,7 +129,8 @@ export function createEntityPool<T extends Poolable, S>(
     claim(id, variant, create, state) {
       const held = active.get(id);
       if (held) release(held, id);
-      const item = free.take(variant) ?? create();
+      const item =
+        (variant === null ? undefined : free.take(variant)) ?? create();
       item.object.visible = true;
       parent.add(item.object);
       const slot = { item, variant, state, seenFrame: frame };

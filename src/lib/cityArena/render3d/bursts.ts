@@ -180,8 +180,10 @@ function muzzle(
   rng: Rng,
   at: Emitter,
   aim: number,
+  flame: boolean,
 ): void {
   targets.flashes.muzzle(at.x, at.y, at.z);
+  if (!flame) return;
   emitPuff(targets.fire, rng, MUZZLE_CORE, at);
   repeat(MUZZLE_TONGUE_COUNT, () =>
     emitPuff(targets.fire, rng, MUZZLE_TONGUE, at, aim),
@@ -193,8 +195,14 @@ function muzzle(
  *
  * @param targets - The particle pools, debris and flashes the burst goes into.
  * @param effect - The effect, seen for the first time.
+ * @param muzzleFlame - For a muzzle flash: false lights the street but draws no flame, for a
+ *   flash the first-person view model draws at its own barrel.
  */
-export function burst(targets: BurstTargets, effect: EffectState): void {
+export function burst(
+  targets: BurstTargets,
+  effect: EffectState,
+  muzzleFlame = true,
+): void {
   const rng = rngFor(effect.kind, effect.id);
   if (effect.kind === "explosion") {
     explode(targets, rng, { x: effect.x, y: EXPLOSION_HEIGHT_M, z: effect.y });
@@ -213,5 +221,5 @@ export function burst(targets: BurstTargets, effect: EffectState): void {
     y: PERSON_CHEST_HEIGHT_M,
     z: effect.y + Math.sin(effect.angle) * MUZZLE_OFFSET_M,
   };
-  muzzle(targets, rng, muzzleAt, effect.angle);
+  muzzle(targets, rng, muzzleAt, effect.angle, muzzleFlame);
 }

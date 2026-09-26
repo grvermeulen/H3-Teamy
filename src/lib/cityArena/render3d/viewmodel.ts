@@ -4,21 +4,29 @@
  * throws a punch or swings the bat, and dips out and back in when the weapon changes.
  *
  * Everything is in camera space (−Z ahead, +Y up, +X right): attach {@link ViewModel.object} to
- * the camera. It uses the lit character material, so the camera must be in a lit scene.
+ * the camera. It uses the lit character material, so the camera must be in a lit scene. A gun's
+ * shot flashes at its own barrel here: the world's muzzle flash sits just ahead of the eye in
+ * first person, so the effects leave it out there.
  */
 import {
   Group,
+  IcosahedronGeometry,
   Mesh,
   Quaternion,
   Vector3,
   type BufferGeometry,
   type Object3D,
+  type PerspectiveCamera,
 } from "three";
 import { LOOKS } from "./characterLooks";
 import { RUN_SPEED_MPS, RUN_STRIDE_M, WALK_STRIDE_M } from "./characterPose";
 import { characterMaterials } from "./characterRig";
+import {
+  createFireballMaterial,
+  type FireballMaterial,
+} from "./fireballMaterial";
 import { block, mergeParts, shade, type Vec3 } from "./lowPoly";
-import { createWeaponModel, type ModelWeapon } from "./weapons3d";
+import { createWeaponModel, muzzleTipOf, type ModelWeapon } from "./weapons3d";
 
 /** What the view model follows each frame. */
 export type ViewModelInput = {
@@ -65,6 +73,34 @@ const IDLE_SWAY_RATE = 1.7;
 /** How the forearms run back from the fists toward the bottom of the screen, radians. */
 const ARM_PITCH_RAD = 0.45;
 const ARM_YAW_RAD = 0.3;
+
+/**
+ * How big the hands are drawn against the layouts below, which are measured for full-size arms a
+ * forearm's length from the eye: at full size a pistol and both hands filled most of the lower
+ * half of the screen. Scaled down about {@link LAYOUT_ANCHOR} and moved out toward the corner by
+ * {@link placeViewModel}, the gun and hands take about a quarter of the lower-right quadrant.
+ */
+export const VIEW_MODEL_SCALE = 0.48;
+/** The typical grip the layouts are drawn around, camera space; it keeps its depth when scaled. */
+const LAYOUT_ANCHOR: Vec3 = [0.13, -0.13, -0.36];
+/** Where the anchor lands on screen, normalised device coordinates (right and down of centre). */
+export const VIEW_MODEL_SCREEN_ANCHOR = { x: 0.62, y: -0.66 } as const;
+
+/**
+ * How long a shot's flash shows at the view model's barrel, seconds. It is lit on the shot's own
+ * frame and dimmed only by later ones, so even a frame longer than this draws it once.
+ */
+export const VIEW_FLASH_S = 0.06;
+/** The flash's warm white-yellow. */
+const VIEW_FLASH_COLOUR = 0xffd27a;
+/** The flash's radius across the barrel at the shot, metres in the layouts' full size. */
+const VIEW_FLASH_RADIUS_M = 0.07;
+/** It is this many times longer along the barrel than across. */
+const VIEW_FLASH_STRETCH = 1.8;
+/** It shrinks to this share of its size as it fades. */
+const VIEW_FLASH_MIN_SHARE = 0.6;
+/** Faceting of the flash ball: enough to read as round once it glows. */
+const VIEW_FLASH_DETAIL = 1;
 
 /** Straight ahead, in camera space. */
 const AHEAD: Vec3 = [0, 0, -1];
@@ -259,10 +295,23 @@ type ViewState = {
   swap: number;
   stridePhase: number;
   seconds: number;
+  /** Where the held gun's muzzle is, weapon space; `null` for fists and the bat. */
+  tip: Vec3 | null;
+  /** Seconds the muzzle flash still shows, from {@link VIEW_FLASH_S} at a shot down to 0. */
+  flash: number;
 };
 
+/** The glowing ball at the barrel on a shot. */
+type FlashMesh = Mesh<IcosahedronGeometry, FireballMaterial>;
+
 /** The parts the view model moves. */
-type ViewParts = { rig: Group; holder: Group; right: Group; left: Group };
+type ViewParts = {
+  rig: Group;
+  holder: Group;
+  right: Group;
+  left: Group;
+  flash: FlashMesh;
+};
 
 /** Swaps the held model when the weapon changes. */
 function syncWeapon(
@@ -276,14 +325,44 @@ function syncWeapon(
   state.model = createWeaponModel(weapon);
   parts.holder.add(state.model);
   state.swap = 1;
+  state.tip = muzzleTipOf(weapon);
+  if (state.tip) parts.flash.position.set(...state.tip);
 }
 
-/** Starts a kick when a new, fresh shot arrives. */
+/** Starts a kick, and a gun's muzzle flash, when a new, fresh shot arrives. */
 function syncShot(state: ViewState, input: ViewModelInput): void {
   if (input.firedTick === null || input.firedTick === state.lastFiredTick)
     return;
   state.lastFiredTick = input.firedTick;
-  if (input.tick - input.firedTick <= FRESH_SHOT_TICKS) state.kick = 1;
+  if (input.tick - input.firedTick > FRESH_SHOT_TICKS) return;
+  state.kick = 1;
+  if (state.tip) state.flash = VIEW_FLASH_S;
+}
+
+/** The muzzle flash: hidden between shots, set at `holder`'s barrel tip by the weapon swap. */
+function createFlashMesh(): FlashMesh {
+  const flash = new Mesh(
+    new IcosahedronGeometry(1, VIEW_FLASH_DETAIL),
+    createFireballMaterial(VIEW_FLASH_COLOUR),
+  );
+  flash.name = "muzzleFlash";
+  flash.visible = false;
+  return flash;
+}
+
+/**
+ * Shows the flash for what is left of it: full size and bright on the shot's frame, shrinking
+ * and fading after; stretched along the barrel.
+ */
+function placeFlash(flash: FlashMesh, state: ViewState): void {
+  const share = state.flash / VIEW_FLASH_S;
+  flash.visible = share > 0;
+  if (!flash.visible) return;
+  const size =
+    VIEW_FLASH_RADIUS_M *
+    (VIEW_FLASH_MIN_SHARE + (1 - VIEW_FLASH_MIN_SHARE) * share);
+  flash.scale.set(size * VIEW_FLASH_STRETCH, size, size);
+  flash.material.uniforms.uOpacity.value = share;
 }
 
 /**
@@ -338,6 +417,7 @@ function placeRig(
 function advance(state: ViewState, input: ViewModelInput): void {
   const stride = input.speed > RUN_SPEED_MPS ? RUN_STRIDE_M : WALK_STRIDE_M;
   state.kick = Math.max(0, state.kick - input.dt / VIEW_RECOIL_RECOVERY_S);
+  state.flash = Math.max(0, state.flash - input.dt);
   state.swap = Math.max(0, state.swap - input.dt / SWAP_S);
   state.stridePhase += ((input.dt * input.speed) / stride) * Math.PI * 2;
   state.seconds += input.dt;
@@ -353,6 +433,8 @@ export function createViewModel(): ViewModel {
   const holder = new Group();
   const rightArm = createArm("R");
   const leftArm = createArm("L");
+  const flash = createFlashMesh();
+  holder.add(flash);
   rig.add(holder, rightArm.group, leftArm.group);
   const object = new Group();
   object.name = "viewModel";
@@ -362,6 +444,7 @@ export function createViewModel(): ViewModel {
     holder,
     right: rightArm.group,
     left: leftArm.group,
+    flash,
   };
   const state: ViewState = {
     weapon: null,
@@ -371,6 +454,8 @@ export function createViewModel(): ViewModel {
     swap: 0,
     stridePhase: 0,
     seconds: 0,
+    tip: null,
+    flash: 0,
   };
   return {
     object,
@@ -379,12 +464,42 @@ export function createViewModel(): ViewModel {
       syncShot(state, input);
       placeHands(parts, preparedLayout(input.weapon), state.kick);
       placeRig(rig, state, LAYOUTS[input.weapon], input.speed);
+      placeFlash(flash, state);
       advance(state, input);
     },
     dispose() {
       object.removeFromParent();
       rightArm.mesh.geometry.dispose();
       leftArm.mesh.geometry.dispose();
+      flash.geometry.dispose();
+      flash.material.dispose();
     },
   };
+}
+
+/** Degrees to radians, halved: a field of view's half angle. */
+const HALF_ANGLE_PER_DEGREE = Math.PI / 360;
+
+/**
+ * Sizes and places the view model for a camera's lens: shrinks it by {@link VIEW_MODEL_SCALE}
+ * about {@link LAYOUT_ANCHOR}, keeping the anchor's depth, and moves the anchor to
+ * {@link VIEW_MODEL_SCREEN_ANCHOR} on screen — so the gun sits at the same spot on a wide monitor
+ * and a narrow phone, and the forearms still run off the bottom-right edge. Allocates nothing.
+ *
+ * @param object - The view model's {@link ViewModel.object}, attached to `camera`.
+ * @param camera - The camera it is drawn through, with its field of view and aspect set.
+ */
+export function placeViewModel(
+  object: Object3D,
+  camera: Pick<PerspectiveCamera, "fov" | "aspect">,
+): void {
+  const [anchorX, anchorY, anchorZ] = LAYOUT_ANCHOR;
+  const halfHeight = -anchorZ * Math.tan(camera.fov * HALF_ANGLE_PER_DEGREE);
+  const halfWidth = halfHeight * camera.aspect;
+  object.scale.setScalar(VIEW_MODEL_SCALE);
+  object.position.set(
+    VIEW_MODEL_SCREEN_ANCHOR.x * halfWidth - VIEW_MODEL_SCALE * anchorX,
+    VIEW_MODEL_SCREEN_ANCHOR.y * halfHeight - VIEW_MODEL_SCALE * anchorY,
+    anchorZ * (1 - VIEW_MODEL_SCALE),
+  );
 }

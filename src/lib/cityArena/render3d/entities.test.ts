@@ -326,6 +326,20 @@ describe("createEntitySync: characters", () => {
     expect(characters[0]!.object.visible).toBe(true);
   });
 
+  it("disposes another player's hued character when it leaves, keeping none for reuse", () => {
+    const { sync, characters, factories } = syncOf();
+    const friend = sceneOf({ players: [player(7, 0, 0)] });
+    sync.update(friend, FRAME_S, ORIGIN, THIRD);
+    const [built] = characters;
+    sync.update(sceneOf({}), FRAME_S, ORIGIN, THIRD);
+    expect(built!.dispose).toHaveBeenCalledTimes(1);
+    expect(built!.object.parent).toBeNull();
+    sync.update(friend, FRAME_S, ORIGIN, THIRD);
+    expect(factories.character).toHaveBeenCalledTimes(2);
+    sync.dispose();
+    expect(built!.dispose).toHaveBeenCalledTimes(1);
+  });
+
   it("gives every other player the same vest hue each time their character is built", () => {
     const { sync, characters } = syncOf();
     const scene = sceneOf({ players: [player(7, 0, 0)] });
@@ -445,10 +459,42 @@ describe("createEntitySync: characters", () => {
     expect(sync.local.firedTick).toBeNull();
   });
 
+  it("kicks your own hands only when your next-shot tick moves on, never for a flash beside you", () => {
+    const { sync, characters } = syncOf();
+    const you = player(1, 0, 0, { nextShotTick: 280 });
+    const officer = cop(30, 0.6, 0);
+    const calm = sceneOf({ players: [you], cops: [officer] });
+    const beside = sceneOf({
+      players: [you],
+      cops: [officer],
+      effects: [muzzle(0.6, 0)],
+    });
+    sync.update(calm, FRAME_S, ORIGIN, FIRST);
+    sync.update(beside, FRAME_S, ORIGIN, FIRST);
+    expect(characters[0]!.pose!.recoil).toBe(0);
+    expect(sync.local.firedTick).toBeNull();
+    expect(characters[1]!.pose!.recoil).toBe(1);
+    const fired = { ...you, nextShotTick: TICK + 8 };
+    sync.update(sceneOf({ players: [fired] }), FRAME_S, ORIGIN, FIRST);
+    expect(characters[0]!.pose!.recoil).toBe(1);
+    expect(sync.local.firedTick).toBe(TICK);
+  });
+
+  it("still kicks another player by a fresh flash at their gun", () => {
+    const { sync, characters } = syncOf();
+    const friend = player(7, 10, 0, { nextShotTick: 280 });
+    sync.update(sceneOf({ players: [friend] }), FRAME_S, ORIGIN, THIRD);
+    const flashed = sceneOf({ players: [friend], effects: [muzzle(10.5, 0)] });
+    sync.update(flashed, FRAME_S, ORIGIN, THIRD);
+    expect(characters[0]!.pose!.recoil).toBe(1);
+  });
+
   it("tells the view model your weapon, last shot and speed while you are on foot", () => {
     const { sync } = syncOf();
     const you = player(1, 0, 0, { weapon: "shotgun", speed: 2 });
-    const scene = sceneOf({ players: [you], effects: [muzzle(0, 0)] });
+    sync.update(sceneOf({ players: [you] }), FRAME_S, ORIGIN, FIRST);
+    const fired = { ...you, nextShotTick: TICK + 10 };
+    const scene = sceneOf({ players: [fired], effects: [muzzle(0, 0)] });
     sync.update(scene, FRAME_S, ORIGIN, FIRST);
     expect(sync.local).toMatchObject({
       onFoot: true,

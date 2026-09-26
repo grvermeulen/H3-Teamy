@@ -2,7 +2,9 @@
  * Pooled 3D particles: one `Points` draw call per blend mode (spec §6.8, §8). Every buffer is
  * allocated once at `capacity`; living particles stay packed at the front of the buffers (a dead
  * one is replaced by the last living one), so the draw range is just the living count and `update`
- * allocates nothing.
+ * allocates nothing. A particle is never aged by the update of the frame it was born in: that
+ * update only draws it, so a flash shorter than one frame (a 0.05 s muzzle pop below 20 fps) is
+ * still seen once.
  */
 import {
   BufferAttribute,
@@ -47,9 +49,12 @@ export type ParticleSystem = {
   object: Points;
   /** Most particles alive at once; spawns beyond it are dropped. */
   capacity: number;
-  /** Starts a particle at life 0; dropped when the pool is full. */
+  /** Starts a particle at life 0, drawn as it is by the next update; dropped when the pool is full. */
   spawn(p: Omit<Particle, "life">): void;
-  /** Ages, moves and expires every particle, and uploads the buffers. Allocates nothing. */
+  /**
+   * Ages, moves and expires every particle — except those spawned since the last update, which it
+   * draws at their birth — and uploads the buffers. Allocates nothing.
+   */
   update(dt: number): void;
   /** How many particles are alive. */
   alive(): number;
@@ -68,6 +73,8 @@ type Pool = {
   maxLife: Float32Array;
   gravity: Float32Array;
   drag: Float32Array;
+  /** 1 until the particle's first update, which draws it without ageing it. */
+  fresh: Uint8Array;
 };
 
 function createPool(capacity: number): Pool {
@@ -81,6 +88,7 @@ function createPool(capacity: number): Pool {
     maxLife: new Float32Array(capacity),
     gravity: new Float32Array(capacity),
     drag: new Float32Array(capacity),
+    fresh: new Uint8Array(capacity),
   };
 }
 
@@ -105,6 +113,7 @@ function write(pool: Pool, index: number, p: Omit<Particle, "life">): void {
   pool.maxLife[index] = p.maxLife;
   pool.gravity[index] = p.gravity;
   pool.drag[index] = p.drag;
+  pool.fresh[index] = 1;
 }
 
 /** Copies particle `from` into slot `to`. */
@@ -119,6 +128,7 @@ function move(pool: Pool, from: number, to: number): void {
   pool.maxLife[to] = pool.maxLife[from];
   pool.gravity[to] = pool.gravity[from];
   pool.drag[to] = pool.drag[from];
+  pool.fresh[to] = pool.fresh[from];
 }
 
 /** Keeps a particle above the ground, bouncing it softly when it lands. */
@@ -130,8 +140,15 @@ function landOnGround(pool: Pool, at: number): void {
   pool.velocity[at + 2] *= GROUND_FRICTION;
 }
 
-/** Ages and moves one particle; false once it has lived out its life. */
+/**
+ * Ages and moves one particle — a fresh one only loses its freshness, so its birth is drawn — and
+ * returns false once it has lived out its life.
+ */
 function step(pool: Pool, index: number, dt: number): boolean {
+  if (pool.fresh[index] === 1) {
+    pool.fresh[index] = 0;
+    return true;
+  }
   const age = pool.age[index] + dt;
   if (age >= pool.maxLife[index]) return false;
   pool.age[index] = age;

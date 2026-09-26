@@ -140,9 +140,10 @@ describe("createEffects3d", () => {
     expect(effects.smoke.alive()).toBe(EXPLOSION_SMOKE_COUNT * 2);
   });
 
-  it("releases an explosion's light after 0.25 s", () => {
+  it("releases an explosion's light 0.25 s after the frame it lit", () => {
     const effects = createEffects3d({ maxParticles: 600 });
     effects.sync(scene({ effects: [EXPLOSION] }));
+    effects.update(1 / 60);
 
     effects.update(0.2);
     expect(litLights(effects.object)).toHaveLength(1);
@@ -198,6 +199,39 @@ describe("createEffects3d", () => {
     expect(litLights(effects.object)).toHaveLength(1);
     effects.update(0.05);
     expect(litLights(effects.object)).toHaveLength(0);
+  });
+
+  it("keeps only the light of your own muzzle flash when the view model shows its own", () => {
+    const yours: EffectState = { ...EXPLOSION, kind: "muzzle", x: 10, y: 10 };
+    const theirs: EffectState = { ...yours, id: 6, x: 30 };
+    const effects = createEffects3d({ maxParticles: 600 });
+
+    effects.sync(
+      scene({ effects: [yours], players: [player(10.4, 10)] }),
+      undefined,
+      true,
+    );
+    effects.update(0.001);
+
+    expect(fireParticles(effects.object)).toBe(0);
+    expect(litLights(effects.object)).toHaveLength(1);
+    effects.sync(
+      scene({ effects: [yours, theirs], players: [player(10.4, 10)] }),
+      undefined,
+      true,
+    );
+    effects.update(0.001);
+    expect(fireParticles(effects.object)).toBeGreaterThan(0);
+  });
+
+  it("draws your own muzzle flame when the view model does not show one", () => {
+    const yours: EffectState = { ...EXPLOSION, kind: "muzzle", x: 10, y: 10 };
+    const effects = createEffects3d({ maxParticles: 600 });
+
+    effects.sync(scene({ effects: [yours], players: [player(10.4, 10)] }));
+    effects.update(0.001);
+
+    expect(fireParticles(effects.object)).toBeGreaterThan(0);
   });
 
   it("draws the rounds in flight as tracers", () => {

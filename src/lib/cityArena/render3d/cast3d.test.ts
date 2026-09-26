@@ -138,7 +138,7 @@ describe("createCast3d", () => {
     const [effects] = effectsMade;
     expect(effects!.object).toBeInstanceOf(Group);
     expect((effects!.object as Group).parent).toBe(cast.object);
-    expect(effects!.sync).toHaveBeenCalledWith(frame.scene, FOCUS);
+    expect(effects!.sync).toHaveBeenCalledWith(frame.scene, FOCUS, false);
     expect(effects!.update).toHaveBeenCalledWith(0.02);
     const [synced] = effects!.sync.mock.invocationCallOrder;
     const [updated] = effects!.update.mock.invocationCallOrder;
@@ -189,6 +189,13 @@ describe("createCast3d", () => {
     const dead = frameOf({ mode: "first" });
     dead.scene.players = [you({ diedAtTick: 80 })];
     expect(cast.update(dead, FOCUS, camera)).toBeNull();
+  });
+
+  it("leaves your own muzzle flame to the hands in first person", () => {
+    const cast = createCast3d(fakeFactories());
+    const first = frameOf({ mode: "first" });
+    cast.update(first, FOCUS, new PerspectiveCamera());
+    expect(effectsMade[0]!.sync).toHaveBeenCalledWith(first.scene, FOCUS, true);
   });
 
   it("hides your body in first person", () => {

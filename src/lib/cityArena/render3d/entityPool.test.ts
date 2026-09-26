@@ -39,6 +39,25 @@ describe("createEntityPool", () => {
     expect(item.dispose).not.toHaveBeenCalled();
   });
 
+  it("destroys a one-off object (no variant) when its entity leaves, never keeping it", () => {
+    const parent = new Group();
+    const pool = createEntityPool<Fake, null>(parent, 4);
+    const create = vi.fn(() => fake("one-off"));
+    pool.begin();
+    const { item } = pool.claim(7, null, create, null);
+    pool.end();
+    pool.begin();
+    pool.end();
+    expect(item.dispose).toHaveBeenCalledTimes(1);
+    expect(item.object.parent).toBeNull();
+    pool.begin();
+    pool.claim(7, null, create, null);
+    pool.end();
+    expect(create).toHaveBeenCalledTimes(2);
+    pool.dispose();
+    expect(item.dispose).toHaveBeenCalledTimes(1);
+  });
+
   it("reuses a freed object only for the same variant", () => {
     const parent = new Group();
     const pool = createEntityPool<Fake, null>(parent, 4);

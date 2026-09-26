@@ -84,6 +84,8 @@ describe("createFlashPool", () => {
     expect(EXPLOSION_LIGHT_S).toBe(0.25);
     const pool = createFlashPool();
     pool.explode(0, 1, 0);
+    pool.update(0.1);
+    expect(litLights(pool)[0].intensity).toBe(EXPLOSION_LIGHT_INTENSITY);
 
     pool.update(0.1);
     const [light] = litLights(pool);
@@ -117,8 +119,21 @@ describe("createFlashPool", () => {
 
     pool.muzzle(0, 1.3, 0);
     expect(pool.litCount()).toBe(1);
+    pool.update(1 / 60);
 
     pool.update(0.05);
+    expect(pool.litCount()).toBe(0);
+  });
+
+  it("lights a muzzle flash through the frame it fires in, even when that frame outlasts it", () => {
+    const pool = createFlashPool();
+    pool.muzzle(0, 1.3, 0);
+
+    pool.update(1 / 18);
+
+    expect(pool.litCount()).toBe(1);
+    expect(litLights(pool)).toHaveLength(1);
+    pool.update(1 / 18);
     expect(pool.litCount()).toBe(0);
   });
 

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { Box3, Mesh, Vector3 } from "three";
-import { createWeaponModel, isTwoHanded, type ModelWeapon } from "./weapons3d";
+import {
+  createWeaponModel,
+  isTwoHanded,
+  muzzleTipOf,
+  type ModelWeapon,
+} from "./weapons3d";
 
 function sizeOf(kind: ModelWeapon): Vector3 {
   return new Box3()
@@ -46,6 +51,35 @@ describe("createWeaponModel", () => {
     expect(first).not.toBe(second);
     expect(first.geometry).toBe(second.geometry);
     expect(first.material).toBe(second.material);
+  });
+
+  it("puts each gun's muzzle at the front end of its barrel", () => {
+    const tips: [ModelWeapon, number[]][] = [
+      ["pistol", [0.158, 0.06, 0]],
+      ["uzi", [0.245, 0.065, 0]],
+      ["shotgun", [0.66, 0.078, 0]],
+      ["rifle", [0.56, 0.07, 0]],
+    ];
+    for (const [kind, expected] of tips)
+      muzzleTipOf(kind)?.forEach((value, axis) =>
+        expect(value).toBeCloseTo(expected[axis], 9),
+      );
+    for (const kind of [
+      "pistol",
+      "uzi",
+      "shotgun",
+      "rifle",
+      "rocket",
+    ] as const) {
+      const box = new Box3().setFromObject(createWeaponModel(kind));
+      expect(muzzleTipOf(kind)?.[0]).toBeCloseTo(box.max.x, 3);
+    }
+  });
+
+  it("gives fists, the bat and the tank's cannon no muzzle to flash", () => {
+    expect(muzzleTipOf("fist")).toBeNull();
+    expect(muzzleTipOf("bat")).toBeNull();
+    expect(muzzleTipOf("cannon")).toBeNull();
   });
 
   it("marks the long guns and the launcher as two-handed", () => {

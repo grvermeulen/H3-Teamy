@@ -191,7 +191,7 @@ describe("createView3d frame path", () => {
       aim: 0.7,
     });
     const effects = vi.mocked(createEffects3d).mock.results[0]!.value;
-    expect(effects.sync).toHaveBeenCalledWith(SCENE, focus);
+    expect(effects.sync).toHaveBeenCalledWith(SCENE, focus, false);
     expect(effects.update).toHaveBeenCalledWith(DT);
     expect(renderer.render).toHaveBeenCalledWith(null);
   });
