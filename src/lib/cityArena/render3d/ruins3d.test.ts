@@ -128,6 +128,16 @@ describe("createRuins3d", () => {
     expect(rubbleIds(target)).toEqual([HOUSE]);
   });
 
+  it("never replays a fall stamped after the current tick, as after the tick count restarts", () => {
+    const ruins = createRuins3d();
+    const target = fakeTarget();
+
+    ruins.update([destroyed(HOUSE, NOW + 5)], town(), NOW, target);
+
+    expect(target.collapse).not.toHaveBeenCalled();
+    expect(rubbleIds(target)).toEqual([HOUSE]);
+  });
+
   it("collapses each fall once, however many frames list it", () => {
     const ruins = createRuins3d();
     const target = fakeTarget();

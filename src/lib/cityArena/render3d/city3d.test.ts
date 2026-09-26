@@ -1,6 +1,8 @@
-import { Texture, TextureLoader } from "three";
+import * as Sentry from "@sentry/nextjs";
+import { Object3D, Quaternion, Texture, TextureLoader } from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LandmarkLookup } from "../render/drawStatic";
+import { ROAD_FILL } from "../render/palette";
 import type { DecodedTile } from "../world/decode";
 import {
   WORLD_BUILD_BUDGET_MS,
@@ -134,6 +136,18 @@ describe("createCity3d", () => {
     expect(near.map((piece) => piece.kind)).toEqual(["bench"]);
   });
 
+  it("has the cells keep knocked furniture down, and ignores it before the first frame", () => {
+    const city = createCity3d(createTestMaterials());
+    const pose = new Quaternion();
+    expect(() => city.keepDown(benchPiece(), pose)).not.toThrow();
+    city.update(FOCUS, frameOf(new Map()));
+    const [bench] = city.furnitureNear(30, 58, 2);
+
+    city.keepDown(bench!, pose);
+
+    expect(city.furnitureNear(30, 58, 2)).toEqual([]);
+  });
+
   it("frees its cells and the shared materials on dispose", () => {
     const materials = createTestMaterials();
     const city = createCity3d(materials);
@@ -147,13 +161,24 @@ describe("createCity3d", () => {
   });
 });
 
+/** A lone bench piece that belongs to no cell. */
+function benchPiece(): Parameters<
+  ReturnType<typeof createCity3d>["keepDown"]
+>[0] {
+  return { kind: "bench", x: 0, y: 0, heading: 0, object: new Object3D() };
+}
+
+/** Stubs jsdom's canvas: the façades paint on a recording fake. */
+function stubCanvas(): void {
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    // jsdom's getContext returns null; the fake covers what the painters use (test file only).
+    () => createColourRecordingContext() as unknown as CanvasRenderingContext2D,
+  );
+}
+
 describe("loadWorldMaterials", () => {
   it("loads every surface's 2D art through three's texture loader", () => {
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
-      // jsdom's getContext returns null; the façades paint on a recording fake (test file only).
-      () =>
-        createColourRecordingContext() as unknown as CanvasRenderingContext2D,
-    );
+    stubCanvas();
     const load = vi
       .spyOn(TextureLoader.prototype, "load")
       .mockImplementation(() => new Texture());
@@ -164,5 +189,38 @@ describe("loadWorldMaterials", () => {
       SURFACE_KEYS.map(surfaceUrl).sort(),
     );
     expect(materials.surfaces.road.map).toBeInstanceOf(Texture);
+  });
+
+  it("paints a surface whose art fails to load in its flat 2D colour, with one breadcrumb per file", () => {
+    stubCanvas();
+    const failures: [string, (error: unknown) => void][] = [];
+    vi.spyOn(TextureLoader.prototype, "load").mockImplementation(
+      (url, _onLoad, _onProgress, onError) => {
+        failures.push([url, onError!]);
+        return new Texture();
+      },
+    );
+    const reported = new Set<string>();
+    const first = loadWorldMaterials(reported);
+    const second = loadWorldMaterials(reported);
+    const road = surfaceUrl("road");
+    const [firstRoad, secondRoad] = failures.filter(([url]) => url === road);
+
+    firstRoad![1](new Event("error"));
+    firstRoad![1](new Event("error"));
+    secondRoad![1](new Event("error"));
+
+    for (const materials of [first, second]) {
+      expect(materials.surfaces.road.map).toBeNull();
+      expect(`#${materials.surfaces.road.color.getHexString()}`).toBe(
+        ROAD_FILL,
+      );
+      expect(materials.surfaces.pavement.map).toBeInstanceOf(Texture);
+    }
+    expect(Sentry.addBreadcrumb).toHaveBeenCalledTimes(1);
+    expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+      expect.objectContaining({ category: "arena", data: { url: road } }),
+    );
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 });

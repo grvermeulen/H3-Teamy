@@ -3,10 +3,12 @@ import {
   InstancedMesh,
   Matrix4,
   Mesh,
+  Quaternion,
+  Vector3,
   type BufferAttribute,
   type Group,
 } from "three";
-import { structureMaxHealth } from "../world/structureId";
+import { structureIdOf, structureMaxHealth } from "../world/structureId";
 import type { DecodedTile } from "../world/decode";
 import { CELL_M, cellsWithin } from "./cellGrid";
 import {
@@ -17,6 +19,7 @@ import {
   squareRing,
 } from "./testing/cityFixture";
 import { createWorldCells, type StructureView } from "./worldCells";
+import type { WorldMaterials } from "./worldMaterials";
 
 const ORIGIN = { x: 64, y: 64 };
 const VIEW_M = 200;
@@ -272,5 +275,71 @@ describe("createWorldCells", () => {
 
     expect(world.group.children).toHaveLength(0);
     expect(world.furnitureNear(30, 58, 2)).toEqual([]);
+  });
+});
+
+describe("createWorldCells keeping knocked furniture down", () => {
+  /** The fixture town's house, in cell (0, 0) with the bench at (30, 58). */
+  const HOUSE = structureIdOf(1, 1, 0);
+
+  /** The instance matrix of the one bench in cell (0, 0). */
+  function homeBench(group: Group, materials: WorldMaterials): Matrix4 {
+    const home = group.children.find(
+      (child) => child.position.x === 0 && child.position.z === 0,
+    )!;
+    const benches = home.children.find(
+      (child): child is InstancedMesh =>
+        child instanceof InstancedMesh && child.material === materials.bench,
+    )!;
+    const matrix = new Matrix4();
+    benches.getMatrixAt(0, matrix);
+    return matrix;
+  }
+
+  /** Lays the bench at (30, 58) a quarter turn over and has the city keep it down. */
+  function knockBench(world: ReturnType<typeof createWorldCells>): void {
+    const [bench] = world.furnitureNear(30, 58, 2);
+    const fallen = new Quaternion()
+      .setFromAxisAngle(new Vector3(1, 0, 0), Math.PI / 2)
+      .multiply(bench.object.quaternion);
+    bench.object.quaternion.copy(fallen);
+    world.keepDown(bench, fallen);
+  }
+
+  it("puts a knocked bench straight back down when a fall rebuilds its cell", () => {
+    const materials = createTestMaterials();
+    const world = createWorldCells(materials);
+    const tiles = [fixtureTown()];
+    world.update(ORIGIN, tiles, NO_STRUCTURES, VIEW_M, Infinity);
+    const standing = homeBench(world.group, materials);
+    knockBench(world);
+    world.update(ORIGIN, tiles, NO_STRUCTURES, VIEW_M, 0);
+    const lying = homeBench(world.group, materials);
+    expect(lying.equals(standing)).toBe(false);
+    expect(world.furnitureNear(30, 58, 2)).toEqual([]);
+
+    const fell = [{ id: HOUSE, damage: 999, destroyedAtTick: 5 }];
+    world.update(ORIGIN, tiles, fell, VIEW_M, 0);
+
+    expect(homeBench(world.group, materials).equals(lying)).toBe(true);
+    expect(world.furnitureNear(30, 58, 2)).toEqual([]);
+  });
+
+  it("forgets the fallen furniture of a cell it drops, which then stands again", () => {
+    const materials = createTestMaterials();
+    const world = createWorldCells(materials);
+    const tiles = [fixtureTown()];
+    world.update(ORIGIN, tiles, NO_STRUCTURES, VIEW_M, Infinity);
+    const standing = homeBench(world.group, materials);
+    knockBench(world);
+    world.update(ORIGIN, tiles, NO_STRUCTURES, VIEW_M, 0);
+
+    world.update({ x: 900, y: 64 }, tiles, NO_STRUCTURES, VIEW_M, Infinity);
+    world.update(ORIGIN, tiles, NO_STRUCTURES, VIEW_M, Infinity);
+
+    expect(homeBench(world.group, materials).equals(standing)).toBe(true);
+    expect(world.furnitureNear(30, 58, 2).map((piece) => piece.kind)).toEqual([
+      "bench",
+    ]);
   });
 });

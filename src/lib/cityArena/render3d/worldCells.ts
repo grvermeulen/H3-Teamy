@@ -8,7 +8,7 @@
  * changed: the tiles, the structure list, the focus by {@link REFRESH_DISTANCE_M}, the view
  * distance, or work the budget left for later.
  */
-import { Group } from "three";
+import { Group, type Quaternion } from "three";
 import type { DecodedTile } from "../world/decode";
 import { structureMaxHealth } from "../world/structureId";
 import {
@@ -35,6 +35,12 @@ export const KEEP_DISTANCE_FACTOR = 1.4;
  * the built city trails the exact view distance by at most this much.
  */
 export const REFRESH_DISTANCE_M = 16;
+
+/**
+ * Furniture positions are matched across a cell's rebuilds on a grid this fine, metres: a rebuilt
+ * cell places its pieces from the same map data, so this only absorbs rounding.
+ */
+const FURNITURE_KEY_STEP_M = 0.1;
 
 /**
  * What the city needs to know about a damaged or destroyed building; the simulation's structure
@@ -67,8 +73,9 @@ export type WorldCells = {
   ): void;
   /**
    * The furniture of the built cells standing within `radius` metres of a point, for cosmetic
-   * knock-over; from then on `update` mirrors each returned piece's proxy. Pass `into` to have it
-   * emptied and filled instead of a new list made, for searches run every frame.
+   * knock-over — pieces kept down are left out; from then on `update` mirrors each returned
+   * piece's proxy. Pass `into` to have it emptied and filled instead of a new list made, for
+   * searches run every frame.
    */
   furnitureNear(
     x: number,
@@ -76,6 +83,12 @@ export type WorldCells = {
     radius: number,
     into?: FurnitureInstance[],
   ): FurnitureInstance[];
+  /**
+   * Remembers that a knocked-over piece lies in `pose` (its proxy's final rotation): searches
+   * leave it out, and when its cell is rebuilt — a building in it fell or rose again — the rebuilt
+   * piece is laid straight down in that pose. Forgotten once the cell is dropped.
+   */
+  keepDown(piece: FurnitureInstance, pose: Quaternion): void;
   /** Frees every cell; the shared materials stay with their owner. */
   dispose(): void;
 };
@@ -94,7 +107,47 @@ type CellState = {
   shaded: Map<number, number>;
   /** Pieces handed out by `furnitureNear`, whose proxies are mirrored every update. */
   live: Set<FurnitureInstance>;
+  /**
+   * The fallen pose of each knocked-over piece, by {@link furnitureKey}: carried over when the
+   * cell is rebuilt, dropped with the cell.
+   */
+  down: Map<string, Quaternion>;
+  /** The cell's present pieces that lie knocked over. */
+  downPieces: Set<FurnitureInstance>;
 };
+
+/** A piece's identity across its cell's rebuilds: its kind and where it stands. */
+function furnitureKey(piece: FurnitureInstance): string {
+  const x = Math.round(piece.x / FURNITURE_KEY_STEP_M);
+  const y = Math.round(piece.y / FURNITURE_KEY_STEP_M);
+  return `${piece.kind}:${x}:${y}`;
+}
+
+/** Lays the rebuilt cell's pieces that were knocked over before straight down again. */
+function restoreDown(state: CellState): void {
+  if (state.down.size === 0) return;
+  for (const piece of state.built.furniture) {
+    const pose = state.down.get(furnitureKey(piece));
+    if (!pose) continue;
+    piece.object.quaternion.copy(pose);
+    state.downPieces.add(piece);
+    state.live.add(piece);
+  }
+}
+
+/** Records a knocked-over piece's fallen pose in the cell that holds it. */
+function keepDown(
+  city: City,
+  piece: FurnitureInstance,
+  pose: Quaternion,
+): void {
+  for (const state of city.cells.values()) {
+    if (!state.built.furniture.includes(piece)) continue;
+    state.down.set(furnitureKey(piece), pose.clone());
+    state.downPieces.add(piece);
+    return;
+  }
+}
 
 /** A cell in view, with its key. */
 type WantedCell = { cell: CellCoord; key: string };
@@ -189,16 +242,21 @@ function buildInto(city: City, cell: CellCoord, key: string): void {
   const tiles = tilesReaching(cell, city.tiles);
   const { destroyed, materials, landmarks } = city;
   const built = buildCell({ cell, tiles, destroyed, materials, landmarks });
+  const down = city.cells.get(key)?.down ?? new Map<string, Quaternion>();
   dropCell(city, key);
   const health = healthOf(built);
-  city.cells.set(key, {
+  const state: CellState = {
     cell,
     built,
     tiles: tileSignature(cell, tiles),
     health,
     shaded: new Map(),
     live: new Set(),
-  });
+    down,
+    downPieces: new Set(),
+  };
+  restoreDown(state);
+  city.cells.set(key, state);
   for (const id of health.keys()) city.owners.set(id, key);
   city.group.add(built.group);
   city.shadeDirty = true;
@@ -322,7 +380,7 @@ function rebuildFallen(city: City, budget: Budget): void {
     buildInto(city, state.cell, key);
     budget.built += 1;
   }
-  city.fallen.clear();
+  if (city.fallen.size > 0) city.fallen.clear();
 }
 
 /** Rebuilds the stale cells, those in view nearest first; false when the budget ran out. */
@@ -393,6 +451,7 @@ function searchCell(state: CellState, query: FurnitureQuery): void {
   const furniture = state.built.furniture;
   for (let index = 0; index < furniture.length; index++) {
     const piece = furniture[index];
+    if (state.downPieces.has(piece)) continue;
     if (Math.hypot(piece.x - x, piece.y - y) > radius) continue;
     found.push(piece);
     state.live.add(piece);
@@ -488,6 +547,7 @@ export function createWorldCells(
       updateCity(city, focus, { tiles, structures }, viewDistance, budgetMs),
     furnitureNear: (x, y, radius, into = []) =>
       handOutFurniture(city, x, y, radius, into),
+    keepDown: (piece, pose) => keepDown(city, piece, pose),
     dispose() {
       for (const key of city.cells.keys()) dropCell(city, key);
       city.wanted = [];

@@ -1,15 +1,17 @@
 /**
  * Street furniture falling over (spec §6.8: client-side cosmetic, not simulated): a lamp, bench or
- * bus shelter topples when a car sweeps past it fast, or when an explosion goes off beside it.
- * Each frame asks the city only for the furniture next to the fast cars and the new blasts, into
- * one reused list, so a frame allocates nothing.
+ * bus shelter topples when a car sweeps past it fast, or when an explosion goes off beside it, and
+ * the city keeps it down — even when a falling building rebuilds its cell. Each frame asks the city
+ * only for the furniture next to the fast cars and the new blasts, into one reused list, so a
+ * frame allocates nothing.
  */
-import type { Object3D } from "three";
+import { Quaternion, type Object3D } from "three";
 import type { Scene } from "../render/renderScene";
 import { widthOf } from "../sim/vehicle";
 import type { Destruction3d } from "./destruction3d";
 import type { FurnitureInstance } from "./furnitureMesh";
 import { createSeenIds } from "./seenIds";
+import { toppledPose } from "./toppling";
 import type { WorldCells } from "./worldCells";
 
 /** A car must move faster than this to knock furniture over, m/s. */
@@ -23,8 +25,8 @@ const KNOCK_MIN_SPEED_SQ = KNOCK_MIN_SPEED_MPS * KNOCK_MIN_SPEED_MPS;
 
 /** What the knock-overs read from a frame's scene. */
 export type KnockScene = Pick<Scene, "vehicles" | "effects">;
-/** Where the furniture is found: the streamed city. */
-export type FurnitureSource = Pick<WorldCells, "furnitureNear">;
+/** Where the furniture is found, and kept down once it fell: the streamed city. */
+export type FurnitureSource = Pick<WorldCells, "furnitureNear" | "keepDown">;
 /** What topples it: the destruction view. */
 export type KnockTarget = Pick<Destruction3d, "knockOver">;
 
@@ -33,7 +35,8 @@ export type KnockOvers = {
   /**
    * Knocks over, away from the cause, every standing piece of furniture within
    * {@link KNOCK_REACH_M} past the side of a car moving faster than {@link KNOCK_MIN_SPEED_MPS},
-   * or within {@link BLAST_KNOCK_RADIUS_M} of an explosion seen for the first time.
+   * or within {@link BLAST_KNOCK_RADIUS_M} of an explosion seen for the first time, and has the
+   * city keep each one down in the pose it will land in.
    */
   update(
     scene: KnockScene,
@@ -50,6 +53,7 @@ export type KnockOvers = {
 export function createKnockOvers(): KnockOvers {
   const down = new WeakSet<Object3D>();
   const near: FurnitureInstance[] = [];
+  const landed = new Quaternion();
   const blasts = createSeenIds();
   const knockAround = (
     furniture: FurnitureSource,
@@ -59,10 +63,11 @@ export function createKnockOvers(): KnockOvers {
   ): void => {
     furniture.furnitureNear(at.x, at.y, radius, near);
     for (let index = 0; index < near.length; index++) {
-      const { object } = near[index];
-      if (down.has(object)) continue;
-      down.add(object);
-      target.knockOver(object, at.x, at.y);
+      const piece = near[index];
+      if (down.has(piece.object)) continue;
+      down.add(piece.object);
+      furniture.keepDown(piece, toppledPose(piece.object, at.x, at.y, landed));
+      target.knockOver(piece.object, at.x, at.y);
     }
   };
   return {

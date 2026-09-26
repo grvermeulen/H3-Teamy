@@ -50,7 +50,8 @@ export function ruinOf(
 export type Ruins3d = {
   /**
    * Compares the frame's destroyed structures with the last frame's: starts the collapse of each
-   * newly destroyed building that fell within {@link RECENT_COLLAPSE_TICKS} of `tick`, and hands
+   * newly destroyed building that fell in the last {@link RECENT_COLLAPSE_TICKS} before `tick`
+   * (never one stamped after it), and hands
    * `setRubble` every destroyed building's footprint whenever that set (or the tiles) changed.
    * Allocates nothing while both stay the same.
    */
@@ -84,13 +85,15 @@ function collectDestroyed(
   target: RuinTarget,
 ): boolean {
   let fresh = false;
-  state.next.clear();
+  if (state.next.size > 0) state.next.clear();
   for (const { id, destroyedAtTick } of structures) {
     if (destroyedAtTick === null) continue;
     state.next.add(id);
     if (state.known.has(id)) continue;
     fresh = true;
-    if (tick - destroyedAtTick > RECENT_COLLAPSE_TICKS) continue;
+    const age = tick - destroyedAtTick;
+    // A fall stamped after this tick means the tick count restarted: it is an old ruin.
+    if (age < 0 || age > RECENT_COLLAPSE_TICKS) continue;
     const ruin = ruinOf(id, state.tiles);
     if (ruin) target.collapse(ruin);
   }

@@ -15,6 +15,13 @@ import {
   type Texture,
 } from "three";
 import type { RasterContext } from "../render/canvasTypes";
+import {
+  GROUND_FILL,
+  PAVEMENT_FILL,
+  ROAD_FILL,
+  WATER_FILL,
+  buildingFill,
+} from "../render/palette";
 import { createRng, seedFromString } from "../sim/rng";
 import type { GroundKind } from "../world/mapTypes";
 import { WINDOW_COLD, WINDOW_DARK, WINDOW_WARM } from "./palette3d";
@@ -41,6 +48,44 @@ const SURFACE_URLS: Record<SurfaceKey, string> = {
   roofTiles: "/arena/sprites/roof-tiles.png",
   roofFlat: "/arena/sprites/roof-flat.png",
 };
+
+/** Storeys whose 2D roof shade stands in for a tiled roof's art: a small house. */
+const TILED_ROOF_SHADE_LEVELS = 2;
+/** Storeys whose 2D roof shade stands in for a gravel roof's art: a block or a hall. */
+const FLAT_ROOF_SHADE_LEVELS = 4;
+
+/**
+ * The flat colour of each surface, as the 2D map fills it before (or instead of) its art: the
+ * mean tone of that art, so a surface whose texture fails to load keeps its look, not black.
+ */
+const SURFACE_FALLBACK_COLOURS: Record<SurfaceKey, string> = {
+  road: ROAD_FILL,
+  pavement: PAVEMENT_FILL,
+  water: WATER_FILL,
+  ...GROUND_FILL,
+  roofTiles: buildingFill(TILED_ROOF_SHADE_LEVELS),
+  roofFlat: buildingFill(FLAT_ROOF_SHADE_LEVELS),
+};
+
+/**
+ * The surface whose art is served at a URL.
+ *
+ * @param url - A URL from {@link surfaceUrl}.
+ * @returns The surface, or `undefined` for any other URL.
+ */
+export function surfaceOfUrl(url: string): SurfaceKey | undefined {
+  return SURFACE_KEYS.find((key) => SURFACE_URLS[key] === url);
+}
+
+/**
+ * A surface's flat colour: the 2D map's fill for it, the mean tone of its art.
+ *
+ * @param key - The surface.
+ * @returns A CSS hex colour.
+ */
+export function surfaceFallbackColour(key: SurfaceKey): string {
+  return SURFACE_FALLBACK_COLOURS[key];
+}
 
 /** Every {@link SurfaceKey}, in a stable order. */
 export const SURFACE_KEYS: readonly SurfaceKey[] = [

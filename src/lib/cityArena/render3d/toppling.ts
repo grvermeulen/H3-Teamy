@@ -48,6 +48,28 @@ function tippingAxis(object: Object3D, fromX: number, fromY: number): Vector3 {
 const tip = new Quaternion();
 
 /**
+ * Where a knock leaves `object` once it has fallen: its present rotation tipped a quarter turn
+ * away from the world point `(fromX, fromY)`, relative to its parent — the pose
+ * {@link Toppling.knock} ends in, for putting a piece straight back down after a rebuild.
+ *
+ * @param object - The standing object; its origin is its base.
+ * @param fromX - The hit's world x, metres.
+ * @param fromY - The hit's world y, metres.
+ * @param target - Receives the pose.
+ * @returns `target`.
+ */
+export function toppledPose(
+  object: Object3D,
+  fromX: number,
+  fromY: number,
+  target: Quaternion,
+): Quaternion {
+  return target
+    .setFromAxisAngle(tippingAxis(object, fromX, fromY), QUARTER_TURN)
+    .multiply(object.quaternion);
+}
+
+/**
  * Creates the toppling animation.
  *
  * @param durationS - Seconds from the hit to lying flat.

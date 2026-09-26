@@ -1,7 +1,7 @@
 import { Mesh, Scene, type BufferGeometry, type Object3D } from "three";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Scene as ArenaScene } from "../render/renderScene";
-import type { VehicleState } from "../sim/types";
+import type { EffectState, VehicleState } from "../sim/types";
 import { createVehicle } from "../sim/vehicle";
 import { structureIdOf } from "../world/structureId";
 import { createCity3d } from "./city3d";
@@ -94,12 +94,15 @@ const TOWN = fixtureTown();
 /** The world session's landmark lookup: one map for the life of a session. */
 const LANDMARKS = new Map();
 
-function sceneOf(vehicles: VehicleState[] = []): ArenaScene {
+function sceneOf(
+  vehicles: VehicleState[] = [],
+  effects: EffectState[] = [],
+): ArenaScene {
   return {
     localPlayerId: 2,
     players: [{ id: 2, x: 25, y: 60, vehicleId: null }],
     vehicles,
-    effects: [],
+    effects,
     tick: TICK,
     world: { landmarks: LANDMARKS },
   } as unknown as ArenaScene;
@@ -229,18 +232,51 @@ describe("createView3d frame path", () => {
   it("knocks over the furniture a fast car sweeps past", () => {
     const view = createView3d(document.createElement("canvas"));
     view.render(frameOf("third"), OVERLAY);
+    const { city } = partsOfView();
+    const [bench] = city.furnitureNear(30, 58, 1);
     const car = createVehicle(9, "sedan", [30, 57], 0, 0);
     car.velocityX = 10;
 
     view.render(frameOf("third", { scene: sceneOf([car]) }), OVERLAY);
 
-    const { city } = partsOfView();
-    const [bench] = city.furnitureNear(30, 58, 1);
     expect(destructionOfView().knockOver).toHaveBeenCalledWith(
       bench!.object,
       30,
       57,
     );
+    expect(city.furnitureNear(30, 58, 1)).toEqual([]);
+  });
+
+  it("knocks over the rebuilt cell's bench when a blast brings a building in its cell down", () => {
+    const view = createView3d(document.createElement("canvas"));
+    const { city } = partsOfView();
+    view.render(frameOf("third"), OVERLAY);
+    const [before] = city.furnitureNear(30, 58, 1);
+    const blast: EffectState = {
+      id: 7,
+      kind: "explosion",
+      x: 30,
+      y: 60,
+      angle: 0,
+      bornTick: TICK,
+      ttlTicks: 20,
+    };
+    const fell: StructureView = {
+      id: HOUSE,
+      damage: 999,
+      destroyedAtTick: TICK,
+    };
+
+    view.render(
+      frameOf("third", { scene: sceneOf([], [blast]), structures: [fell] }),
+      OVERLAY,
+    );
+
+    const { knockOver } = destructionOfView();
+    expect(knockOver).toHaveBeenCalledTimes(1);
+    const [knocked] = knockOver.mock.calls[0] as [Object3D];
+    expect(knocked).not.toBe(before!.object);
+    expect([knocked.position.x, knocked.position.z]).toEqual([30, 58]);
   });
 
   it("draws the first-person hands in a pass of their own over the city", () => {

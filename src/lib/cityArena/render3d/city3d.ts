@@ -4,11 +4,13 @@
  * them. The cells are made by the first frame, which brings the world session's landmark lookup
  * for the landmark dressing, and made again only when a frame brings another session's lookup.
  */
-import { Group, TextureLoader } from "three";
+import * as Sentry from "@sentry/nextjs";
+import { Group, TextureLoader, type Texture } from "three";
 import type { DecodedTile } from "../world/decode";
 import type { LandmarkStyles } from "./buildCell";
 import type { FurnitureInstance } from "./furnitureMesh";
 import { viewDistanceFor, type RenderQuality } from "./renderer3d";
+import { surfaceFallbackColour, surfaceOfUrl } from "./textures";
 import {
   createWorldCells,
   type StructureView,
@@ -43,18 +45,61 @@ export type City3d = {
   update(focus: { x: number; y: number }, frame: CityFrame): void;
   /** The built cells' furniture near a point; see {@link WorldCells.furnitureNear}. */
   furnitureNear: WorldCells["furnitureNear"];
+  /** Keeps a knocked piece down; see {@link WorldCells.keepDown}. Ignored before the first frame. */
+  keepDown: WorldCells["keepDown"];
   /** Frees the cells and the shared materials. */
   dispose(): void;
 };
 
+/** Surface art that failed to load this session, each reported once. */
+const REPORTED_SURFACE_FAILURES = new Set<string>();
+
 /**
- * The city's shared materials, the surface art loaded with three's `TextureLoader`.
+ * A surface whose art failed to load: drawn in its flat 2D colour instead of the black an
+ * unloaded texture samples as, with a breadcrumb the first time that file fails. The 2D map
+ * loads the same files and reports their failures, so this raises no Sentry issue of its own.
+ */
+function surfaceFailed(
+  materials: WorldMaterials,
+  url: string,
+  reported: Set<string>,
+): void {
+  const key = surfaceOfUrl(url);
+  if (!key) return;
+  const material = materials.surfaces[key];
+  material.map?.dispose();
+  material.map = null;
+  material.color.set(surfaceFallbackColour(key));
+  material.needsUpdate = true;
+  if (reported.has(url)) return;
+  reported.add(url);
+  Sentry.addBreadcrumb({
+    category: "arena",
+    level: "warning",
+    message: "3D surface art failed to load; drawn in its flat colour",
+    data: { url },
+  });
+}
+
+/**
+ * The city's shared materials, the surface art loaded with three's `TextureLoader`. A file that
+ * fails to load leaves its surface in its flat 2D colour.
  *
+ * @param reported - The failed files already reported; one set for the session by default.
  * @returns A fresh set; free it with `disposeWorldMaterials`.
  */
-export function loadWorldMaterials(): WorldMaterials {
+export function loadWorldMaterials(
+  reported: Set<string> = REPORTED_SURFACE_FAILURES,
+): WorldMaterials {
   const loader = new TextureLoader();
-  return createWorldMaterials((url) => loader.load(url));
+  const loaded: { materials: WorldMaterials | null } = { materials: null };
+  // A failure arrives asynchronously, after the materials below exist.
+  const load = (url: string): Texture =>
+    loader.load(url, undefined, undefined, () => {
+      if (loaded.materials) surfaceFailed(loaded.materials, url, reported);
+    });
+  loaded.materials = createWorldMaterials(load);
+  return loaded.materials;
 }
 
 /** The streamed cells and the landmark lookup they were made with. */
@@ -106,6 +151,9 @@ export function createCity3d(
         viewDistanceFor(frame.quality, frame.size.width),
         WORLD_BUILD_BUDGET_MS,
       );
+    },
+    keepDown(piece, pose) {
+      streamed?.cells.keepDown(piece, pose);
     },
     furnitureNear(x, y, radius, into: FurnitureInstance[] = []) {
       if (!streamed) {

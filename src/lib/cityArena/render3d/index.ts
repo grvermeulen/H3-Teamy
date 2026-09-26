@@ -136,10 +136,12 @@ function wreck(parts: View3dParts, frame: View3dFrame): void {
 }
 
 /**
- * Places the camera; syncs the cast (characters, vehicles, pickups, effects, destruction); starts
- * collapses and knock-overs; streams the city — which drops a fallen building in the same frame
- * its stand-in starts to fall, and copies the knocked furniture's poses — then renders, the
- * first-person hands in a pass of their own over the city, and draws the HUD.
+ * Places the camera; syncs the cast (characters, vehicles, pickups, effects, destruction); streams
+ * the city, which rebuilds the cells a building fell in and copies the knocked furniture's poses;
+ * then starts the collapses (in the frame the real building is dropped) and knocks furniture over.
+ * The knocks come after the city, so a blast that brings a building down knocks the rebuilt
+ * cell's pieces, not the ones the rebuild just threw away. Then it renders, the first-person hands
+ * in a pass of their own over the city, and draws the HUD.
  */
 function renderFrame(
   parts: View3dParts,
@@ -151,8 +153,8 @@ function renderFrame(
   renderer.configure(frame.size, frame.quality);
   placeCamera(renderer.camera, frame, focus);
   const hands = cast.update(frame, focus, renderer.camera);
-  wreck(parts, frame);
   city.update(focus, frame);
+  wreck(parts, frame);
   renderer.render(hands);
   drawOverlay3d(overlay, renderer.camera, {
     origin: focus,

@@ -1,4 +1,4 @@
-import { Object3D } from "three";
+import { Object3D, Quaternion, Vector3 } from "three";
 import { describe, expect, it, vi } from "vitest";
 import type { EffectState, VehicleState } from "../sim/types";
 import { createVehicle, widthOf } from "../sim/vehicle";
@@ -12,16 +12,20 @@ import {
   type KnockScene,
 } from "./knockOver3d";
 
-/** One bench at a point; the fake city hands it out to any search reaching it. */
+/** One bench at a point, its proxy standing there as the city's do; the fake city hands it out. */
 function benchAt(x: number, y: number): FurnitureInstance {
-  return { kind: "bench", x, y, heading: 0, object: new Object3D() };
+  const object = new Object3D();
+  object.position.set(x, 0, y);
+  return { kind: "bench", x, y, heading: 0, object };
 }
 
 /** A city holding `pieces`, searched by straight-line distance, recording every search. */
 function fakeCity(pieces: FurnitureInstance[]): FurnitureSource & {
   furnitureNear: ReturnType<typeof vi.fn>;
+  keepDown: ReturnType<typeof vi.fn>;
 } {
   return {
+    keepDown: vi.fn(),
     furnitureNear: vi.fn(
       (
         x: number,
@@ -76,6 +80,27 @@ describe("createKnockOvers", () => {
       expect.any(Array),
     );
     expect(knockOver).toHaveBeenCalledWith(bench.object, 10, 0);
+  });
+
+  it("has the city keep each knocked piece lying a quarter turn away from the hit", () => {
+    const bench = benchAt(10, 2);
+    const city = fakeCity([bench]);
+
+    createKnockOvers().update(scene([carAt(10, 0, 8)]), city, {
+      knockOver: vi.fn(),
+    });
+
+    expect(city.keepDown).toHaveBeenCalledTimes(1);
+    const [piece, pose] = city.keepDown.mock.calls[0] as [
+      FurnitureInstance,
+      Quaternion,
+    ];
+    expect(piece).toBe(bench);
+    const top = new Vector3(0, 1, 0).applyQuaternion(pose);
+    // World y (away from the car here) is three's z.
+    expect(top.x).toBeCloseTo(0);
+    expect(top.y).toBeCloseTo(0);
+    expect(top.z).toBeCloseTo(1);
   });
 
   it("leaves furniture alone next to a car at 3 m/s or slower", () => {

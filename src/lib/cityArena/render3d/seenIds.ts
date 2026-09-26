@@ -31,7 +31,7 @@ export function createSeenIds(): SeenIds {
       const done = previous;
       previous = current;
       current = done;
-      current.clear();
+      if (current.size > 0) current.clear();
     },
   };
 }
