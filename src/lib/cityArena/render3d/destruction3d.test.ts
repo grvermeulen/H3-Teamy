@@ -237,7 +237,7 @@ describe("createDestruction3d — collapse", () => {
     expect((mound.material as MeshLambertMaterial).color.getHex()).toBe(
       RUBBLE_COLOUR,
     );
-    expect(RUBBLE_COLOUR).toBe(0x4a4239);
+    expect(RUBBLE_COLOUR).toBe(0x7a6e62);
   });
 });
 

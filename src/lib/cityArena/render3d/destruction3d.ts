@@ -40,8 +40,8 @@ export const COLLAPSE_MAX_TILT_RAD = (8 * Math.PI) / 180;
 export const COLLAPSE_DUST_COUNT = 60;
 /** Chunks tumbling off a collapsing building (spec §6.8). */
 export const COLLAPSE_CHUNK_COUNT = 20;
-/** Colour of a rubble mound (spec §6.8). */
-export const RUBBLE_COLOUR = 0x4a4239;
+/** Colour of a rubble mound (spec §6.8): a lighter dusty brick-grey, readable on dark tarmac. */
+export const RUBBLE_COLOUR = 0x7a6e62;
 /** Seconds a knocked piece of furniture takes to hit the ground (spec §6.8). */
 export const KNOCK_OVER_S = 0.5;
 
