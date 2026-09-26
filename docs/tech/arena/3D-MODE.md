@@ -13,6 +13,17 @@ Shipped alongside 3D: networked destructible buildings (sim-side health, collaps
 rendered as ruins in both 2D and 3D), a rocket launcher, and 3D-only guidance (navigation ribbon,
 mission beacons, player markers, a zone wall). Protocol version is **4**.
 
+## Screenshots
+
+Captured in the dev build (Wageningen, dusk):
+
+|                                                                                   |                                                                                  |
+| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| ![First person with the pistol, a rubble field ahead](img/3d/3d-first-person.jpg) | ![Three row houses shot down, rubble mounds in the gap](img/3d/3d-ruins-row.jpg) |
+| ![A house collapsing: stand-in, dust and debris](img/3d/3d-collapse-a.jpg)        | ![The same collapse half a second later, sinking](img/3d/3d-collapse-b.jpg)      |
+
+The same ruins in the 2D view: ![2D rubble and damage shading](img/3d/2d-ruins-row.jpg)
+
 ## Architecture
 
 ### A second renderer, not a replacement
