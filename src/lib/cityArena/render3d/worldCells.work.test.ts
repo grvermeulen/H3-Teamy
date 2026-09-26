@@ -107,6 +107,37 @@ describe("createWorldCells work per update", () => {
     );
   });
 
+  it("rebuilds every cell a building fell in within the same update, whatever the budget", () => {
+    const world = createWorldCells(createTestMaterials());
+    const tiles = [
+      fixtureTile(
+        { x: 2, y: 2, rect: FIXTURE_TILE_RECT },
+        {
+          buildings: [
+            { ring: squareRing(40, 40, 10), levels: 2 },
+            { ring: squareRing(180, 40, 10), levels: 2 },
+          ],
+        },
+      ),
+    ];
+    world.update(FOCUS, tiles, [], VIEW_M, Infinity);
+    vi.clearAllMocks();
+    const fallen = tiles[0].buildings.map((building) => ({
+      id: building.structureId,
+      damage: 900,
+      destroyedAtTick: 7,
+    }));
+
+    world.update(FOCUS, tiles, fallen, VIEW_M, 0);
+
+    const rebuilt = vi.mocked(buildCell).mock.calls.map(([input]) => input);
+    expect(rebuilt.map((input) => input.cell)).toEqual([
+      { cx: 0, cy: 0 },
+      { cx: 1, cy: 0 },
+    ]);
+    expect(rebuilt.every((input) => input.destroyed.size === 2)).toBe(true);
+  });
+
   it("shades again, without building, when only the damage changes", () => {
     const world = createWorldCells(createTestMaterials());
     const tiles = town();

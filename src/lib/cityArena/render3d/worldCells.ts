@@ -51,9 +51,10 @@ export type WorldCells = {
   /** Every built cell; add it to the scene once, at `renderOrder` 0. */
   group: Group;
   /**
-   * Streams the city around `focus`, once per frame: rebuilds cells whose buildings fell or rose
-   * again (or whose tiles changed), then builds missing cells nearest first until `budgetMs` has
-   * passed (always at least one), drops cells beyond 1.4 × `viewDistance`, copies moved furniture
+   * Streams the city around `focus`, once per frame: rebuilds the cells whose buildings fell or
+   * rose again at once, whatever the budget (so a fallen building vanishes the frame it falls),
+   * then cells whose tiles changed and missing cells, nearest first, until `budgetMs` has passed
+   * (always at least one), drops cells beyond 1.4 × `viewDistance`, copies moved furniture
    * proxies (those handed out by `furnitureNear`) into their instances, and shades each damaged
    * building by its share of health. With unchanged inputs it only checks for movement.
    */
@@ -66,9 +67,15 @@ export type WorldCells = {
   ): void;
   /**
    * The furniture of the built cells standing within `radius` metres of a point, for cosmetic
-   * knock-over; from then on `update` mirrors each returned piece's proxy.
+   * knock-over; from then on `update` mirrors each returned piece's proxy. Pass `into` to have it
+   * emptied and filled instead of a new list made, for searches run every frame.
    */
-  furnitureNear(x: number, y: number, radius: number): FurnitureInstance[];
+  furnitureNear(
+    x: number,
+    y: number,
+    radius: number,
+    into?: FurnitureInstance[],
+  ): FurnitureInstance[];
   /** Frees every cell; the shared materials stay with their owner. */
   dispose(): void;
 };
@@ -92,6 +99,14 @@ type CellState = {
 /** A cell in view, with its key. */
 type WantedCell = { cell: CellCoord; key: string };
 
+/** A furniture search in progress; one per city, reused so a search allocates nothing. */
+type FurnitureQuery = {
+  x: number;
+  y: number;
+  radius: number;
+  found: FurnitureInstance[];
+};
+
 /** The streamed city's state between updates. */
 type City = {
   materials: WorldMaterials;
@@ -109,12 +124,20 @@ type City = {
   wanted: WantedCell[];
   lookedFrom: { x: number; y: number } | null;
   viewDistance: number;
-  /** Built cells to rebuild before any missing one is built. */
+  /**
+   * Built cells a building fell or rose again in: rebuilt in the same update whatever the budget,
+   * so a collapsing building's real walls vanish the frame its stand-in starts to fall.
+   */
+  fallen: Set<string>;
+  /** Built cells to rebuild (their tiles changed) before any missing one is built. */
   stale: Set<string>;
   /** Whether the budget ran out with cells in view still to build. */
   pending: boolean;
   /** Whether damage shading must be applied again. */
   shadeDirty: boolean;
+  query: FurnitureQuery;
+  /** Adds a cell's furniture within {@link City.query} to its list; made once per city. */
+  searchCell: (state: CellState) => void;
 };
 
 /** A build budget: when it started, what it allows, and how many cells it has paid for. */
@@ -158,6 +181,7 @@ function dropCell(city: City, key: string): void {
   state.built.dispose();
   city.cells.delete(key);
   city.stale.delete(key);
+  city.fallen.delete(key);
 }
 
 /** Builds (or rebuilds) one cell from the current tiles and destroyed set. */
@@ -180,8 +204,15 @@ function buildInto(city: City, cell: CellCoord, key: string): void {
   city.shadeDirty = true;
 }
 
-/** True when two tile lists hold the same tiles in the same order. */
-function sameTiles(
+/**
+ * True when two tile lists hold the same tiles in the same order; the world session hands out a
+ * fresh list every frame, so identity of the lists says nothing.
+ *
+ * @param left - One list.
+ * @param right - The other.
+ * @returns Whether they match element by element.
+ */
+export function sameTiles(
   left: readonly DecodedTile[],
   right: readonly DecodedTile[],
 ): boolean {
@@ -216,10 +247,10 @@ function structuresChanged(
   return false;
 }
 
-/** Marks the cell owning a building for rebuilding, if it is built. */
+/** Marks the cell owning a building for rebuilding this update, if it is built. */
 function markOwner(city: City, id: number): void {
   const key = city.owners.get(id);
-  if (key !== undefined) city.stale.add(key);
+  if (key !== undefined) city.fallen.add(key);
 }
 
 /**
@@ -283,6 +314,17 @@ function spent(budget: Budget): boolean {
   return budget.built > 0 && performance.now() - budget.start >= budget.limitMs;
 }
 
+/** Rebuilds every cell a building fell or rose again in: paid for from the budget, never deferred. */
+function rebuildFallen(city: City, budget: Budget): void {
+  for (const key of city.fallen) {
+    const state = city.cells.get(key);
+    if (!state) continue;
+    buildInto(city, state.cell, key);
+    budget.built += 1;
+  }
+  city.fallen.clear();
+}
+
 /** Rebuilds the stale cells, those in view nearest first; false when the budget ran out. */
 function rebuildStale(city: City, budget: Budget): boolean {
   for (const { cell, key } of city.wanted) {
@@ -344,23 +386,35 @@ function shadeDamaged(city: City): void {
   }
 }
 
-/** The furniture standing within `radius` of a point, now mirrored every update. */
+/** Adds a cell's furniture within the query's reach to its list, and mirrors it from now on. */
+function searchCell(state: CellState, query: FurnitureQuery): void {
+  const { x, y, radius, found } = query;
+  if (distanceToCell(x, y, state.cell) > radius) return;
+  const furniture = state.built.furniture;
+  for (let index = 0; index < furniture.length; index++) {
+    const piece = furniture[index];
+    if (Math.hypot(piece.x - x, piece.y - y) > radius) continue;
+    found.push(piece);
+    state.live.add(piece);
+  }
+}
+
+/** The furniture standing within `radius` of a point, in `into` (emptied first), now mirrored every update. */
 function handOutFurniture(
   city: City,
   x: number,
   y: number,
   radius: number,
+  into: FurnitureInstance[],
 ): FurnitureInstance[] {
-  const found: FurnitureInstance[] = [];
-  for (const state of city.cells.values()) {
-    if (distanceToCell(x, y, state.cell) > radius) continue;
-    for (const piece of state.built.furniture) {
-      if (Math.hypot(piece.x - x, piece.y - y) > radius) continue;
-      found.push(piece);
-      state.live.add(piece);
-    }
-  }
-  return found;
+  into.length = 0;
+  const { query } = city;
+  query.x = x;
+  query.y = y;
+  query.radius = radius;
+  query.found = into;
+  city.cells.forEach(city.searchCell);
+  return into;
 }
 
 /** A city with nothing built yet. */
@@ -368,6 +422,7 @@ function emptyCity(
   materials: WorldMaterials,
   landmarks: LandmarkStyles | undefined,
 ): City {
+  const query: FurnitureQuery = { x: 0, y: 0, radius: 0, found: [] };
   return {
     materials,
     landmarks,
@@ -380,9 +435,12 @@ function emptyCity(
     wanted: [],
     lookedFrom: null,
     viewDistance: 0,
+    fallen: new Set(),
     stale: new Set(),
     pending: false,
     shadeDirty: false,
+    query,
+    searchCell: (state) => searchCell(state, query),
   };
 }
 
@@ -400,8 +458,10 @@ function updateCity(
   syncTiles(city, frame.tiles);
   syncStructures(city, frame.structures);
   const looked = lookAround(city, focus, viewDistance);
-  if (looked || city.pending || city.stale.size > 0) {
+  const work = city.fallen.size > 0 || city.stale.size > 0 || city.pending;
+  if (looked || work) {
     const budget = { start: performance.now(), limitMs: budgetMs, built: 0 };
+    rebuildFallen(city, budget);
     city.pending = !(rebuildStale(city, budget) && buildMissing(city, budget));
   }
   for (const state of city.cells.values()) {
@@ -426,7 +486,8 @@ export function createWorldCells(
     group: city.group,
     update: (focus, tiles, structures, viewDistance, budgetMs) =>
       updateCity(city, focus, { tiles, structures }, viewDistance, budgetMs),
-    furnitureNear: (x, y, radius) => handOutFurniture(city, x, y, radius),
+    furnitureNear: (x, y, radius, into = []) =>
+      handOutFurniture(city, x, y, radius, into),
     dispose() {
       for (const key of city.cells.keys()) dropCell(city, key);
       city.wanted = [];

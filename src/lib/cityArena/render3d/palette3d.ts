@@ -14,10 +14,10 @@ export const HORIZON_GLOW = 0xd08a52;
 export const FOG_COLOUR = 0x26324c;
 /** The moon's directional light. */
 export const MOON_LIGHT = 0xb9c8ff;
-/** The hemisphere light's sky half. */
-export const AMBIENT_SKY = 0x5a6c9a;
-/** The hemisphere light's ground half. */
-export const AMBIENT_GROUND = 0x2a2420;
+/** The hemisphere light's sky half: a pale dusk blue, grey enough that skin and clothes keep their colour. */
+export const AMBIENT_SKY = 0x7282ad;
+/** The hemisphere light's ground half: warm light bounced off the lamp-lit street onto walls and people. */
+export const AMBIENT_GROUND = 0x524438;
 /** Street lamp heads and their glow. */
 export const LAMP_GLOW = 0xffc46b;
 /** A window lit by a warm bulb. */

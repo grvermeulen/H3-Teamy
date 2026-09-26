@@ -180,6 +180,18 @@ describe("createWorldCells", () => {
     expect(world.furnitureNear(-500, -500, 5)).toEqual([]);
   });
 
+  it("fills a list it is handed instead of making a new one each call", () => {
+    const world = createWorldCells(createTestMaterials());
+    world.update(ORIGIN, [fixtureTown()], NO_STRUCTURES, VIEW_M, Infinity);
+    const into = world.furnitureNear(90, 57, 2);
+
+    const found = world.furnitureNear(30, 58, 2, into);
+
+    expect(found).toBe(into);
+    expect(found.map((piece) => piece.kind)).toEqual(["bench"]);
+    expect(world.furnitureNear(-500, -500, 5, into)).toHaveLength(0);
+  });
+
   it("finds a street lamp standing just across a cell edge from its road", () => {
     const world = createWorldCells(createTestMaterials());
     const edgeRoad = fixtureTile(

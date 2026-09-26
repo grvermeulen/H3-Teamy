@@ -15,6 +15,7 @@ import {
   type Camera,
   type Light,
 } from "three";
+import { DESKTOP_MIN_WIDTH_PX } from "../render/camera";
 import type { ArenaSettings } from "../schemas";
 import { WebGl2UnavailableError } from "../webgl2";
 import { disposeObject } from "./disposal";
@@ -43,12 +44,19 @@ const MAX_PIXEL_RATIO: Record<RenderQuality, number> = {
 };
 /** Fog starts at this share of the view distance. */
 const FOG_NEAR_SHARE = 0.35;
-/** ACES filmic exposure; a touch over 1 lifts the dusk palette. */
-const TONE_MAPPING_EXPOSURE = 1.1;
-/** Hemisphere fill strength (sky over ground). */
-const HEMISPHERE_INTENSITY = 1.4;
-/** Moonlight strength. */
-const MOON_INTENSITY = 0.9;
+/*
+ * The evening's light levels. three.js lights a matte surface by intensity / π, and ACES's toe
+ * crushes whatever lands below about 0.05, so at dusk levels the side of a character facing away
+ * from the moon went black. The fill below lifts that side into ACES's straight part — a person
+ * 10 m down the street shows skin and clothes — while the scene still reads as evening: the road
+ * and walls stay well below the lit windows and lamps, which are emissive and do not rise with it.
+ */
+/** ACES filmic exposure; a quarter over 1 lifts the dusk palette out of the curve's toe. */
+const TONE_MAPPING_EXPOSURE = 1.25;
+/** Hemisphere fill strength (sky over ground): the light every side of a character gets. */
+const HEMISPHERE_INTENSITY = 4;
+/** Moonlight strength: the side facing the moon reads a step brighter than the fill. */
+const MOON_INTENSITY = 1.9;
 /** Where the moon shines from: high, from the north-west; only the direction matters. */
 const MOON_DIRECTION: [number, number, number] = [-120, 300, -80];
 /** Near and far planes, metres; the far plane holds the sky dome. */
@@ -77,12 +85,19 @@ export function pixelRatioFor(
 }
 
 /**
- * How far the city is drawn for a quality (spec §6.5).
+ * How far the city is drawn for a quality (spec §6.5). At "auto" a phone-sized viewport draws as
+ * near as "laag", by the rule the 2D view lowers its render scale by.
  *
  * @param quality - The settings' render quality.
+ * @param viewportWidth - The canvas's CSS width.
  * @returns Metres: 260, 380 or 520.
  */
-export function viewDistanceFor(quality: RenderQuality): number {
+export function viewDistanceFor(
+  quality: RenderQuality,
+  viewportWidth: number,
+): number {
+  if (quality === "auto" && viewportWidth < DESKTOP_MIN_WIDTH_PX)
+    return VIEW_DISTANCE_M.low;
   return VIEW_DISTANCE_M[quality];
 }
 
@@ -174,7 +189,7 @@ export function createRenderer3d(canvas: HTMLCanvasElement): Renderer3d {
     configure(size, quality) {
       configureSize(renderer, camera, applied, size, quality);
       const fog = scene.fog as Fog;
-      fog.far = viewDistanceFor(quality);
+      fog.far = viewDistanceFor(quality, size.width);
       fog.near = fog.far * FOG_NEAR_SHARE;
     },
     render(overlay) {

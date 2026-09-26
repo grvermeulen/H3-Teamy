@@ -12,6 +12,7 @@ import { createDebrisPool } from "./debris";
 import { createFlashPool } from "./flashes";
 import { createParticleSystem, type ParticleSystem } from "./particles";
 import { createProjectiles3d } from "./projectiles3d";
+import { createSeenIds } from "./seenIds";
 import { createVehicleSmoke } from "./vehicleSmoke";
 
 /** Share of the particle budget that goes to fire, sparks and embers; smoke and dust get the rest. */
@@ -53,36 +54,6 @@ export type Effects3d = {
 function localFocus(scene: EffectsScene): { x: number; y: number } | null {
   const own = scene.players.find((player) => player.id === scene.localPlayerId);
   return own ? { x: own.x, y: own.y } : null;
-}
-
-/** Which effect ids a frame has already seen. */
-type SeenIds = {
-  /** Records an id seen this frame; true when the previous frame did not have it. */
-  firstSeen(id: number): boolean;
-  /** Closes the frame: ids it did not record are forgotten. */
-  endFrame(): void;
-};
-
-/**
- * Remembers the effect ids of the last frame, so each effect bursts exactly once. Two sets swap
- * roles every frame, so the memory never outgrows the scene's effect list.
- */
-function createSeenIds(): SeenIds {
-  let previous = new Set<number>();
-  let current = new Set<number>();
-  return {
-    firstSeen(id) {
-      if (current.has(id)) return false;
-      current.add(id);
-      return !previous.has(id);
-    },
-    endFrame() {
-      const done = previous;
-      previous = current;
-      current = done;
-      current.clear();
-    },
-  };
 }
 
 function createTargets(maxParticles: number): BurstTargets {

@@ -10,6 +10,7 @@ import {
   type CastFrame,
 } from "./cast3d";
 import { createCharacter } from "./characters";
+import { createDestruction3d } from "./destruction3d";
 import { createEffects3d } from "./effects3d";
 import type { EntityFactories } from "./entities";
 import { createPickup3d } from "./pickups3d";
@@ -42,9 +43,38 @@ vi.mock("./effects3d", async () => {
   };
 });
 
+const destructionMade = vi.hoisted(
+  () =>
+    [] as {
+      object: unknown;
+      update: ReturnType<typeof vi.fn>;
+      dispose: ReturnType<typeof vi.fn>;
+    }[],
+);
+
+vi.mock("./destruction3d", async () => {
+  const { Group: DestructionGroup } = await import("three");
+  return {
+    createDestruction3d: vi.fn(() => {
+      const destruction = {
+        object: new DestructionGroup(),
+        collapse: vi.fn(),
+        setRubble: vi.fn(),
+        knockOver: vi.fn(),
+        update: vi.fn(),
+        dispose: vi.fn(),
+      };
+      destructionMade.push(destruction);
+      return destruction;
+    }),
+  };
+});
+
 beforeEach(() => {
   effectsMade.length = 0;
+  destructionMade.length = 0;
   vi.mocked(createEffects3d).mockClear();
+  vi.mocked(createDestruction3d).mockClear();
 });
 
 const FOCUS = { x: 3, y: 4 };
@@ -126,6 +156,27 @@ describe("createCast3d", () => {
     expect(effectsMade[0]!.update).toHaveBeenCalledTimes(2);
   });
 
+  it("makes the destruction with the effects, lending it their dust, and advances it after them", () => {
+    const cast = createCast3d(fakeFactories());
+    expect(cast.destruction()).toBeNull();
+
+    cast.update(frameOf(), FOCUS, new PerspectiveCamera());
+    cast.update(frameOf({ dt: 0.03 }), FOCUS, new PerspectiveCamera());
+
+    const [effects] = effectsMade;
+    const [destruction] = destructionMade;
+    expect(createDestruction3d).toHaveBeenCalledTimes(1);
+    expect(createDestruction3d).toHaveBeenCalledWith(
+      (effects as unknown as { smoke: unknown }).smoke,
+    );
+    expect(cast.destruction()).toBe(destruction);
+    expect((destruction!.object as Group).parent).toBe(cast.object);
+    expect(destruction!.update.mock.calls).toEqual([[0.02], [0.03]]);
+    const [effectsUpdated] = effects!.update.mock.invocationCallOrder;
+    const [destructionUpdated] = destruction!.update.mock.invocationCallOrder;
+    expect(effectsUpdated).toBeLessThan(destructionUpdated!);
+  });
+
   it("shows the hands only in first person while you are alive and on foot", () => {
     const cast = createCast3d(fakeFactories());
     const camera = new PerspectiveCamera();
@@ -160,6 +211,11 @@ describe("createCast3d", () => {
     };
     expect(body.dispose).toHaveBeenCalledTimes(1);
     expect(effectsMade[0]!.dispose).toHaveBeenCalledTimes(1);
+    const [destruction] = destructionMade;
+    expect(destruction!.dispose).toHaveBeenCalledTimes(1);
+    const [freedDestruction] = destruction!.dispose.mock.invocationCallOrder;
+    const [freedEffects] = effectsMade[0]!.dispose.mock.invocationCallOrder;
+    expect(freedDestruction).toBeLessThan(freedEffects!);
   });
 
   it("disposes cleanly before the first frame", () => {

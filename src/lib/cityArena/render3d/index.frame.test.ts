@@ -1,10 +1,17 @@
-import { Scene } from "three";
+import { Mesh, Scene, type BufferGeometry, type Object3D } from "three";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Scene as ArenaScene } from "../render/renderScene";
+import type { VehicleState } from "../sim/types";
+import { createVehicle } from "../sim/vehicle";
+import { structureIdOf } from "../world/structureId";
+import { createCity3d } from "./city3d";
+import { createDestruction3d } from "./destruction3d";
 import { createEffects3d } from "./effects3d";
 import { createEntitySync } from "./entities";
-import { createView3d, type View3dFrame } from "./index";
+import { createView3d, type StructureView, type View3dFrame } from "./index";
 import { createRenderer3d } from "./renderer3d";
+import { ruinOf } from "./ruins3d";
+import { fixtureTown } from "./testing/cityFixture";
 
 vi.mock("./renderer3d", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./renderer3d")>();
@@ -36,6 +43,20 @@ vi.mock("./effects3d", async () => {
   };
 });
 
+vi.mock("./destruction3d", async () => {
+  const three = await import("three");
+  return {
+    createDestruction3d: vi.fn(() => ({
+      object: new three.Group(),
+      collapse: vi.fn(),
+      setRubble: vi.fn(),
+      knockOver: vi.fn(),
+      update: vi.fn(),
+      dispose: vi.fn(),
+    })),
+  };
+});
+
 vi.mock("./entities", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./entities")>();
   const three = await import("three");
@@ -50,22 +71,49 @@ vi.mock("./entities", async (importOriginal) => {
   };
 });
 
+// The real city with textureless materials: jsdom has no canvas for the façades.
+vi.mock("./city3d", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./city3d")>();
+  const { createTestMaterials } = await import("./testing/cityFixture");
+  return {
+    ...actual,
+    createCity3d: vi.fn(() => actual.createCity3d(createTestMaterials())),
+  };
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
 const DT = 1 / 60;
+const TICK = 500;
 const OVERLAY = {} as CanvasRenderingContext2D;
-const SCENE = {
-  localPlayerId: 2,
-  players: [{ id: 2, x: 5, y: 6, vehicleId: null }],
-  vehicles: [],
-} as unknown as ArenaScene;
+/** The fixture town's house, a 10 m square at (20, 72) on tile (1, 1). */
+const HOUSE = structureIdOf(1, 1, 0);
+const TOWN = fixtureTown();
+/** The world session's landmark lookup: one map for the life of a session. */
+const LANDMARKS = new Map();
 
-function frameOf(mode: View3dFrame["mode"]): View3dFrame {
+function sceneOf(vehicles: VehicleState[] = []): ArenaScene {
+  return {
+    localPlayerId: 2,
+    players: [{ id: 2, x: 25, y: 60, vehicleId: null }],
+    vehicles,
+    effects: [],
+    tick: TICK,
+    world: { landmarks: LANDMARKS },
+  } as unknown as ArenaScene;
+}
+
+const SCENE = sceneOf();
+
+function frameOf(
+  mode: View3dFrame["mode"],
+  extra: Partial<View3dFrame> = {},
+): View3dFrame {
   return {
     scene: SCENE,
-    tiles: [],
+    tiles: [TOWN],
     structures: [],
     yaw: 0.7,
     pitch: 0,
@@ -76,6 +124,7 @@ function frameOf(mode: View3dFrame["mode"]): View3dFrame {
     deadSeconds: null,
     quality: "auto",
     size: { width: 800, height: 450 },
+    ...extra,
   };
 }
 
@@ -89,22 +138,51 @@ function partsOfView(): {
     update: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
   };
+  city: ReturnType<typeof createCity3d>;
 } {
   return {
     renderer: vi.mocked(createRenderer3d).mock.results[0]!.value,
     sync: vi.mocked(createEntitySync).mock.results[0]!.value,
+    city: vi.mocked(createCity3d).mock.results[0]!.value,
   };
+}
+
+/** The destruction the view's cast made, with its recorded calls. */
+function destructionOfView(): Record<
+  "collapse" | "setRubble" | "knockOver",
+  ReturnType<typeof vi.fn>
+> {
+  return vi.mocked(createDestruction3d).mock.results[0]!.value;
+}
+
+/**
+ * Wall vertices standing in the city's cell (0, 0), where the fixture's house is: the merged walls
+ * mesh is the one drawn with a material list.
+ */
+function homeWallVertices(city: Object3D): number {
+  let count = 0;
+  city.traverse((node) => {
+    const home = node.parent?.parent === city && node.position.lengthSq() === 0;
+    if (!home) return;
+    for (const part of node.children)
+      if (part instanceof Mesh && Array.isArray(part.material))
+        count += (part.geometry as BufferGeometry).getAttribute(
+          "position",
+        ).count;
+  });
+  return count;
 }
 
 describe("createView3d frame path", () => {
   it("syncs the cast and the effects every frame and renders the city", () => {
     const view = createView3d(document.createElement("canvas"));
-    const { renderer, sync } = partsOfView();
+    const { renderer, sync, city } = partsOfView();
     let root = sync.group.parent;
     while (root?.parent) root = root.parent;
     expect(root).toBe(renderer.scene);
+    expect(city.object.parent).toBe(renderer.scene);
     view.render(frameOf("third"), OVERLAY);
-    const focus = expect.objectContaining({ x: 5, y: 6 });
+    const focus = expect.objectContaining({ x: 25, y: 60 });
     expect(sync.update).toHaveBeenCalledWith(SCENE, DT, focus, {
       firstPerson: false,
       aim: 0.7,
@@ -113,6 +191,56 @@ describe("createView3d frame path", () => {
     expect(effects.sync).toHaveBeenCalledWith(SCENE, focus);
     expect(effects.update).toHaveBeenCalledWith(DT);
     expect(renderer.render).toHaveBeenCalledWith(null);
+  });
+
+  it("streams the real city around the focus, dressed by the scene's landmarks", () => {
+    const view = createView3d(document.createElement("canvas"));
+    const { city } = partsOfView();
+
+    view.render(frameOf("third"), OVERLAY);
+
+    expect(homeWallVertices(city.object)).toBeGreaterThan(0);
+    expect(city.furnitureNear(30, 58, 2).map((piece) => piece.kind)).toEqual([
+      "bench",
+    ]);
+  });
+
+  it("drops a building that just fell from the city in the frame its collapse starts", () => {
+    const view = createView3d(document.createElement("canvas"));
+    const { city } = partsOfView();
+    view.render(frameOf("third"), OVERLAY);
+    const standing = homeWallVertices(city.object);
+    const fell: StructureView = {
+      id: HOUSE,
+      damage: 999,
+      destroyedAtTick: TICK - 1,
+    };
+
+    view.render(frameOf("third", { structures: [fell] }), OVERLAY);
+
+    const destruction = destructionOfView();
+    expect(destruction.collapse).toHaveBeenCalledWith(ruinOf(HOUSE, [TOWN]));
+    expect(destruction.setRubble).toHaveBeenLastCalledWith([
+      ruinOf(HOUSE, [TOWN]),
+    ]);
+    expect(homeWallVertices(city.object)).toBeLessThan(standing);
+  });
+
+  it("knocks over the furniture a fast car sweeps past", () => {
+    const view = createView3d(document.createElement("canvas"));
+    view.render(frameOf("third"), OVERLAY);
+    const car = createVehicle(9, "sedan", [30, 57], 0, 0);
+    car.velocityX = 10;
+
+    view.render(frameOf("third", { scene: sceneOf([car]) }), OVERLAY);
+
+    const { city } = partsOfView();
+    const [bench] = city.furnitureNear(30, 58, 1);
+    expect(destructionOfView().knockOver).toHaveBeenCalledWith(
+      bench!.object,
+      30,
+      57,
+    );
   });
 
   it("draws the first-person hands in a pass of their own over the city", () => {
@@ -128,12 +256,28 @@ describe("createView3d frame path", () => {
     expect(pass.scene).not.toBe(renderer.scene);
   });
 
-  it("frees the cast, the effects and the renderer on dispose", () => {
+  it("frees the WebGL context when a layer fails to start, and passes the error on", () => {
+    const failure = new Error("no 2D canvas for the façades");
+    vi.mocked(createCity3d).mockImplementationOnce(() => {
+      throw failure;
+    });
+
+    expect(() => createView3d(document.createElement("canvas"))).toThrow(
+      failure,
+    );
+
+    const renderer = vi.mocked(createRenderer3d).mock.results[0]!.value;
+    expect(renderer.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("frees the city, the cast, the effects and the renderer on dispose", () => {
     const view = createView3d(document.createElement("canvas"));
-    const { renderer, sync } = partsOfView();
+    const { renderer, sync, city } = partsOfView();
+    const freeCity = vi.spyOn(city, "dispose");
     view.render(frameOf("third"), OVERLAY);
     view.dispose();
     const effects = vi.mocked(createEffects3d).mock.results[0]!.value;
+    expect(freeCity).toHaveBeenCalledTimes(1);
     expect(sync.dispose).toHaveBeenCalledTimes(1);
     expect(effects.dispose).toHaveBeenCalledTimes(1);
     expect(renderer.dispose).toHaveBeenCalledTimes(1);

@@ -8,27 +8,20 @@ import { lengthOf } from "../sim/vehicle";
 import type { DecodedTile } from "../world/decode";
 import { applyRigPose, rigPose, type CameraMode } from "./cameraRig";
 import { createCast3d, type Cast3d } from "./cast3d";
+import { createCity3d, type City3d } from "./city3d";
+import { createKnockOvers, type KnockOvers } from "./knockOver3d";
 import { drawOverlay3d } from "./overlay3d";
-import { createPlaceholderWorld, type PlaceholderWorld } from "./placeholders";
 import {
   createRenderer3d,
-  viewDistanceFor,
   type RenderQuality,
   type Renderer3d,
 } from "./renderer3d";
+import { createRuins3d, type Ruins3d } from "./ruins3d";
+import type { StructureView } from "./worldCells";
 
 export type { CameraMode } from "./cameraRig";
 export { pitchLimitsFor } from "./cameraRig";
-
-/**
- * A building's damage as the 3D view reads it. Mirrors the simulation's `StructureState`
- * (Track S) until that lands on this branch; the runtime passes an empty list for now.
- */
-export type StructureView = {
-  id: number;
-  damage: number;
-  destroyedAtTick: number | null;
-};
+export type { StructureView } from "./worldCells";
 
 /** Everything the 3D view draws in one frame. */
 export type View3dFrame = {
@@ -66,9 +59,6 @@ export type View3dHandle = {
   dispose(): void;
 };
 
-/** Milliseconds per frame the world layer may spend building new geometry. */
-const WORLD_BUILD_BUDGET_MS = 4;
-
 /** Who the camera follows: the local player, or the car they drive. */
 export type Focus = {
   x: number;
@@ -99,16 +89,57 @@ export function focusOf(scene: ArenaScene): Focus {
   };
 }
 
-/** The renderer and the two layers it draws: the city and everything that moves in it. */
+/**
+ * The renderer, the two layers it draws — the city and everything that moves in it — and what
+ * turns the frame's structures and traffic into destruction: ruins and knocked-over furniture.
+ */
 type View3dParts = {
   renderer: Renderer3d;
-  world: PlaceholderWorld;
+  city: City3d;
   cast: Cast3d;
+  ruins: Ruins3d;
+  knocks: KnockOvers;
 };
 
+/** Puts the camera where the frame's mode, look and focus place it. */
+function placeCamera(
+  camera: Renderer3d["camera"],
+  frame: View3dFrame,
+  focus: Focus,
+): void {
+  applyRigPose(
+    camera,
+    rigPose({
+      mode: frame.mode,
+      yaw: frame.yaw,
+      pitch: frame.pitch,
+      target: focus,
+      driving: focus.driving,
+      dead: frame.deadSeconds !== null,
+      deadSeconds: frame.deadSeconds ?? 0,
+      dt: frame.dt,
+    }),
+  );
+}
+
 /**
- * Places the camera, syncs the city and the cast (characters, vehicles, pickups, effects),
- * renders — the first-person hands in a pass of their own over the city — then draws the HUD.
+ * Starts the collapse of the buildings that just fell (found by comparing the frame's structure
+ * list with the last one), lays the rubble, and knocks over the furniture next to fast cars and
+ * new explosions. The destruction exists from the cast's first update on.
+ */
+function wreck(parts: View3dParts, frame: View3dFrame): void {
+  const destruction = parts.cast.destruction();
+  if (!destruction) return;
+  const { scene, structures, tiles } = frame;
+  parts.ruins.update(structures, tiles, scene.tick, destruction);
+  parts.knocks.update(scene, parts.city, destruction);
+}
+
+/**
+ * Places the camera; syncs the cast (characters, vehicles, pickups, effects, destruction); starts
+ * collapses and knock-overs; streams the city — which drops a fallen building in the same frame
+ * its stand-in starts to fall, and copies the knocked furniture's poses — then renders, the
+ * first-person hands in a pass of their own over the city, and draws the HUD.
  */
 function renderFrame(
   parts: View3dParts,
@@ -116,42 +147,25 @@ function renderFrame(
   overlay: CanvasRenderingContext2D,
 ): void {
   const focus = focusOf(frame.scene);
-  const dead = frame.deadSeconds !== null;
-  const { renderer, world, cast } = parts;
+  const { renderer, city, cast } = parts;
   renderer.configure(frame.size, frame.quality);
-  applyRigPose(
-    renderer.camera,
-    rigPose({
-      mode: frame.mode,
-      yaw: frame.yaw,
-      pitch: frame.pitch,
-      target: focus,
-      driving: focus.driving,
-      dead,
-      deadSeconds: frame.deadSeconds ?? 0,
-      dt: frame.dt,
-    }),
-  );
-  world.update(
-    focus,
-    frame.tiles,
-    frame.structures,
-    viewDistanceFor(frame.quality),
-    WORLD_BUILD_BUDGET_MS,
-  );
-  renderer.render(cast.update(frame, focus, renderer.camera));
+  placeCamera(renderer.camera, frame, focus);
+  const hands = cast.update(frame, focus, renderer.camera);
+  wreck(parts, frame);
+  city.update(focus, frame);
+  renderer.render(hands);
   drawOverlay3d(overlay, renderer.camera, {
     origin: focus,
     aim: frame.aim,
     size: frame.size,
-    dead,
+    dead: frame.deadSeconds !== null,
   });
 }
 
 /**
- * Starts the 3D view on `canvas` (spec §6): renderer, sky, lights and fog; the real characters,
- * vehicles, pickups, effects and first-person hands, in a placeholder city until the real world
- * cells are wired in.
+ * Starts the 3D view on `canvas` (spec §6): renderer, sky, lights and fog; the streamed city of
+ * the loaded map tiles; the characters, vehicles, pickups, effects, destruction and first-person
+ * hands.
  *
  * @param canvas - The WebGL canvas stacked under the 2D HUD canvas.
  * @returns The live view.
@@ -159,16 +173,31 @@ function renderFrame(
  */
 export function createView3d(canvas: HTMLCanvasElement): View3dHandle {
   const renderer = createRenderer3d(canvas);
-  const parts: View3dParts = {
-    renderer,
-    world: createPlaceholderWorld(),
-    cast: createCast3d(),
-  };
-  renderer.scene.add(parts.world.group, parts.cast.object);
+  let parts: View3dParts | null = null;
+  try {
+    parts = {
+      renderer,
+      city: createCity3d(),
+      cast: createCast3d(),
+      ruins: createRuins3d(),
+      knocks: createKnockOvers(),
+    };
+  } finally {
+    // A layer that fails to start (say, no 2D canvas to paint the façades on) must not leave the
+    // WebGL context behind; the error itself goes on to the caller, which reports it.
+    if (!parts) renderer.dispose();
+  }
+  return startView(parts);
+}
+
+/** Puts the layers in the scene and hands out the view. */
+function startView(parts: View3dParts): View3dHandle {
+  const { renderer } = parts;
+  renderer.scene.add(parts.city.object, parts.cast.object);
   return {
     render: (frame, overlay) => renderFrame(parts, frame, overlay),
     dispose() {
-      parts.world.dispose();
+      parts.city.dispose();
       parts.cast.dispose();
       renderer.dispose();
     },

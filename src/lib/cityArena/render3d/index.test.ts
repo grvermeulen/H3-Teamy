@@ -57,8 +57,15 @@ describe("render quality", () => {
     expect(pixelRatioFor("auto", 1)).toBe(1);
     expect(pixelRatioFor("high", 3)).toBe(2);
     expect(pixelRatioFor("high", 0)).toBe(1);
-    expect(viewDistanceFor("low")).toBe(260);
-    expect(viewDistanceFor("auto")).toBe(380);
-    expect(viewDistanceFor("high")).toBe(520);
+    expect(viewDistanceFor("low", 1280)).toBe(260);
+    expect(viewDistanceFor("auto", 1280)).toBe(380);
+    expect(viewDistanceFor("high", 1280)).toBe(520);
+  });
+
+  it("draws less far at 'auto' on a narrow screen, as the 2D view lowers its quality there", () => {
+    expect(viewDistanceFor("auto", 767)).toBe(260);
+    expect(viewDistanceFor("auto", 768)).toBe(380);
+    expect(viewDistanceFor("high", 390)).toBe(520);
+    expect(viewDistanceFor("low", 2560)).toBe(260);
   });
 });
