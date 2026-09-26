@@ -278,8 +278,9 @@ export function pushDashes(
 /**
  * Street lamps along a road with pavements: one every {@link LAMP_SPACING_M} (half a spacing in
  * from the start), alternating sides, just past the kerb, the arm turned toward the road; none
- * within {@link JUNCTION_CLEARANCE_M} of either end. Only lamps whose foot on the centre line lies
- * in `region` are returned, so each is placed by exactly one cell.
+ * within {@link JUNCTION_CLEARANCE_M} of either end. Only lamps standing in `region` are returned,
+ * so each is placed by exactly one cell: the cell it stands in, which may not be the cell its road
+ * runs through (pass every road within the lamp's reach of the region).
  *
  * @param points - The whole centre line.
  * @param roadWidth - The carriageway's width, metres.
@@ -301,14 +302,12 @@ export function lampsAlong(
     ({ point, direction }, at, total, index) => {
       if (at < JUNCTION_CLEARANCE_M || at > total - JUNCTION_CLEARANCE_M)
         return;
-      if (!inRegion(point, region)) return;
       const side = index % 2 === 0 ? 1 : -1;
       const [ax, ay] = perpendicular(direction);
-      lamps.push({
-        x: point[0] + ax * reach * side,
-        y: point[1] + ay * reach * side,
-        heading: Math.atan2(-ay * side, -ax * side),
-      });
+      const x = point[0] + ax * reach * side;
+      const y = point[1] + ay * reach * side;
+      if (!inRegion([x, y], region)) return;
+      lamps.push({ x, y, heading: Math.atan2(-ay * side, -ax * side) });
     },
   );
   return lamps;

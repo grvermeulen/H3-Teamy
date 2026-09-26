@@ -180,6 +180,32 @@ describe("createWorldCells", () => {
     expect(world.furnitureNear(-500, -500, 5)).toEqual([]);
   });
 
+  it("finds a street lamp standing just across a cell edge from its road", () => {
+    const world = createWorldCells(createTestMaterials());
+    const edgeRoad = fixtureTile(
+      { x: 2, y: 2, rect: FIXTURE_TILE_RECT },
+      {
+        roads: [
+          {
+            points: [
+              [-50, 126],
+              [300, 126],
+            ],
+            roadClass: "residential",
+          },
+        ],
+      },
+    );
+    world.update(ORIGIN, [edgeRoad], NO_STRUCTURES, VIEW_M, Infinity);
+
+    // The third lamp stands at x = 35 on the +y side: y = 126 + 3 + 0.6, in row 1.
+    // Radius 1 keeps the query 1.6 m clear of row 0, where the lamp's road runs.
+    const near = world.furnitureNear(35, 129.6, 1);
+
+    expect(near.map((piece) => piece.kind)).toEqual(["lamp"]);
+    expect(near[0].y).toBeCloseTo(129.6);
+  });
+
   it("mirrors a knocked-over furniture proxy on the next update", () => {
     const materials = createTestMaterials();
     const world = createWorldCells(materials);
@@ -201,6 +227,29 @@ describe("createWorldCells", () => {
     const after = new Matrix4();
     benches.getMatrixAt(0, after);
     expect(after.equals(before)).toBe(false);
+  });
+
+  it("re-uploads furniture only for handed-out pieces that moved", () => {
+    const materials = createTestMaterials();
+    const world = createWorldCells(materials);
+    world.update(ORIGIN, [fixtureTown()], NO_STRUCTURES, VIEW_M, Infinity);
+    const home = world.group.children.find(
+      (child) => child.position.x === 0 && child.position.z === 0,
+    )!;
+    const shelters = home.children.find(
+      (child): child is InstancedMesh =>
+        child instanceof InstancedMesh &&
+        child.material === materials.shelterGlass,
+    )!;
+    const uploads = shelters.instanceMatrix.version;
+    const [shelter] = world.furnitureNear(90, 57, 2);
+
+    world.update(ORIGIN, [fixtureTown()], NO_STRUCTURES, VIEW_M, 0);
+    expect(shelters.instanceMatrix.version).toBe(uploads);
+
+    shelter.object.position.y = -1;
+    world.update(ORIGIN, [fixtureTown()], NO_STRUCTURES, VIEW_M, 0);
+    expect(shelters.instanceMatrix.version).toBe(uploads + 1);
   });
 
   it("frees everything on dispose", () => {

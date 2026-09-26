@@ -237,6 +237,19 @@ describe("buildBuildingGeometry", () => {
     expect(Math.max(...heights)).toBeLessThan(buildingHeight(2) + 3);
   });
 
+  it("walls a roofless building but leaves its roof to its dressing", () => {
+    const { walls, roofsTiled, roofsFlat, ranges } = buildBuildingGeometry(
+      [building(12, square(0, 0, 10), 2), building(13, square(20, 0, 30), 2)],
+      new Set(),
+      { roofless: new Set([12, 13]) },
+    );
+
+    expect(ranges.map((range) => range.structureId).sort()).toEqual([12, 13]);
+    expect(walls.getAttribute("position").count).toBe(32);
+    expect(roofsTiled.getAttribute("position").count).toBe(0);
+    expect(roofsFlat.getAttribute("position").count).toBe(0);
+  });
+
   it("leaves out a skipped building entirely", () => {
     const { walls, roofsTiled, roofsFlat, ranges } = buildBuildingGeometry(
       [building(11, square(0, 0, 10), 2)],

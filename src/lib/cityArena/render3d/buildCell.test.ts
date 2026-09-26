@@ -253,6 +253,33 @@ describe("buildCell", () => {
     );
   });
 
+  it.each(["pool", "church"] as const)(
+    "leaves out the flat roof a %s's dressing replaces",
+    (style) => {
+      const materials = createTestMaterials();
+      const churchEaves = 3 * 3.1;
+      const roofHeights = (styles?: CellInput["landmarks"]): number[] => {
+        const { group } = buildCell({
+          cell: { cx: 0, cy: 0 },
+          tiles: [fixtureTown()],
+          destroyed: new Set(),
+          materials,
+          landmarks: styles,
+        });
+        return positions(
+          meshWith(group, materials.surfaces.roofFlat).geometry,
+        ).map((vertex) => vertex.y);
+      };
+
+      const plain = roofHeights(undefined);
+      const dressed = roofHeights(new Map([["cunerakerk", { style }]]));
+
+      expect(plain.some((y) => Math.abs(y - churchEaves) < 1e-4)).toBe(true);
+      expect(dressed.some((y) => Math.abs(y - churchEaves) < 1e-4)).toBe(false);
+      expect(dressed.length).toBeGreaterThan(0);
+    },
+  );
+
   it("instances trees by owner cell, two greens by id parity", () => {
     const materials = createTestMaterials();
     const { group } = buildTownCell(materials);
@@ -282,6 +309,42 @@ describe("buildCell", () => {
     );
     for (const lamp of streetLamps)
       expect(Math.abs(lamp.y - 64)).toBeCloseTo(3.6);
+  });
+
+  it("places a street lamp in the cell it stands in, not its road's", () => {
+    const tile = fixtureTile(
+      { x: 2, y: 2, rect: FIXTURE_TILE_RECT },
+      {
+        roads: [
+          {
+            points: [
+              [-50, 126],
+              [300, 126],
+            ],
+            roadClass: "residential",
+          },
+        ],
+      },
+    );
+    const build = (cy: number): ReturnType<typeof buildCell> =>
+      buildCell({
+        cell: { cx: 0, cy },
+        tiles: [tile],
+        destroyed: new Set(),
+        materials: createTestMaterials(),
+      });
+
+    for (const [cy, rows] of [
+      [0, [0, CELL_M]],
+      [1, [CELL_M, 2 * CELL_M]],
+    ] as const) {
+      const lamps = build(cy).furniture;
+      expect(lamps.length).toBeGreaterThan(0);
+      for (const lamp of lamps) {
+        expect(lamp.y).toBeGreaterThanOrEqual(rows[0]);
+        expect(lamp.y).toBeLessThan(rows[1]);
+      }
+    }
   });
 
   it("copies a furniture proxy's pose into its instances on sync", () => {

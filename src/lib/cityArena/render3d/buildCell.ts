@@ -62,7 +62,7 @@ import {
   type FurnitureInstance,
   type PlacedFurniture,
 } from "./furnitureMesh";
-import { landmarkDressing } from "./landmarkDressing";
+import { dressingReplacesRoof, landmarkDressing } from "./landmarkDressing";
 import {
   createMeshBuffers,
   pushFlatPolygon,
@@ -72,6 +72,7 @@ import {
   type UvMapping,
 } from "./meshBuffers";
 import {
+  LAMP_KERB_OFFSET_M,
   inRegion,
   lampsAlong,
   pushDashes,
@@ -100,11 +101,9 @@ export const ROAD_Y_M = 0.02;
 export const MARKING_Y_M = 0.03;
 /** Furniture this close to a road turns to face it, metres (as the map build aligns it). */
 const FACE_ROAD_M = 30;
-/**
- * How far past the cell's edge footprints are gathered to keep street lamps out of them, metres
- * (a lamp stands up to half a road plus a pavement away from its centre line).
- */
-const LAMP_BUILDING_MARGIN_M = 10;
+/** The farthest a street lamp stands from its road's centre line, metres: the widest road's half plus the kerb offset. */
+const LAMP_REACH_M =
+  Math.max(...Object.values(ROAD_WIDTH_M)) / 2 + LAMP_KERB_OFFSET_M;
 
 /** Landmark styles by landmark key, e.g. the world session's landmark lookup. */
 export type LandmarkStyles = ReadonlyMap<
@@ -134,8 +133,11 @@ export type BuiltCell = {
   furniture: FurnitureInstance[];
   /** Every building the cell owns as the map decodes it, destroyed ones included. */
   buildings: DecodedBuilding[];
-  /** Copies moved or hidden furniture proxies into their instances. */
-  syncFurniture(): void;
+  /**
+   * Copies moved, turned or hidden furniture proxies into their instances: only `pieces` when
+   * given (the ones handed out for a knock-over), else every piece of the cell.
+   */
+  syncFurniture(pieces?: Iterable<FurnitureInstance>): void;
   /** Frees the cell's own geometry and dressing; the shared materials are left alone. */
   dispose(): void;
 };
@@ -382,6 +384,29 @@ function ownedBuildings(
   );
 }
 
+/** The landmark style a building is dressed in, if it is a known landmark. */
+function landmarkStyleOf(
+  building: DecodedBuilding,
+  input: CellInput,
+): LandmarkStyle | undefined {
+  return building.landmark
+    ? input.landmarks?.get(building.landmark)?.style
+    : undefined;
+}
+
+/** The ids of the buildings whose dressing brings its own roof. */
+function rooflessIds(
+  shapes: readonly DecodedBuilding[],
+  input: CellInput,
+): Set<number> {
+  const ids = new Set<number>();
+  for (const shape of shapes) {
+    const style = landmarkStyleOf(shape, input);
+    if (style && dressingReplacesRoof(style)) ids.add(shape.structureId);
+  }
+  return ids;
+}
+
 /** Walls and roofs of the owned buildings, and the dressing of their landmarks. */
 function addBuildings(
   group: Group,
@@ -391,7 +416,10 @@ function addBuildings(
   origin: Point,
 ): { ranges: BuildingRange[]; walls: BufferGeometry | null } {
   const shapes = buildings.map((building) => building.shape);
-  const built = buildBuildingGeometry(shapes, input.destroyed, origin);
+  const built = buildBuildingGeometry(shapes, input.destroyed, {
+    origin,
+    roofless: rooflessIds(shapes, input),
+  });
   const { surfaces } = input.materials;
   const parts: [BufferGeometry, Material | Material[]][] = [
     [built.walls, facadeMaterials(input.materials)],
@@ -417,9 +445,7 @@ function addLandmarks(
   origin: Point,
 ): void {
   for (const shape of shapes) {
-    const style = shape.landmark
-      ? input.landmarks?.get(shape.landmark)?.style
-      : undefined;
+    const style = landmarkStyleOf(shape, input);
     if (!style || input.destroyed.has(shape.structureId)) continue;
     const dressing = landmarkDressing(
       style,
@@ -465,14 +491,7 @@ function nearestRoadPoint(
   let best: { at: Point; distance: number } | null = null;
   for (const { tile } of regions) {
     for (const road of tile.roads) {
-      const { minX, minY, maxX, maxY } = road.bounds;
-      const reach = {
-        minX: minX - FACE_ROAD_M,
-        minY: minY - FACE_ROAD_M,
-        maxX: maxX + FACE_ROAD_M,
-        maxY: maxY + FACE_ROAD_M,
-      };
-      if (!inRegion(point, reach)) continue;
+      if (!inRegion(point, grown(road.bounds, FACE_ROAD_M))) continue;
       for (let index = 0; index + 1 < road.points.length; index++) {
         const [a, b] = [road.points[index], road.points[index + 1]];
         const distance = distancePointToSegment(point, a, b);
@@ -541,20 +560,29 @@ function ownedFurniture(
   );
 }
 
-/** Street lamps along the paved roads of the regions, clear of every footprint nearby. */
+/** A rectangle grown by a margin on every side. */
+function grown(rect: Rect, margin: number): Rect {
+  return {
+    minX: rect.minX - margin,
+    minY: rect.minY - margin,
+    maxX: rect.maxX + margin,
+    maxY: rect.maxY + margin,
+  };
+}
+
+/**
+ * The street lamps standing in the regions, from every paved road within a lamp's reach of them
+ * (a lamp may stand in a neighbouring cell from its road's), clear of every footprint.
+ */
 function streetLamps(
   cell: CellCoord,
   regions: readonly Region[],
 ): PlacedFurniture[] {
   const bounds = cellRect(cell);
-  const near = {
-    minX: bounds.minX - LAMP_BUILDING_MARGIN_M,
-    minY: bounds.minY - LAMP_BUILDING_MARGIN_M,
-    maxX: bounds.maxX + LAMP_BUILDING_MARGIN_M,
-    maxY: bounds.maxY + LAMP_BUILDING_MARGIN_M,
-  };
   const footprints = regions.flatMap(({ tile }) =>
-    tile.buildings.filter((building) => rectsIntersect(building.bounds, near)),
+    tile.buildings.filter((building) =>
+      rectsIntersect(building.bounds, bounds),
+    ),
   );
   const clear = (point: Point): boolean =>
     !footprints.some(
@@ -567,7 +595,7 @@ function streetLamps(
       .filter(
         (road) =>
           PAVEMENT_CLASSES.includes(road.roadClass) &&
-          rectsIntersect(road.bounds, rect),
+          rectsIntersect(road.bounds, grown(rect, LAMP_REACH_M)),
       )
       .flatMap((road) =>
         lampsAlong(road.points, ROAD_WIDTH_M[road.roadClass], rect),
@@ -584,7 +612,10 @@ function addScenery(
   regions: readonly Region[],
   input: CellInput,
   origin: Point,
-): { furniture: FurnitureInstance[]; sync: () => void } {
+): {
+  furniture: FurnitureInstance[];
+  sync: (pieces?: Iterable<FurnitureInstance>) => void;
+} {
   const { cell } = input;
   const trees = buildTreeLayer(
     ownedTrees(cell, regions),

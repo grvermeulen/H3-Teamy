@@ -491,6 +491,24 @@ function brewery(footprint: Footprint): Object3D[] {
   ];
 }
 
+/** The styles whose dressing brings its own roof over the whole footprint. */
+const ROOF_REPLACING_STYLES: ReadonlySet<LandmarkStyle> = new Set([
+  "church",
+  "pool",
+]);
+
+/**
+ * Whether a style's dressing roofs the whole footprint itself (the church's nave, the pool's
+ * glass hall), so the building must be built without its own flat roof — under the pool's glass
+ * it would show through.
+ *
+ * @param style - The landmark's style.
+ * @returns True for a church or a pool.
+ */
+export function dressingReplacesRoof(style: LandmarkStyle): boolean {
+  return ROOF_REPLACING_STYLES.has(style);
+}
+
 /** The dressing builder of each style. */
 const DRESSINGS: Record<LandmarkStyle, (footprint: Footprint) => Object3D[]> = {
   church,

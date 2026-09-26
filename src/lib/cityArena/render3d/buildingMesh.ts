@@ -341,6 +341,12 @@ function pushRoof(
   }
 }
 
+/** Where {@link buildBuildingGeometry} builds, and which roofs it leaves to landmark dressing. */
+export type BuildingGeometryOptions = {
+  origin?: Point;
+  roofless?: ReadonlySet<number>;
+};
+
 /** A run of wall indices drawn with one façade material. */
 type WallGroup = { start: number; count: number; materialIndex: number };
 
@@ -357,6 +363,22 @@ function extendGroups(
   else groups.push({ start, count: end - start, materialIndex });
 }
 
+/** The buildings to build (not skipped, not slivers), each with its façade, sorted by façade. */
+function buildableByMaterial(
+  buildings: readonly DecodedBuilding[],
+  skip: ReadonlySet<number>,
+): { building: DecodedBuilding; material: number }[] {
+  return buildings
+    .filter(
+      (building) =>
+        !skip.has(building.structureId) &&
+        building.ring.length >= 3 &&
+        polygonArea(building.ring) >= MIN_FOOTPRINT_M2,
+    )
+    .map((building) => ({ building, material: facadeMaterialIndex(building) }))
+    .sort((left, right) => left.material - right.material);
+}
+
 /**
  * Merged geometry for a set of buildings: walls with outward normals, u along the perimeter in
  * 6 m modules and v in storeys (shifted by whole modules and storeys, seeded per building), a
@@ -367,13 +389,15 @@ function extendGroups(
  *
  * @param buildings - The footprints to build.
  * @param skip - Structure ids to leave out (destroyed buildings).
- * @param origin - The world point that is the geometry's local zero (a cell's corner).
+ * @param options - `origin`: the world point that is the geometry's local zero (a cell's corner,
+ *   default the world origin); `roofless`: ids whose walls are built but whose roof is left to a
+ *   landmark dressing that replaces it.
  * @returns The three geometries and each built building's wall range.
  */
 export function buildBuildingGeometry(
   buildings: readonly DecodedBuilding[],
   skip: ReadonlySet<number>,
-  origin: Point = [0, 0],
+  options: BuildingGeometryOptions = {},
 ): {
   walls: BufferGeometry;
   roofsTiled: BufferGeometry;
@@ -385,17 +409,10 @@ export function buildBuildingGeometry(
     createMeshBuffers(),
     createMeshBuffers(),
   ];
+  const { origin = [0, 0], roofless } = options;
   const ranges: BuildingRange[] = [];
   const groups: WallGroup[] = [];
-  const entries = buildings
-    .filter(
-      (building) =>
-        !skip.has(building.structureId) &&
-        building.ring.length >= 3 &&
-        polygonArea(building.ring) >= MIN_FOOTPRINT_M2,
-    )
-    .map((building) => ({ building, material: facadeMaterialIndex(building) }))
-    .sort((left, right) => left.material - right.material);
+  const entries = buildableByMaterial(buildings, skip);
   for (const { building, material } of entries) {
     const [start, indexStart] = [vertexCount(walls), walls.indices.length];
     pushWalls(walls, building, origin);
@@ -405,7 +422,9 @@ export function buildBuildingGeometry(
       count: vertexCount(walls) - start,
     });
     extendGroups(groups, material, indexStart, walls.indices.length);
-    pushRoof(tiled, flat, building, origin);
+    if (!roofless?.has(building.structureId)) {
+      pushRoof(tiled, flat, building, origin);
+    }
   }
   const wallGeometry = toGeometry(walls, true);
   for (const group of groups)

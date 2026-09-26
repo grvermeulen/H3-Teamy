@@ -71,7 +71,14 @@ export type GroundLayer =
  * 2D map instead: its materials pass the depth test always and still write depth, and these
  * orders — below anything else in the scene — draw the layers first, bottom to top. Everything
  * drawn later (walls, trees, people, a sinking ruin) is depth-tested against the painted ground
- * as usual. Keep other opaque objects above −100 and parent groups at `renderOrder` 0.
+ * as usual.
+ *
+ * The contract this relies on:
+ * - the renderer sorts objects (`renderer.sortObjects === true`, three.js's default), or the
+ *   orders are ignored and the ground paints over whatever happened to be drawn before it;
+ * - no other opaque object has a `renderOrder` at or below the highest ground order (−93);
+ * - no ancestor `Group` of the city or of any opaque object has a negative `renderOrder` (three.js
+ *   sorts by the nearest group's order before an object's own).
  */
 export const GROUND_RENDER_ORDER: Readonly<Record<GroundLayer, number>> = {
   urban: -100,

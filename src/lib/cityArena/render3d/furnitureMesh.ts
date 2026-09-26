@@ -13,6 +13,7 @@ import {
   Matrix4,
   Object3D,
   Points,
+  Quaternion,
   Vector3,
   type Material,
 } from "three";
@@ -85,8 +86,11 @@ export type PlacedFurniture = Omit<FurnitureInstance, "object">;
 export type FurnitureLayer = {
   objects: Object3D[];
   furniture: FurnitureInstance[];
-  /** Copies every moved, turned or hidden proxy into the instances. */
-  sync(): void;
+  /**
+   * Copies the proxies that moved, turned or were hidden since the last copy into the
+   * instances: only `pieces` when given (e.g. the ones handed out for a knock-over), else all.
+   */
+  sync(pieces?: Iterable<FurnitureInstance>): void;
   dispose(): void;
 };
 
@@ -237,11 +241,13 @@ function proxyFor(piece: PlacedFurniture): Object3D {
   return proxy;
 }
 
-/** One kind's instanced parts and the pieces (by index into the layer) they draw. */
+/** One kind's instanced parts, the pieces (by index into the layer) they draw, and whether a
+ * piece's instances changed since they were last uploaded. */
 type KindMeshes = {
   kind: FurnitureKind;
   meshes: InstancedMesh[];
   pieces: number[];
+  dirty: boolean;
 };
 
 /** The instanced meshes of one kind, one per part, sized to its pieces. */
@@ -259,7 +265,7 @@ function kindMeshes(
     mesh.matrixAutoUpdate = false;
     return mesh;
   });
-  return { kind, meshes, pieces };
+  return { kind, meshes, pieces, dirty: false };
 }
 
 /** The halo points over the lamps, one vertex per lamp. */
@@ -305,7 +311,8 @@ export function buildFurnitureLayer(
   const lamps = kinds.find((entry) => entry.kind === "lamp");
   const glow = lamps ? glowPoints(lamps.pieces.length, materials) : null;
   const poser = createPoser(furniture, kinds, glow, origin);
-  poser.sync(true);
+  for (const piece of furniture) writePose(poser, piece);
+  flushPoses(poser);
   const objects: Object3D[] = [
     ...kinds.flatMap((entry) => entry.meshes),
     ...(glow ? [glow] : []),
@@ -313,7 +320,13 @@ export function buildFurnitureLayer(
   return {
     objects,
     furniture,
-    sync: () => poser.sync(false),
+    sync: (pieces = furniture) => {
+      for (const piece of pieces) {
+        const slot = poser.slots.get(piece);
+        if (slot && hasMoved(slot, piece.object)) writePose(poser, piece);
+      }
+      flushPoses(poser);
+    },
     dispose: () => {
       for (const mesh of kinds.flatMap((entry) => entry.meshes)) {
         mesh.geometry.dispose();
@@ -324,51 +337,100 @@ export function buildFurnitureLayer(
   };
 }
 
-/** Copies proxy poses into the instances, remembering the last pose to skip the unmoved. */
+/** Where a piece's instances sit, and the proxy pose they were last written from. */
+type PieceSlot = {
+  kind: KindMeshes;
+  slot: number;
+  position: Vector3;
+  quaternion: Quaternion;
+  scale: Vector3;
+  visible: boolean;
+};
+
+/** A layer's pieces by proxy, its halo points, and scratch space for writing poses. */
+type Poser = {
+  slots: Map<FurnitureInstance, PieceSlot>;
+  kinds: readonly KindMeshes[];
+  glow: Points | null;
+  shift: Matrix4;
+  pose: Matrix4;
+  glowAt: Vector3;
+};
+
+/** A poser for the layer's pieces, each mapped to its kind and slot. */
 function createPoser(
   furniture: readonly FurnitureInstance[],
   kinds: readonly KindMeshes[],
   glow: Points | null,
   origin: Point,
-): { sync(force: boolean): void } {
-  const shift = new Matrix4().makeTranslation(-origin[0], 0, -origin[1]);
-  const posed = furniture.map(() => new Matrix4());
-  const pose = new Matrix4();
-  const glowAt = new Vector3();
-  const writeKind = (entry: KindMeshes, force: boolean): boolean => {
-    let changed = false;
-    entry.pieces.forEach((pieceIndex, slot) => {
-      const proxy = furniture[pieceIndex].object;
-      proxy.updateMatrix();
-      pose.multiplyMatrices(shift, proxy.matrix);
-      if (!proxy.visible) pose.scale(HIDDEN);
-      if (!force && pose.equals(posed[pieceIndex])) return;
-      posed[pieceIndex].copy(pose);
-      for (const mesh of entry.meshes) mesh.setMatrixAt(slot, pose);
-      if (entry.kind === "lamp" && glow) {
-        glowAt.copy(GLOW_AT).applyMatrix4(pose);
-        if (!proxy.visible) glowAt.y = -HIDDEN_GLOW_DEPTH_M;
-        glow.geometry
-          .getAttribute("position")
-          .setXYZ(slot, glowAt.x, glowAt.y, glowAt.z);
-      }
-      changed = true;
+): Poser {
+  const slots = new Map<FurnitureInstance, PieceSlot>();
+  for (const kind of kinds) {
+    kind.pieces.forEach((pieceIndex, slot) => {
+      slots.set(furniture[pieceIndex], {
+        kind,
+        slot,
+        position: new Vector3(),
+        quaternion: new Quaternion(),
+        scale: new Vector3(),
+        visible: true,
+      });
     });
-    return changed;
-  };
+  }
+  const shift = new Matrix4().makeTranslation(-origin[0], 0, -origin[1]);
   return {
-    sync: (force) => {
-      for (const entry of kinds) {
-        if (!writeKind(entry, force)) continue;
-        for (const mesh of entry.meshes) {
-          mesh.instanceMatrix.needsUpdate = true;
-          mesh.computeBoundingSphere();
-        }
-        if (entry.kind === "lamp" && glow) {
-          glow.geometry.getAttribute("position").needsUpdate = true;
-          glow.geometry.computeBoundingSphere();
-        }
-      }
-    },
+    slots,
+    kinds,
+    glow,
+    shift,
+    pose: new Matrix4(),
+    glowAt: new Vector3(),
   };
+}
+
+/** True when a proxy's pose differs from the one its instances were written from. */
+function hasMoved(slot: PieceSlot, proxy: Object3D): boolean {
+  return (
+    slot.visible !== proxy.visible ||
+    !slot.position.equals(proxy.position) ||
+    !slot.quaternion.equals(proxy.quaternion) ||
+    !slot.scale.equals(proxy.scale)
+  );
+}
+
+/** Writes a piece's proxy pose into its instances (and its lamp's halo), marking its kind dirty. */
+function writePose(poser: Poser, piece: FurnitureInstance): void {
+  const slot = poser.slots.get(piece);
+  if (!slot) return;
+  const proxy = piece.object;
+  slot.position.copy(proxy.position);
+  slot.quaternion.copy(proxy.quaternion);
+  slot.scale.copy(proxy.scale);
+  slot.visible = proxy.visible;
+  proxy.updateMatrix();
+  const pose = poser.pose.multiplyMatrices(poser.shift, proxy.matrix);
+  if (!proxy.visible) pose.scale(HIDDEN);
+  for (const mesh of slot.kind.meshes) mesh.setMatrixAt(slot.slot, pose);
+  slot.kind.dirty = true;
+  if (slot.kind.kind !== "lamp" || !poser.glow) return;
+  const glowAt = poser.glowAt.copy(GLOW_AT).applyMatrix4(pose);
+  if (!proxy.visible) glowAt.y = -HIDDEN_GLOW_DEPTH_M;
+  poser.glow.geometry
+    .getAttribute("position")
+    .setXYZ(slot.slot, glowAt.x, glowAt.y, glowAt.z);
+}
+
+/** Uploads the instances (and halos) of every kind a pose was written to since the last flush. */
+function flushPoses(poser: Poser): void {
+  for (const kind of poser.kinds) {
+    if (!kind.dirty) continue;
+    kind.dirty = false;
+    for (const mesh of kind.meshes) {
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
+    }
+    if (kind.kind !== "lamp" || !poser.glow) continue;
+    poser.glow.geometry.getAttribute("position").needsUpdate = true;
+    poser.glow.geometry.computeBoundingSphere();
+  }
 }
