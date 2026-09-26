@@ -8,7 +8,7 @@ import {
   playerById,
   replacePlayer,
 } from "./players";
-import { boundsOf } from "../mapBuild/geometry";
+import type { Rect } from "../mapBuild/geometry";
 import type { Obstacle } from "../world/collisionGrid";
 import type { Point } from "../world/projection";
 import {
@@ -18,22 +18,15 @@ import {
   type BulletHit,
   type PlayerTarget,
 } from "./bullets";
+import { applyBlast, CAR_BLAST } from "./blast";
 import { BULLET_STRUCTURE_FACTOR, damageStructure } from "./structures";
-import {
-  EXPLOSION_DAMAGE,
-  LETHAL_DAMAGE,
-  damagePlayer,
-  damageVehicle,
-  inBlastRadius,
-  isDead,
-} from "./damage";
+import { LETHAL_DAMAGE, damagePlayer, damageVehicle, isDead } from "./damage";
 import { addEffect } from "./effects";
 import { pushEvent } from "./events";
 import { applyEntityHit } from "./hits";
-import { aliveCops, blastCops } from "./cops";
-import { alivePeds, blastPeds } from "./peds";
+import { aliveCops } from "./cops";
+import { alivePeds } from "./peds";
 import type {
-  ArenaEvent,
   ArenaPlayerState,
   ArenaState,
   BulletState,
@@ -44,6 +37,7 @@ import type {
   WorldInput,
 } from "./types";
 import {
+  EXPLOSIVES,
   WEAPONS,
   consumeAmmo,
   cooldownTicks,
@@ -240,15 +234,25 @@ function withHitEvent(
   };
 }
 
+/** Padding added to a hit-point query rect (every side) so a raycast's float intersection point,
+ * which can land a hair outside the obstacle's own bounds, still resolves to it. */
+export const STRUCTURE_LOOKUP_PAD_M = 0.01;
+
 /** The building obstacle a hit's structure id names, found by querying the collision view around
- * the impact point (the raycast that produced the hit already knows it crossed this building's
- * outline, so the id always resolves to an obstacle whose bounding box contains `point`). */
-function structureObstacle(
+ * the impact point, padded by {@link STRUCTURE_LOOKUP_PAD_M} (the raycast that produced the hit
+ * already knows it crossed this building's outline, so the id always resolves to an obstacle near
+ * `point`, even when floating-point error puts the point a hair outside its bounds). */
+export function structureObstacle(
   world: ArenaWorld,
   point: Point,
   structureId: number,
 ): Obstacle | null {
-  const rect = boundsOf([point]);
+  const rect: Rect = {
+    minX: point[0] - STRUCTURE_LOOKUP_PAD_M,
+    minY: point[1] - STRUCTURE_LOOKUP_PAD_M,
+    maxX: point[0] + STRUCTURE_LOOKUP_PAD_M,
+    maxY: point[1] + STRUCTURE_LOOKUP_PAD_M,
+  };
   return (
     world.collision
       .query(rect)
@@ -347,7 +351,28 @@ function bulletTargets(state: ArenaState): PlayerTarget[] {
   return targets;
 }
 
-/** Sweeps the bullets, applies their hits and spawns an impact effect per hit. */
+/** Detonates `shooter`'s blast at `point` when their weapon is explosive; a direct hit's own
+ * damage (bullet or structure) has already been applied by the caller. */
+function detonate(
+  state: ArenaState,
+  weapon: WeaponKind,
+  ownerId: number,
+  point: Point,
+  world: ArenaWorld,
+  tick: number,
+): ArenaState {
+  const spec = EXPLOSIVES[weapon];
+  if (!spec) return state;
+  return applyBlast(
+    state,
+    { ...spec, x: point[0], y: point[1], ownerId },
+    world,
+    tick,
+  );
+}
+
+/** Sweeps the bullets, applies their hits and spawns an impact effect per hit; an explosive
+ * weapon also detonates at every hit and, once it runs out of range, at its end point. */
 export function advanceBullets(
   state: ArenaState,
   dt: number,
@@ -374,104 +399,77 @@ export function advanceBullets(
         bornTick: tick,
       }),
     };
+    next = detonate(
+      next,
+      hit.bullet.weapon,
+      hit.bullet.ownerId,
+      hit.point,
+      world,
+      tick,
+    );
   }
+  for (const bullet of swept.expired)
+    next = detonate(
+      next,
+      bullet.weapon,
+      bullet.ownerId,
+      [bullet.x, bullet.y],
+      world,
+      tick,
+    );
   return next;
 }
 
-/** Blast damage to the player: lethal for the occupant, 80 inside the radius on foot. */
-function blastPlayer(
-  player: ArenaPlayerState,
-  vehicle: VehicleState,
-  tick: number,
-): ArenaPlayerState {
-  if (player.vehicleId === vehicle.id)
-    return damagePlayer(player, LETHAL_DAMAGE, tick);
-  if (player.vehicleId === null && inBlastRadius(vehicle, [player.x, player.y]))
-    return damagePlayer(player, EXPLOSION_DAMAGE, tick);
-  return player;
-}
-
-/** Something with an id and a position that an explosion can kill. */
-type BlastVictim = { id: number; x: number; y: number };
-
 /**
- * Records one kill per victim of a blast. A wrecked car has no owner, so these carry no killer
- * rather than being attributed to whoever last shot the car — which the simulation does not track.
+ * Kills the occupant of an exploding car outright: unlike every other passenger's car, its own
+ * body cannot shield it from its own blast (spec §5). A no-op push if they are already dead or the
+ * blast could not touch them (invulnerability, `damagePlayer`'s own guard).
  */
-function blastKillEvents(
-  events: ArenaEvent[],
-  victim: "ped" | "cop" | "player",
-  killed: BlastVictim[],
-): ArenaEvent[] {
-  let next = events;
-  for (const dead of killed)
-    next = pushEvent(next, {
+function killOccupant(
+  state: ArenaState,
+  occupant: ArenaPlayerState,
+  tick: number,
+): ArenaState {
+  const dead = damagePlayer(occupant, LETHAL_DAMAGE, tick);
+  const next = replacePlayer(state, dead);
+  if (dead.diedAtTick === null || occupant.diedAtTick !== null) return next;
+  return {
+    ...next,
+    events: pushEvent(next.events, {
       kind: "kill",
-      victim,
+      victim: "player",
       victimId: dead.id,
       killerId: null,
       x: dead.x,
       y: dead.y,
-    });
-  return next;
+    }),
+  };
 }
 
-/** Blasts every player in range, and lists the ones this blast killed. */
-function blastPlayers(
-  players: ArenaPlayerState[],
-  vehicle: VehicleState,
-  tick: number,
-): { players: ArenaPlayerState[]; killed: ArenaPlayerState[] } {
-  const blasted = players.map((player) => blastPlayer(player, vehicle, tick));
-  const killed = blasted.filter(
-    (player, position) =>
-      player.diedAtTick !== null && players[position]?.diedAtTick === null,
-  );
-  return { players: blasted, killed };
-}
-
-/** Wrecks one car that reached 0 health and applies its explosion blast. */
+/** Wrecks one car that reached 0 health, applies its blast (spec §5, shared with an explosive
+ * projectile via {@link applyBlast}) and kills its occupant outright. */
 function explodeVehicle(
   state: ArenaState,
   vehicle: VehicleState,
+  world: ArenaWorld,
   tick: number,
 ): ArenaState {
-  const vehicles = state.vehicles.map((other) => {
-    if (other.id === vehicle.id)
-      return { ...other, wrecked: true, velocityX: 0, velocityY: 0 };
-    return inBlastRadius(vehicle, [other.x, other.y])
-      ? damageVehicle(other, EXPLOSION_DAMAGE)
-      : other;
-  });
-  const blast = blastPeds(state.peds, vehicle, tick);
-  const copBlast = blastCops(state.cops, vehicle, tick);
-  const playerBlast = blastPlayers(state.players, vehicle, tick);
-  let events = pushEvent(state.events, {
-    kind: "explosion",
-    x: vehicle.x,
-    y: vehicle.y,
-  });
-  events = blastKillEvents(events, "ped", blast.killed);
-  events = blastKillEvents(events, "cop", copBlast.killed);
-  events = blastKillEvents(events, "player", playerBlast.killed);
-
-  return {
+  const wrecked: ArenaState = {
     ...state,
-    vehicles,
-    peds: blast.peds,
-    cops: copBlast.cops,
-    nextId: state.nextId + 1,
-    players: playerBlast.players,
-    events,
-    effects: addEffect(state.effects, {
-      id: state.nextId,
-      kind: "explosion",
-      x: vehicle.x,
-      y: vehicle.y,
-      angle: 0,
-      bornTick: tick,
-    }),
+    vehicles: state.vehicles.map((other) =>
+      other.id === vehicle.id
+        ? { ...other, wrecked: true, velocityX: 0, velocityY: 0 }
+        : other,
+    ),
   };
+  const blasted = applyBlast(
+    wrecked,
+    { ...CAR_BLAST, x: vehicle.x, y: vehicle.y, ownerId: null },
+    world,
+    tick,
+  );
+  const occupant = driverPlayer(blasted, vehicle.id);
+  return occupant ? killOccupant(blasted, occupant, tick) : blasted;
 }
 
 /** Explodes every car whose health reached 0 this tick and throws its occupant out. */
@@ -483,7 +481,7 @@ export function applyExplosions(
   let next = state;
   for (const vehicle of state.vehicles) {
     if (vehicle.health > 0 || vehicle.wrecked) continue;
-    next = explodeVehicle(next, vehicle, tick);
+    next = explodeVehicle(next, vehicle, world, tick);
     const driver = driverPlayer(next, vehicle.id);
     if (driver) next = exitVehicle(next, driver, world);
   }

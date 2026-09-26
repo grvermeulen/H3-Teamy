@@ -137,10 +137,20 @@ describe("stepBullets", () => {
     expect(first.bullets[0].x).toBeCloseTo(4);
     expect(first.bullets[0].rangeLeftM).toBeCloseTo(36);
     expect(first.hits).toEqual([]);
+    expect(first.expired).toEqual([]);
     let bullets = first.bullets;
-    for (let tick = 0; tick < 9; tick++)
-      bullets = stepBullets(bullets, step, world).bullets;
+    let last = first;
+    for (let tick = 0; tick < 9; tick++) {
+      last = stepBullets(bullets, step, world);
+      bullets = last.bullets;
+    }
     expect(bullets).toEqual([]);
+    // The pistol's 40 m range runs out exactly on this last tick, with nothing in its way.
+    expect(last.expired).toHaveLength(1);
+    expect(last.expired[0]).toMatchObject({
+      x: expect.closeTo(40, 5),
+      rangeLeftM: 0,
+    });
   });
 
   it("stops at the first building outline", () => {

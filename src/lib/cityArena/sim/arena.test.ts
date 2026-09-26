@@ -547,7 +547,7 @@ describe("the tank", () => {
     expect(checkInvariants(state)).toEqual([]);
   });
 
-  it("fires from the barrel without ammo and leaves a tougher compact barely alive after one shell", () => {
+  it("fires from the barrel without ammo and wrecks a compact with one shell's hit-plus-blast", () => {
     const state = boot();
     const me = localPlayer(state);
     const tank = createVehicle(500, "tank", [me.x, me.y], 0, 0);
@@ -578,9 +578,11 @@ describe("the tank", () => {
     });
     const hit = run(seated, createInput({ fire: true }), 12);
     expect(hit.bullets).toHaveLength(0);
+    // 150 direct + the shell's own blast (90 within 4 m, falloff-scaled) finishes off a 160-health
+    // compact; the tank that fired it is 20 m away, well outside the blast's reach.
     expect(hit.vehicles.find((vehicle) => vehicle.id === 501)).toMatchObject({
-      health: 10,
-      wrecked: false,
+      health: 0,
+      wrecked: true,
     });
     expect(hit.vehicles.find((vehicle) => vehicle.id === 500)?.health).toBe(
       750,

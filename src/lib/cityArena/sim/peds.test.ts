@@ -4,13 +4,13 @@ import type { MapIndex, MapZone } from "../world/mapTypes";
 import type { Point } from "../world/projection";
 import { decodeRoadGraph } from "../world/roadGraph";
 import { createArenaState } from "./arena";
+import { CAR_BLAST, blastPeds } from "./blast";
 import {
   PED_BODY_TICKS,
   PED_FLEE_TICKS,
   PED_RECYCLE_DISTANCE_M,
   PED_SPAWN_RADIUS_M,
   alivePeds,
-  blastPeds,
   createPed,
   damagePed,
   pedLook,
@@ -231,7 +231,7 @@ describe("pedestrian contacts", () => {
   it("kills pedestrians in an explosion but leaves distant ones alone", () => {
     const blast = blastPeds(
       [standingAt(72, 1, 0), standingAt(73, 5, 0)],
-      { x: 0, y: 0 },
+      { ...CAR_BLAST, x: 0, y: 0, ownerId: null },
       3,
     );
     expect(blast.peds[0]).toMatchObject({ mode: "dead", modeUntilTick: 243 });

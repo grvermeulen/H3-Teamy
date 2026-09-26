@@ -1,3 +1,4 @@
+import type { Blast } from "./blast";
 import type { AmmoState, MagazineWeapon, WeaponKind } from "./types";
 
 /** Ticks per second of the fixed step (mirrors `SIM_STEP_S`). */
@@ -94,6 +95,33 @@ export const WEAPONS: Record<WeaponKind, WeaponSpec> = {
     magazine: null,
   },
 };
+
+/**
+ * Blast for the weapons that detonate on impact (spec §3.3, §4) rather than just dealing direct
+ * damage: the cannon now, the rocket once a later task adds it to {@link WeaponKind}.
+ */
+export const EXPLOSIVES: Partial<
+  Record<WeaponKind, Omit<Blast, "x" | "y" | "ownerId">>
+> = {
+  cannon: {
+    entityRadius: 4,
+    entityDamage: 70,
+    vehicleDamage: 90,
+    structureRadius: 5,
+    structureDamage: 320,
+    entityFalloff: true,
+  },
+};
+
+/**
+ * True for a weapon that detonates on impact rather than just dealing direct damage.
+ *
+ * @param kind - The weapon.
+ * @returns Whether `kind` has a blast in {@link EXPLOSIVES}.
+ */
+export function isExplosive(kind: WeaponKind): boolean {
+  return kind in EXPLOSIVES;
+}
 
 /** Cycling order of the Wapen button: the melee pair, then the guns by reach. */
 export const WEAPON_ORDER: WeaponKind[] = [

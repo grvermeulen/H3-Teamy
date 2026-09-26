@@ -4,7 +4,9 @@ import {
   ammoFor,
   consumeAmmo,
   cooldownTicks,
+  EXPLOSIVES,
   hasAmmo,
+  isExplosive,
   isMelee,
   MAX_AMMO,
   nextWeapon,
@@ -144,5 +146,23 @@ describe("the cannon", () => {
     expect(ammoFor(empty, "cannon")).toBeNull();
     expect(isMelee("cannon")).toBe(false);
     expect(nextWeapon("cannon", empty)).toBe("fist");
+  });
+});
+
+describe("EXPLOSIVES", () => {
+  it("gives the cannon's shell the spec's blast numbers and marks it explosive", () => {
+    expect(EXPLOSIVES.cannon).toEqual({
+      entityRadius: 4,
+      entityDamage: 70,
+      vehicleDamage: 90,
+      structureRadius: 5,
+      structureDamage: 320,
+      entityFalloff: true,
+    });
+    expect(isExplosive("cannon")).toBe(true);
+  });
+
+  it("leaves every other weapon a direct-damage-only hit", () => {
+    for (const kind of WEAPON_ORDER) expect(isExplosive(kind)).toBe(false);
   });
 });

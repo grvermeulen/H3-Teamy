@@ -4,11 +4,11 @@ import type { MapIndex } from "../world/mapTypes";
 import type { Point } from "../world/projection";
 import { decodeRoadGraph } from "../world/roadGraph";
 import { createArenaState } from "./arena";
+import { CAR_BLAST, blastCops } from "./blast";
 import {
   COP_BODY_TICKS,
   COP_COOLDOWN_TICKS,
   aliveCops,
-  blastCops,
   copAim,
   copWeaponForLevel,
   createCop,
@@ -131,7 +131,7 @@ describe("stepCops and management", () => {
     expect(hit.cops[0]).toMatchObject({ health: 0, diedAtTick: 5 });
     const blast = blastCops(
       [copAt(6, 1), { ...copAt(7, 2), health: 50 }, copAt(8, 5)],
-      { x: 0, y: 0 },
+      { ...CAR_BLAST, x: 0, y: 0, ownerId: null },
       3,
     );
     expect(blast.cops[0].health).toBe(20);
