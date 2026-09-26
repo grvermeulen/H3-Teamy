@@ -42,9 +42,22 @@ export type Tracers = {
 };
 
 /** How far a round has flown since it left the barrel, as far as the tracer is concerned. */
-function flown(bullet: BulletState): number {
+function flown(bullet: Pick<BulletState, "weapon" | "rangeLeftM">): number {
   const spec: WeaponSpec | undefined = WEAPONS[bullet.weapon];
   return spec ? spec.rangeM - bullet.rangeLeftM : TRACER_LENGTH_M;
+}
+
+/**
+ * Length of a round's tracer: how far it has flown, capped at {@link TRACER_LENGTH_M}, so a round
+ * just out of the barrel does not trail a line back through its shooter.
+ *
+ * @param bullet - The round in flight.
+ * @returns The tail length behind the round, metres, in `[0, TRACER_LENGTH_M]`.
+ */
+export function tracerTail(
+  bullet: Pick<BulletState, "weapon" | "rangeLeftM">,
+): number {
+  return Math.max(0, Math.min(TRACER_LENGTH_M, flown(bullet)));
 }
 
 function createGeometry(): BufferGeometry {
@@ -86,7 +99,7 @@ export function createTracers(): Tracers {
     },
     add(bullet) {
       if (count >= MAX_TRACERS) return;
-      const tail = Math.max(0, Math.min(TRACER_LENGTH_M, flown(bullet)));
+      const tail = tracerTail(bullet);
       const at = count * ENDS;
       positions.setXYZ(at, bullet.x, PERSON_CHEST_HEIGHT_M, bullet.y);
       positions.setXYZ(

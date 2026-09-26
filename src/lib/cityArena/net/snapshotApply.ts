@@ -17,11 +17,14 @@ import type {
   ArenaState,
   BulletState,
   CopState,
+  DriverState,
   PedState,
   PickupState,
   StructureState,
   VehicleState,
 } from "../sim/types";
+import { WEAPONS } from "../sim/weapons";
+import type { Point } from "../world/projection";
 import type {
   SnapshotBullet,
   SnapshotCop,
@@ -30,11 +33,6 @@ import type {
   SnapshotStructure,
   SnapshotView,
 } from "./snapshotWire";
-
-/** Speed a bullet is assumed to carry when the client has never seen it before. */
-const ASSUMED_BULLET_SPEED_MPS = 300;
-/** Range a bullet is assumed to have left when the client has never seen it before. */
-const ASSUMED_BULLET_RANGE_M = 40;
 
 /** Indexes a list by entity id. */
 function byId<T extends { id: number }>(items: T[]): Map<number, T> {
@@ -114,10 +112,37 @@ function patchCop(
   };
 }
 
-/** One bullet from the snapshot, keeping what the client already knew about it. */
+/** Where each shooter in the snapshot stands: its players and cops, the only bullet owners. */
+function shooterPositions(view: SnapshotView): Map<number, Point> {
+  const positions = new Map<number, Point>();
+  for (const row of view.players) positions.set(row.id, [row.x, row.y]);
+  for (const row of view.cops) positions.set(row.id, [row.x, row.y]);
+  return positions;
+}
+
+/**
+ * Range a round first seen on the wire has left: its weapon's full range less how far it now is
+ * from whoever fired it, never below 0; a shooter the snapshot does not list leaves the full range.
+ * Clients never step bullets, so this estimate is what the 3D tracers measure a round's flight by.
+ */
+function estimatedRangeLeft(
+  row: SnapshotBullet,
+  shooter: Point | undefined,
+): number {
+  const range = WEAPONS[row.weapon].rangeM;
+  if (!shooter) return range;
+  const flown = Math.hypot(row.x - shooter[0], row.y - shooter[1]);
+  return Math.max(0, range - flown);
+}
+
+/**
+ * One bullet from the snapshot, keeping what the client already knew about it. A round the client
+ * has never seen gets its weapon's speed and a range left estimated from its shooter's position.
+ */
 function patchBullet(
   row: SnapshotBullet,
   local: BulletState | undefined,
+  shooters: ReadonlyMap<number, Point>,
 ): BulletState {
   return {
     id: row.id,
@@ -128,8 +153,9 @@ function patchBullet(
     directionY: row.directionY,
     damage: row.damage,
     ignoreVehicleId: local?.ignoreVehicleId ?? null,
-    speedMps: local?.speedMps ?? ASSUMED_BULLET_SPEED_MPS,
-    rangeLeftM: local?.rangeLeftM ?? ASSUMED_BULLET_RANGE_M,
+    speedMps: local?.speedMps ?? WEAPONS[row.weapon].speedMps,
+    rangeLeftM:
+      local?.rangeLeftM ?? estimatedRangeLeft(row, shooters.get(row.ownerId)),
     weapon: row.weapon,
   };
 }
@@ -154,6 +180,31 @@ function patchStructure(
   };
 }
 
+/** The snapshot's bullets, each patched over the client's own copy of it. */
+function patchBullets(view: SnapshotView, known: BulletState[]): BulletState[] {
+  const bullets = byId(known);
+  const shooters = shooterPositions(view);
+  return view.bullets.map((row) =>
+    patchBullet(row, bullets.get(row.id), shooters),
+  );
+}
+
+/** The ambient drivers whose car the host still lists intact and nobody in a seat drives. */
+function survivingTraffic(
+  traffic: DriverState[],
+  view: SnapshotView,
+  vehicles: VehicleState[],
+): DriverState[] {
+  const intact = new Set(
+    vehicles.filter((vehicle) => !vehicle.wrecked).map((vehicle) => vehicle.id),
+  );
+  return traffic.filter(
+    (driver) =>
+      intact.has(driver.vehicleId) &&
+      !view.players.some((row) => row.vehicleId === driver.vehicleId),
+  );
+}
+
 /**
  * Folds a decoded snapshot into a client's state.
  *
@@ -173,7 +224,6 @@ export function applySnapshot(
   const vehicles = byId(state.vehicles);
   const peds = byId(state.peds);
   const cops = byId(state.cops);
-  const bullets = byId(state.bullets);
   const structures = byId(state.structures ?? []);
 
   const nextVehicles: VehicleState[] = view.vehicles.map((row) => ({
@@ -199,7 +249,6 @@ export function applySnapshot(
     takenAtTick: row.takenAtTick,
   }));
 
-  const liveVehicleIds = new Set(nextVehicles.map((vehicle) => vehicle.id));
   const highestId = Math.max(
     state.nextId - 1,
     ...view.players.map((row) => row.id),
@@ -218,19 +267,12 @@ export function applySnapshot(
     vehicles: nextVehicles,
     peds: view.peds.map((row) => patchPed(row, peds.get(row.id))),
     cops: view.cops.map((row) => patchCop(row, cops.get(row.id), view.tick)),
-    bullets: view.bullets.map((row) => patchBullet(row, bullets.get(row.id))),
+    bullets: patchBullets(view, state.bullets),
     pickups: nextPickups,
     structures: view.structures.map((row) =>
       patchStructure(row, structures.get(row.id)),
     ),
-    traffic: state.traffic.filter(
-      (driver) =>
-        liveVehicleIds.has(driver.vehicleId) &&
-        !view.players.some((row) => row.vehicleId === driver.vehicleId) &&
-        !nextVehicles.some(
-          (vehicle) => vehicle.id === driver.vehicleId && vehicle.wrecked,
-        ),
-    ),
+    traffic: survivingTraffic(state.traffic, view, nextVehicles),
     events: [],
   };
 }
