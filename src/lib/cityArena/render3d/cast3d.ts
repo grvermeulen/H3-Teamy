@@ -1,12 +1,14 @@
 /**
- * Everything in the 3D view that moves (spec §6.6–6.8): the cast from the entity sync, the
- * effects, the destruction (collapsing buildings, rubble, falling furniture) and the first-person
- * hands — one frame step for `index.ts` to call between placing the camera and rendering.
+ * Everything in the 3D view that moves (spec §6.6–6.8): the cast from the entity sync, the mission
+ * contacts standing in the street, the effects, the destruction (collapsing buildings, rubble,
+ * falling furniture) and the first-person hands — one frame step for `index.ts` to call between
+ * placing the camera and rendering.
  */
 import { Group, type Object3D, type PerspectiveCamera } from "three";
 import type { Scene } from "../render/renderScene";
 import type { CameraMode } from "./cameraRig";
 import { createCharacter } from "./characters";
+import { createContacts3d } from "./contacts3d";
 import { createDestruction3d, type Destruction3d } from "./destruction3d";
 import { createEffects3d, type Effects3d } from "./effects3d";
 import {
@@ -15,6 +17,7 @@ import {
   type EntitySync,
   type EntityView,
 } from "./entities";
+import type { ContactSpot } from "./missionMarkers";
 import { createPickup3d } from "./pickups3d";
 import type { OverlayPass, RenderQuality } from "./renderer3d";
 import { createVehicle3d } from "./vehicles3d";
@@ -39,6 +42,9 @@ export const EFFECT_PARTICLES: Record<RenderQuality, number> = {
   high: 1600,
 };
 
+/** No mission contacts in the street. */
+const NO_CONTACTS: readonly ContactSpot[] = [];
+
 /** What the cast reads from a frame; `View3dFrame` fits. */
 export type CastFrame = {
   scene: Scene;
@@ -59,12 +65,14 @@ export type Cast3d = {
    * @param frame - The frame's scene, time step, camera mode, aim and quality.
    * @param focus - The camera focus, world metres: what the draw distances are measured from.
    * @param camera - The city camera, already placed for this frame.
+   * @param contacts - The mission contacts to stand in the street (the mission markers').
    * @returns The hands' pass to draw over the city, or `null` when they are hidden.
    */
   update(
     frame: CastFrame,
     focus: { x: number; y: number },
     camera: PerspectiveCamera,
+    contacts?: readonly ContactSpot[],
   ): OverlayPass | null;
   /**
    * The collapses, rubble and falling furniture, made with the effects by the first `update`
@@ -117,7 +125,8 @@ export function createCast3d(
   const object = new Group();
   object.name = "cast";
   const entities = createEntitySync(factories);
-  object.add(entities.group);
+  const street = createContacts3d(factories);
+  object.add(entities.group, street.object);
   const view: EntityView = { firstPerson: false, aim: 0 };
   const handsScratch: ViewModelInput = {
     weapon: "fist",
@@ -129,10 +138,11 @@ export function createCast3d(
   let fx: Fx | null = null;
   return {
     object,
-    update(frame, focus, camera) {
+    update(frame, focus, camera, contacts = NO_CONTACTS) {
       view.firstPerson = frame.mode === "first";
       view.aim = frame.aim;
       entities.update(frame.scene, frame.dt, focus, view);
+      street.update(contacts, frame.scene, focus);
       fx = fxFor(object, fx, frame.quality);
       fx.effects.sync(frame.scene, focus, view.firstPerson);
       fx.effects.update(frame.dt);
@@ -142,6 +152,7 @@ export function createCast3d(
     destruction: () => fx?.destruction ?? null,
     dispose() {
       entities.dispose();
+      street.dispose();
       // The destruction leaves the smoke pool it borrowed to the effects, so it goes first.
       fx?.destruction.dispose();
       fx?.effects.dispose();

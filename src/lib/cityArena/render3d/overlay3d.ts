@@ -1,11 +1,14 @@
 /**
  * The 3D view's HUD layer: what gets drawn on the transparent 2D canvas stacked over the WebGL
- * one (spec §6.2) — for now the crosshair, placed honestly on the flat simulation's shot line.
+ * one (spec §6.2) — the crosshair, placed honestly on the flat simulation's shot line, and arrows
+ * at the screen's edge toward friends out of view.
  */
 import { Vector3, type PerspectiveCamera } from "three";
 import type { RasterContext } from "../render/canvasTypes";
 import { drawCrosshair } from "../render/drawProjectiles";
+import type { Scene } from "../render/renderScene";
 import { AIM_PROJECT_DISTANCE_M, PERSON_CHEST_HEIGHT_M } from "./coords";
+import { drawPlayerArrows } from "./playerArrows";
 
 export { AIM_PROJECT_DISTANCE_M } from "./coords";
 
@@ -78,13 +81,16 @@ export type Overlay3dInput = {
   aim: number;
   /** The canvas's CSS size. */
   size: { width: number; height: number };
-  /** No crosshair over a body. */
+  /** No crosshair (and no arrows) over a body. */
   dead: boolean;
+  /** The players, for arrows toward friends out of view; none are drawn without them. */
+  friends?: Pick<Scene, "players" | "localPlayerId">;
 };
 
 /**
  * Draws the 3D view's HUD on the 2D canvas, in CSS pixels: the 2D game's crosshair, placed by
- * {@link crosshairScreen} and kept on screen by {@link clampToScreen}.
+ * {@link crosshairScreen} and kept on screen by {@link clampToScreen}, and an arrow at the edge
+ * toward each friend out of view.
  *
  * @param context - The cleared 2D context, transformed to CSS pixels.
  * @param camera - The camera the frame was rendered with.
@@ -98,4 +104,11 @@ export function drawOverlay3d(
   if (input.dead) return;
   const point = crosshairScreen(camera, input.origin, input.aim, input.size);
   if (point) drawCrosshair(context, clampToScreen(point, input.size));
+  if (input.friends)
+    drawPlayerArrows(context, camera, {
+      origin: input.origin,
+      size: input.size,
+      players: input.friends.players,
+      localPlayerId: input.friends.localPlayerId,
+    });
 }

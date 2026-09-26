@@ -1,6 +1,7 @@
 import { PerspectiveCamera } from "three";
 import { describe, expect, it } from "vitest";
 import { createFakeContext } from "../render/testing/fakeContext";
+import { createArenaPlayer } from "../sim/roster";
 import { applyRigPose, rigPose, type RigInput } from "./cameraRig";
 import {
   CROSSHAIR_EDGE_MARGIN_PX,
@@ -8,6 +9,7 @@ import {
   crosshairScreen,
   drawOverlay3d,
 } from "./overlay3d";
+import { markerCss } from "./playerMarkers3d";
 
 const SIZE = { width: 1280, height: 720 };
 
@@ -90,6 +92,24 @@ describe("drawOverlay3d", () => {
       size: SIZE,
       dead: true,
     });
+    expect(dead.calls).toEqual([]);
+  });
+
+  it("points an arrow at a friend behind you while alive, and none once dead", () => {
+    const camera = placedCamera();
+    const friends = {
+      players: [
+        { ...createArenaPlayer([10, 20], 0), id: 1 },
+        { ...createArenaPlayer([-20, -10], 0), id: 7 },
+      ],
+      localPlayerId: 1,
+    };
+    const input = { origin: { x: 10, y: 20 }, aim: 0.8, size: SIZE, friends };
+    const alive = createFakeContext();
+    drawOverlay3d(alive, camera, { ...input, dead: false });
+    expect(alive.calls).toContain(`fill(${markerCss(7)})`);
+    const dead = createFakeContext();
+    drawOverlay3d(dead, camera, { ...input, dead: true });
     expect(dead.calls).toEqual([]);
   });
 });

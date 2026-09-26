@@ -198,6 +198,26 @@ describe("createCast3d", () => {
     expect(effectsMade[0]!.sync).toHaveBeenCalledWith(first.scene, FOCUS, true);
   });
 
+  it("stands the mission contacts in the street with the cast's own characters", () => {
+    const factories = fakeFactories();
+    const cast = createCast3d(factories);
+    const noor = { key: 0, x: 5, y: 4, look: "ped2" as const };
+
+    cast.update(frameOf(), FOCUS, new PerspectiveCamera(), [noor]);
+
+    expect(factories.character).toHaveBeenCalledWith("ped2");
+    const contact = factories.character.mock.results.at(-1)!.value as {
+      object: Group;
+    };
+    let root = contact.object.parent;
+    while (root?.parent) root = root.parent;
+    expect(root).toBe(cast.object);
+    cast.dispose();
+    expect(
+      (contact as unknown as { dispose: ReturnType<typeof vi.fn> }).dispose,
+    ).toHaveBeenCalledTimes(1);
+  });
+
   it("hides your body in first person", () => {
     const factories = fakeFactories();
     const cast = createCast3d(factories);

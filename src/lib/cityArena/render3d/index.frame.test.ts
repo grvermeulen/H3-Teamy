@@ -9,6 +9,7 @@ import { createDestruction3d } from "./destruction3d";
 import { createEffects3d } from "./effects3d";
 import { createEntitySync } from "./entities";
 import { createView3d, type StructureView, type View3dFrame } from "./index";
+import { drawOverlay3d } from "./overlay3d";
 import { createRenderer3d } from "./renderer3d";
 import { ruinOf } from "./ruins3d";
 import { fixtureTown } from "./testing/cityFixture";
@@ -277,6 +278,31 @@ describe("createView3d frame path", () => {
     const [knocked] = knockOver.mock.calls[0] as [Object3D];
     expect(knocked).not.toBe(before!.object);
     expect([knocked.position.x, knocked.position.z]).toEqual([30, 58]);
+  });
+
+  it("guides the way: the route on the road, and arrows toward friends on the HUD", () => {
+    const view = createView3d(document.createElement("canvas"));
+    const { renderer } = partsOfView();
+    const friend = { id: 7, x: 300, y: 60, vehicleId: null, diedAtTick: null };
+    const scene = {
+      ...SCENE,
+      players: [...SCENE.players, friend],
+      navigation: [
+        [25, 60],
+        [80, 60],
+      ],
+    } as unknown as ArenaScene;
+
+    view.render(frameOf("third", { scene }), OVERLAY);
+
+    const route = renderer.scene.getObjectByName("route")!;
+    expect(route.visible).toBe(true);
+    expect(renderer.scene.getObjectByName("guidance")).toBe(route.parent);
+    expect(drawOverlay3d).toHaveBeenCalledWith(
+      OVERLAY,
+      renderer.camera,
+      expect.objectContaining({ friends: scene }),
+    );
   });
 
   it("draws the first-person hands in a pass of their own over the city", () => {

@@ -111,8 +111,16 @@ export const PLACEHOLDER_FILL = "#1e2024";
 export const PLAYER_FILL = "#f5f5f5";
 /** Player sprite outline ring colour. */
 export const PLAYER_RING = "#e11d48";
+/** The zone boundary's blue as red, green, blue (0–255): the 2D ring and the 3D wall share it. */
+export const ZONE_RGB: readonly [number, number, number] = [29, 78, 216];
 /** Zone boundary ring. */
-export const ZONE_RING = "rgba(29,78,216,0.7)";
+export const ZONE_RING = `rgba(${ZONE_RGB.join(",")},0.7)`;
+/** The navigation route's cyan as red, green, blue (0–255): the 2D ribbon and the 3D glow share it. */
+export const ROUTE_RGB: readonly [number, number, number] = [34, 211, 238];
+/** The 2D route ribbon along the road: {@link ROUTE_RGB}, translucent. */
+export const ROUTE_RIBBON = `rgba(${ROUTE_RGB.join(",")},0.28)`;
+/** The 2D route's chevrons and the ring at its destination. */
+export const ROUTE_ARROW = "#a5f3fc";
 /** Car body colours indexed by `VehicleState.colour` (ten entries, matching `VEHICLE_COLOUR_COUNT`). */
 export const CAR_BODY_COLOURS: string[] = [
   "#c0392b",

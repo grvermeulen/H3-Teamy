@@ -9,7 +9,9 @@ import type { DecodedTile } from "../world/decode";
 import { applyRigPose, rigPose, type CameraMode } from "./cameraRig";
 import { createCast3d, type Cast3d } from "./cast3d";
 import { createCity3d, type City3d } from "./city3d";
+import { createGuidance3d, type Guidance3d } from "./guidance3d";
 import { createKnockOvers, type KnockOvers } from "./knockOver3d";
+import { createMissionMarkers, type MissionMarkers } from "./missionMarkers";
 import { drawOverlay3d } from "./overlay3d";
 import {
   createRenderer3d,
@@ -90,13 +92,17 @@ export function focusOf(scene: ArenaScene): Focus {
 }
 
 /**
- * The renderer, the two layers it draws — the city and everything that moves in it — and what
- * turns the frame's structures and traffic into destruction: ruins and knocked-over furniture.
+ * The renderer, the layers it draws — the city, everything that moves in it, and the guidance
+ * (route, beacons, zone wall, friends' markers) — the mission markers the cast and the guidance
+ * share, and what turns the frame's structures and traffic into destruction: ruins and
+ * knocked-over furniture.
  */
 type View3dParts = {
   renderer: Renderer3d;
   city: City3d;
   cast: Cast3d;
+  guidance: Guidance3d;
+  markers: MissionMarkers;
   ruins: Ruins3d;
   knocks: KnockOvers;
 };
@@ -136,12 +142,13 @@ function wreck(parts: View3dParts, frame: View3dFrame): void {
 }
 
 /**
- * Places the camera; syncs the cast (characters, vehicles, pickups, effects, destruction); streams
- * the city, which rebuilds the cells a building fell in and copies the knocked furniture's poses;
- * then starts the collapses (in the frame the real building is dropped) and knocks furniture over.
- * The knocks come after the city, so a blast that brings a building down knocks the rebuilt
- * cell's pieces, not the ones the rebuild just threw away. Then it renders, the first-person hands
- * in a pass of their own over the city, and draws the HUD.
+ * Places the camera; reads the mission markers; syncs the cast (characters, mission contacts,
+ * vehicles, pickups, effects, destruction) and the guidance; streams the city, which rebuilds the
+ * cells a building fell in and copies the knocked furniture's poses; then starts the collapses (in
+ * the frame the real building is dropped) and knocks furniture over. The knocks come after the
+ * city, so a blast that brings a building down knocks the rebuilt cell's pieces, not the ones the
+ * rebuild just threw away. Then it renders, the first-person hands in a pass of their own over
+ * the city, and draws the HUD.
  */
 function renderFrame(
   parts: View3dParts,
@@ -149,10 +156,12 @@ function renderFrame(
   overlay: CanvasRenderingContext2D,
 ): void {
   const focus = focusOf(frame.scene);
-  const { renderer, city, cast } = parts;
+  const { renderer, city, cast, markers } = parts;
   renderer.configure(frame.size, frame.quality);
   placeCamera(renderer.camera, frame, focus);
-  const hands = cast.update(frame, focus, renderer.camera);
+  markers.update(frame.scene);
+  const hands = cast.update(frame, focus, renderer.camera, markers.contacts);
+  parts.guidance.update(frame, focus, renderer.camera, markers.beacons);
   city.update(focus, frame);
   wreck(parts, frame);
   renderer.render(hands);
@@ -161,13 +170,14 @@ function renderFrame(
     aim: frame.aim,
     size: frame.size,
     dead: frame.deadSeconds !== null,
+    friends: frame.scene,
   });
 }
 
 /**
  * Starts the 3D view on `canvas` (spec §6): renderer, sky, lights and fog; the streamed city of
- * the loaded map tiles; the characters, vehicles, pickups, effects, destruction and first-person
- * hands.
+ * the loaded map tiles; the characters, mission contacts, vehicles, pickups, effects, destruction
+ * and first-person hands; the route, beacons, zone wall and friends' markers.
  *
  * @param canvas - The WebGL canvas stacked under the 2D HUD canvas.
  * @returns The live view.
@@ -181,6 +191,8 @@ export function createView3d(canvas: HTMLCanvasElement): View3dHandle {
       renderer,
       city: createCity3d(),
       cast: createCast3d(),
+      guidance: createGuidance3d(),
+      markers: createMissionMarkers(),
       ruins: createRuins3d(),
       knocks: createKnockOvers(),
     };
@@ -195,12 +207,17 @@ export function createView3d(canvas: HTMLCanvasElement): View3dHandle {
 /** Puts the layers in the scene and hands out the view. */
 function startView(parts: View3dParts): View3dHandle {
   const { renderer } = parts;
-  renderer.scene.add(parts.city.object, parts.cast.object);
+  renderer.scene.add(
+    parts.city.object,
+    parts.cast.object,
+    parts.guidance.object,
+  );
   return {
     render: (frame, overlay) => renderFrame(parts, frame, overlay),
     dispose() {
       parts.city.dispose();
       parts.cast.dispose();
+      parts.guidance.dispose();
       renderer.dispose();
     },
   };
