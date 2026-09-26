@@ -58,6 +58,18 @@ describe("createEntityPool", () => {
     expect(item.dispose).toHaveBeenCalledTimes(1);
   });
 
+  it("keys entities by a string id as well as a number", () => {
+    const parent = new Group();
+    const pool = createEntityPool<Fake, null, string>(parent, 4);
+    pool.begin();
+    const slot = pool.claim("noor", "a", () => fake("noor"), null);
+    pool.end();
+    pool.begin();
+    expect(pool.keep("noor")).toBe(slot);
+    pool.end();
+    expect(pool.activeCount()).toBe(1);
+  });
+
   it("reuses a freed object only for the same variant", () => {
     const parent = new Group();
     const pool = createEntityPool<Fake, null>(parent, 4);

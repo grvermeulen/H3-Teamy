@@ -51,8 +51,9 @@ function samePoint(a: Point, b: Point): boolean {
 }
 
 /**
- * Whether a route is the one already laid: the same list, or one of the same length with the same
- * start and end — a navigation refresh hands over a new list for an unchanged route.
+ * Whether a route is the one already laid: the same list, or an equal copy — a navigation refresh
+ * hands over a new list for an unchanged route. Every point is compared (only when a new list
+ * arrives, about once a second), since a replan can keep both ends and change the middle.
  *
  * @param last - The route the band was built from.
  * @param next - This frame's route.
@@ -64,11 +65,9 @@ export function sameRoute(
 ): boolean {
   if (last === next) return true;
   if (!last || !next || last.length !== next.length) return false;
-  if (last.length === 0) return true;
-  return (
-    samePoint(last[0], next[0]) &&
-    samePoint(last[last.length - 1], next[next.length - 1])
-  );
+  for (let index = 0; index < last.length; index++)
+    if (!samePoint(last[index], next[index])) return false;
+  return true;
 }
 
 /** The route without points repeated in place. */

@@ -41,8 +41,8 @@ function fakes(): {
   };
 }
 
-const NOOR: ContactSpot = { key: 0, x: 10, y: 0, look: "ped1" };
-const VERA: ContactSpot = { key: 2, x: -12, y: 4, look: "ped3" };
+const NOOR: ContactSpot = { id: "noor", x: 10, y: 0, look: "ped1" };
+const VERA: ContactSpot = { id: "vera", x: -12, y: 4, look: "ped3" };
 
 function sceneAt(x: number, y: number): ContactsScene {
   return {
@@ -99,6 +99,23 @@ describe("createContacts3d", () => {
     contacts.update([NOOR, far], sceneAt(0, 0), { x: 0, y: 0 });
 
     expect(made).toHaveLength(1);
+  });
+
+  it("keeps each contact's own character by their id, never taking it down between frames", () => {
+    const { character, made } = fakes();
+    const contacts = createContacts3d({ character });
+    const twin: ContactSpot = { ...VERA, look: NOOR.look };
+    contacts.update([NOOR, twin], sceneAt(0, 0), { x: 0, y: 0 });
+    const detached = made.map((fake) =>
+      vi.spyOn(fake.object, "removeFromParent"),
+    );
+
+    contacts.update([twin, NOOR], sceneAt(0, 0), { x: 0, y: 0 });
+
+    expect(character).toHaveBeenCalledTimes(2);
+    for (const spy of detached) expect(spy).not.toHaveBeenCalled();
+    expect(made[0]!.object.position.x).toBe(NOOR.x);
+    expect(made[1]!.object.position.x).toBe(VERA.x);
   });
 
   it("keeps a contact's character frame to frame and frees it once they are gone", () => {

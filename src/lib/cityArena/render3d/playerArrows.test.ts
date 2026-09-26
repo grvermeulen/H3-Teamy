@@ -78,20 +78,33 @@ describe("edgeArrow", () => {
 });
 
 describe("drawPlayerArrows", () => {
+  it("draws nothing without the players", () => {
+    const context = createFakeContext();
+
+    drawPlayerArrows(context, eastCamera(), {
+      origin: { x: 0, y: 0 },
+      size: SIZE,
+    });
+
+    expect(context.calls).toEqual([]);
+  });
+
   it("points at a friend off screen within 300 m in their colour, and at no one else", () => {
     const context = createFakeContext();
 
     drawPlayerArrows(context, eastCamera(), {
       origin: { x: 0, y: 0 },
       size: SIZE,
-      players: [
-        player(1, 0, 0),
-        player(7, 0, -60),
-        player(8, 60, 0),
-        player(9, 0, 60, { diedAtTick: 3 }),
-        player(10, -(MARKER_RANGE_M + 5), 0),
-      ],
-      localPlayerId: 1,
+      friends: {
+        players: [
+          player(1, 0, 0),
+          player(7, 0, -60),
+          player(8, 60, 0),
+          player(9, 0, 60, { diedAtTick: 3 }),
+          player(10, -(MARKER_RANGE_M + 5), 0),
+        ],
+        localPlayerId: 1,
+      },
     });
 
     const fills = context.calls.filter((call) => call.startsWith("fill("));
@@ -104,8 +117,10 @@ describe("drawPlayerArrows", () => {
     drawPlayerArrows(context, eastCamera(), {
       origin: { x: 0, y: 0 },
       size: SIZE,
-      players: [player(1, 0, 0), player(7, 0, 60)],
-      localPlayerId: 1,
+      friends: {
+        players: [player(1, 0, 0), player(7, 0, 60)],
+        localPlayerId: 1,
+      },
     });
 
     const [translate] = context.calls.filter((call) =>

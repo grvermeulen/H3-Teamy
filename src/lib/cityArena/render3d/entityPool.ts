@@ -26,19 +26,26 @@ export type PoolSlot<T extends Poolable, S> = {
   seenFrame: number;
 };
 
-/** Pooled objects for one kind of entity, keyed by entity id. */
-export type EntityPool<T extends Poolable, S> = {
+/**
+ * Pooled objects for one kind of entity, keyed by entity id: the simulation's number, or a stable
+ * string such as a mission contact's id.
+ */
+export type EntityPool<
+  T extends Poolable,
+  S,
+  K extends number | string = number,
+> = {
   /** Starts a frame: every entity must be kept or claimed again to stay. */
   begin(): void;
   /** The slot `id` held since an earlier frame, marked as seen; `undefined` when it has none. */
-  keep(id: number): PoolSlot<T, S> | undefined;
+  keep(id: K): PoolSlot<T, S> | undefined;
   /**
    * Gives `id` a slot, shown under the parent: a freed object of `variant` if there is one, else
    * a new one from `create`. An object `id` already held (of another variant) is freed first.
    * A `null` variant is a one-off: always new, and destroyed rather than kept once freed.
    */
   claim(
-    id: number,
+    id: K,
     variant: string | null,
     create: () => T,
     state: S,
@@ -111,19 +118,20 @@ function retire<T extends Poolable>(
  * @param freeCap - Freed objects kept per variant.
  * @returns The pool; call `begin`, then `keep`/`claim` per visible entity, then `end` each frame.
  */
-export function createEntityPool<T extends Poolable, S>(
-  parent: Object3D,
-  freeCap: number,
-): EntityPool<T, S> {
-  const active = new Map<number, PoolSlot<T, S>>();
+export function createEntityPool<
+  T extends Poolable,
+  S,
+  K extends number | string = number,
+>(parent: Object3D, freeCap: number): EntityPool<T, S, K> {
+  const active = new Map<K, PoolSlot<T, S>>();
   const free = createFreeLists<T>(freeCap);
   let frame = 0;
-  const release = (slot: PoolSlot<T, S>, id: number): void => {
+  const release = (slot: PoolSlot<T, S>, id: K): void => {
     active.delete(id);
     retire(free, slot);
   };
   // One callback for every frame: `forEach` walks the map without allocating entry pairs.
-  const releaseUnseen = (slot: PoolSlot<T, S>, id: number): void => {
+  const releaseUnseen = (slot: PoolSlot<T, S>, id: K): void => {
     if (slot.seenFrame !== frame) release(slot, id);
   };
   return {

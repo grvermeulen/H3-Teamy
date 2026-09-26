@@ -1,6 +1,12 @@
-import { AdditiveBlending, Color, DoubleSide, FrontSide } from "three";
+import {
+  AdditiveBlending,
+  Color,
+  DoubleSide,
+  FrontSide,
+  NormalBlending,
+} from "three";
 import { describe, expect, it } from "vitest";
-import { createGlowMaterial } from "./glowMaterial";
+import { createGlowMaterial, glowAlpha, linearFogFactor } from "./glowMaterial";
 
 describe("createGlowMaterial", () => {
   it("adds its light from both sides without writing depth, and takes the scene's fog", () => {
@@ -20,6 +26,46 @@ describe("createGlowMaterial", () => {
 
     expect(glow.toneMapped).toBe(false);
     expect(glow.fragmentShader).not.toContain("<tonemapping_fragment>");
+  });
+
+  it("blends normally when asked, for a core that keeps its colour over a bright sky", () => {
+    const glow = createGlowMaterial({
+      colour: 0xf3cf68,
+      opacity: 0.8,
+      blending: NormalBlending,
+    });
+
+    expect(glow.blending).toBe(NormalBlending);
+    expect(createGlowMaterial({ colour: 0, opacity: 1 }).blending).toBe(
+      AdditiveBlending,
+    );
+  });
+
+  it("works out its strength as its shader does: fades up, across and into the fog", () => {
+    const shape = { opacity: 0.8, riseFade: 2, acrossFade: 1, fogShare: 0.5 };
+    const glow = createGlowMaterial({ colour: 0, ...shape });
+
+    expect(glowAlpha(shape, 0.25, 0.5, 0.4)).toBeCloseTo(
+      0.8 * 0.5 ** 2 * 0.5 * (1 - 0.5 * 0.4),
+    );
+    expect(glow.uniforms.uFogShare.value).toBe(0.5);
+    expect(glow.fragmentShader).toContain(
+      "alpha *= 1.0 - uFogShare * fogFactor",
+    );
+  });
+
+  it("gives all of itself to the fog unless told to keep some", () => {
+    expect(glowAlpha({ opacity: 1 }, 0.5, 0, 1)).toBe(0);
+    expect(glowAlpha({ opacity: 1, fogShare: 0 }, 0.5, 0, 1)).toBe(1);
+    expect(
+      createGlowMaterial({ colour: 0, opacity: 1 }).uniforms.uFogShare.value,
+    ).toBe(1);
+  });
+
+  it("reads the fog as three.js's linear fog does: clear before it starts, gone at its end", () => {
+    expect(linearFogFactor(50, 100, 300)).toBe(0);
+    expect(linearFogFactor(200, 100, 300)).toBeCloseTo(0.5);
+    expect(linearFogFactor(400, 100, 300)).toBe(1);
   });
 
   it("glows from its front faces only when asked", () => {
@@ -53,7 +99,7 @@ describe("createGlowMaterial", () => {
 
     expect(glow.uniforms.uRiseFade.value).toBe(1.5);
     expect(glow.uniforms.uAcrossFade.value).toBe(0.8);
-    expect(glow.fragmentShader).toContain("alpha *= 1.0 - fogFactor");
+    expect(glow.fragmentShader).toContain("fogFactor");
     expect(glow.fragmentShader).not.toContain("<fog_fragment>");
   });
 });

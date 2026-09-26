@@ -77,8 +77,8 @@ describe("createMissionMarkers: contacts", () => {
     expect(markers.contacts).toHaveLength(2);
     expect([noor!.x, noor!.y]).toEqual(missionAnchor(NOOR!.id));
     expect(noor!.look).toBe(pedLookOf(NOOR!.look));
-    expect(noor!.key).toBe(0);
-    expect(vera!.key).toBe(2);
+    expect(noor!.id).toBe(NOOR!.id);
+    expect(vera!.id).toBe(VERA!.id);
     expect(vera!.look).toBe(pedLookOf(VERA!.look));
   });
 
@@ -129,8 +129,17 @@ describe("createMissionMarkers: contacts", () => {
     expect(markers.contacts[0]).toBe(noor);
     markers.update(sceneOf({ missionContacts: [VERA!] }));
 
-    expect(markers.contacts.map((contact) => contact.key)).toEqual([2]);
+    expect(markers.contacts.map((contact) => contact.id)).toEqual([VERA!.id]);
     expect(markers.beacons).toHaveLength(1);
+  });
+
+  it("keys a contact by their id, whatever list the contact came in", () => {
+    const markers = createMissionMarkers();
+    const copy = { ...VERA! };
+
+    markers.update(sceneOf({ missionContacts: [copy] }));
+
+    expect(markers.contacts[0]!.id).toBe(VERA!.id);
   });
 
   it("stands no one without contacts in the scene", () => {

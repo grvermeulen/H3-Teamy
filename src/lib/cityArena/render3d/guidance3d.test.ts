@@ -66,14 +66,17 @@ describe("createGuidance3d", () => {
     expect(shownNamed(guidance.object, "playerMarker")).toBe(1);
   });
 
-  it("stands beacons as far as the quality draws the city", () => {
+  it("stands a beacon 300 m away on every quality, and one past 450 m only as far as the city", () => {
     const guidance = createGuidance3d();
-    const spot = [{ x: 300, y: 0, colour: 0xf3cf68 }];
+    const near = [{ x: 300, y: 0, colour: 0xf3cf68 }];
+    const far = [{ x: 500, y: 0, colour: 0xf3cf68 }];
 
-    guidance.update(frameOf({ quality: "auto" }), FOCUS, camera(), spot);
+    guidance.update(frameOf({ quality: "low" }), FOCUS, camera(), near);
     expect(shownNamed(guidance.object, "beacon")).toBe(1);
-    guidance.update(frameOf({ quality: "low" }), FOCUS, camera(), spot);
+    guidance.update(frameOf({ quality: "low" }), FOCUS, camera(), far);
     expect(shownNamed(guidance.object, "beacon")).toBe(0);
+    guidance.update(frameOf({ quality: "high" }), FOCUS, camera(), far);
+    expect(shownNamed(guidance.object, "beacon")).toBe(1);
   });
 
   it("hides the route and the wall when the scene has neither", () => {
@@ -100,7 +103,7 @@ describe("createGuidance3d", () => {
 
     guidance.dispose();
 
-    expect(spies).toHaveLength(4);
+    expect(spies).toHaveLength(5);
     for (const spy of spies) expect(spy).toHaveBeenCalledOnce();
   });
 });

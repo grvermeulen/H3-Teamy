@@ -104,11 +104,5 @@ export function drawOverlay3d(
   if (input.dead) return;
   const point = crosshairScreen(camera, input.origin, input.aim, input.size);
   if (point) drawCrosshair(context, clampToScreen(point, input.size));
-  if (input.friends)
-    drawPlayerArrows(context, camera, {
-      origin: input.origin,
-      size: input.size,
-      players: input.friends.players,
-      localPlayerId: input.friends.localPlayerId,
-    });
+  drawPlayerArrows(context, camera, input);
 }

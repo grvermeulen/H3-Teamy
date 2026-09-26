@@ -43,7 +43,7 @@ const MAX_PIXEL_RATIO: Record<RenderQuality, number> = {
   high: 2,
 };
 /** Fog starts at this share of the view distance. */
-const FOG_NEAR_SHARE = 0.35;
+export const FOG_NEAR_SHARE = 0.35;
 /*
  * The evening's light levels. three.js lights a matte surface by intensity / π, and ACES's toe
  * crushes whatever lands below about 0.05, so at dusk levels the side of a character facing away

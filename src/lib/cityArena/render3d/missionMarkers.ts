@@ -11,7 +11,7 @@
  * frame only moves the beacons of targets that walk or drive, and allocates nothing.
  */
 import { missionById } from "../missions/catalog";
-import { MISSION_CONTACTS, type MissionContact } from "../missions/contacts";
+import type { MissionContact } from "../missions/contacts";
 import { missionScenario } from "../missions/scenarios";
 import type {
   MissionProfile,
@@ -55,8 +55,8 @@ const NO_CONTACTS: readonly MissionContact[] = [];
 
 /** A contact standing on the street. */
 export type ContactSpot = {
-  /** Stable per contact: their place in the full contact list. */
-  key: number;
+  /** The contact's own id, stable across contact lists. */
+  id: string;
   /** World metres. */
   x: number;
   y: number;
@@ -144,7 +144,7 @@ function standContacts(list: readonly MissionContact[]): Standing[] {
     standing.push({
       contact,
       spot: {
-        key: MISSION_CONTACTS.indexOf(contact),
+        id: contact.id,
         x,
         y,
         look: pedLookOf(contact.look),

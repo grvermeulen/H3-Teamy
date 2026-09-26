@@ -1,5 +1,5 @@
 import { PerspectiveCamera } from "three";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createFakeContext } from "../render/testing/fakeContext";
 import { createArenaPlayer } from "../sim/roster";
 import { applyRigPose, rigPose, type RigInput } from "./cameraRig";
@@ -9,7 +9,14 @@ import {
   crosshairScreen,
   drawOverlay3d,
 } from "./overlay3d";
+import { drawPlayerArrows } from "./playerArrows";
 import { markerCss } from "./playerMarkers3d";
+
+// The real arrows, watched: the overlay must hand them its own input, not a copy per frame.
+vi.mock("./playerArrows", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./playerArrows")>();
+  return { ...actual, drawPlayerArrows: vi.fn(actual.drawPlayerArrows) };
+});
 
 const SIZE = { width: 1280, height: 720 };
 
@@ -111,6 +118,23 @@ describe("drawOverlay3d", () => {
     const dead = createFakeContext();
     drawOverlay3d(dead, camera, { ...input, dead: true });
     expect(dead.calls).toEqual([]);
+  });
+
+  it("hands the arrows its own input, making no new object per frame", () => {
+    const camera = placedCamera();
+    const friends = { players: [], localPlayerId: 1 };
+    const input = {
+      origin: { x: 10, y: 20 },
+      aim: 0.8,
+      size: SIZE,
+      dead: false,
+      friends,
+    };
+    vi.mocked(drawPlayerArrows).mockClear();
+
+    drawOverlay3d(createFakeContext(), camera, input);
+
+    expect(vi.mocked(drawPlayerArrows).mock.calls[0]![2]).toBe(input);
   });
 });
 

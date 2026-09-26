@@ -79,7 +79,7 @@ export function createContacts3d(
 ): Contacts3d {
   const object = new Group();
   object.name = "contacts";
-  const pool = createEntityPool<Character3d, CharacterLook>(
+  const pool = createEntityPool<Character3d, CharacterLook, string>(
     object,
     FREE_LIST_CAP,
   );
@@ -100,12 +100,12 @@ export function createContacts3d(
       for (const contact of contacts) {
         if (!near(focus, contact.x, contact.y, CHARACTER_DRAW_DISTANCE_M))
           continue;
-        const kept = pool.keep(contact.key);
+        const kept = pool.keep(contact.id);
         const slot =
           kept?.state === contact.look
             ? kept
             : pool.claim(
-                contact.key,
+                contact.id,
                 contact.look,
                 () => factories.character(contact.look),
                 contact.look,

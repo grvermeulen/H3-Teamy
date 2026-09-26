@@ -143,11 +143,13 @@ export function createCast3d(
       view.aim = frame.aim;
       entities.update(frame.scene, frame.dt, focus, view);
       street.update(contacts, frame.scene, focus);
+      const drawn = handsInput(handsScratch, entities, frame);
       fx = fxFor(object, fx, frame.quality);
-      fx.effects.sync(frame.scene, focus, view.firstPerson);
+      // Your own flame moves to the hands' barrel only while the hands are there to show it.
+      fx.effects.sync(frame.scene, focus, drawn !== null);
       fx.effects.update(frame.dt);
       fx.destruction.update(frame.dt);
-      return hands.update(camera, handsInput(handsScratch, entities, frame));
+      return hands.update(camera, drawn);
     },
     destruction: () => fx?.destruction ?? null,
     dispose() {

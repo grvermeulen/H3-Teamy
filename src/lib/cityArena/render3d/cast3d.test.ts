@@ -198,10 +198,25 @@ describe("createCast3d", () => {
     expect(effectsMade[0]!.sync).toHaveBeenCalledWith(first.scene, FOCUS, true);
   });
 
+  it("keeps your own muzzle flame in the world when no hands are drawn: a first-person drive-by", () => {
+    const cast = createCast3d(fakeFactories());
+    const driving = frameOf({ mode: "first" });
+    driving.scene.players = [you({ vehicleId: 9 })];
+
+    const hands = cast.update(driving, FOCUS, new PerspectiveCamera());
+
+    expect(hands).toBeNull();
+    expect(effectsMade[0]!.sync).toHaveBeenCalledWith(
+      driving.scene,
+      FOCUS,
+      false,
+    );
+  });
+
   it("stands the mission contacts in the street with the cast's own characters", () => {
     const factories = fakeFactories();
     const cast = createCast3d(factories);
-    const noor = { key: 0, x: 5, y: 4, look: "ped2" as const };
+    const noor = { id: "noor", x: 5, y: 4, look: "ped2" as const };
 
     cast.update(frameOf(), FOCUS, new PerspectiveCamera(), [noor]);
 

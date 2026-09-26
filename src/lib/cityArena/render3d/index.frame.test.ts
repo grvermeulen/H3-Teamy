@@ -1,4 +1,10 @@
-import { Mesh, Scene, type BufferGeometry, type Object3D } from "three";
+import {
+  Mesh,
+  Scene,
+  type BufferGeometry,
+  type Material,
+  type Object3D,
+} from "three";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Scene as ArenaScene } from "../render/renderScene";
 import type { EffectState, VehicleState } from "../sim/types";
@@ -332,16 +338,25 @@ describe("createView3d frame path", () => {
     expect(renderer.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it("frees the city, the cast, the effects and the renderer on dispose", () => {
+  it("frees the city, the cast, the effects, the guidance and the renderer on dispose", () => {
     const view = createView3d(document.createElement("canvas"));
     const { renderer, sync, city } = partsOfView();
     const freeCity = vi.spyOn(city, "dispose");
     view.render(frameOf("third"), OVERLAY);
+    const guidance = renderer.scene.getObjectByName("guidance")!;
+    const freeGuidance: ReturnType<typeof vi.spyOn>[] = [];
+    guidance.traverse((node) => {
+      if (!(node instanceof Mesh)) return;
+      freeGuidance.push(vi.spyOn(node.geometry as BufferGeometry, "dispose"));
+      freeGuidance.push(vi.spyOn(node.material as Material, "dispose"));
+    });
     view.dispose();
     const effects = vi.mocked(createEffects3d).mock.results[0]!.value;
     expect(freeCity).toHaveBeenCalledTimes(1);
     expect(sync.dispose).toHaveBeenCalledTimes(1);
     expect(effects.dispose).toHaveBeenCalledTimes(1);
     expect(renderer.dispose).toHaveBeenCalledTimes(1);
+    expect(freeGuidance.length).toBeGreaterThanOrEqual(4);
+    for (const free of freeGuidance) expect(free).toHaveBeenCalledTimes(1);
   });
 });

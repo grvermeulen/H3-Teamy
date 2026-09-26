@@ -31,7 +31,16 @@ function cornersAt(
 }
 
 describe("sameRoute", () => {
-  it("is the same route for the same list, or one of the same length and ends", () => {
+  it("is a new route when a replan moves a middle point between the same ends", () => {
+    const replanned: Point[] = [
+      [0, 0],
+      [0, 10],
+      [10, 10],
+    ];
+    expect(sameRoute(L_ROUTE, replanned)).toBe(false);
+  });
+
+  it("is the same route for the same list, or an equal copy of it", () => {
     expect(sameRoute(L_ROUTE, L_ROUTE)).toBe(true);
     expect(
       sameRoute(
