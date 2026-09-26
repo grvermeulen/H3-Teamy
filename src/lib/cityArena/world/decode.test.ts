@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MapIndex, MapTile } from "./mapTypes";
 import { decodeTile, flatUnitsToPoints, tileRectMetres } from "./decode";
+import { structureIdOf } from "./structureId";
 
 const index: MapIndex = {
   version: 1,
@@ -70,6 +71,7 @@ describe("decode", () => {
       landmark: "grote-kerk-wageningen",
     });
     expect(decoded.buildings[0].ring).toHaveLength(4);
+    expect(decoded.buildings[0].structureId).toBe(structureIdOf(4, 2, 0));
     expect(decoded.ground[0].kind).toBe("grass");
     expect(decoded.water[0].ring[2]).toEqual([10, 10]);
     expect(decoded.rect).toEqual(tileRectMetres(4, 2, index));

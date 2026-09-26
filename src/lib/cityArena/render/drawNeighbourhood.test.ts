@@ -9,6 +9,7 @@ import {
 import { createFakeContext } from "./testing/fakeContext";
 
 const house: DecodedBuilding = {
+  structureId: 1,
   ring: [
     [10, 10],
     [22, 10],
