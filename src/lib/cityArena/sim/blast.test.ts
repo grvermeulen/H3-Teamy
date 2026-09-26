@@ -189,6 +189,27 @@ describe("applyBlast — an explosive projectile (entity falloff on)", () => {
     );
   });
 
+  it("kills a player on foot and credits the kill to the shooter", () => {
+    const world = worldWithoutBuildings();
+    const state: ArenaState = {
+      ...baseState(),
+      players: [{ ...createArenaPlayer([0, 0], 0), id: 40, health: 50 }],
+    };
+    const blast: Blast = { ...cannon, x: 0, y: 0, ownerId: 11 };
+    const next = applyBlast(state, blast, world, 6);
+
+    const player = next.players.find((p) => p.id === 40);
+    expect(player).toMatchObject({ health: 0, diedAtTick: 6 });
+    expect(next.events).toContainEqual(
+      expect.objectContaining({
+        kind: "kill",
+        victim: "player",
+        victimId: 40,
+        killerId: 11,
+      }),
+    );
+  });
+
   it("damages a structure at the falloff for its nearest footprint point, and crushes a ped inside it credited to the shooter", () => {
     const world = worldWithBuilding();
     // The footprint's near wall sits at x = 5; a blast centred 5 m further out is exactly at the

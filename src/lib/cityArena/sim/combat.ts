@@ -372,7 +372,10 @@ function detonate(
 }
 
 /** Sweeps the bullets, applies their hits and spawns an impact effect per hit; an explosive
- * weapon also detonates at every hit and, once it runs out of range, at its end point. */
+ * weapon also detonates at every hit and, once it runs out of range, at its end point. A shell
+ * that wrecks a car here still gets a second, separate explosion from `applyExplosions` right
+ * after (Ruling 17) — the shell bursts, then the car it wrecked blows up too; deliberate, not a
+ * double-fire bug. */
 export function advanceBullets(
   state: ArenaState,
   dt: number,

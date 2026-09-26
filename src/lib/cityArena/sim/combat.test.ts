@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { boundsOf, rectsIntersect, type Rect } from "../mapBuild/geometry";
-import { createCollisionGrid, type Obstacle } from "../world/collisionGrid";
+import { boundsOf } from "../mapBuild/geometry";
+import { createCollisionGrid } from "../world/collisionGrid";
 import type { DecodedTile } from "../world/decode";
 import type { MapIndex } from "../world/mapTypes";
 import type { Point } from "../world/projection";
@@ -10,9 +10,12 @@ import type { ArenaWorld } from "./arenaWorld";
 import {
   STRUCTURE_LOOKUP_PAD_M,
   advanceBullets,
+  applyExplosions,
   structureObstacle,
 } from "./combat";
+import { damageStructure } from "./structures";
 import type { ArenaState, BulletState, PedState } from "./types";
+import { createVehicle } from "./vehicle";
 import { WEAPONS } from "./weapons";
 
 const index: MapIndex = {
@@ -83,33 +86,49 @@ function cannonShell(ownerId: number, rangeLeftM: number): BulletState {
 }
 
 describe("structureObstacle (Ruling 9)", () => {
-  it("still resolves an obstacle when the hit point lies a hair outside its bounds", () => {
-    const wall: Obstacle = {
-      ring: [
-        [0, 0],
-        [10, 0],
-        [10, 10],
-        [0, 10],
-      ],
-      bounds: { minX: 0, minY: 0, maxX: 10, maxY: 10 },
-      kind: "building",
-      structure: { id: 1, maxHealth: 120 },
+  it("still damages the building when the hit point lies a hair outside its bounds", () => {
+    const grid = createCollisionGrid();
+    const ring: Point[] = [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+    ];
+    const structureId = structureIdOf(0, 0, 0);
+    const tile: DecodedTile = {
+      x: 0,
+      y: 0,
+      rect: { minX: -100, minY: -100, maxX: 100, maxY: 100 },
+      trees: [],
+      furniture: [],
+      roads: [],
+      ground: [],
+      water: [],
+      buildings: [{ structureId, ring, bounds: boundsOf(ring), levels: 1 }],
     };
-    const world: ArenaWorld = {
-      collision: {
-        query: (rect: Rect) =>
-          rectsIntersect(wall.bounds, rect) ? [wall] : [],
-        resolveCircle: (centre: Point) => centre,
-      },
-      index,
-      graph,
-    };
+    grid.insertTile(tile);
+    const world: ArenaWorld = { collision: grid, index, graph };
+
     // A float intersection point 1e-9 m outside the wall's own maxX bound: a zero-area query rect
     // there would miss it entirely (no padding), but STRUCTURE_LOOKUP_PAD_M widens the rect enough
-    // to still find it.
+    // to still find it — and the building actually takes the hit's damage, not just a lookup hit.
     const point: Point = [10 + 1e-9, 5];
     expect(STRUCTURE_LOOKUP_PAD_M).toBeGreaterThan(1e-9);
-    expect(structureObstacle(world, point, 1)).toBe(wall);
+    const obstacle = structureObstacle(world, point, structureId);
+    expect(obstacle).not.toBeNull();
+
+    const damaged = damageStructure(
+      baseState(),
+      { obstacle: obstacle!, amount: 50, killerId: null },
+      3,
+    );
+    expect(damaged.structures).toEqual([
+      expect.objectContaining({
+        id: structureId,
+        damage: 50,
+        destroyedAtTick: null,
+      }),
+    ]);
   });
 });
 
@@ -202,5 +221,51 @@ describe("advanceBullets — explosive detonation", () => {
         killerId: 5,
       }),
     );
+  });
+});
+
+describe("advanceBullets + applyExplosions — double boom (Ruling 17)", () => {
+  it("gives a shell-wrecked car its own second explosion without double-counting the kill the shell's blast already made", () => {
+    const world: ArenaWorld = {
+      collision: createCollisionGrid(),
+      index,
+      graph,
+    };
+    const carId = 501;
+    const shooterId = 5;
+    const state: ArenaState = {
+      ...baseState(),
+      bullets: [cannonShell(shooterId, WEAPONS.cannon.rangeM)],
+      // 100 health: the shell's 150 direct hit alone already zeroes it, before its own blast adds
+      // any more — so the car is wrecked in this same tick regardless of the blast's own reach.
+      vehicles: [
+        { ...createVehicle(carId, "compact", [50, 0], 0, 0), health: 100 },
+      ],
+      // 2 m from the car's centre: inside both the shell's own 4 m entityRadius (falloff-scaled,
+      // but still enough to kill a 40-health ped) and the car's own 3 m CAR_BLAST radius — but the
+      // shell detonates first, so the ped is already dead by the time the car's own blast runs.
+      peds: [pedAt(99, 50, 2)],
+    };
+    let next = advanceBullets(state, 1, world, 20);
+    next = applyExplosions(next, world, 20);
+
+    expect(next.vehicles.find((v) => v.id === carId)).toMatchObject({
+      health: 0,
+      wrecked: true,
+    });
+    // The shell's own detonation and the car's separate explosion both fire this tick — deliberate
+    // (Ruling 17), not a duplicate-fire bug.
+    expect(
+      next.events.filter((event) => event.kind === "explosion"),
+    ).toHaveLength(2);
+    const kills = next.events.filter(
+      (event) =>
+        event.kind === "kill" &&
+        event.victim === "ped" &&
+        event.victimId === 99,
+    );
+    expect(kills).toHaveLength(1);
+    expect(kills[0]).toMatchObject({ killerId: shooterId });
+    expect(next.peds[0]).toMatchObject({ mode: "dead" });
   });
 });
