@@ -59,15 +59,16 @@ function destroy(item: Poolable): void {
   item.dispose();
 }
 
-/** Free lists by variant, each capped; an object beyond the cap is destroyed. */
-function createFreeLists<T extends Poolable>(
-  cap: number,
-): {
+/** Freed objects by variant, waiting for reuse. */
+type FreeLists<T extends Poolable> = {
   take(variant: string): T | undefined;
   put(variant: string, item: T): void;
   count(variant: string): number;
   clear(): void;
-} {
+};
+
+/** Free lists by variant, each capped; an object beyond the cap is destroyed. */
+function createFreeLists<T extends Poolable>(cap: number): FreeLists<T> {
   const lists = new Map<string, T[]>();
   return {
     take: (variant) => lists.get(variant)?.pop(),
@@ -88,6 +89,20 @@ function createFreeLists<T extends Poolable>(
   };
 }
 
+/** Takes a slot's object out of the scene: hidden and kept for its variant, or destroyed if a one-off. */
+function retire<T extends Poolable>(
+  free: FreeLists<T>,
+  slot: { item: T; variant: string | null },
+): void {
+  if (slot.variant === null) {
+    destroy(slot.item);
+    return;
+  }
+  slot.item.object.visible = false;
+  slot.item.object.removeFromParent();
+  free.put(slot.variant, slot.item);
+}
+
 /**
  * A pool of scene objects by entity id. A freed object is hidden and detached, then kept for the
  * next entity of its variant; each variant keeps at most `freeCap` of them and destroys the rest.
@@ -105,13 +120,7 @@ export function createEntityPool<T extends Poolable, S>(
   let frame = 0;
   const release = (slot: PoolSlot<T, S>, id: number): void => {
     active.delete(id);
-    if (slot.variant === null) {
-      destroy(slot.item);
-      return;
-    }
-    slot.item.object.visible = false;
-    slot.item.object.removeFromParent();
-    free.put(slot.variant, slot.item);
+    retire(free, slot);
   };
   // One callback for every frame: `forEach` walks the map without allocating entry pairs.
   const releaseUnseen = (slot: PoolSlot<T, S>, id: number): void => {

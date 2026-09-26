@@ -9,8 +9,9 @@ import { clipPolygonToRect } from "../mapBuild/geometry";
 import { SIM_STEP_S } from "../sim/player";
 import type { DecodedTile } from "../world/decode";
 import { structureTileOf } from "../world/structureId";
-import { buildingHeight } from "./buildingMesh";
+import { buildingHeight, facadeStyleOf } from "./buildingMesh";
 import type { CollapseInput, Destruction3d } from "./destruction3d";
+import { facadeWallColour } from "./textures";
 import { sameTiles, type StructureView } from "./worldCells";
 
 /** How long after a building fell the view still plays its collapse, seconds; later it is rubble. */
@@ -24,8 +25,8 @@ const MIN_RING_CORNERS = 3;
 export type RuinTarget = Pick<Destruction3d, "collapse" | "setRubble">;
 
 /**
- * The footprint and height a structure id names, as the city builds it: the building at the id's
- * position in its tile, cut to the tile's own rectangle.
+ * The footprint, height and wall colour a structure id names, as the city builds it: the building
+ * at the id's position in its tile, cut to the tile's own rectangle, in its façade's paint.
  *
  * @param id - A structure id.
  * @param tiles - The loaded tiles.
@@ -43,7 +44,12 @@ export function ruinOf(
   if (!tile || !building) return null;
   const ring = clipPolygonToRect(building.ring, tile.rect);
   if (ring.length < MIN_RING_CORNERS) return null;
-  return { structureId: id, ring, height: buildingHeight(building.levels) };
+  return {
+    structureId: id,
+    ring,
+    height: buildingHeight(building.levels),
+    colour: facadeWallColour(facadeStyleOf(building)),
+  };
 }
 
 /** The ruins as the destruction view last heard of them. */

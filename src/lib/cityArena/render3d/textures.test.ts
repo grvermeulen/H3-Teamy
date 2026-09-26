@@ -17,6 +17,7 @@ import {
 } from "./testing/recordingCanvas";
 import {
   FACADE_STYLES,
+  PAVEMENT_DUSK_SHADE,
   SURFACE_KEYS,
   TEXTURE_REPEAT_M,
   createFacadeMaterial,
@@ -96,6 +97,15 @@ describe("createSurfaceMaterials", () => {
       expect(map?.wrapT).toBe<Wrapping>(RepeatWrapping);
       expect(map?.colorSpace).toBe(SRGBColorSpace);
     }
+  });
+
+  it("shades the light pavement slabs down to concrete at dusk, and no other surface", () => {
+    const materials = createSurfaceMaterials(() => new Texture());
+
+    expect(PAVEMENT_DUSK_SHADE).toBe(0.55);
+    expect(materials.pavement.color.toArray()).toEqual([0.55, 0.55, 0.55]);
+    for (const key of SURFACE_KEYS.filter((other) => other !== "pavement"))
+      expect(materials[key].color.toArray()).toEqual([1, 1, 1]);
   });
 });
 

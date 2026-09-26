@@ -49,6 +49,29 @@ const SURFACE_URLS: Record<SurfaceKey, string> = {
   roofFlat: "/arena/sprites/roof-flat.png",
 };
 
+/**
+ * The pavement's material colour, a multiplier on its art. The 2D slab texture is painted light
+ * so pavements read under the night map's overlays; lit by the evening sky at eye level it glared
+ * like snow, so the 3D view darkens it to dusk concrete. Every other surface keeps its art as is.
+ */
+export const PAVEMENT_DUSK_SHADE = 0.55;
+
+/** Each surface's material colour, a multiplier on its art (or on its flat fallback colour). */
+const SURFACE_SHADES: Partial<Record<SurfaceKey, number>> = {
+  pavement: PAVEMENT_DUSK_SHADE,
+};
+
+/**
+ * How much the 3D view darkens a surface's art: {@link PAVEMENT_DUSK_SHADE} for the pavement, 1
+ * for the rest.
+ *
+ * @param key - The surface.
+ * @returns A multiplier in (0, 1].
+ */
+export function surfaceShade(key: SurfaceKey): number {
+  return SURFACE_SHADES[key] ?? 1;
+}
+
 /** Storeys whose 2D roof shade stands in for a tiled roof's art: a small house. */
 const TILED_ROOF_SHADE_LEVELS = 2;
 /** Storeys whose 2D roof shade stands in for a gravel roof's art: a block or a hall. */
@@ -119,7 +142,8 @@ function repeatingColourMap<T extends Texture>(texture: T): T {
 }
 
 /**
- * One material per surface, each mapping its 2D texture so it repeats once per UV unit.
+ * One material per surface, each mapping its 2D texture so it repeats once per UV unit, shaded by
+ * {@link surfaceShade}.
  *
  * @param load - Loads a texture by URL, e.g. `TextureLoader.load`; called once per surface.
  * @returns The surface materials.
@@ -127,8 +151,13 @@ function repeatingColourMap<T extends Texture>(texture: T): T {
 export function createSurfaceMaterials(
   load: (url: string) => Texture,
 ): Record<SurfaceKey, MeshLambertMaterial> {
-  const material = (key: SurfaceKey): MeshLambertMaterial =>
-    new MeshLambertMaterial({ map: repeatingColourMap(load(surfaceUrl(key))) });
+  const material = (key: SurfaceKey): MeshLambertMaterial => {
+    const surface = new MeshLambertMaterial({
+      map: repeatingColourMap(load(surfaceUrl(key))),
+    });
+    surface.color.setScalar(surfaceShade(key));
+    return surface;
+  };
   return {
     road: material("road"),
     pavement: material("pavement"),
@@ -300,6 +329,17 @@ function paintConcrete(context: RasterContext): void {
   }
 }
 
+/**
+ * The colour a style's walls are painted in behind their windows and frames: what a wall of it
+ * reads as from across the street.
+ *
+ * @param style - The façade style.
+ * @returns A CSS hex colour: brick red-brown, pale plaster, grey concrete or dark glass.
+ */
+export function facadeWallColour(style: FacadeStyle): string {
+  return FACADE_WALL_COLOURS[style];
+}
+
 /** Glass curtain wall: mullion spacing, spandrel height and mullion width, px. */
 const MULLION_SPACING_PX = 32;
 const SPANDREL_PX = 26;
@@ -307,6 +347,14 @@ const MULLION_PX = 3;
 const GLASS = "#2b3c4f";
 const GLASS_SPANDREL = "#1f2b38";
 const GLASS_MULLION = "#18202a";
+
+/** Each style's wall paint, for {@link facadeWallColour}. */
+const FACADE_WALL_COLOURS: Record<FacadeStyle, string> = {
+  brick: BRICK,
+  plaster: PLASTER,
+  concrete: CONCRETE,
+  glass: GLASS,
+};
 
 /** Dark glass between mullions, over an opaque spandrel band at the floor. */
 function paintGlass(context: RasterContext): void {

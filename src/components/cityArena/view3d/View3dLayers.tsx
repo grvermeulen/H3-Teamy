@@ -52,7 +52,8 @@ function useFinePointer(): boolean {
 
 /**
  * The 3D view's messages over the playfield: the click-to-aim hint — while 3D runs on a mouse
- * that has neither locked the pointer nor fallen back to lock-free aiming — and the "3D werkt
+ * that has neither locked the pointer nor fallen back to lock-free aiming, low on the playfield
+ * just above the footer, clear of the character in the middle of the view — and the "3D werkt
  * niet op dit apparaat" toast.
  *
  * @param props - Whether 3D runs, the pointer-lock state and the toast.
@@ -70,7 +71,7 @@ function View3dMessages({
   return (
     <>
       {hint ? (
-        <p className="arena-label pointer-events-none absolute left-1/2 top-[62%] z-10 -translate-x-1/2 rounded bg-black/70 px-3 py-2 text-center text-sm text-[#c9d1d9]">
+        <p className="arena-label pointer-events-none absolute bottom-6 left-1/2 z-10 -translate-x-1/2 rounded bg-black/70 px-3 py-2 text-center text-sm text-[#c9d1d9]">
           {VIEW3D_HINT_TEXT}
         </p>
       ) : null}

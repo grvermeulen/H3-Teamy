@@ -312,9 +312,10 @@ describe("CityArenaOverlay", () => {
     await waitFor(() => expect(mockCreateView3d).toHaveBeenCalledTimes(1));
     const glCanvas = mockCreateView3d.mock.calls[0]![0] as HTMLCanvasElement;
     expect(glCanvas.parentElement).toBe(layer);
-    expect(
-      screen.getByText("Klik om te richten · V wisselt camera"),
-    ).toBeInTheDocument();
+    const hint = screen.getByText("Klik om te richten · V wisselt camera");
+    // Low on the playfield, just above the footer: clear of the character in the middle.
+    expect(hint).toHaveClass("bottom-6", "left-1/2");
+    expect(hint.className).not.toMatch(/top-/);
     fireEvent.click(screen.getByRole("button", { name: "Wissel naar 2D" }));
     expect(layer.children).toHaveLength(0);
     expect(

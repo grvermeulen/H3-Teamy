@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DecodedTile } from "../world/decode";
 import { structureIdOf } from "../world/structureId";
-import { buildingHeight } from "./buildingMesh";
+import { buildingHeight, facadeStyleOf } from "./buildingMesh";
 import type { CollapseInput } from "./destruction3d";
 import {
   RECENT_COLLAPSE_TICKS,
@@ -14,6 +14,7 @@ import {
   fixtureTile,
   squareRing,
 } from "./testing/cityFixture";
+import { facadeWallColour } from "./textures";
 import type { StructureView } from "./worldCells";
 
 const NOW = 900;
@@ -60,13 +61,28 @@ function rubbleIds(target: ReturnType<typeof fakeTarget>): number[] {
 
 describe("ruinOf", () => {
   it("finds the building a structure id names in its tile, with its height by storeys", () => {
-    const ruin = ruinOf(HOUSE, town());
+    const tiles = town();
+    const ruin = ruinOf(HOUSE, tiles);
 
     expect(ruin).toEqual({
       structureId: HOUSE,
       ring: squareRing(40, 40, 10),
       height: buildingHeight(2),
+      colour: facadeWallColour(facadeStyleOf(tiles[0]!.buildings[0]!)),
     });
+  });
+
+  it("colours the stand-in like the walls it replaces: brick red, plaster pale, concrete grey", () => {
+    const tiles = town();
+    const block = tiles[0]!.buildings[1]!;
+
+    expect(ruinOf(BLOCK, tiles)!.colour).toBe(
+      facadeWallColour(facadeStyleOf(block)),
+    );
+    expect(facadeWallColour("brick")).toBe("#6d3b2c");
+    expect(facadeWallColour("plaster")).toBe("#8f8878");
+    expect(facadeWallColour("concrete")).toBe("#5f6368");
+    expect(facadeWallColour("glass")).toBe("#2b3c4f");
   });
 
   it("cuts the footprint to its tile's own rectangle, as the city builds it", () => {

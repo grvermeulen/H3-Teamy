@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   Box3,
+  Color,
   Group,
   InstancedMesh,
   Mesh,
@@ -13,7 +14,9 @@ import {
 import type { Point } from "../world/projection";
 import {
   COLLAPSE_CHUNK_COUNT,
+  COLLAPSE_DEFAULT_COLOUR,
   COLLAPSE_DUST_COUNT,
+  COLLAPSE_END_SHADE,
   COLLAPSE_MAX_TILT_RAD,
   COLLAPSE_S,
   createDestruction3d,
@@ -70,6 +73,58 @@ describe("createDestruction3d — collapse", () => {
       building.geometry.getAttribute("position") as BufferAttribute,
     );
     expect(box.max.y).toBeCloseTo(BLOCK.height);
+  });
+
+  it("stands in in the walls' own colour, then darkens as it falls", () => {
+    const { destruction } = setup();
+    destruction.collapse({ ...BLOCK, colour: "#8f8878" });
+    const [building] = named(destruction.object, "collapse");
+    const material = building.material as MeshLambertMaterial;
+    const plaster = new Color("#8f8878");
+
+    expect(material.color.toArray()).toEqual(plaster.toArray());
+    run(destruction.update, COLLAPSE_S / 2);
+    const halfway = material.color.r;
+    expect(halfway).toBeLessThan(plaster.r);
+    run(destruction.update, COLLAPSE_S / 2 - 2 / 60);
+    expect(material.color.r).toBeLessThan(halfway);
+    expect(material.color.r).toBeGreaterThanOrEqual(
+      plaster.r * COLLAPSE_END_SHADE - 1e-6,
+    );
+  });
+
+  it("gives each falling building its own colour, a mid grey when none is known", () => {
+    const { destruction } = setup();
+    destruction.collapse(BLOCK);
+    destruction.collapse({
+      structureId: 18,
+      ring: RING.map(([x, y]): Point => [x + 50, y]),
+      height: 6,
+      colour: "#6d3b2c",
+    });
+    const [grey, brick] = named(destruction.object, "collapse");
+
+    expect(grey.material).not.toBe(brick.material);
+    expect((grey.material as MeshLambertMaterial).color.getHex()).toBe(
+      COLLAPSE_DEFAULT_COLOUR,
+    );
+    expect((brick.material as MeshLambertMaterial).color.getHexString()).toBe(
+      "6d3b2c",
+    );
+  });
+
+  it("frees a finished stand-in's own material", () => {
+    const { destruction } = setup();
+    destruction.collapse(BLOCK);
+    const [building] = named(destruction.object, "collapse");
+    const dispose = vi.spyOn(
+      building.material as MeshLambertMaterial,
+      "dispose",
+    );
+
+    run(destruction.update, COLLAPSE_S + 1 / 60);
+
+    expect(dispose).toHaveBeenCalledOnce();
   });
 
   it("sinks by its height with ease-in: a quarter of the way at half time", () => {

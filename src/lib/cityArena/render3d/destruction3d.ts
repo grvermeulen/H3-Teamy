@@ -1,6 +1,7 @@
 /**
  * Buildings coming down in 3D (spec §3.5, §6.8). A collapse stands a plain prism in for the building
- * and, over {@link COLLAPSE_S}, sinks it into the ground with a slight tilt while dust billows from
+ * — in the colour of its walls, so the swap does not show, darkening as it falls — and, over
+ * {@link COLLAPSE_S}, sinks it into the ground with a slight tilt while dust billows from
  * its footprint and chunks tumble off; a rubble mound shaped to the footprint rises in its place and
  * stays until the structure is rebuilt. Street furniture hit by a car falls over.
  *
@@ -8,10 +9,12 @@
  * mesh is the caller's job.
  */
 import {
+  Color,
   Group,
   Mesh,
   MeshLambertMaterial,
   Vector3,
+  type ColorRepresentation,
   type Object3D,
 } from "three";
 import type { Point } from "../world/projection";
@@ -51,8 +54,10 @@ const COLLAPSE_EMIT_SHARE = 0.75;
 /** The shudder as the building gives way: how fast and how far, metres, fading as it sinks. */
 const RUMBLE_HZ = 9;
 const RUMBLE_M = 0.12;
-/** Scorched brick of the falling stand-in: by now the building is fully damaged. */
-const COLLAPSE_COLOUR = 0x5b4f45;
+/** The stand-in's colour when the walls' own is not known: a mid plaster grey. */
+export const COLLAPSE_DEFAULT_COLOUR = 0x7f776b;
+/** The stand-in darkens to this share of its walls' colour as it comes down, into its own dust. */
+export const COLLAPSE_END_SHADE = 0.35;
 /** A mound never flattens fully, so its matrix never becomes singular. */
 const RUBBLE_MIN_RISE = 0.02;
 /** Chunks in flight at once: three collapses' worth. */
@@ -95,6 +100,11 @@ export type CollapseInput = {
   ring: readonly Point[];
   /** Roof height, metres. */
   height: number;
+  /**
+   * The colour of the building's walls: the stand-in starts in it and darkens as it falls;
+   * {@link COLLAPSE_DEFAULT_COLOUR} when absent.
+   */
+  colour?: ColorRepresentation;
 };
 
 /** Collapses, rubble and knocked-over furniture. */
@@ -117,6 +127,9 @@ export type Destruction3d = {
 type Collapse = {
   id: number;
   mesh: Mesh;
+  /** The stand-in's own material, darkened from {@link Collapse.walls} as it falls. */
+  material: MeshLambertMaterial;
+  walls: Color;
   centre: Point;
   outline: Point[];
   height: number;
@@ -143,20 +156,22 @@ function risen(t: number): number {
   return Math.max(RUBBLE_MIN_RISE, 1 - (1 - t) * (1 - t));
 }
 
-function startCollapse(
-  input: CollapseInput,
-  material: MeshLambertMaterial,
-): Collapse | null {
+function startCollapse(input: CollapseInput): Collapse | null {
   const { centre, outline } = footprint(input.ring);
   if (outline.length < 3) return null;
   const rng = rngFor("collapse", input.structureId);
   const lean = rng() * FULL_TURN_RAD;
+  const material = new MeshLambertMaterial({
+    color: input.colour ?? COLLAPSE_DEFAULT_COLOUR,
+  });
   const mesh = new Mesh(prismGeometry(outline, input.height), material);
   mesh.name = "collapse";
   mesh.position.set(centre[0], 0, centre[1]);
   return {
     id: input.structureId,
     mesh,
+    material,
+    walls: material.color.clone(),
     centre,
     outline,
     height: input.height,
@@ -169,9 +184,12 @@ function startCollapse(
   };
 }
 
-/** Sinks, leans and shakes the stand-in for its age. */
+/** Sinks, leans, shakes and darkens the stand-in for its age. */
 function poseCollapse(collapse: Collapse): void {
   const t = Math.min(1, collapse.age / COLLAPSE_S);
+  collapse.material.color
+    .copy(collapse.walls)
+    .multiplyScalar(1 - (1 - COLLAPSE_END_SHADE) * leaned(t));
   const shudder =
     Math.sin(collapse.age * RUMBLE_HZ * FULL_TURN_RAD) * RUMBLE_M * (1 - t);
   collapse.mesh.position.set(
@@ -307,7 +325,6 @@ type CollapseTargets = {
 
 function createCollapses(targets: CollapseTargets): Collapses {
   const { parent, dust, debris, rubble } = targets;
-  const material = new MeshLambertMaterial({ color: COLLAPSE_COLOUR });
   const falling = new Map<number, Collapse>();
   const advance = (collapse: Collapse, dt: number): void => {
     collapse.age += dt;
@@ -321,12 +338,13 @@ function createCollapses(targets: CollapseTargets): Collapses {
     }
     parent.remove(collapse.mesh);
     collapse.mesh.geometry.dispose();
+    collapse.material.dispose();
     falling.delete(collapse.id);
   };
   return {
     start(input) {
       if (falling.has(input.structureId)) return;
-      const collapse = startCollapse(input, material);
+      const collapse = startCollapse(input);
       if (!collapse) return;
       falling.set(collapse.id, collapse);
       parent.add(collapse.mesh);
@@ -338,9 +356,11 @@ function createCollapses(targets: CollapseTargets): Collapses {
       for (const collapse of falling.values()) advance(collapse, dt);
     },
     dispose() {
-      for (const collapse of falling.values()) collapse.mesh.geometry.dispose();
+      for (const collapse of falling.values()) {
+        collapse.mesh.geometry.dispose();
+        collapse.material.dispose();
+      }
       falling.clear();
-      material.dispose();
     },
   };
 }

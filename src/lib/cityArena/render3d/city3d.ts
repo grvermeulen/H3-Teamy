@@ -10,7 +10,7 @@ import type { DecodedTile } from "../world/decode";
 import type { LandmarkStyles } from "./buildCell";
 import type { FurnitureInstance } from "./furnitureMesh";
 import { viewDistanceFor, type RenderQuality } from "./renderer3d";
-import { surfaceFallbackColour, surfaceOfUrl } from "./textures";
+import { surfaceFallbackColour, surfaceOfUrl, surfaceShade } from "./textures";
 import {
   createWorldCells,
   type StructureView,
@@ -55,8 +55,8 @@ export type City3d = {
 const REPORTED_SURFACE_FAILURES = new Set<string>();
 
 /**
- * A surface whose art failed to load: drawn in its flat 2D colour instead of the black an
- * unloaded texture samples as, with a breadcrumb the first time that file fails. The 2D map
+ * A surface whose art failed to load: drawn in its flat 2D colour (under the same dusk shade as
+ * its art) instead of the black an unloaded texture samples as, with a breadcrumb the first time that file fails. The 2D map
  * loads the same files and reports their failures, so this raises no Sentry issue of its own.
  */
 function surfaceFailed(
@@ -69,7 +69,9 @@ function surfaceFailed(
   const material = materials.surfaces[key];
   material.map?.dispose();
   material.map = null;
-  material.color.set(surfaceFallbackColour(key));
+  material.color
+    .set(surfaceFallbackColour(key))
+    .multiplyScalar(surfaceShade(key));
   material.needsUpdate = true;
   if (reported.has(url)) return;
   reported.add(url);

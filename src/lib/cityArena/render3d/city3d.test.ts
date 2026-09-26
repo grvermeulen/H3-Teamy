@@ -1,8 +1,8 @@
 import * as Sentry from "@sentry/nextjs";
-import { Object3D, Quaternion, Texture, TextureLoader } from "three";
+import { Color, Object3D, Quaternion, Texture, TextureLoader } from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LandmarkLookup } from "../render/drawStatic";
-import { ROAD_FILL } from "../render/palette";
+import { PAVEMENT_FILL, ROAD_FILL } from "../render/palette";
 import type { DecodedTile } from "../world/decode";
 import {
   WORLD_BUILD_BUDGET_MS,
@@ -12,7 +12,7 @@ import {
 } from "./city3d";
 import { createColourRecordingContext } from "./testing/recordingCanvas";
 import { createTestMaterials, fixtureTown } from "./testing/cityFixture";
-import { SURFACE_KEYS, surfaceUrl } from "./textures";
+import { PAVEMENT_DUSK_SHADE, SURFACE_KEYS, surfaceUrl } from "./textures";
 import { disposeWorldMaterials } from "./worldMaterials";
 import { createWorldCells, type StructureView } from "./worldCells";
 
@@ -222,5 +222,28 @@ describe("loadWorldMaterials", () => {
       expect.objectContaining({ category: "arena", data: { url: road } }),
     );
     expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it("keeps the pavement's dusk shade on its flat colour when its art fails", () => {
+    stubCanvas();
+    const failures: [string, (error: unknown) => void][] = [];
+    vi.spyOn(TextureLoader.prototype, "load").mockImplementation(
+      (url, _onLoad, _onProgress, onError) => {
+        failures.push([url, onError!]);
+        return new Texture();
+      },
+    );
+    const materials = loadWorldMaterials(new Set<string>());
+    const pavement = surfaceUrl("pavement");
+
+    failures.find(([url]) => url === pavement)![1](new Event("error"));
+
+    const expected = new Color(PAVEMENT_FILL).multiplyScalar(
+      PAVEMENT_DUSK_SHADE,
+    );
+    expect(materials.surfaces.pavement.map).toBeNull();
+    expect(materials.surfaces.pavement.color.toArray()).toEqual(
+      expected.toArray(),
+    );
   });
 });

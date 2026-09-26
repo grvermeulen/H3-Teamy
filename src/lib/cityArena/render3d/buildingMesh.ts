@@ -97,8 +97,14 @@ export type BuildingRange = {
   count: number;
 };
 
-/** The wall finish a building gets: seeded by its id, weighted by its size and storeys. */
-function facadeStyleOf(building: DecodedBuilding): FacadeStyle {
+/**
+ * The wall finish a building gets: seeded by its id, weighted by its size and storeys — houses
+ * brick or plaster, big low halls concrete, towers glass or concrete, landmarks brick.
+ *
+ * @param building - The building.
+ * @returns Its façade style.
+ */
+export function facadeStyleOf(building: DecodedBuilding): FacadeStyle {
   const pick = (share: number): boolean =>
     idUnit(building.structureId, STYLE_SALT) < share;
   if (building.landmark) return "brick";
