@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DbUnavailableError } from "@/lib/dbUnavailableError";
+import { ARENA_PROTOCOL_VERSION } from "@/lib/cityArena/net/roomProtocol";
 
 const { authorize, command, capture } = vi.hoisted(() => ({
   authorize: vi.fn(),
@@ -35,7 +36,7 @@ const request = (body: unknown) =>
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Arena-Protocol": "3",
+      "X-Arena-Protocol": String(ARENA_PROTOCOL_VERSION),
     },
     body: JSON.stringify(body),
   });
@@ -53,7 +54,11 @@ describe("POST /api/arena/session", () => {
   it("returns 503 without Sentry when arena tables are missing", async () => {
     command.mockRejectedValueOnce(new DbUnavailableError());
     const response = await POST(
-      request({ action: "create", zone: "campus", joinNonce: crypto.randomUUID() }),
+      request({
+        action: "create",
+        zone: "campus",
+        joinNonce: crypto.randomUUID(),
+      }),
     );
     expect(response.status).toBe(503);
     const body = await response.json();
