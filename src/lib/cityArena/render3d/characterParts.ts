@@ -459,12 +459,12 @@ function faceSideParts(ctx: PartContext, side: Side): RigPart[] {
   ];
 }
 
-/** Short hair: a cap over the crown, the back of the head, a fringe and sideburns. */
+/** Short hair: a cap over the crown, the back of the head and a fringe. */
 function shortHairParts(ctx: PartContext, colour: number): RigPart[] {
   const { p } = ctx;
   const crown = p.height;
   const fringeY = crown - 0.045;
-  const parts: RigPart[] = [
+  return [
     part("head", {
       size: [p.headDepth + 0.018, 0.08, p.headWidth + 0.018],
       at: [-0.004, crown - 0.03, 0],
@@ -485,17 +485,6 @@ function shortHairParts(ctx: PartContext, colour: number): RigPart[] {
       chamfer: 0.4,
     }),
   ];
-  for (const side of ["L", "R"] as const) {
-    const y = crown - 0.1;
-    parts.push(
-      part("head", {
-        size: [0.035, 0.07, 0.015],
-        at: [0.012, y, sideSign(side) * (headSideZ(ctx, y) + 0.004)],
-        colour,
-      }),
-    );
-  }
-  return parts;
 }
 
 /** The ponytail's block, before it is tilted: `[x, y, z]` extent, metres. */
