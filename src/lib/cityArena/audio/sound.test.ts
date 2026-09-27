@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/nextjs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ArenaEvent } from "../sim/types";
 import type { ClipName } from "./clips";
@@ -576,6 +577,23 @@ describe("the city's loops", () => {
     expect(
       loops.every(({ loop }) => vi.mocked(loop.stop).mock.calls.length === 1),
     ).toBe(true);
+  });
+
+  it("reports a world update that throws, and never throws into the game loop", () => {
+    const player: SamplePlayer = {
+      ...playerWith(["engine"]),
+      startLoop: vi.fn(() => {
+        throw new Error("no loops today");
+      }),
+    };
+    const { factory } = createFakeAudioContext();
+    const sound = createArenaSound(factory, true, () => player);
+    sound.setListener(listenerAt(0, 0, null));
+    expect(() => sound.updateWorld(streetWith([car(1, 20, 0)]))).not.toThrow();
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      { tags: { area: "arena", kind: "audio-world" } },
+    );
   });
 
   it("fades a car's engine out once it drives out of earshot, then stops it", () => {

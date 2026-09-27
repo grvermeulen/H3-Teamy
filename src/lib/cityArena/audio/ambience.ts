@@ -29,13 +29,13 @@ export const SILENT_AMBIENCE: Readonly<Record<AmbienceLoop, number>> = {
 };
 
 /** Weighted road metres within 80 m that make traffic full on its own (a busy crossing). */
-export const TRAFFIC_FULL_ROAD_M = 600;
+const TRAFFIC_FULL_ROAD_M = 600;
 /** Moving cars within 80 m that make traffic full on their own. */
-export const TRAFFIC_FULL_CARS = 6;
+const TRAFFIC_FULL_CARS = 6;
 /** People within 30 m that make a full crowd. */
-export const CROWD_FULL_PEDS = 8;
+const CROWD_FULL_PEDS = 8;
 /** Trees within 60 m that fill the birdsong on their own. */
-export const BIRDS_FULL_TREES = 30;
+const BIRDS_FULL_TREES = 30;
 /** How much a fully green ground adds to the birdsong. */
 const BIRDS_GREEN_WEIGHT = 0.8;
 /** Full traffic drowns this share of the birds. */

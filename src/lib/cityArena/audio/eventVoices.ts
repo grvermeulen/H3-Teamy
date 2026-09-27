@@ -132,7 +132,7 @@ const DOOR_TONES: Record<"open" | "eject" | "close", Tone> = {
 };
 
 /** Gain boost on the explosion clip when it voices the tank's cannon. */
-export const CANNON_CLIP_GAIN = 1.25;
+const CANNON_CLIP_GAIN = 1.25;
 
 /**
  * The recorded clip for an event, or null for one that only the synthesiser voices.

@@ -55,25 +55,19 @@ export type SpatialMix = { gain: number; pan: number; cutoffHz: number };
 /** The low-pass cutoff of a sound close by: wide open, effectively no filter. */
 export const OPEN_CUTOFF_HZ = 18000;
 /** The cutoff a sound closes toward at the edge of hearing. */
-export const FAR_CUTOFF_HZ = 1500;
+const FAR_CUTOFF_HZ = 1500;
 /** Hard left/right is never reached: a single ear playing alone sounds broken, not placed. */
 export const MAX_PAN = 0.85;
 /** A source straight behind the listener plays at this share of its level. */
-export const BEHIND_GAIN = 0.8;
+const BEHIND_GAIN = 0.8;
 /** …and with its cutoff at this share. */
-export const BEHIND_CUTOFF_SHARE = 0.55;
+const BEHIND_CUTOFF_SHARE = 0.55;
 /** Below this gain a voice is not worth a node: it plays nothing. */
 export const MIN_AUDIBLE_GAIN = 0.01;
 /** The last share of a profile's reach over which the level fades linearly to silence. */
 const EDGE_FADE_SHARE = 0.15;
 /** In 2D the listener faces screen-up: north, −π/2 in sim angles (y points south). */
 export const TOP_DOWN_FACING = -Math.PI / 2;
-/** A voice heard as if at the listener: full, centred and unfiltered. */
-export const CENTRED_MIX: SpatialMix = {
-  gain: 1,
-  pan: 0,
-  cutoffHz: OPEN_CUTOFF_HZ,
-};
 
 /** Clamps `value` to `[min, max]`. */
 function clamp(value: number, min: number, max: number): number {

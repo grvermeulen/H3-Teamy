@@ -246,6 +246,35 @@ describe("placed voices", () => {
     expect(player.liveVoices()).toBe(MAX_ONE_SHOTS);
   });
 
+  it("reports a loop that cannot be moved, tagged with its clip, without throwing", async () => {
+    const { context, player } = await loaded(["engine"]);
+    const loop = player.startLoop("engine", placed)!;
+    context.gains.at(-1)!.gain.setTargetAtTime = () => {
+      throw new RangeError("non-finite");
+    };
+    expect(() => loop.setPlacement(placed)).not.toThrow();
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(RangeError),
+      { tags: { area: "arena", kind: "audio", clip: "engine" } },
+    );
+  });
+
+  it("reports a quietest voice that will not stop, and still plays the louder newcomer", async () => {
+    const { context, player } = await loaded(["pistol"]);
+    const faint = { ...placed, gain: 0.1 };
+    for (let voice = 0; voice < MAX_ONE_SHOTS; voice++)
+      player.play("pistol", 1, 1, faint);
+    context.sources[0]!.stop = () => {
+      throw new Error("already stopped");
+    };
+    expect(player.play("pistol", 1, 1, placed)).toBe(true);
+    expect(context.sources).toHaveLength(MAX_ONE_SHOTS + 1);
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      { tags: { area: "arena", kind: "audio", clip: "pistol" } },
+    );
+  });
+
   it("frees the voices once their clips have ended", async () => {
     const { context, player } = await loaded(["pistol"]);
     for (let voice = 0; voice < MAX_ONE_SHOTS; voice++) player.play("pistol");

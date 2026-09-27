@@ -51,11 +51,11 @@ export const EMPTY_SURROUNDINGS: Surroundings = {
 /** How far roads and traffic are heard, metres. */
 export const TRAFFIC_RADIUS_M = 80;
 /** How far a crowd is heard, metres. */
-export const PEDS_RADIUS_M = 30;
+const PEDS_RADIUS_M = 30;
 /** How far trees and the ground count, metres. */
-export const GROUND_RADIUS_M = 60;
+const GROUND_RADIUS_M = 60;
 /** Spacing of the ground samples, metres: a 9 × 9 grid over the 120 m square. */
-export const GROUND_SAMPLE_STEP_M = 15;
+const GROUND_SAMPLE_STEP_M = 15;
 /** Below this speed a car is parked, m/s. */
 const MOVING_MPS = 0.5;
 /** How far a tile's geometry reaches past its own rectangle (`world/decode.ts`), metres. */

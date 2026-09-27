@@ -63,9 +63,9 @@ export type WorldAudio = {
 };
 
 /** Below this speed a car is parked and its engine is not heard, m/s. */
-export const MIN_MOVING_MPS = 0.5;
+const MIN_MOVING_MPS = 0.5;
 /** At this speed and above a passing car is heard at its full level, m/s. */
-export const TRAFFIC_FULL_LEVEL_MPS = 12;
+const TRAFFIC_FULL_LEVEL_MPS = 12;
 /** A traffic engine's level relative to the engine clip, which is recorded from inside a car. */
 const TRAFFIC_ENGINE_LEVEL = 0.8;
 /** Seconds an engine or siren voice stays running silent before it is stopped. */

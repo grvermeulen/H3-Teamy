@@ -15,7 +15,7 @@ import type {
 } from "./sound";
 
 /** Seconds a moving voice's placement takes to settle (three time constants of the ease). */
-export const PLACEMENT_RAMP_S = 0.1;
+const PLACEMENT_RAMP_S = 0.1;
 /** Time constants in {@link PLACEMENT_RAMP_S}: after three an exponential ease is 95 % there. */
 const RAMP_TIME_CONSTANTS = 3;
 

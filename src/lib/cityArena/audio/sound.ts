@@ -143,7 +143,7 @@ const DRONE_BASE_HZ = 70;
 const DRONE_HZ_PER_MPS = 5;
 const DRONE_TOP_SPEED_MPS = 30;
 /** A loud event ducks the radio only when it is heard at least this loud: not a distant shot. */
-export const RADIO_DUCK_MIN_GAIN = 0.2;
+const RADIO_DUCK_MIN_GAIN = 0.2;
 /** How many voiced events the debug snapshot keeps. */
 const RECENT_EVENTS = 8;
 /** Spot-sound seeds are drawn from this many values. */
@@ -157,7 +157,7 @@ export const FOOTSTEP_RATE_JITTER = 0.06;
  * @param error - What was thrown.
  * @param kind - Which part of the sound layer failed.
  */
-export function reportAudioError(error: unknown, kind: string): void {
+function reportAudioError(error: unknown, kind: string): void {
   Sentry.captureException(error, { tags: { area: "arena", kind } });
 }
 

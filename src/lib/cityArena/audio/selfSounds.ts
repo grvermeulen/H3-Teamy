@@ -23,13 +23,13 @@ export const RUN_SPEED_MPS = 4;
 const MIN_STEP_SPEED_MPS = 0.3;
 
 /** A car corners hard enough to squeal past this sideways acceleration, m/s². */
-export const SKID_LATERAL_MPS2 = 24;
+const SKID_LATERAL_MPS2 = 24;
 /** …or brakes hard enough past this deceleration, m/s². */
-export const SKID_DECEL_MPS2 = 12;
+const SKID_DECEL_MPS2 = 12;
 /** Deceleration beyond this is a crash, which the impact voices; not a skid, m/s². */
 const SKID_CRASH_DECEL_MPS2 = 40;
 /** Below this speed nothing squeals, m/s. */
-export const SKID_MIN_SPEED_MPS = 10;
+const SKID_MIN_SPEED_MPS = 10;
 /** Seconds after a squeal before the next one may start. */
 export const SKID_COOLDOWN_S = 1.5;
 

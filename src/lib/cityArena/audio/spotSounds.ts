@@ -57,9 +57,9 @@ export const CHURCH_LANDMARK_ID = "cunerakerk";
 /** How close to the church its bell is heard, metres. */
 export const CHURCH_BELL_RANGE_M = 700;
 /** How close a person must be for their chatter to be heard, metres. */
-export const CHATTER_RANGE_M = 18;
+const CHATTER_RANGE_M = 18;
 /** How close a car must be for its horn, metres. */
-export const HORN_RANGE_M = 60;
+const HORN_RANGE_M = 60;
 /** Weighted road metres around that make a street for bells and scooters. */
 const STREET_MIN_ROAD_M = 40;
 /** Green ground share, or trees, that make a place for dogs. */
@@ -235,7 +235,7 @@ export function createSpotScheduler(seed: number): SpotScheduler {
 }
 
 /** People closer than this are heard walking, metres (spec §6: "within a few metres"). */
-export const PED_STEP_RANGE_M = 6;
+const PED_STEP_RANGE_M = 6;
 /** Seconds between a nearby walker's footfalls. */
 export const PED_STEP_INTERVAL_S = 0.5;
 
