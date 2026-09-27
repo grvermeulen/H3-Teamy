@@ -31,6 +31,8 @@ export type BufferSourceLike = AudioNodeLike & {
   playbackRate: AudioParamLike;
   start(when?: number): void;
   stop(when?: number): void;
+  /** Called once the clip has played out or been stopped. */
+  onended?: (() => void) | null;
 };
 
 /** What the sample player needs from a Web Audio context, beyond what the synth needs. */
@@ -209,6 +211,25 @@ function loopHandle(
   };
 }
 
+/**
+ * Frees a one-shot's nodes once it has played out or been cut short, so a long firefight does
+ * not leave its gains, filters and panners hanging off the master.
+ */
+function releaseWhenEnded(
+  { source, chain }: StartedVoice,
+  clip: ClipName,
+): void {
+  source.onended = () => {
+    source.onended = null;
+    try {
+      source.disconnect();
+      disconnectVoiceChain(chain);
+    } catch (error: unknown) {
+      reportClipError(error, clip);
+    }
+  };
+}
+
 /** Starts `buffer` as `clip` through its nodes, or null when the context refuses. */
 function startVoice(
   context: SampleContextLike,
@@ -284,6 +305,7 @@ export function createSamplePlayer(
         placement: placement ?? null,
       });
       if (!started) return false;
+      releaseWhenEnded(started, clip);
       const endsAt = context.currentTime + buffer.duration / rate;
       cap.add({ endsAt, level: heard, source: started.source });
       return true;

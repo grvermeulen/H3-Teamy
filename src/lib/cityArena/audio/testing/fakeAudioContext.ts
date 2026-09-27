@@ -191,12 +191,18 @@ function sourceNodes(
     },
     createBufferSource(): FakeBufferSource {
       const noBuffer: AudioBufferLike | null = null;
-      const source = playable({
+      const source: FakeBufferSource = playable({
         buffer: noBuffer,
         loop: false,
         playbackRate: param([]),
       });
       source.playbackRate = param(source.operations);
+      // A real source fires `ended` when stopped as well as when it plays out.
+      const stop = source.stop;
+      source.stop = () => {
+        stop();
+        source.onended?.();
+      };
       lists.sources.push(source);
       return source;
     },

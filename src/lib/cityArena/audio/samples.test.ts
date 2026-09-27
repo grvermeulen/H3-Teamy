@@ -246,6 +246,34 @@ describe("placed voices", () => {
     expect(player.liveVoices()).toBe(MAX_ONE_SHOTS);
   });
 
+  it("disconnects a one-shot's nodes when its clip ends", async () => {
+    const { context, player } = await loaded(["pistol"]);
+    player.play("pistol", 1, 1, placed);
+    const source = context.sources.at(-1)!;
+    const chain = [
+      context.gains.at(-1)!,
+      ...context.filters,
+      ...context.panners,
+    ];
+    source.onended?.();
+    expect(source.operations).toContainEqual({ kind: "disconnect" });
+    for (const node of chain)
+      expect(node.operations).toContainEqual({ kind: "disconnect" });
+  });
+
+  it("disconnects the nodes of a voice the cap cuts short", async () => {
+    const { context, player } = await loaded(["pistol"]);
+    player.play("pistol", 1, 1, { ...placed, gain: 0.1 });
+    const faintGain = context.gains.at(-1)!;
+    for (let voice = 1; voice < MAX_ONE_SHOTS; voice++)
+      player.play("pistol", 1, 1, placed);
+    player.play("pistol", 1, 1, { ...placed, gain: 0.9 });
+    expect(context.sources[0]!.operations).toContainEqual({
+      kind: "disconnect",
+    });
+    expect(faintGain.operations).toContainEqual({ kind: "disconnect" });
+  });
+
   it("reports a loop that cannot be moved, tagged with its clip, without throwing", async () => {
     const { context, player } = await loaded(["engine"]);
     const loop = player.startLoop("engine", placed)!;
