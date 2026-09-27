@@ -283,6 +283,21 @@ function glowPoints(count: number, materials: WorldMaterials): Points {
   return points;
 }
 
+/** The halo points over a layer's lamps and, when asked, the pools of light under them. */
+function lampLights(
+  kinds: readonly KindMeshes[],
+  materials: WorldMaterials,
+  withPools: boolean,
+): LampLights {
+  const lamps = kinds.find((entry) => entry.kind === "lamp");
+  if (!lamps) return { glow: null, pools: null };
+  const count = lamps.pieces.length;
+  return {
+    glow: glowPoints(count, materials),
+    pools: withPools ? createLampPools(count, materials.lampPool) : null,
+  };
+}
+
 /**
  * Instanced furniture for one cell: per kind one mesh per part (lamp: pole with arm, glowing
  * head; bench; shelter: frame, glass, lit poster), one halo point per lamp, a pool of light under
@@ -313,13 +328,9 @@ export function buildFurnitureLayer(
     }))
     .filter(({ indices }) => indices.length > 0)
     .map(({ kind, indices }) => kindMeshes(kind, indices, materials));
-  const lamps = kinds.find((entry) => entry.kind === "lamp");
-  const glow = lamps ? glowPoints(lamps.pieces.length, materials) : null;
-  const pools =
-    lamps && options.pools
-      ? createLampPools(lamps.pieces.length, materials.lampPool)
-      : null;
-  const poser = createPoser(furniture, kinds, { glow, pools }, origin);
+  const lights = lampLights(kinds, materials, options.pools ?? false);
+  const { glow, pools } = lights;
+  const poser = createPoser(furniture, kinds, lights, origin);
   for (const piece of furniture) writePose(poser, piece);
   flushPoses(poser);
   const objects: Object3D[] = [
