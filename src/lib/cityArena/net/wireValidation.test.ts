@@ -35,6 +35,21 @@ describe("untrusted arena wire messages", () => {
     }
   });
 
+  it("rejects a vehicle row whose health exceeds its kind's maximum", () => {
+    expect(
+      isSnapshot({
+        ...snapshot,
+        v: [[199, 1, 0, 0, 0, 0, 0, 200, 0, 0]],
+      }),
+    ).toBe(false);
+    expect(
+      isSnapshot({
+        ...snapshot,
+        v: [[199, 6, 0, 0, 0, 0, 0, 350, 0, 0]],
+      }),
+    ).toBe(true);
+  });
+
   it("requires the protocol version and bounds nested rows before decoding", () => {
     expect(isSnapshot(snapshot)).toBe(true);
     for (const value of [

@@ -173,6 +173,15 @@ describe("checkInvariants", () => {
     ).toContain("driver of vehicle 42 has no intact car");
   });
 
+  it("reports vehicle health above a kind's maximum", () => {
+    expect(
+      checkInvariants({
+        ...healthy,
+        vehicles: [{ ...createVehicle(199, "sedan", [0, 0], 0, 0), health: 200 }],
+      }),
+    ).toContain("vehicle 199 health 200 out of range (max 180)");
+  });
+
   it("reports cop health, police drivers, expired bodies and overdue pickups", () => {
     const cop = createCop(5, [0, 0], "pistol", 0);
     expect(
