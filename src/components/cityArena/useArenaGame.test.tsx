@@ -12,6 +12,7 @@ import { createStaticRaster } from "@/lib/cityArena/render/staticRaster";
 import {
   createFakeContext,
   createFakeTarget,
+  fakeGetContext,
   type FakeContext,
 } from "@/lib/cityArena/render/testing/fakeContext";
 import { createArenaState } from "@/lib/cityArena/sim/arena";
@@ -224,8 +225,8 @@ type RenderWithCanvasOptions = {
  */
 function renderArenaGameWithCanvas(options: RenderWithCanvasOptions = {}) {
   const fakeContext = createFakeContext();
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
-    fakeContext as unknown as CanvasRenderingContext2D,
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    fakeGetContext(() => fakeContext),
   );
   const canvas = document.createElement("canvas");
   // `canvasRef` must keep one stable identity across re-renders: `useArenaBoot` and

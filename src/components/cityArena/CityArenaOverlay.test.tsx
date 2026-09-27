@@ -12,6 +12,7 @@ import type { MapIndex, MapTile } from "@/lib/cityArena/world/mapTypes";
 import {
   createFakeContext,
   createFakeTarget,
+  fakeGetContext,
 } from "@/lib/cityArena/render/testing/fakeContext";
 
 /** Stubs `document.pointerLockElement`, which jsdom does not implement. */
@@ -184,10 +185,10 @@ describe("CityArenaOverlay", () => {
         dispatchEvent: vi.fn(),
       })),
     });
+    // jsdom's canvas getContext returns null; the fake only implements the RasterContext subset
+    // the renderer needs, and a WebGL2 probe finds a context, as on a desktop browser.
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
-      // jsdom's canvas getContext returns null; the fake only implements the RasterContext
-      // subset the renderer needs, so a cast is unavoidable here (test file only).
-      () => createFakeContext() as unknown as CanvasRenderingContext2D,
+      fakeGetContext(),
     );
     // Yield between frames so React can commit the asynchronously loaded room and world.
     let rafCount = 0;

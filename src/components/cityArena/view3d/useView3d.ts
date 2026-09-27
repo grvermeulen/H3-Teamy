@@ -4,7 +4,8 @@
  * `render3d/` through a dynamic `import()` — so three.js stays out of the 2D bundle — starts it on
  * a fresh WebGL canvas, binds mouse-look to the 2D canvas above, and hands both to the runtime.
  * When the view cannot start or breaks, it shows a toast and returns to 2D; a device without
- * WebGL2 is expected and leaves only a breadcrumb, every other failure goes to Sentry.
+ * WebGL2 (asked before three.js is even downloaded) and a chunk that failed to download are
+ * expected and leave only a breadcrumb, every other failure goes to Sentry.
  */
 import * as Sentry from "@sentry/nextjs";
 import {
@@ -22,7 +23,12 @@ import {
 import type { CameraMode, View3dHandle } from "@/lib/cityArena/render3d";
 import { occupiedVehicle } from "@/lib/cityArena/sim/boarding";
 import { playerById } from "@/lib/cityArena/sim/players";
-import { isWebGl2Unavailable } from "@/lib/cityArena/webgl2";
+import { isChunkLoadError } from "@/lib/cityArena/chunkLoadError";
+import {
+  hasWebGl2,
+  isWebGl2Unavailable,
+  WebGl2UnavailableError,
+} from "@/lib/cityArena/webgl2";
 import { reportArenaError, type Runtime } from "../arenaRuntime";
 
 /** The toast shown when the 3D view cannot start or breaks (spec §7). */
@@ -57,21 +63,33 @@ function startYaw(runtime: Runtime): number {
   return occupiedVehicle(runtime.state, player)?.heading ?? player.facing;
 }
 
+/** The breadcrumb for a 3D failure that is expected on some devices or deploys, else `null`. */
+function expectedFailure(error: unknown): string | null {
+  if (isWebGl2Unavailable(error))
+    return "3D view unavailable: no WebGL2; staying in 2D";
+  if (isChunkLoadError(error))
+    return "3D view chunk failed to download; staying in 2D";
+  return null;
+}
+
 /**
- * Reports a 3D failure: a device without WebGL2 is expected and leaves a breadcrumb (AGENTS.md
- * Sentry-noise policy), anything else is a real error.
+ * Reports a 3D failure: a device without WebGL2, or the 3D chunk failing to download (a tab still
+ * on the previous deploy, a dropped connection), is expected and leaves a breadcrumb (AGENTS.md
+ * Sentry-noise policy); anything else is a real error.
  *
  * @param error - What the import, the start or a frame threw.
  */
 export function reportView3dFailure(error: unknown): void {
-  if (!isWebGl2Unavailable(error)) {
+  const expected = expectedFailure(error);
+  if (expected === null) {
     reportArenaError(error, "render3d");
     return;
   }
   Sentry.addBreadcrumb({
     category: "arena",
     level: "warning",
-    message: "3D view unavailable: no WebGL2; staying in 2D",
+    message: expected,
+    data: { error: error instanceof Error ? error.name : String(error) },
   });
 }
 
@@ -181,9 +199,15 @@ function handOver(
   };
 }
 
-/** Loads the 3D module — the one dynamic `import()` that keeps three.js out of the 2D bundle. */
+/**
+ * Loads the 3D module — the one dynamic `import()` that keeps three.js out of the 2D bundle —
+ * after checking the device has WebGL2 at all, so one without it never downloads three.js.
+ */
 function loadRender3d(): Promise<Render3dModule> {
-  return import("@/lib/cityArena/render3d");
+  return Promise.resolve().then(() => {
+    if (!hasWebGl2()) throw new WebGl2UnavailableError();
+    return import("@/lib/cityArena/render3d");
+  });
 }
 
 /** What {@link mountView3d} needs; the refs are read when the module arrives. */

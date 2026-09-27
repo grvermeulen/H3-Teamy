@@ -26,3 +26,18 @@ export class WebGl2UnavailableError extends Error {
 export function isWebGl2Unavailable(error: unknown): boolean {
   return error instanceof Error && error.name === WEBGL2_UNAVAILABLE;
 }
+
+/**
+ * Whether this browser can make a WebGL2 context, asked of a throwaway canvas before the 3D view's
+ * chunk is downloaded — a device without WebGL2 then never fetches three.js at all. The probe's
+ * context is lost straight away, so it does not count against the browser's live-context limit.
+ *
+ * @param doc - The document to make the probe canvas in.
+ * @returns True when a WebGL2 context was available.
+ */
+export function hasWebGl2(doc: Document = document): boolean {
+  const context = doc.createElement("canvas").getContext("webgl2");
+  if (!context) return false;
+  context.getExtension("WEBGL_lose_context")?.loseContext();
+  return true;
+}

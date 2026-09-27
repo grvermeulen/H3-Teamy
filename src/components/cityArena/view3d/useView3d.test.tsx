@@ -2,12 +2,14 @@ import * as Sentry from "@sentry/nextjs";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { View3dFrame, View3dHandle } from "@/lib/cityArena/render3d";
+import { fakeGetContext } from "@/lib/cityArena/render/testing/fakeContext";
 import { WebGl2UnavailableError } from "@/lib/cityArena/webgl2";
 import type { Runtime } from "../arenaRuntime";
 import {
   VIEW3D_FAILED_TEXT,
   VIEW3D_NOTICE_MS,
   mountView3d,
+  reportView3dFailure,
   useReleaseLockWhile,
   useView3d,
 } from "./useView3d";
@@ -91,12 +93,32 @@ describe("useView3d", () => {
     vi.clearAllMocks();
     stubPointerLock(null);
     document.exitPointerLock = vi.fn();
+    // jsdom has no WebGL; a desktop browser does, so the probe before the download passes.
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+      fakeGetContext(),
+    );
   });
 
   afterEach(() => {
     stubPointerLock(null);
     cleanup();
     vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("never downloads three.js on a device without WebGL2: a toast, a fallback, no Sentry error", async () => {
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+    const { result, onFallback, on } = renderView3d();
+    on();
+    await waitFor(() => expect(onFallback).toHaveBeenCalledTimes(1));
+    expect(mockCreateView3d).not.toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+    expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "3D view unavailable: no WebGL2; staying in 2D",
+      }),
+    );
+    expect(result.current.notice).toBe(VIEW3D_FAILED_TEXT);
   });
 
   it("starts the view on a fresh canvas in the layer, behind the player, and frees both in 2D", async () => {
@@ -319,7 +341,7 @@ describe("mountView3d", () => {
   });
 
   it("still reports a module that fails after the view was switched off, without a toast", async () => {
-    const error = new Error("Loading chunk render3d failed");
+    const error = new Error("render3d threw while evaluating");
     const layer = document.createElement("div");
     const onFailure = vi.fn();
     const onFallback = vi.fn();
@@ -360,5 +382,41 @@ describe("useReleaseLockWhile", () => {
     rerender({ open: false });
     rerender({ open: true });
     expect(release).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("reportView3dFailure", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it.each([
+    Object.assign(new Error("Failed to load chunk /_next/static/chunks/x.js"), {
+      name: "ChunkLoadError",
+    }),
+    new TypeError("Failed to fetch dynamically imported module: /x.js"),
+    new TypeError("Importing a module script failed."),
+  ])(
+    "leaves a breadcrumb, not an issue, for a 3D chunk that failed to download: %s",
+    (error) => {
+      reportView3dFailure(error);
+      expect(Sentry.captureException).not.toHaveBeenCalled();
+      expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+        expect.objectContaining({
+          category: "arena",
+          level: "warning",
+          message: "3D view chunk failed to download; staying in 2D",
+        }),
+      );
+    },
+  );
+
+  it("reports anything else as a render3d error", () => {
+    const error = new Error("shader compile failed");
+    reportView3dFailure(error);
+    expect(Sentry.captureException).toHaveBeenCalledWith(error, {
+      tags: { area: "arena", kind: "render3d" },
+    });
+    expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
   });
 });
