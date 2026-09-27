@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { INITIAL_FEEDBACK } from "@/lib/cityArena/render/feedback";
 import { createArenaPlayer } from "@/lib/cityArena/sim/roster";
 import type { ArenaState } from "@/lib/cityArena/sim/types";
-import { feelTick, type FeelRuntime } from "./arenaFeel";
+import { eventSources, feelTick, type FeelRuntime } from "./arenaFeel";
 
 /** A state holding only this client's player and the events given. */
 function stateWith(health: number, events: ArenaState["events"]): ArenaState {
@@ -19,6 +19,7 @@ function runtime(): FeelRuntime {
     sound: {
       unlock: vi.fn(),
       setEnabled: vi.fn(),
+      setListener: vi.fn(),
       handleEvents: vi.fn(),
       updateEngine: vi.fn(),
       updateSiren: vi.fn(),
@@ -43,7 +44,10 @@ describe("feelTick", () => {
       { kind: "pickup", pickupKind: "uzi", playerId: 4, x: 0, y: 0 },
     ];
     feelTick(feel, stateWith(70, pickup));
-    expect(feel.sound.handleEvents).toHaveBeenLastCalledWith(pickup);
+    expect(feel.sound.handleEvents).toHaveBeenLastCalledWith(
+      pickup,
+      expect.objectContaining({ selfId: 4 }),
+    );
     expect(
       vi.mocked(feel.haptics.fire).mock.calls.map(([kind]) => kind),
     ).toEqual(["hit", "pickup"]);
@@ -58,7 +62,10 @@ describe("feelTick", () => {
       { kind: "collapse", structureId: 1, x: 5, y: 0, killerId: null },
     ];
     feelTick(feel, stateWith(100, collapse));
-    expect(feel.sound.handleEvents).toHaveBeenLastCalledWith(collapse);
+    expect(feel.sound.handleEvents).toHaveBeenLastCalledWith(
+      collapse,
+      expect.objectContaining({ selfId: 4 }),
+    );
     expect(
       vi.mocked(feel.haptics.fire).mock.calls.map(([kind]) => kind),
     ).toEqual(["explosion"]);
@@ -72,5 +79,17 @@ describe("feelTick", () => {
     expect(feel.sound.handleEvents).toHaveBeenCalledTimes(1);
     expect(feel.haptics.fire).not.toHaveBeenCalled();
     expect(feel.feedback).toBe(INITIAL_FEEDBACK);
+  });
+});
+
+describe("eventSources", () => {
+  it("names this client and finds a car by id, or nothing for one that is gone", () => {
+    const state = {
+      vehicles: [{ id: 3, x: 12, y: -4 }],
+    } as unknown as ArenaState;
+    const sources = eventSources(state, 4);
+    expect(sources.selfId).toBe(4);
+    expect(sources.vehicleAt(3)).toMatchObject({ x: 12, y: -4 });
+    expect(sources.vehicleAt(9)).toBeNull();
   });
 });

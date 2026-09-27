@@ -8,6 +8,7 @@
  * stepping the world: the offline stepper, the host loop and the client loop alike.
  */
 
+import type { EventSources } from "@/lib/cityArena/audio/eventVoices";
 import { hapticPulses } from "@/lib/cityArena/input/haptics";
 import { stepFeedback } from "@/lib/cityArena/render/feedback";
 import { playerById } from "@/lib/cityArena/sim/players";
@@ -21,13 +22,31 @@ export type FeelRuntime = Pick<
 >;
 
 /**
+ * What the sound layer needs to voice a tick's events: who this client is, and where a car is.
+ *
+ * @param state - The state after the tick.
+ * @param selfId - This client's player id.
+ * @returns The lookups.
+ */
+export function eventSources(state: ArenaState, selfId: number): EventSources {
+  return {
+    selfId,
+    vehicleAt: (id) =>
+      state.vehicles.find((vehicle) => vehicle.id === id) ?? null,
+  };
+}
+
+/**
  * Feeds one tick's events to the sound, the haptics and the feedback state.
  *
  * @param runtime - The runtime, whose `feedback` is replaced with this tick's.
  * @param state - The state after the tick, with the events it produced.
  */
 export function feelTick(runtime: FeelRuntime, state: ArenaState): void {
-  runtime.sound.handleEvents(state.events);
+  runtime.sound.handleEvents(
+    state.events,
+    eventSources(state, runtime.netplay.playerId),
+  );
   const me = playerById(state, runtime.netplay.playerId);
   if (!me) return;
   const previous = runtime.feedback;

@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ArenaEvent } from "../sim/types";
 import type { ClipName } from "./clips";
 import type { RadioPlayer } from "./radio/radio";
 import { createSamplePlayer, type SamplePlayer } from "./samples";
+import { listenerAt, type SpatialMix } from "./spatial";
 import { createFakeAudioContext } from "./testing/fakeAudioContext";
 import {
   ENGINE_RATE_MAX,
@@ -19,7 +21,24 @@ function playerWith(clips: ClipName[]): SamplePlayer {
     preload: vi.fn(async () => undefined),
     play: vi.fn((clip: ClipName) => clips.includes(clip)),
     startLoop: vi.fn(() => null),
+    liveVoices: () => 0,
     has: (clip: ClipName) => clips.includes(clip),
+  };
+}
+
+/** A radio that does nothing, for tests that only watch one of its controls. */
+function silentRadio(): RadioPlayer {
+  return {
+    unlock: vi.fn(),
+    setInCar: vi.fn(),
+    setEnabled: vi.fn(),
+    setSoundEnabled: vi.fn(),
+    tune: vi.fn(() => null),
+    nextStation: vi.fn(() => null),
+    station: () => null,
+    playing: () => false,
+    duck: vi.fn(),
+    dispose: vi.fn(),
   };
 }
 
@@ -53,9 +72,9 @@ describe("createArenaSound", () => {
       { kind: "shot", weapon: "cannon", ownerId: 0, x: 0, y: 0 },
     ]);
     expect(player.play).toHaveBeenCalledTimes(1);
-    expect(player.play).toHaveBeenCalledWith("explosion", 1, 1.25);
+    expect(player.play).toHaveBeenCalledWith("explosion", 1, 1.25, undefined);
     sound.handleEvents([{ kind: "explosion", x: 0, y: 0 }]);
-    expect(player.play).toHaveBeenLastCalledWith("explosion");
+    expect(player.play).toHaveBeenLastCalledWith("explosion", 1, 1, undefined);
     const { context, factory: bare } = createFakeAudioContext();
     const silent = createArenaSound(bare, true, () => playerWith([]));
     silent.unlock();
@@ -73,7 +92,7 @@ describe("createArenaSound", () => {
     sound.handleEvents([
       { kind: "collapse", structureId: 1, x: 0, y: 0, killerId: null },
     ]);
-    expect(player.play).toHaveBeenCalledWith("explosion");
+    expect(player.play).toHaveBeenCalledWith("explosion", 1, 1, undefined);
     const { context, factory: bare } = createFakeAudioContext();
     const silent = createArenaSound(bare, true, () => playerWith([]));
     silent.unlock();
@@ -198,7 +217,7 @@ describe("createArenaSound", () => {
 
   it("runs the engine from the clip when it has one: faster is higher, and stopping stops it", () => {
     const { context, factory } = createFakeAudioContext();
-    const loop = { setRate: vi.fn(), stop: vi.fn() };
+    const loop = { setRate: vi.fn(), setPlacement: vi.fn(), stop: vi.fn() };
     const player = { ...playerWith(["engine"]), startLoop: vi.fn(() => loop) };
     const sound = createArenaSound(factory, true, () => player);
     sound.updateEngine(0, true);
@@ -217,7 +236,7 @@ describe("createArenaSound", () => {
 
   it("runs the siren loop once while a chase is near and stops it when it is not", () => {
     const { context, factory } = createFakeAudioContext();
-    const loop = { setRate: vi.fn(), stop: vi.fn() };
+    const loop = { setRate: vi.fn(), setPlacement: vi.fn(), stop: vi.fn() };
     const player = { ...playerWith(["siren"]), startLoop: vi.fn(() => loop) };
     const sound = createArenaSound(factory, true, () => player);
     sound.updateSiren(true);
@@ -234,7 +253,7 @@ describe("createArenaSound", () => {
 
   it("keeps the siren silent while sound is off and without its clip", () => {
     const { factory } = createFakeAudioContext();
-    const loop = { setRate: vi.fn(), stop: vi.fn() };
+    const loop = { setRate: vi.fn(), setPlacement: vi.fn(), stop: vi.fn() };
     const player = { ...playerWith(["siren"]), startLoop: vi.fn(() => loop) };
     const sound = createArenaSound(factory, false, () => player);
     sound.updateSiren(true);
@@ -261,13 +280,14 @@ describe("createArenaSound", () => {
     // The clips arrive whenever the preload finishes; a car already running on the drone must
     // hand over to the clip rather than play both.
     const { context, factory } = createFakeAudioContext();
-    const loop = { setRate: vi.fn(), stop: vi.fn() };
+    const loop = { setRate: vi.fn(), setPlacement: vi.fn(), stop: vi.fn() };
     let landed = false;
     const player: SamplePlayer = {
       preload: vi.fn(async () => undefined),
       play: vi.fn(() => false),
       startLoop: vi.fn(() => loop),
       has: () => landed,
+      liveVoices: () => 0,
     };
     const sound = createArenaSound(factory, true, () => player);
     sound.updateEngine(4, true);
@@ -322,5 +342,103 @@ describe("engineRate", () => {
     expect(radio.duck).toHaveBeenCalledTimes(2);
     sound.dispose();
     expect(radio.dispose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("placing sounds around the listener", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const northUp = listenerAt(0, 0, null);
+
+  /** The placement the player was handed for its `index`th play. */
+  function placementOf(player: SamplePlayer, index: number): SpatialMix {
+    return vi.mocked(player.play).mock.calls[index]![3]!;
+  }
+
+  it("plays a far shot quieter than a near one", () => {
+    const player = playerWith(["pistol"]);
+    const { factory } = createFakeAudioContext();
+    const sound = createArenaSound(factory, true, () => player);
+    sound.setListener(northUp);
+    sound.handleEvents([
+      { kind: "shot", weapon: "pistol", ownerId: 1, x: 0, y: -10 },
+      { kind: "shot", weapon: "pistol", ownerId: 1, x: 0, y: -100 },
+    ]);
+    expect(placementOf(player, 1).gain).toBeLessThan(
+      placementOf(player, 0).gain,
+    );
+    expect(placementOf(player, 1).cutoffHz).toBeLessThan(
+      placementOf(player, 0).cutoffHz,
+    );
+  });
+
+  it("pans a shot east of a north-up 2D listener to the right, synthesised or not", () => {
+    const player = playerWith(["pistol"]);
+    const { factory } = createFakeAudioContext();
+    const sound = createArenaSound(factory, true, () => player);
+    sound.setListener(northUp);
+    sound.handleEvents([
+      { kind: "shot", weapon: "pistol", ownerId: 1, x: 40, y: 0 },
+    ]);
+    expect(placementOf(player, 0).pan).toBeGreaterThan(0.5);
+    const { context, factory: bare } = createFakeAudioContext();
+    const synth = createArenaSound(bare, true);
+    synth.setListener(northUp);
+    synth.handleEvents([
+      { kind: "hit", target: "ped", ownerId: 1, x: 20, y: 0 },
+    ]);
+    expect(context.panners).toHaveLength(1);
+    expect(context.panners[0]!.pan.value).toBeGreaterThan(0.5);
+  });
+
+  it("plays nothing at all for a shot past its reach", () => {
+    const player = playerWith(["pistol"]);
+    const { context, factory } = createFakeAudioContext();
+    const sound = createArenaSound(factory, true, () => player);
+    sound.setListener(northUp);
+    sound.handleEvents([
+      { kind: "shot", weapon: "pistol", ownerId: 1, x: 0, y: -400 },
+      { kind: "shot", weapon: "uzi", ownerId: 1, x: 0, y: -400 },
+    ]);
+    expect(player.play).not.toHaveBeenCalled();
+    expect(context.oscillators).toHaveLength(0);
+  });
+
+  it("places an impact at its car, and plays it unplaced when the car is unknown", () => {
+    const player = playerWith(["impact"]);
+    const { factory } = createFakeAudioContext();
+    const sound = createArenaSound(factory, true, () => player);
+    sound.setListener(northUp);
+    const impact: ArenaEvent = {
+      kind: "impact",
+      vehicleId: 7,
+      otherVehicleId: null,
+      impactSpeed: 9,
+    };
+    sound.handleEvents([impact], {
+      selfId: 0,
+      vehicleAt: (id) => (id === 7 ? { x: -30, y: 0 } : null),
+    });
+    expect(placementOf(player, 0).pan).toBeLessThan(-0.5);
+    sound.handleEvents([impact], { selfId: 0, vehicleAt: () => null });
+    expect(vi.mocked(player.play).mock.calls[1]![3]).toBeUndefined();
+  });
+
+  it("ducks the radio for a shot close by but not for a faint one far off", () => {
+    const { factory } = createFakeAudioContext();
+    const duck = vi.fn();
+    const radio = { ...silentRadio(), duck };
+    const sound = createArenaSound(factory, true, undefined, () => radio);
+    sound.setListener(northUp);
+    sound.handleEvents([
+      { kind: "shot", weapon: "pistol", ownerId: 1, x: 0, y: -120 },
+    ]);
+    expect(duck).not.toHaveBeenCalled();
+    sound.handleEvents([
+      { kind: "shot", weapon: "pistol", ownerId: 1, x: 0, y: -5 },
+    ]);
+    expect(duck).toHaveBeenCalledTimes(1);
   });
 });

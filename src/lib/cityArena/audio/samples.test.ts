@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as Sentry from "@sentry/nextjs";
 import { AUDIO_CLIPS, CLIP_NAMES, clipUrl, type ClipName } from "./clips";
-import { browserSamplePlayer, createSamplePlayer } from "./samples";
+import {
+  MAX_ONE_SHOTS,
+  browserSamplePlayer,
+  createSamplePlayer,
+} from "./samples";
+import type { SpatialMix } from "./spatial";
 import { createFakeAudioContext } from "./testing/fakeAudioContext";
 
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
@@ -154,5 +159,99 @@ describe("browserSamplePlayer", () => {
     };
     expect(browserSamplePlayer(synthOnly, context.destination)).toBeNull();
     expect(browserSamplePlayer(context, context.destination)).not.toBeNull();
+  });
+});
+
+describe("placed voices", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const placed: SpatialMix = { gain: 0.5, pan: 0.4, cutoffHz: 6000 };
+
+  /** A player over a fresh fake context that has loaded `clips`. */
+  async function loaded(
+    clips: ClipName[],
+    options?: { spatial?: boolean },
+  ): Promise<{
+    context: ReturnType<typeof createFakeAudioContext>["context"];
+    player: ReturnType<typeof createSamplePlayer>;
+  }> {
+    const { context } = createFakeAudioContext(options);
+    const player = createSamplePlayer(
+      context,
+      context.destination,
+      serving(clips),
+    );
+    await player.preload();
+    return { context, player };
+  }
+
+  it("plays a placed clip through gain, low-pass and panner at the mix it is given", async () => {
+    const { context, player } = await loaded(["pistol"]);
+    expect(player.play("pistol", 1, 1, placed)).toBe(true);
+    expect(context.gains.at(-1)!.gain.value).toBeCloseTo(
+      AUDIO_CLIPS.pistol.gain * placed.gain,
+    );
+    expect(context.filters[0]!.type).toBe("lowpass");
+    expect(context.filters[0]!.frequency.value).toBe(placed.cutoffHz);
+    expect(context.panners[0]!.pan.value).toBe(placed.pan);
+  });
+
+  it("still plays a placed clip, unpanned, in a context without panners or filters", async () => {
+    const { context, player } = await loaded(["pistol"], { spatial: false });
+    expect(player.play("pistol", 1, 1, placed)).toBe(true);
+    expect(context.sources[0]!.started).toBe(true);
+    expect(context.gains.at(-1)!.gain.value).toBeCloseTo(
+      AUDIO_CLIPS.pistol.gain * placed.gain,
+    );
+  });
+
+  it("moves a placed loop by easing its gain, cutoff and pan", async () => {
+    const { context, player } = await loaded(["engine"]);
+    const loop = player.startLoop("engine", placed)!;
+    loop.setPlacement({ gain: 0.2, pan: -0.6, cutoffHz: 3000 });
+    const gain = context.gains.at(-1)!;
+    expect(gain.operations.at(-1)).toMatchObject({
+      kind: "target",
+      value: AUDIO_CLIPS.engine.gain * 0.2,
+    });
+    expect(context.panners[0]!.operations.at(-1)).toMatchObject({
+      kind: "target",
+      value: -0.6,
+    });
+    expect(context.filters[0]!.operations.at(-1)).toMatchObject({
+      kind: "target",
+      value: 3000,
+    });
+  });
+
+  it("turns the 25th simultaneous voice away without handing the sound back to the synth", async () => {
+    const { context, player } = await loaded(["pistol"]);
+    for (let voice = 0; voice < MAX_ONE_SHOTS; voice++)
+      player.play("pistol", 1, 1, placed);
+    expect(player.liveVoices()).toBe(MAX_ONE_SHOTS);
+    expect(player.play("pistol", 1, 1, placed)).toBe(true);
+    expect(context.sources).toHaveLength(MAX_ONE_SHOTS);
+  });
+
+  it("lets a louder voice cut the quietest short when every voice is busy", async () => {
+    const { context, player } = await loaded(["pistol"]);
+    player.play("pistol", 1, 1, { ...placed, gain: 0.1 });
+    for (let voice = 1; voice < MAX_ONE_SHOTS; voice++)
+      player.play("pistol", 1, 1, placed);
+    player.play("pistol", 1, 1, { ...placed, gain: 0.9 });
+    expect(context.sources).toHaveLength(MAX_ONE_SHOTS + 1);
+    expect(context.sources[0]!.stopped).toBe(true);
+    expect(player.liveVoices()).toBe(MAX_ONE_SHOTS);
+  });
+
+  it("frees the voices once their clips have ended", async () => {
+    const { context, player } = await loaded(["pistol"]);
+    for (let voice = 0; voice < MAX_ONE_SHOTS; voice++) player.play("pistol");
+    context.currentTime += 2;
+    expect(player.liveVoices()).toBe(0);
+    player.play("pistol");
+    expect(context.sources).toHaveLength(MAX_ONE_SHOTS + 1);
   });
 });
