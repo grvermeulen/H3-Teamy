@@ -9,6 +9,37 @@ describe("ArenaDebugOverlay", () => {
     cleanup();
   });
 
+  it("survives partial metrics without throwing", () => {
+    render(
+      <ArenaDebugOverlay
+        metrics={{
+          ...createFrameMetrics().snapshot(),
+          frameP95Ms: undefined as unknown as number,
+          drawP95Ms: undefined as unknown as number,
+        }}
+        chunks={{ chunks: 1, bytes: 0 }}
+        tiles={1}
+        camera={{ x: 0, y: 0, zoom: 1 }}
+        player={createArenaPlayer([0, 0], 0)}
+        routeMetres={null}
+        entities={{
+          vehicles: 0,
+          bullets: 0,
+          effects: 0,
+          peds: 0,
+          cops: 0,
+          traffic: 0,
+          pickups: 0,
+          wantedLevel: 0,
+          zoneSecondsLeft: null,
+          eventCount: 0,
+          violations: 0,
+        }}
+      />,
+    );
+    expect(screen.getByTestId("arena-debug")).toHaveTextContent("frame p95 — ms");
+  });
+
   it("prints the metrics", () => {
     render(
       <ArenaDebugOverlay

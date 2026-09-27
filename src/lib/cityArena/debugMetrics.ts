@@ -33,6 +33,20 @@ export type FrameMetrics = {
   snapshot(): MetricsSnapshot;
 };
 
+/**
+ * Formats a metric for the debug overlay and browser probes without throwing on bad input.
+ *
+ * @param value - Milliseconds, metres per second, or another finite number.
+ * @param digits - Decimal places passed to `toFixed`.
+ * @returns A fixed-point string, or `"—"` when the value is missing or non-finite.
+ */
+export function formatFixed(
+  value: number | null | undefined,
+  digits: number,
+): string {
+  return Number.isFinite(value) ? value!.toFixed(digits) : "—";
+}
+
 function percentile(sorted: number[], fraction: number): number {
   return (
     sorted[Math.min(sorted.length - 1, Math.floor(fraction * sorted.length))] ??

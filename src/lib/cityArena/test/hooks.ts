@@ -1,8 +1,11 @@
+import type { MetricsSnapshot } from "../debugMetrics";
 import type { ArenaState, WorldInput } from "../sim/types";
 
 /** The debug seam exposed as `window.__arena` behind `?debug=1` (spec §12.A3, minimal subset). */
 export type ArenaTestHooks = {
   getState(): ArenaState | null;
+  /** Recent and session frame metrics for browser probes and the debug overlay. */
+  getMetrics(): MetricsSnapshot;
   dispatch(input: Partial<WorldInput>, ticks?: number): void;
   damage(amount: number): void;
   setZoneEnforced(enabled: boolean): void;
