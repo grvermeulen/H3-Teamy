@@ -175,6 +175,26 @@ const GREEN_SALT = 0x74;
 /** The trunk template's height, which trunk matrices scale to each species' clear height. */
 const TRUNK_TEMPLATE_M = TRUNK_CLEAR_M + TRUNK_INSET_M;
 
+/**
+ * The crown templates, made once per material set and shared by every detailed cell: building
+ * them per cell cost more than placing the cell's trees. They live as long as the materials.
+ */
+const CROWNS = new WeakMap<
+  WorldMaterials,
+  Record<TreeSpecies, BufferGeometry>
+>();
+
+/** The shared crown templates of a material set, made on first use. */
+function sharedCrowns(
+  materials: WorldMaterials,
+): Record<TreeSpecies, BufferGeometry> {
+  const cached = CROWNS.get(materials);
+  if (cached) return cached;
+  const templates = crownGeometries();
+  CROWNS.set(materials, templates);
+  return templates;
+}
+
 /** One detailed tree's size factor, turn and green. */
 function treeLook(
   tree: TreeInput,
@@ -246,7 +266,8 @@ function instancedTinted(
  * @param trees - The cell's trees.
  * @param materials - The shared set (trunk, and the white `canopy` tinted per tree).
  * @param origin - The world point that is the cell's local zero.
- * @returns The meshes (none for no trees) and a disposer for their geometry and instance buffers.
+ * @returns The meshes (none for no trees) and a disposer for the trunk geometry and instance
+ * buffers; the crown templates are shared and stay.
  */
 export function buildDetailedTreeLayer(
   trees: readonly TreeInput[],
@@ -265,7 +286,7 @@ export function buildDetailedTreeLayer(
     list.push({ matrix: crown, colour: look.green });
     crowns.set(species, list);
   }
-  const [trunk, templates] = [trunkGeometry(), crownGeometries()];
+  const [trunk, templates] = [trunkGeometry(), sharedCrowns(materials)];
   const meshes = [
     instancedTinted(trunk, materials.treeTrunk, trunks),
     ...TREE_SPECIES.flatMap((species) => {
@@ -280,7 +301,6 @@ export function buildDetailedTreeLayer(
     dispose: () => {
       for (const mesh of meshes) mesh.dispose();
       trunk.dispose();
-      for (const species of TREE_SPECIES) templates[species].dispose();
     },
   };
 }

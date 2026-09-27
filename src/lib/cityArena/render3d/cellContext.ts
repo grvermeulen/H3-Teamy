@@ -26,7 +26,7 @@ import {
   visitNear,
   type BucketGrid,
 } from "./bucketGrid";
-import { tileBuildingsIn, tileRoadsIn } from "./tileIndex";
+import { tileBuildingsIn, tileGroundIn, tileRoadsIn } from "./tileIndex";
 
 /** Side of a grid bucket, metres. */
 const BUCKET_M = 16;
@@ -209,9 +209,8 @@ function groundGrid(
 ): BucketGrid<DecodedGround> {
   const grid = createBucketGrid<DecodedGround>(area, GROUND_BUCKET_M);
   for (const tile of tiles)
-    for (const polygon of tile.ground)
-      if (rectsIntersect(polygon.bounds, area))
-        insertItem(grid, polygon, polygon.bounds);
+    for (const polygon of tileGroundIn(tile, area))
+      insertItem(grid, polygon, polygon.bounds);
   return grid;
 }
 

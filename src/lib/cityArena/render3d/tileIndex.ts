@@ -1,5 +1,5 @@
 /**
- * A bucket index over each decoded tile's buildings and roads, made the first time a cell asks
+ * A bucket index over each decoded tile's buildings, roads and ground, made the first time a cell asks
  * and kept as long as the tile object lives, so a cell finds the few hundred footprints near it
  * without scanning the tile's thousands. Results come back in the tile's own order, so a cell
  * builds exactly as it would from a full scan.
@@ -7,6 +7,7 @@
 import { rectsIntersect, type Rect } from "../mapBuild/geometry";
 import type {
   DecodedBuilding,
+  DecodedGround,
   DecodedRoad,
   DecodedTile,
 } from "../world/decode";
@@ -27,6 +28,7 @@ const TILE_GRID_MARGIN_M = 64;
 type TileIndex = {
   buildings: BucketGrid<number>;
   roads: BucketGrid<number>;
+  ground: BucketGrid<number>;
 };
 
 /** Every indexed tile. */
@@ -50,6 +52,7 @@ function indexOf(tile: DecodedTile): TileIndex {
   const index = {
     buildings: indexList(tile.buildings, rect),
     roads: indexList(tile.roads, rect),
+    ground: indexList(tile.ground, rect),
   };
   INDEXES.set(tile, index);
   return index;
@@ -91,4 +94,15 @@ export function tileBuildingsIn(
  */
 export function tileRoadsIn(tile: DecodedTile, area: Rect): DecodedRoad[] {
   return inArea(tile.roads, indexOf(tile).roads, area);
+}
+
+/**
+ * A tile's ground polygons whose bounds meet an area, in the tile's order.
+ *
+ * @param tile - The tile.
+ * @param area - The area, world metres.
+ * @returns The ground polygons.
+ */
+export function tileGroundIn(tile: DecodedTile, area: Rect): DecodedGround[] {
+  return inArea(tile.ground, indexOf(tile).ground, area);
 }
