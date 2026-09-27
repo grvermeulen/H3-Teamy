@@ -41,7 +41,7 @@ export const CHANGELOG: Record<string, ChangelogEntry> = {
       },
       {
         title: "Missiebakens ook in 3D",
-        body: "Bakens en de routelint naar je missie blijven zichtbaar in de 3D-weergave, zodat je nooit de weg kwijtraakt.",
+        body: "Bakens en het routelint naar je missie blijven zichtbaar in de 3D-weergave, zodat je nooit de weg kwijtraakt.",
       },
     ],
   },

@@ -434,12 +434,24 @@ function ArenaPlayfield({
 }
 
 /** Props for {@link ArenaFooter}. */
-type ArenaFooterProps = { showTouch: boolean; twinStick: boolean };
+type ArenaFooterProps = {
+  showTouch: boolean;
+  twinStick: boolean;
+  /** The 3D view is running, where V switches between third and first person. */
+  view3d: boolean;
+};
 
-/** The hint for each control scheme (spec §7). */
-function controlsHint(showTouch: boolean, twinStick: boolean): string {
+/**
+ * The hint for each control scheme (spec §7); "V camera" only in 3D, the one view where V does
+ * anything.
+ */
+function controlsHint(
+  showTouch: boolean,
+  twinStick: boolean,
+  view3d: boolean,
+): string {
   if (!showTouch)
-    return "WASD of pijltjes lopen of sturen · muis richt en schiet · E instappen of biertje bestellen · Q, wiel of 1-6 wapens · V camera · R radio · Tab scorebord · Esc menu.";
+    return `WASD of pijltjes lopen of sturen · muis richt en schiet · E instappen of biertje bestellen · Q, wiel of 1-6 wapens · ${view3d ? "V camera · " : ""}R radio · Tab scorebord · Esc menu.`;
   return twinStick
     ? "Sleep links op het scherm om te lopen of te sturen; sleep rechts om te richten en te schieten."
     : "Sleep links op het scherm om te lopen of te sturen; rechts: Schieten, Instappen, Wapen.";
@@ -449,11 +461,12 @@ function controlsHint(showTouch: boolean, twinStick: boolean): string {
 function ArenaFooter({
   showTouch,
   twinStick,
+  view3d,
 }: ArenaFooterProps): React.JSX.Element {
   return (
     <p className="muted mx-2 my-1 shrink-0 text-center text-xs">
       <span className="hidden sm:inline">
-        {controlsHint(showTouch, twinStick)}
+        {controlsHint(showTouch, twinStick, view3d)}
       </span>{" "}
       <span>{ATTRIBUTION_TEXT}</span>
     </p>
@@ -592,7 +605,11 @@ export default function CityArenaOverlay({
         sharedScreen={entry.role === "hybrid"}
         onOpenMap={openMap}
       />
-      <ArenaFooter showTouch={showTouch} twinStick={game.settings.twinStick} />
+      <ArenaFooter
+        showTouch={showTouch}
+        twinStick={game.settings.twinStick}
+        view3d={game.view3d.active}
+      />
       {entry.kind !== "solo" && (
         <ArenaPhaseScreens
           game={game}
@@ -615,6 +632,7 @@ export default function CityArenaOverlay({
           onChange={game.updateSettings}
           onLeave={leave}
           onClose={closeMenu}
+          hideView={entry.role === "hybrid"}
         >
           <button
             type="button"

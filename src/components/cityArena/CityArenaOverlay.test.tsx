@@ -292,6 +292,38 @@ describe("CityArenaOverlay", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("mentions the V camera key in the controls hint only while 3D runs", async () => {
+    renderOverlay(vi.fn());
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    const hint = screen.getByText(/WASD of pijltjes/);
+    expect(hint).not.toHaveTextContent("V camera");
+    fireEvent.click(screen.getByRole("button", { name: "Wissel naar 3D" }));
+    expect(screen.getByText(/WASD of pijltjes/)).toHaveTextContent(
+      "Q, wiel of 1-6 wapens · V camera · R radio",
+    );
+  });
+
+  it("offers no 2D/3D choice on a shared screen, in the HUD strip or the menu", async () => {
+    render(
+      <CityArenaOverlay
+        entry={{ kind: "new", zone: "wageningen", role: "hybrid" }}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /oefenen|start potje/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Menu", exact: true }));
+    expect(screen.getByRole("dialog", { name: "Menu" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Weergave" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "3D-camera" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Wissel naar 3D" })).toBeNull();
+  });
+
   it("stacks the WebGL layer under the playfield in 3D with the click-to-aim hint", async () => {
     renderOverlay(vi.fn());
     await waitFor(() =>

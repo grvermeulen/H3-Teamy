@@ -18,6 +18,11 @@ export type ArenaSettingsSheetProps = {
   onLeave: () => void;
   /** Closes the sheet; the match, if any, has been running underneath the whole time. */
   onClose: () => void;
+  /**
+   * Leaves out Weergave and 3D-camera: on a shared (hybrid) screen 3D cannot run, the same rule
+   * that hides the HUD strip's 2D/3D toggle there.
+   */
+  hideView?: boolean;
 };
 
 /** The sheet's Dutch copy (spec §7, §16). */
@@ -71,17 +76,19 @@ function SegmentButton<Value extends string>({
   );
 }
 
-/** The "Weergave" (2D/3D) and "3D-camera" segmented controls (spec §7, §6.3). */
+/** Classes of a segmented control's group, and of the legend that names it. */
+const SEGMENT_FIELDSET_CLASS = "border-b border-[var(--arena-line)] py-2";
+const SEGMENT_LEGEND_CLASS = "arena-label mb-2 text-[var(--arena-dim)]";
+
+/** The "Weergave" (2D/3D) segmented control (spec §7). */
 function ViewSettings({
   settings,
   onChange,
 }: Pick<ArenaSettingsSheetProps, "settings" | "onChange">): React.JSX.Element {
   const is3d = settings.view === "3d";
   return (
-    <fieldset className="border-b border-[var(--arena-line)] py-2">
-      <legend className="arena-label mb-2 text-[var(--arena-dim)]">
-        {VIEW_LABEL}
-      </legend>
+    <fieldset className={SEGMENT_FIELDSET_CLASS}>
+      <legend className={SEGMENT_LEGEND_CLASS}>{VIEW_LABEL}</legend>
       <div className="flex gap-2">
         <SegmentButton
           value="2d"
@@ -96,9 +103,19 @@ function ViewSettings({
           onSelect={(view) => onChange({ view })}
         />
       </div>
-      <p className="arena-label mb-2 mt-3 text-[var(--arena-dim)]">
-        {CAMERA3D_LABEL}
-      </p>
+    </fieldset>
+  );
+}
+
+/** The "3D-camera" segmented control (spec §6.3), a group of its own, disabled outside 3D. */
+function CameraSettings({
+  settings,
+  onChange,
+}: Pick<ArenaSettingsSheetProps, "settings" | "onChange">): React.JSX.Element {
+  const is3d = settings.view === "3d";
+  return (
+    <fieldset className={SEGMENT_FIELDSET_CLASS}>
+      <legend className={SEGMENT_LEGEND_CLASS}>{CAMERA3D_LABEL}</legend>
       <div className="flex gap-2">
         <SegmentButton
           value="third"
@@ -116,6 +133,32 @@ function ViewSettings({
         />
       </div>
     </fieldset>
+  );
+}
+
+/** "Beeldkwaliteit": the render quality, from thrifty to high. */
+function QualitySelect({
+  settings,
+  onChange,
+}: Pick<ArenaSettingsSheetProps, "settings" | "onChange">): React.JSX.Element {
+  return (
+    <label className="flex min-h-[44px] items-center justify-between gap-4 py-2 text-sm">
+      <span>Beeldkwaliteit</span>
+      <select
+        aria-label="Beeldkwaliteit"
+        className="min-h-11 rounded border border-[var(--arena-line)] bg-[var(--arena-panel)] px-2"
+        value={settings.quality}
+        onChange={(event) =>
+          onChange({
+            quality: event.target.value as ArenaSettings["quality"],
+          })
+        }
+      >
+        <option value="auto">Automatisch</option>
+        <option value="low">Zuinig</option>
+        <option value="high">Hoog</option>
+      </select>
+    </label>
   );
 }
 
@@ -181,6 +224,7 @@ export function ArenaSettingsSheet({
   onLeave,
   onClose,
   children,
+  hideView = false,
 }: ArenaSettingsSheetProps): React.JSX.Element {
   const sheetRef = useRef<HTMLDivElement>(null);
   const castButtonRef = useRef<HTMLButtonElement>(null);
@@ -245,24 +289,13 @@ export function ArenaSettingsSheet({
             {RADIO_STATIONS.length > 0 ? (
               <StationSelect settings={settings} onChange={onChange} />
             ) : null}
-            <label className="flex min-h-[44px] items-center justify-between gap-4 py-2 text-sm">
-              <span>Beeldkwaliteit</span>
-              <select
-                aria-label="Beeldkwaliteit"
-                className="min-h-11 rounded border border-[var(--arena-line)] bg-[var(--arena-panel)] px-2"
-                value={settings.quality}
-                onChange={(event) =>
-                  onChange({
-                    quality: event.target.value as ArenaSettings["quality"],
-                  })
-                }
-              >
-                <option value="auto">Automatisch</option>
-                <option value="low">Zuinig</option>
-                <option value="high">Hoog</option>
-              </select>
-            </label>
-            <ViewSettings settings={settings} onChange={onChange} />
+            <QualitySelect settings={settings} onChange={onChange} />
+            {hideView ? null : (
+              <>
+                <ViewSettings settings={settings} onChange={onChange} />
+                <CameraSettings settings={settings} onChange={onChange} />
+              </>
+            )}
             <p className="arena-label mt-3 text-[var(--arena-dim)]">
               {CONTROLS_LABEL}
             </p>
