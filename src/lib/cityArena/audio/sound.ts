@@ -102,10 +102,17 @@ export type AudioContextFactory = () => AudioContextLike | null;
 export type AudioDebugSnapshot = {
   /** Where the ears were last put, or `null` before the first frame. */
   listener: Listener | null;
+  /** Omgevingsgeluid. */
+  ambience: boolean;
   /** One-shots sounding now. */
   oneShots: number;
+  /** The last few events voiced, newest last, with where each was placed. */
+  recent: PlacedEvent[];
   world: WorldAudioSnapshot;
 };
+
+/** One event voiced: its kind, and the placement it was heard at (`null` for unplaced). */
+export type PlacedEvent = { kind: ArenaEvent["kind"]; mix: SpatialMix | null };
 
 /** Arena sound controls consumed by the runtime. */
 export type ArenaSound = {
@@ -120,6 +127,8 @@ export type ArenaSound = {
   updateSelf(motion: SelfMotion): void;
   /** Moves the city's loops — traffic, sirens, the ambient bed — for this frame; once per frame. */
   updateWorld(world: WorldSounds): void;
+  /** Omgevingsgeluid: the ambient bed and the spot sounds; Geluid off mutes them regardless. */
+  setAmbienceEnabled(enabled: boolean): void;
   /** A snapshot of the voices, for the debug seam. */
   debug(): AudioDebugSnapshot;
   dispose(): void;
@@ -135,6 +144,8 @@ const DRONE_HZ_PER_MPS = 5;
 const DRONE_TOP_SPEED_MPS = 30;
 /** A loud event ducks the radio only when it is heard at least this loud: not a distant shot. */
 export const RADIO_DUCK_MIN_GAIN = 0.2;
+/** How many voiced events the debug snapshot keeps. */
+const RECENT_EVENTS = 8;
 /** Spot-sound seeds are drawn from this many values. */
 const SPOT_SEED_RANGE = 2 ** 32;
 /** Each footstep's rate is jittered by up to this share either way, so a walk is not a metronome. */
@@ -189,6 +200,8 @@ type SoundCore = {
   listener: Listener | null;
   /** Omgevingsgeluid: the ambient bed and the spot sounds. */
   ambience: boolean;
+  /** The last few events voiced, for the debug seam. */
+  recent: PlacedEvent[];
   engine: OscillatorLike | null;
   engineGain: GainNodeLike | null;
   engineLoop: LoopHandle | null;
@@ -215,6 +228,7 @@ function createCore(
     unlocked: false,
     listener: null,
     ambience: true,
+    recent: [],
     engine: null,
     engineGain: null,
     engineLoop: null,
@@ -310,6 +324,9 @@ function handleEvent(
   const gain = mix?.gain ?? 1;
   if (gain < MIN_AUDIBLE_GAIN) return;
   if (ducksRadio(event) && gain >= RADIO_DUCK_MIN_GAIN) core.radio?.duck();
+  core.recent = [...core.recent, { kind: event.kind, mix }].slice(
+    -RECENT_EVENTS,
+  );
   const clip = clipFor(event);
   if (
     clip !== null &&
@@ -524,9 +541,14 @@ export function createArenaSound(
       updateCoreEngine(core, speedMps, active),
     updateSelf: (motion) => updateCoreSelf(core, motion),
     updateWorld: (world) => updateCoreWorld(core, world),
+    setAmbienceEnabled(enabled: boolean): void {
+      core.ambience = enabled;
+    },
     debug: () => ({
       listener: core.listener,
+      ambience: core.ambience,
       oneShots: core.player?.liveVoices() ?? 0,
+      recent: [...core.recent],
       world: core.world.snapshot(),
     }),
     dispose: () => disposeCore(core),

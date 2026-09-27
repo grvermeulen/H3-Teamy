@@ -24,6 +24,7 @@ function runtime(): FeelRuntime {
       updateEngine: vi.fn(),
       updateSelf: vi.fn(),
       updateWorld: vi.fn(),
+      setAmbienceEnabled: vi.fn(),
       debug: vi.fn(),
       dispose: vi.fn(),
     },

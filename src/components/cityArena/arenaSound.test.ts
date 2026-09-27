@@ -33,6 +33,7 @@ function spySound(): ArenaSound {
     updateEngine: vi.fn(),
     updateSelf: vi.fn(),
     updateWorld: vi.fn(),
+    setAmbienceEnabled: vi.fn(),
     debug: vi.fn(),
     dispose: vi.fn(),
     radio: null,

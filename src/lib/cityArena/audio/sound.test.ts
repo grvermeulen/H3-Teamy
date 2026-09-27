@@ -624,3 +624,42 @@ describe("the street around the listener", () => {
     });
   });
 });
+
+describe("Omgevingsgeluid", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("silences the chatter and the passers-by when off, and brings them back when on", () => {
+    const player = playerWith([...CHATTER_CLIPS, "footstep"]);
+    const { factory } = createFakeAudioContext();
+    const sound = createArenaSound(factory, true, () => player);
+    sound.setListener(listenerAt(0, 0, null));
+    sound.setAmbienceEnabled(false);
+    const frame = {
+      dt: 0.1,
+      traffic: [],
+      peds: [{ x: 3, y: 0 }],
+      tiles: [],
+      landmarks: [],
+    };
+    for (let tick = 0; tick < 100; tick++) sound.updateWorld(frame);
+    expect(player.play).not.toHaveBeenCalled();
+    expect(sound.debug().ambience).toBe(false);
+    sound.setAmbienceEnabled(true);
+    for (let tick = 0; tick < 100; tick++) sound.updateWorld(frame);
+    expect(player.play).toHaveBeenCalled();
+  });
+
+  it("keeps the traffic and the events, which are not ambience", () => {
+    const player = playerWith(["pistol"]);
+    const { factory } = createFakeAudioContext();
+    const sound = createArenaSound(factory, true, () => player);
+    sound.setAmbienceEnabled(false);
+    sound.handleEvents([
+      { kind: "shot", weapon: "pistol", ownerId: 0, x: 0, y: 0 },
+    ]);
+    expect(player.play).toHaveBeenCalledTimes(1);
+    expect(sound.debug().recent).toEqual([{ kind: "shot", mix: null }]);
+  });
+});
