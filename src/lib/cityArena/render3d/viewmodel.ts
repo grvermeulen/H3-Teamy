@@ -47,6 +47,14 @@ export type ViewModel = {
   /** Attach to the camera. */
   object: Object3D;
   update(input: ViewModelInput): void;
+  /**
+   * Where the held gun's barrel ends in the world, as posed by the last `update` and seen through
+   * the camera the view model hangs on — where your shots are seen to leave from in first person.
+   *
+   * @param target - Receives the world position; untouched without a gun.
+   * @returns `false` for fists and the bat.
+   */
+  muzzleWorld(target: Vector3): boolean;
   /** Detaches the view model and frees its hand geometry. */
   dispose(): void;
 };
@@ -431,6 +439,21 @@ function advance(state: ViewState, input: ViewModelInput): void {
   state.seconds += input.dt;
 }
 
+/** A view model's state before its first frame: nothing held, at rest. */
+function createViewState(): ViewState {
+  return {
+    weapon: null,
+    model: null,
+    lastFiredTick: null,
+    kick: 0,
+    swap: 0,
+    stridePhase: 0,
+    seconds: 0,
+    tip: null,
+    flash: 0,
+  };
+}
+
 /**
  * The player's hands and weapon for the first-person view.
  *
@@ -454,17 +477,7 @@ export function createViewModel(): ViewModel {
     left: leftArm.group,
     flash,
   };
-  const state: ViewState = {
-    weapon: null,
-    model: null,
-    lastFiredTick: null,
-    kick: 0,
-    swap: 0,
-    stridePhase: 0,
-    seconds: 0,
-    tip: null,
-    flash: 0,
-  };
+  const state = createViewState();
   return {
     object,
     update(input) {
@@ -474,6 +487,12 @@ export function createViewModel(): ViewModel {
       placeRig(rig, state, LAYOUTS[input.weapon], input.speed);
       placeFlash(flash, state);
       advance(state, input);
+    },
+    muzzleWorld(target) {
+      if (!state.tip) return false;
+      holder.updateWorldMatrix(true, false);
+      holder.localToWorld(target.set(...state.tip));
+      return true;
     },
     dispose() {
       object.removeFromParent();

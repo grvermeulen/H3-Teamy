@@ -3,6 +3,7 @@ import {
   Group,
   HemisphereLight,
   PerspectiveCamera,
+  Vector3,
 } from "three";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Cockpit3d } from "./cockpit3d";
@@ -29,9 +30,18 @@ const HANDS: ViewModelInput = {
 
 function fakeViewModel(): ViewModel & {
   update: ReturnType<typeof vi.fn>;
+  muzzleWorld: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
 } {
-  return { object: new Group(), update: vi.fn(), dispose: vi.fn() };
+  return {
+    object: new Group(),
+    update: vi.fn(),
+    muzzleWorld: vi.fn((target: Vector3) => {
+      target.set(1, 2, 3);
+      return true;
+    }),
+    dispose: vi.fn(),
+  };
 }
 
 /** A police car at (12, −8) heading 0.9 rad, siren on. */
@@ -137,6 +147,26 @@ describe("createViewModelPass", () => {
     ).dispose();
     expect(viewModel.dispose).toHaveBeenCalledTimes(1);
     expect(cockpit.dispose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("createViewModelPass: the muzzle", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("hands out the hands' muzzle only in a frame that showed them", () => {
+    const viewModel = fakeViewModel();
+    const pass = createViewModelPass(() => viewModel, fakeCockpit);
+    const target = new Vector3();
+    expect(pass.muzzleWorld(target)).toBe(false);
+    pass.update(cityCamera(), HANDS);
+    expect(pass.muzzleWorld(target)).toBe(true);
+    expect(target.toArray()).toEqual([1, 2, 3]);
+    pass.update(cityCamera(), HANDS, COCKPIT);
+    expect(pass.muzzleWorld(new Vector3())).toBe(false);
+    pass.update(cityCamera(), null);
+    expect(pass.muzzleWorld(new Vector3())).toBe(false);
   });
 });
 

@@ -103,6 +103,7 @@ function fakeFactories(): EntityFactories & {
 function fakePass(): ViewModelPass & { update: ReturnType<typeof vi.fn> } {
   return {
     update: vi.fn(() => null),
+    muzzleWorld: vi.fn(() => false),
     dispose: vi.fn(),
   };
 }

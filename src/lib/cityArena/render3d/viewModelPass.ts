@@ -9,7 +9,7 @@
  * the screen on any screen shape. The cockpit stands in the same scene where the car is in the
  * world: the pass camera sits exactly where the city camera does, so the car's frame lines up.
  */
-import { PerspectiveCamera, Scene } from "three";
+import { PerspectiveCamera, Scene, type Vector3 } from "three";
 import {
   createCockpit3d,
   type Cockpit3d,
@@ -55,6 +55,14 @@ export type ViewModelPass = {
     input: ViewModelInput | null,
     cockpit?: CockpitPose | null,
   ): OverlayPass | null;
+  /**
+   * Where the hands' gun ends in the world this frame: the pass camera stands exactly where the
+   * city camera does, so the point lines up with the drawn gun in the city too.
+   *
+   * @param target - Receives the world position; untouched when there is none.
+   * @returns `false` unless the last `update` showed the hands holding a gun.
+   */
+  muzzleWorld(target: Vector3): boolean;
   /** Frees the hands' geometry and detaches the cockpit. */
   dispose(): void;
 };
@@ -100,8 +108,10 @@ export function createViewModelPass(
   camera.add(viewModel.object);
   scene.add(...createEveningLights(), camera, cockpit.object);
   const pass: OverlayPass = { scene, camera };
+  let handsShown = false;
   return {
     update(city, input, pose = null) {
+      handsShown = input !== null && !pose;
       if (!input && !pose) return null;
       followCamera(camera, city);
       viewModel.object.visible = !pose;
@@ -114,6 +124,7 @@ export function createViewModelPass(
       if (input) viewModel.update(input);
       return pass;
     },
+    muzzleWorld: (target) => handsShown && viewModel.muzzleWorld(target),
     dispose() {
       viewModel.dispose();
       cockpit.dispose();

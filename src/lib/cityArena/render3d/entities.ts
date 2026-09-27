@@ -6,7 +6,7 @@
  * back to a free list of its look or kind for the next one. In the steady state a frame allocates
  * nothing: every input goes through one reused scratch object.
  */
-import { Group, type Object3D } from "three";
+import { Group, Vector3, type Object3D } from "three";
 import { playerLook } from "../render/drawEntities";
 import type { Scene } from "../render/renderScene";
 import type {
@@ -20,7 +20,7 @@ import type {
   VehicleState,
   WeaponKind,
 } from "../sim/types";
-import { firesCannon, forwardSpeed } from "../sim/vehicle";
+import { firesCannon, forwardSpeed, lengthOf } from "../sim/vehicle";
 import { isMelee } from "../sim/weapons";
 import { pedLookOf, type CharacterLook } from "./characterLooks";
 import type { PoseInput } from "./characterPose";
@@ -44,6 +44,7 @@ import {
   registerShot,
   type ShotMemory,
 } from "./entityShots";
+import { createMuzzleMap, type MuzzleMap } from "./muzzleMap";
 import type { Pickup3d } from "./pickups3d";
 import type { Vehicle3d, Vehicle3dInput } from "./vehicles3d";
 
@@ -55,6 +56,8 @@ export const VEHICLE_DRAW_DISTANCE_M = 320;
 export const PICKUP_DRAW_DISTANCE_M = CHARACTER_DRAW_DISTANCE_M;
 /** Released objects kept per look or kind for reuse; more are disposed. */
 export const FREE_LIST_CAP = 32;
+/** Height of the tank's barrel: the turret ring (1.38 m) plus the barrel's axis above it. */
+export const TANK_BARREL_HEIGHT_M = 1.73;
 /** An officer raises the gun while a living player is this close, metres. */
 export const COP_AIM_RANGE_M = 30;
 
@@ -122,6 +125,12 @@ export type EntitySync = {
   ): void;
   /** Add to the scene once. */
   group: Object3D;
+  /**
+   * Every shooter's muzzle this frame by owner id — players', officers' and a tank's barrel for
+   * its driver — written by `update` after posing; the cast may overwrite your own with the view
+   * model's.
+   */
+  muzzles: MuzzleMap;
   /** The local player for the view model; read after `update`. */
   local: Readonly<LocalCharacter>;
   /** Disposes every model, in use or free; detach `group` yourself. */
@@ -164,6 +173,10 @@ type Frame = {
   /** Reused for `local.vehicle` while the local player drives. */
   readonly localVehicle: LocalVehicle;
   readonly muzzles: EffectState[];
+  /** Where each shooter's gun points from, this frame. */
+  readonly muzzleMap: MuzzleMap;
+  /** Receives one character's muzzle before it is recorded. */
+  readonly muzzlePoint: Vector3;
   readonly pose: PoseInput;
   readonly vehicleInput: Vehicle3dInput;
   readonly steerSample: SteerSample;
@@ -254,6 +267,12 @@ function playerSlot(
   return claimCharacter(frame, pool, player.id, look, hue);
 }
 
+/** Records where a posed character's gun points from, if it holds one. */
+function recordMuzzle(frame: Frame, item: Character3d, id: number): void {
+  if (item.muzzleWorld(frame.muzzlePoint))
+    frame.muzzleMap.set(id, frame.muzzlePoint);
+}
+
 /** Moves a character to `(x, y)`, turns it to `facing` and poses it with the scratch pose. */
 function placeCharacter(
   frame: Frame,
@@ -333,6 +352,7 @@ function syncPlayer(
   frame.pose.aiming = !dead && holdsGun(player.weapon);
   frame.pose.dead = dead;
   placeCharacter(frame, slot, scene.tick, player);
+  if (!dead) recordMuzzle(frame, slot.item, player.id);
   const ownBody = local && frame.view.firstPerson && !dead;
   slot.item.object.visible = look !== "blink" && !ownBody;
   if (local) describeLocal(frame.local, player, state, dead);
@@ -366,6 +386,7 @@ function syncCop(frame: Frame, scene: Scene, cop: CopState): void {
     !dead && livingPlayerWithin(scene.players, cop.x, cop.y, COP_AIM_RANGE_M);
   frame.pose.dead = dead;
   placeCharacter(frame, slot, scene.tick, cop);
+  if (!dead) recordMuzzle(frame, slot.item, cop.id);
   slot.item.object.visible = true;
 }
 
@@ -437,6 +458,25 @@ function describeLocalVehicle(
   frame.local.vehicle = vehicle;
 }
 
+/**
+ * Records a tank's barrel as its driver's muzzle: where the simulation fires the shell from (half
+ * the hull's length out along the aim), at the barrel's height.
+ */
+function recordBarrel(
+  frame: Frame,
+  car: VehicleState,
+  driverId: number,
+  aim: number,
+): void {
+  const reach = lengthOf(car.kind) / 2;
+  frame.muzzlePoint.set(
+    car.x + Math.cos(aim) * reach,
+    TANK_BARREL_HEIGHT_M,
+    car.y + Math.sin(aim) * reach,
+  );
+  frame.muzzleMap.set(driverId, frame.muzzlePoint);
+}
+
 /** True when the living local player drives `driver`'s car. */
 function isLocalDriver(
   scene: Scene,
@@ -467,6 +507,8 @@ function syncVehicle(frame: Frame, scene: Scene, car: VehicleState): void {
   input.turretYaw = turretYawOf(frame, scene, car, driver);
   input.dt = frame.dt;
   slot.item.update(input);
+  if (driver && input.turretYaw !== null && !car.wrecked)
+    recordBarrel(frame, car, driver.id, input.turretYaw);
   const own = isLocalDriver(scene, driver);
   if (own) describeLocalVehicle(frame, car, input);
   object.visible = !(own && frame.view.firstPerson && !car.wrecked);
@@ -541,6 +583,8 @@ function createFrame(factories: EntityFactories, group: Group): Frame {
     pools: createPools(group),
     ...createLocal(),
     muzzles: [],
+    muzzleMap: createMuzzleMap(),
+    muzzlePoint: new Vector3(),
     pose: {
       speed: 0,
       phaseM: 0,
@@ -606,13 +650,16 @@ export function createEntitySync(factories: EntityFactories): EntitySync {
   return {
     group,
     local: frame.local,
+    muzzles: frame.muzzleMap,
     update(scene, dt, cameraFocus, view) {
       frame.dt = dt;
       frame.tick = scene.tick;
       frame.focus = cameraFocus;
       frame.view = view;
       for (const pool of pools) pool.begin();
+      frame.muzzleMap.begin();
       syncScene(frame, scene);
+      frame.muzzleMap.end();
       for (const pool of pools) pool.end();
     },
     dispose() {
