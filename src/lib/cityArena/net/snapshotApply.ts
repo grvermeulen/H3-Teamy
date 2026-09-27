@@ -23,6 +23,7 @@ import type {
   StructureState,
   VehicleState,
 } from "../sim/types";
+import { normalizeVehicleHealth } from "../sim/vehicle";
 import { WEAPONS } from "../sim/weapons";
 import type { Point } from "../world/projection";
 import type {
@@ -221,26 +222,25 @@ export function applySnapshot(
   view: SnapshotView,
 ): ArenaState {
   const players = byId(state.players);
-  const vehicles = byId(state.vehicles);
   const peds = byId(state.peds);
   const cops = byId(state.cops);
   const structures = byId(state.structures ?? []);
 
-  const nextVehicles: VehicleState[] = view.vehicles.map((row) => ({
-    ...row,
-    ...(vehicles.get(row.id) ?? {}),
-    id: row.id,
-    kind: row.kind,
-    x: row.x,
-    y: row.y,
-    heading: row.heading,
-    velocityX: row.velocityX,
-    velocityY: row.velocityY,
-    health: row.health,
-    wrecked: row.wrecked,
-    colour: row.colour,
-    boarding: row.boarding,
-  }));
+  const nextVehicles: VehicleState[] = view.vehicles.map((row) =>
+    normalizeVehicleHealth({
+      id: row.id,
+      kind: row.kind,
+      x: row.x,
+      y: row.y,
+      heading: row.heading,
+      velocityX: row.velocityX,
+      velocityY: row.velocityY,
+      health: row.health,
+      wrecked: row.wrecked,
+      colour: row.colour,
+      boarding: row.boarding,
+    }),
+  );
   const nextPickups: PickupState[] = view.pickups.map((row) => ({
     id: row.id,
     kind: row.kind,
