@@ -5,6 +5,8 @@
  */
 import type { PerspectiveCamera, Vector3Tuple } from "three";
 import type { ArenaSettings } from "../schemas";
+import type { VehicleKind } from "../sim/types";
+import { seatOffset } from "./cockpitSpecs";
 import {
   AIM_PROJECT_DISTANCE_M,
   EYE_HEIGHT_M,
@@ -23,8 +25,8 @@ export type RigInput = {
   pitch: number;
   /** The followed player (or their car), world metres. */
   target: { x: number; y: number };
-  /** The car being driven, or `null` on foot. */
-  driving: { length: number; heading: number } | null;
+  /** The car being driven, or `null` on foot: its kind picks the driver's seat. */
+  driving: { length: number; heading: number; kind: VehicleKind } | null;
   dead: boolean;
   /** Seconds since death; ignored while alive. */
   deadSeconds: number;
@@ -56,10 +58,6 @@ const CHASE_UP_M = 2.8;
 const BOOM_TILT = 0.5;
 /** The camera never dips below this height, metres. */
 const MIN_CAMERA_HEIGHT_M = 0.35;
-/** Driver's eye height in a car, metres. */
-const SEAT_EYE_HEIGHT_M = 1.15;
-/** The driver sits this far left of the car's centre line (Dutch cars: wheel on the left), metres. */
-const SEAT_SIDE_M = 0.38;
 /** How far ahead of the eye a first-person look target is placed; only its direction matters. */
 const FIRST_PERSON_LOOK_M = 10;
 /** The death camera starts this high and climbs by {@link DEATH_RISE_M_PER_S} … */
@@ -131,16 +129,27 @@ function boomPose(
   };
 }
 
+/**
+ * The eye in three.js space: over the player on foot, or in the kind's driver's seat — its offset
+ * along the car and to its left (`(sin h, −cos h)` for heading `h`) from the cockpit table.
+ */
+function eyePosition(input: RigInput): Vector3Tuple {
+  const { target, driving } = input;
+  if (!driving) return [target.x, EYE_HEIGHT_M, target.y];
+  const seat = seatOffset(driving.kind);
+  const cos = Math.cos(driving.heading);
+  const sin = Math.sin(driving.heading);
+  return [
+    target.x + cos * seat.forwardM + sin * seat.leftM,
+    seat.heightM,
+    target.y + sin * seat.forwardM - cos * seat.leftM,
+  ];
+}
+
 /** Behind the eyes: on foot at eye height over the player, in a car in the driver's seat. */
 function firstPersonPose(input: RigInput): RigPose {
-  const { yaw, pitch, target, driving } = input;
-  const seatX = driving ? Math.sin(driving.heading) * SEAT_SIDE_M : 0;
-  const seatY = driving ? -Math.cos(driving.heading) * SEAT_SIDE_M : 0;
-  const position: Vector3Tuple = [
-    target.x + seatX,
-    driving ? SEAT_EYE_HEIGHT_M : EYE_HEIGHT_M,
-    target.y + seatY,
-  ];
+  const { yaw, pitch } = input;
+  const position = eyePosition(input);
   const flat = Math.cos(pitch) * FIRST_PERSON_LOOK_M;
   return {
     position,
