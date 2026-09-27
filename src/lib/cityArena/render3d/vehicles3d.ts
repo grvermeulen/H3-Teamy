@@ -1,17 +1,25 @@
 /**
  * A live 3D vehicle: a model from `vehicleModels.ts` plus what moves on it each frame — wheels
- * rolling with speed and steering, the police light bar flashing, the tank's turret following its
- * driver's aim, and the charred look of a wreck (spec §6.7).
+ * rolling with speed and steering, the brake lamps lighting as it slows, the police light bar
+ * flashing, the tank's turret following its driver's aim, and the charred look of a wreck with its
+ * lamps dark (spec §6.7).
  *
  * The caller places and turns `object` (position from the simulation, `rotation.y` from
  * `headingToRotationY(heading)`) and then calls `update`; the turret reads the hull's heading from
  * that rotation.
  */
-import { Mesh, type BufferGeometry, type Material, type Object3D } from "three";
+import {
+  Mesh,
+  Points,
+  type BufferGeometry,
+  type Material,
+  type Object3D,
+} from "three";
 import type { VehicleKind } from "../sim/types";
 import { SIM_STEP_S } from "../sim/player";
 import { headingToRotationY } from "./coords";
 import { charredMaterial } from "./vehicleParts";
+import { showBraking, showFlares, type LampRig } from "./vehicleLamps";
 import {
   buildVehicleModel,
   lensMaterial,
@@ -32,6 +40,12 @@ const FLASH_PHASES = 2;
 const TICKS_PER_SECOND = Math.round(1 / SIM_STEP_S);
 /** One full wheel turn; the spin angle wraps at it so it never grows without bound. */
 const FULL_TURN_RAD = Math.PI * 2;
+/** Deceleration past which the brake lamps light, m/s²: above coasting (3), below braking (14). */
+export const BRAKE_LIGHT_DECEL_MPS2 = 6;
+/** A faster drop in speed is a crash, a teleport or a respawn, not braking, m/s². */
+const IMPLAUSIBLE_DECEL_MPS2 = 60;
+/** How long the brake lamps stay lit after the vehicle stops slowing, seconds, so they never flicker. */
+const BRAKE_HOLD_S = 0.3;
 
 /** What one frame tells a vehicle. */
 export type Vehicle3dInput = {
@@ -51,7 +65,54 @@ export type Vehicle3dInput = {
   turretYaw: number | null;
   /** Seconds since the last frame. */
   dt: number;
+  /** Brake lamps lit; when absent, the vehicle works it out from its speed frame to frame. */
+  braking?: boolean;
 };
+
+/** What the brake lamps remember between frames: the last speed, how long ago it changed, the hold. */
+export type BrakeWatch = { speed: number; since: number; hold: number };
+
+/**
+ * A brake watch for a vehicle that has not reported a speed yet.
+ *
+ * @returns A watch at rest with its lamps off.
+ */
+export function createBrakeWatch(): BrakeWatch {
+  return { speed: 0, since: 0, hold: 0 };
+}
+
+/**
+ * Whether a vehicle is braking, from the speed it reports each frame. The speed changes only on
+ * simulation ticks or snapshots, so the deceleration is measured over the time since it last
+ * changed (never less than one tick), not over one frame; slowing faster than coasting lights the
+ * lamps and they stay lit `BRAKE_HOLD_S` after, while a drop too sudden to be braking (a crash, a
+ * respawn) is ignored.
+ *
+ * @param watch - The vehicle's watch; updated in place.
+ * @param speed - Signed speed along the heading this frame, m/s.
+ * @param dt - Seconds since the last frame.
+ * @returns Whether the brake lamps are lit.
+ */
+export function watchBrakes(
+  watch: BrakeWatch,
+  speed: number,
+  dt: number,
+): boolean {
+  watch.since += dt;
+  watch.hold = Math.max(0, watch.hold - dt);
+  if (speed !== watch.speed && watch.since > 0) {
+    const span = Math.max(watch.since, SIM_STEP_S);
+    const deceleration = (Math.abs(watch.speed) - Math.abs(speed)) / span;
+    if (
+      deceleration > BRAKE_LIGHT_DECEL_MPS2 &&
+      deceleration < IMPLAUSIBLE_DECEL_MPS2
+    )
+      watch.hold = BRAKE_HOLD_S;
+    watch.speed = speed;
+    watch.since = 0;
+  }
+  return watch.hold > 0;
+}
 
 /**
  * A vehicle in the 3D scene. Each frame the caller places `object` and sets its `rotation.y` to
@@ -130,10 +191,32 @@ function aimTurret(model: VehicleModel, turretYaw: number | null): void {
 function disposeGeometries(root: Object3D): void {
   const released = new Set<BufferGeometry>();
   root.traverse((node) => {
-    if (!(node instanceof Mesh) || released.has(node.geometry)) return;
+    if (!(node instanceof Mesh || node instanceof Points)) return;
+    if (released.has(node.geometry)) return;
     released.add(node.geometry);
     node.geometry.dispose();
   });
+}
+
+/** What a vehicle's lamps show now: whether wrecked, and whether braking. */
+type LampState = { wrecked: boolean; braking: boolean };
+
+/** Chars a wreck or restores it, darkens its lamps, and lights the brake lamps while braking. */
+function showLamps(
+  lamps: LampRig,
+  intact: ReadonlyMap<Mesh, Material | Material[]>,
+  shown: LampState,
+  next: LampState,
+): void {
+  if (next.wrecked !== shown.wrecked) {
+    shown.wrecked = next.wrecked;
+    dress(intact, shown.wrecked);
+    showFlares(lamps, !shown.wrecked);
+  }
+  if (!shown.wrecked && next.braking !== shown.braking) {
+    shown.braking = next.braking;
+    showBraking(lamps, shown.braking);
+  }
 }
 
 /**
@@ -148,14 +231,17 @@ function disposeGeometries(root: Object3D): void {
 export function createVehicle3d(kind: VehicleKind, colour: number): Vehicle3d {
   const model = buildVehicleModel(kind, colour);
   const intact = intactMaterials(model.root);
-  let wreckShown = false;
+  const watch = createBrakeWatch();
+  const shown: LampState = { wrecked: false, braking: false };
   return {
     object: model.root,
     update(input) {
-      if (input.wrecked !== wreckShown) {
-        wreckShown = input.wrecked;
-        dress(intact, wreckShown);
-      }
+      const braking =
+        input.braking ?? watchBrakes(watch, input.speed, input.dt);
+      showLamps(model.lamps, intact, shown, {
+        wrecked: input.wrecked,
+        braking,
+      });
       rollWheels(model.wheels, input);
       flashLightBar(model.lightBar, input);
       aimTurret(model, input.turretYaw);
