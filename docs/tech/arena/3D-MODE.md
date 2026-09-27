@@ -93,37 +93,62 @@ Grouped by responsibility; every exported symbol carries its own JSDoc.
 
 **The streamed city**
 
-| File                  | Responsibility                                                                                                                                                             |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `city3d.ts`           | Owns the shared `WorldMaterials` and the streamed cells; rebuilds a cell when a landmark lookup changes                                                                    |
-| `cellGrid.ts`         | The 128 m cell grid, counted from the world origin                                                                                                                         |
-| `worldCells.ts`       | Streams cells around the camera under a time budget, drops far ones, rebuilds a cell when a building in it falls, rebuilds or its tile arrives, scorches damaged buildings |
-| `buildCell.ts`        | One cell's merged geometry from the decoded map tiles: ground, roads, buildings, trees, furniture                                                                          |
-| `worldMaterials.ts`   | The materials every cell shares (never owned or disposed per cell)                                                                                                         |
-| `textures.ts`         | Loads the 2D surface art as repeating textures; paints façade textures (brick/plaster/glass, lit windows) on a canvas from a seed                                          |
-| `sky.ts`              | The evening sky dome, fog-matched at the horizon                                                                                                                           |
-| `roadMesh.ts`         | Road ribbons, centre-line markings, street lamps along the pavements                                                                                                       |
-| `buildingMesh.ts`     | Extruded walls with façade textures; roofs by the 2D map's own tile-vs-gravel rule                                                                                         |
-| `pitchedRoof.ts`      | A ridge-and-gable roof for non-rectangular footprints (churches, pools)                                                                                                    |
-| `treeMesh.ts`         | Instanced trunks and canopies, two greens                                                                                                                                  |
-| `furnitureMesh.ts`    | Instanced lamps/benches/bus shelters with a pose proxy for cosmetic knock-over                                                                                             |
-| `landmarkDressing.ts` | Per-landmark silhouettes (church spire, pool glass hall, campus glass, café awning, brewery chimney)                                                                       |
+| File                  | Responsibility                                                                                                                                                                           |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `city3d.ts`           | Owns the shared `WorldMaterials` and the streamed cells; rebuilds a cell when a landmark lookup changes                                                                                  |
+| `cellGrid.ts`         | The 128 m cell grid, counted from the world origin                                                                                                                                       |
+| `worldCells.ts`       | Streams cells around the camera under a time budget, drops far ones, rebuilds a cell when a building in it falls, rebuilds or its tile arrives, scorches damaged buildings               |
+| `buildCell.ts`        | One cell's merged geometry from the decoded map tiles: ground, roads, buildings, trees, furniture; at full detail also street paint, kerbs, clutter, bikes and lamp pools                |
+| `worldMaterials.ts`   | The materials every cell shares (never owned or disposed per cell)                                                                                                                       |
+| `textures.ts`         | Loads the 2D surface art as repeating textures; the façade wall colours per finish                                                                                                       |
+| `sky.ts`              | The evening sky dome, fog-matched at the horizon; shows the stars and moon at full detail                                                                                                |
+| `roadMesh.ts`         | Road ribbons, centre-line markings, street lamps along the pavements (moved out past cycle paths at full detail)                                                                         |
+| `buildingMesh.ts`     | Walls (one façade-atlas draw per cell) and roofs by the 2D map's own tile-vs-gravel rule; at full detail gables, shopfronts, balconies, awnings and roof detail from the building's plan |
+| `pitchedRoof.ts`      | A ridge-and-gable roof for non-rectangular footprints (churches, pools)                                                                                                                  |
+| `treeMesh.ts`         | Instanced trunks and canopies: two greens at basic detail; at full detail three species, sized, turned and tinted per tree                                                               |
+| `furnitureMesh.ts`    | Instanced lamps/benches/bus shelters with a pose proxy for cosmetic knock-over; a pool of light under each lamp at full detail                                                           |
+| `landmarkDressing.ts` | Per-landmark silhouettes (church spire, pool glass hall, campus glass, café awning, brewery chimney)                                                                                     |
+
+**City detail** (full detail at "auto" and "hoog"; see [City detail](#city-detail))
+
+| File                                                    | Responsibility                                                                                                                                                                                                           |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `cityDetail.ts`                                         | `CityDetail` (`basic` / `full`) and `cityDetailFor(quality)`: "laag" builds basic, "auto" and "hoog" full                                                                                                                |
+| `cellContext.ts`                                        | A cell's surroundings within 48 m, bucketed: nearest road, on-carriageway, ground kind and footprint questions for the detail builders                                                                                   |
+| `bucketGrid.ts`                                         | The plain bucket grid `cellContext.ts` and `tileIndex.ts` are built on                                                                                                                                                   |
+| `tileIndex.ts`                                          | A per-tile bucket index of buildings, roads and ground, made once per tile, so a cell never scans a whole 2 km tile                                                                                                      |
+| `detailBuffers.ts`                                      | Vertex-coloured quads and oriented boxes, merged into a cell's one detail mesh                                                                                                                                           |
+| `facadeSheets.ts`                                       | The twelve façade colourways (brick, plaster, panel, concrete, glass) and which one a building wears, by id and block                                                                                                    |
+| `facadeAtlas.ts`                                        | Paints every colourway's window, ground-floor and plain modules plus the shopfronts into one atlas; the patched material that wraps UVs inside each block                                                                |
+| `facadePaint.ts` / `facadeWalls.ts` / `facadeGround.ts` | The atlas's painters: windows (lit warm or cold, curtains), wall textures and plinths, doors and eight shopfronts with sign boards                                                                                       |
+| `wallQuads.ts`                                          | Wall quads at storey height: the basic layout, and the detailed one with windows centred on each wall and shop bays on the ground floor                                                                                  |
+| `facadePlan.ts`                                         | A building's plan by id: colourway, shop walls, gable, balconies, chimney, dormer, fascia                                                                                                                                |
+| `gableHouse.ts`                                         | Stepped and bell gables on narrow terraced houses, with their pitched roofs                                                                                                                                              |
+| `roofDetail.ts`                                         | Roof faces with a 25 cm overhang, fascia boards, chimneys, dormers                                                                                                                                                       |
+| `facadeExtras.ts`                                       | Balconies on flats and awnings over shopfronts                                                                                                                                                                           |
+| `streetMarkings.ts`                                     | Kerbs (cut back at side streets), red cycle paths, zebra crossings, sign sites and grass verges                                                                                                                          |
+| `streetClutter.ts` / `clutterShapes.ts`                 | Where clutter goes (shops, houses, gardens, flats, zebras; at most 150 pieces a cell, never on a carriageway, cycle path or footprint) and its shapes: bikes, racks, bins, containers, bollards, signs, planters, hedges |
+| `treeSpecies.ts`                                        | Broadleaf, poplar and conifer: each tree's species by id and the unit crowns, darker underneath                                                                                                                          |
+| `skyDetail.ts`                                          | The seeded star field and the moon disc with its halo                                                                                                                                                                    |
+| `lampPools.ts`                                          | Additive pools of lamplight on the street, fading to black in the fog, out for a fallen lamp                                                                                                                             |
 
 **Characters and vehicles**
 
-| File                                         | Responsibility                                                                      |
-| -------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `characters.ts`                              | A posable 3D person: one rigid-skinned mesh, weapon in hand, lies down when dead    |
-| `characterRig.ts`                            | The shared 17-bone rig and per-look merged geometry                                 |
-| `characterPose.ts`                           | Pure procedural poses: idle, walk/run (phased by distance), aim, death              |
-| `characterLooks.ts`                          | The cast's looks, translated from the 2D sprites' sampled colours                   |
-| `characterParts.ts`                          | Body/face/hair as rigid low-poly parts bound to one bone each                       |
-| `characterExtras.ts`                         | Accessories (shades, caps, hoods, backpack, hi-vis) layered over a look             |
-| `vehicles3d.ts`                              | A live vehicle: wheel roll, light bar, tank turret follow, wreck look, over a model |
-| `vehicleModels.ts`                           | Procedural low-poly model per vehicle kind, one merged body mesh + wheels           |
-| `vehicleParts.ts`                            | Shared material cache and primitive shapes vehicles are cut from                    |
-| `vehicleShapes.ts` / `vehicleShapesHeavy.ts` | Per-kind shape builders (passenger kinds; bus/tractor/tank)                         |
-| `vehicleSmoke.ts`                            | Wreck column smoke and bonnet smoke below the 2D `smokeHealthOf` threshold          |
+| File                                         | Responsibility                                                                                                   |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `characters.ts`                              | A posable 3D person: one rigid-skinned mesh, weapon in hand, lies down when dead                                 |
+| `characterRig.ts`                            | The shared 17-bone rig and per-look merged geometry                                                              |
+| `characterPose.ts`                           | Pure procedural poses: idle, walk/run (phased by distance), aim, death                                           |
+| `characterLooks.ts`                          | The cast's looks, translated from the 2D sprites' sampled colours                                                |
+| `characterParts.ts`                          | Body/face/hair as rigid low-poly parts bound to one bone each                                                    |
+| `characterExtras.ts`                         | Accessories (shades, caps, hoods, backpack, hi-vis) layered over a look                                          |
+| `vehicles3d.ts`                              | A live vehicle: wheel roll, brake lamps (`watchBrakes`), light bar, tank turret follow, wreck look, over a model |
+| `vehicleModels.ts`                           | Procedural low-poly model per vehicle kind, one merged body mesh + wheels + lamp flares                          |
+| `vehicleParts.ts`                            | Shared material cache and primitive shapes vehicles are cut from                                                 |
+| `vehicleShapes.ts` / `vehicleShapesHeavy.ts` | Per-kind shape builders (passenger kinds; bus/tractor/tank)                                                      |
+| `vehicleTrim.ts`                             | Wheel arches, door shut lines and Dutch number plates (yellow; classic blue on the oldtimer)                     |
+| `vehicleLamps.ts`                            | Head and tail lamps as lamps: the tail lamps' running/brake glow and one additive flare per lamp                 |
+| `vehicleSmoke.ts`                            | Wreck column smoke and bonnet smoke below the 2D `smokeHealthOf` threshold                                       |
 
 **Weapons, view model and projectiles**
 
@@ -171,6 +196,93 @@ Grouped by responsibility; every exported symbol carries its own JSDoc.
 | `playerArrows.ts`    | Edge-of-screen arrows toward friends who are out of view                                |
 | `missionMarkers.ts`  | Pure read of the scene's mission contacts/objectives for `guidance3d`/`contacts3d`      |
 | `overlay3d.ts`       | The 2D HUD canvas overlay: crosshair and off-screen arrows                              |
+
+## City detail
+
+The immersion pass (plan `docs/superpowers/plans/2026-09-27-arena-immersion-4-city-detail.md`)
+turned the blocky first city into a Dutch evening town. The detail comes in two levels, picked by
+the render quality (`cityDetail.ts`): **"laag" builds `basic`**, exactly the first city's geometry
+(a snapshot test holds every basic cell of the fixture town to the first city's vertex counts),
+and **"auto" and "hoog" build `full`**. Changing quality marks every cell stale; they rebuild
+nearest first under the usual budget.
+
+What `full` adds:
+
+- **Façades.** One canvas atlas holds twelve Dutch colourways — red, brown, yellow and grey
+  brick, five plasters, panels, concrete, glass — each with upper-storey window modules (lit warm
+  or cold, some with curtains), a ground floor with doors, and eight shopfronts with sign boards
+  and goods in lit windows. Each wall vertex carries its atlas block, and a patched Lambert shader
+  wraps the UVs inside it, so every wall of a cell is one draw call (at "laag" too). Windows are
+  centred on each wall. Per building id, `facadePlan.ts` picks shopfronts on walls facing a busy
+  road, stepped or bell gables on narrow terraced houses, balconies on flats, awnings, chimneys,
+  dormers and fascia boards under a 25 cm roof overhang.
+- **Streets.** Bevelled kerbs (cut back where a side street joins), red cycle paths on primary and
+  secondary roads (lamps move out past them), zebra crossings by junctions with give-way, zone and
+  crossing signs, and grass verges where the map leaves a strip between road and field.
+- **Street clutter.** Bike racks in front of shops, bikes against house walls, wheelie bins with
+  coloured lids, containers by flats, bollards, planters and clipped hedges along front gardens —
+  at most 150 pieces a cell, never on a carriageway, cycle path or footprint. All of it merges
+  into the cell's one vertex-coloured detail mesh; the bikes are one instanced mesh, tinted per bike.
+- **Trees.** Broadleaf (62 %), poplar (20 %) or conifer (18 %) by tree id, ±20 % in size, turned
+  and tinted from each species' evening greens, crowns darker underneath.
+- **Sky and lamplight.** 1500 seeded stars fading into the horizon glow, and the moon on the
+  moonlight's bearing at 22° up (the light itself shines from 64°, so the streets stay lit); a
+  soft additive pool of light on the street under every lamp, fading to black in the fog and out
+  when the lamp is knocked over.
+- **Vehicles** (every quality). Bevelled bodies, dark wheel arches, door lines, darker glass and
+  Dutch plates; head and tail lamps with a flare that only shows from in front of its lamp; tail
+  lamps that brighten while the car slows faster than coasting (`watchBrakes` measures the
+  deceleration over the time since the speed last changed, so a frame rate above the simulation's
+  30 Hz never fakes a stop); a wreck's lamps go dark.
+
+Everything is seeded by map ids (`idHash.ts`), so every device builds the same town, and all of it
+is presentation only: no simulation, collision or wire change.
+
+| Before ("auto", first city)                                        | After ("auto", full detail)                                                                                |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| ![Rhenen by the Cunerakerk before](img/3d/city-rhenen-before.jpg)  | ![Rhenen by the Cunerakerk after: kerbs, zebras, bollards, lamp pool, stars](img/3d/city-rhenen-after.jpg) |
+| ![A Wageningen street before](img/3d/city-wageningen-before.jpg)   | ![The same street after: brick colourways, bins, hedges, moon](img/3d/city-wageningen-after.jpg)           |
+| ![A road through the fields before](img/3d/city-fields-before.jpg) | ![The same road after: verge, lamp pools, stars](img/3d/city-fields-after.jpg)                             |
+| ![A car before](img/3d/city-car-before.jpg)                        | ![Traffic after: head-lamp flares, tail lamps, plates](img/3d/city-traffic-after.jpg)                      |
+
+|                                                                            |                                                                                   |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| ![Shopfronts, an awning, a zebra and a bell gable](img/3d/city-shops.jpg)  | ![Two stepped gables over shopfronts, an awning in front](img/3d/city-gables.jpg) |
+| ![Broadleaf, poplar and conifer along a cycle path](img/3d/city-trees.jpg) | ![The moon and stars over the fields](img/3d/city-moon.jpg)                       |
+
+### Measured cost
+
+Browser: dev build, 1280 × 678 canvas at device pixel ratio 1, median of three runs per spot;
+"city" is the frame with every person and vehicle removed, and the milliseconds are JavaScript
+plus GPU per frame (with `gl.finish`) on a shared, noisy dev machine. Spots: A Rhenen by the
+Cunerakerk, B a Wageningen residential street, C a road through the fields.
+
+| Spot | Quality | City draw calls, before → after | City frame, ms before → after |
+| ---- | ------- | ------------------------------- | ----------------------------- |
+| A    | auto    | 236 → 225                       | 1.13 → 1.98                   |
+| B    | auto    | 242 → 238                       | 1.17 → 1.18                   |
+| C    | auto    | 64 → 74                         | 0.40 → 0.54                   |
+| A    | laag    | 175 → 131                       | 0.95 → 0.79                   |
+| B    | laag    | 162 → 114                       | 0.73 → 0.62                   |
+| C    | laag    | 44 → 44                         | 0.29 → 0.35                   |
+
+With the cast at A: 284 → 292 calls and 2.86 → 3.18 ms at "auto", 230 → 193 calls and
+3.15 → 2.53 ms at "laag". The façade atlas (every wall of a cell in one call) pays for the
+detail, paint, bike, crown and pool meshes, so "auto" stays within the plan's +30 % draw-call
+budget (−5 %, −2 %, +16 %) and "laag" draws a quarter fewer calls than before. Each vehicle
+draws one call more than before (its lamp flares): 9–11.
+
+Cell builds (Node, not jsdom; all cells within 380 m, second of two passes; same machine and
+load for both rows; mean / p90 / max ms):
+
+| Spot         | basic (first city's geometry) | full            |
+| ------------ | ----------------------------- | --------------- |
+| A (41 cells) | 0.88 / 1.8 / 2.8              | 3.3 / 8.4 / 13  |
+| B (39 cells) | 1.05 / 1.7 / 1.9              | 4.8 / 7.7 / 9.2 |
+| C (42 cells) | 0.20 / 0.3 / 1.3              | 0.3 / 0.6 / 1.1 |
+
+A typical full cell costs about one `WORLD_BUILD_BUDGET_MS` (4 ms); the densest town-centre
+cells take two to three, so streaming one in makes that frame longer (see Known limitations).
 
 ## Input
 
@@ -330,12 +442,17 @@ damage sources table above.
   camera is only briefly outside.
 - **Device pixel ratio cap** (`MAX_PIXEL_RATIO`): 1 at "laag", 1.5 at "auto", 2 at "hoog".
 - **Cell build budget**: `WORLD_BUILD_BUDGET_MS` = 4 ms per frame for streaming in new/rebuilt
-  city cells, nearest first; a cell whose build would exceed the budget waits for a later frame.
+  city cells, nearest first; a cell whose build would exceed the budget waits for a later frame
+  (but every frame builds at least one). A full-detail cell takes about 3–5 ms, a basic one about
+  1 ms (see [Measured cost](#measured-cost)).
+- **City detail by quality** (`cityDetail.ts`): "laag" builds the first city's geometry; "auto"
+  and "hoog" add façades, street detail, clutter, tree species, stars, moon and lamp pools.
 - **Particle budget by quality** (`cast3d.ts`, `EFFECT_PARTICLES`): 600 (laag) / 1200 (auto) / 1600
   (hoog) particles alive at once across fire and smoke together, set once by the first frame's
   quality and shared with the destruction system's dust.
-- **Draw calls**: roughly 15–25 per dense city cell (190–290 across a typical view), 8–10 per
-  vehicle, and characters/pickups/weapons each merge to one or two draw calls via shared,
+- **Draw calls**: a dense view draws about 225–240 city calls at "auto" and 115–130 at "laag"
+  (every wall of a cell is one façade-atlas call), 9–11 per vehicle (body groups, four wheels,
+  lamp flares), and characters/pickups/weapons each merge to one or two draw calls via shared,
   vertex-coloured, per-look/per-kind geometry.
 
 ## Known limitations
@@ -367,9 +484,14 @@ damage sources table above.
 - **Traffic can pop in beyond 80 m.** In 3D the simulation's out-of-sight rect is a square
   `VIEW3D_POPULATION_HALF_M` = 80 m each way around the player, while the fog closes at 260–520 m,
   so cars and pedestrians may visibly spawn or despawn between 80 m and the fog.
-- **Phones at "laag" still need a smoke test.** A dense view draws roughly 190–290 calls (see
-  Performance notes), above spec §8's budget; 30 fps on a mid-range phone at "laag" is unverified
-  on real hardware.
+- **Phones at "laag" still need a smoke test.** A dense view draws roughly 115–130 city calls, 190
+  with the cast (see Performance notes), above spec §8's budget; 30 fps on a mid-range phone at
+  "laag" is unverified on real hardware.
+- **Dense full-detail cells build over the budget.** A town-centre cell at "auto" or "hoog" takes
+  8–13 ms to build on the dev machine (the budget is 4 ms a frame, and every frame builds at least
+  one cell), so streaming one in costs one long frame. Most cells take one budget or less.
+- **Vehicle detail is not quality-gated.** Bevels, trim, plates and lamp flares show at every
+  quality, "laag" included; the flares cost one draw call per vehicle.
 - **Made-up client feedback is approximate.** A client's fireball sits where the rocket or shell
   was last seen, up to one snapshot interval (about 4.5 m for a rocket, 9 m for a shell) short of
   where it burst; a projectile fired and burst between two snapshots is never seen, so it makes no
