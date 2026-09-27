@@ -58,6 +58,8 @@ export const GROUND_RADIUS_M = 60;
 export const GROUND_SAMPLE_STEP_M = 15;
 /** Below this speed a car is parked, m/s. */
 const MOVING_MPS = 0.5;
+/** How far a tile's geometry reaches past its own rectangle (`world/decode.ts`), metres. */
+const TILE_OVERLAP_M = 20;
 
 /** How much traffic a road of each class carries, relative to an ordinary through road. */
 const ROAD_TRAFFIC_WEIGHT: Readonly<Record<RoadClass, number>> = {
@@ -298,11 +300,17 @@ export function readSurroundings(
   listener: Listener,
 ): Surroundings {
   const moving = scene.traffic.filter((car) => car.speedMps >= MOVING_MPS);
+  const reach = squareAround(
+    listener.x,
+    listener.y,
+    TRAFFIC_RADIUS_M + TILE_OVERLAP_M,
+  );
+  const near = tiles.filter((tile) => rectsIntersect(tile.rect, reach));
   return {
-    ...readRoads(tiles, listener),
+    ...readRoads(near, listener),
     movingCars: countWithin(moving, listener, TRAFFIC_RADIUS_M),
     peds: countWithin(scene.peds, listener, PEDS_RADIUS_M),
-    trees: countTrees(tiles, listener),
-    ...readGround(tiles, listener),
+    trees: countTrees(near, listener),
+    ...readGround(near, listener),
   };
 }
