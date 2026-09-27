@@ -2,9 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ArenaEvent } from "../sim/types";
 import type { ClipName } from "./clips";
 import type { RadioPlayer } from "./radio/radio";
-import { createSamplePlayer, type SamplePlayer } from "./samples";
+import {
+  createSamplePlayer,
+  type LoopHandle,
+  type SamplePlayer,
+} from "./samples";
 import { listenerAt, type SpatialMix } from "./spatial";
 import { createFakeAudioContext } from "./testing/fakeAudioContext";
+import type { TrafficSource } from "./trafficVoices";
 import {
   ENGINE_RATE_MAX,
   ENGINE_RATE_MIN,
@@ -233,41 +238,6 @@ describe("createArenaSound", () => {
     expect(player.startLoop).toHaveBeenCalledTimes(2);
     sound.dispose();
     expect(loop.stop).toHaveBeenCalledTimes(2);
-  });
-
-  it("runs the siren loop once while a chase is near and stops it when it is not", () => {
-    const { context, factory } = createFakeAudioContext();
-    const loop = { setRate: vi.fn(), setPlacement: vi.fn(), stop: vi.fn() };
-    const player = { ...playerWith(["siren"]), startLoop: vi.fn(() => loop) };
-    const sound = createArenaSound(factory, true, () => player);
-    sound.updateSiren(true);
-    sound.updateSiren(true);
-    expect(player.startLoop).toHaveBeenCalledTimes(1);
-    expect(player.startLoop).toHaveBeenCalledWith("siren");
-    sound.updateSiren(false);
-    expect(loop.stop).toHaveBeenCalledTimes(1);
-    sound.updateSiren(true);
-    sound.dispose();
-    expect(loop.stop).toHaveBeenCalledTimes(2);
-    expect(context.oscillators).toHaveLength(0);
-  });
-
-  it("keeps the siren silent while sound is off and without its clip", () => {
-    const { factory } = createFakeAudioContext();
-    const loop = { setRate: vi.fn(), setPlacement: vi.fn(), stop: vi.fn() };
-    const player = { ...playerWith(["siren"]), startLoop: vi.fn(() => loop) };
-    const sound = createArenaSound(factory, false, () => player);
-    sound.updateSiren(true);
-    expect(player.startLoop).not.toHaveBeenCalled();
-    sound.setEnabled(true);
-    sound.updateSiren(true);
-    expect(player.startLoop).toHaveBeenCalledTimes(1);
-    sound.setEnabled(false);
-    sound.updateSiren(true);
-    expect(loop.stop).toHaveBeenCalledTimes(1);
-    const mute = createArenaSound(factory, true, () => playerWith(["engine"]));
-    mute.updateSiren(true);
-    expect(player.startLoop).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the oscillator drone when there is no engine clip", () => {
@@ -528,5 +498,89 @@ describe("the local player's own sounds", () => {
       sources,
     );
     expect(played(player)).toEqual(["death"]);
+  });
+});
+
+describe("the city's loops", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /** A player with the engine and siren clips whose loops are spies, one per start. */
+  function loopingPlayer(): {
+    player: SamplePlayer;
+    loops: { clip: ClipName; loop: LoopHandle }[];
+  } {
+    const loops: { clip: ClipName; loop: LoopHandle }[] = [];
+    const player: SamplePlayer = {
+      ...playerWith(["engine", "siren"]),
+      startLoop: vi.fn((clip: ClipName) => {
+        const loop = { setRate: vi.fn(), setPlacement: vi.fn(), stop: vi.fn() };
+        loops.push({ clip, loop });
+        return loop;
+      }),
+    };
+    return { player, loops };
+  }
+
+  /** A car `id` at (`x`, `y`) moving at `speedMps`. */
+  function car(
+    id: number,
+    x: number,
+    y: number,
+    speedMps = 10,
+    siren = false,
+  ): TrafficSource {
+    return { id, x, y, speedMps, siren };
+  }
+
+  it("runs an engine on each nearby moving car, placed where it drives, and none on a parked one", () => {
+    const { player, loops } = loopingPlayer();
+    const { factory } = createFakeAudioContext();
+    const sound = createArenaSound(factory, true, () => player);
+    sound.setListener(listenerAt(0, 0, null));
+    sound.updateWorld({
+      dt: 0.016,
+      traffic: [car(1, 20, 0), car(2, -20, 0), car(3, 5, 0, 0)],
+    });
+    expect(loops.map(({ clip }) => clip)).toEqual(["engine", "engine"]);
+    const [right, left] = vi
+      .mocked(player.startLoop)
+      .mock.calls.map(([, placement]) => placement!);
+    expect(right!.pan).toBeGreaterThan(0);
+    expect(left!.pan).toBeLessThan(0);
+    expect(loops[0]!.loop.setRate).toHaveBeenCalledWith(engineRate(10));
+    expect(sound.debug().world.engines).toEqual([1, 2, null, null]);
+  });
+
+  it("sounds the siren on the police cars only, and stops every loop when sound goes off", () => {
+    const { player, loops } = loopingPlayer();
+    const { factory } = createFakeAudioContext();
+    const sound = createArenaSound(factory, true, () => player);
+    sound.setListener(listenerAt(0, 0, null));
+    const traffic = [car(1, 0, -30, 10, true), car(2, 0, 30)];
+    sound.updateWorld({ dt: 0.016, traffic });
+    expect(sound.debug().world.sirens).toEqual([1, null]);
+    expect(loops.filter(({ clip }) => clip === "siren")).toHaveLength(1);
+    sound.setEnabled(false);
+    sound.updateWorld({ dt: 0.016, traffic });
+    expect(
+      loops.every(({ loop }) => vi.mocked(loop.stop).mock.calls.length === 1),
+    ).toBe(true);
+  });
+
+  it("fades a car's engine out once it drives out of earshot, then stops it", () => {
+    const { player, loops } = loopingPlayer();
+    const { factory } = createFakeAudioContext();
+    const sound = createArenaSound(factory, true, () => player);
+    sound.setListener(listenerAt(0, 0, null));
+    sound.updateWorld({ dt: 0.1, traffic: [car(1, 20, 0)] });
+    const loop = loops[0]!.loop;
+    sound.updateWorld({ dt: 0.1, traffic: [car(1, 400, 0)] });
+    expect(vi.mocked(loop.setPlacement).mock.lastCall![0].gain).toBe(0);
+    expect(loop.stop).not.toHaveBeenCalled();
+    for (let frame = 0; frame < 40; frame++)
+      sound.updateWorld({ dt: 0.1, traffic: [car(1, 400, 0)] });
+    expect(loop.stop).toHaveBeenCalledTimes(1);
   });
 });

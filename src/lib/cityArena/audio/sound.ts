@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/nextjs";
 import { MAX_EVENTS } from "../sim/limits";
 import type { ArenaEvent } from "../sim/types";
 import type { ClipName } from "./clips";
+import { engineRate } from "./engineRate";
 import {
   clipFor,
   clipGainFor,
@@ -29,6 +30,19 @@ import {
   type SpatialMix,
 } from "./spatial";
 import { buildVoiceChain } from "./voiceChain";
+import {
+  createWorldAudio,
+  type WorldAudio,
+  type WorldAudioSnapshot,
+  type WorldSounds,
+} from "./worldAudio";
+
+export {
+  ENGINE_RATE_MAX,
+  ENGINE_RATE_MIN,
+  ENGINE_RATE_TOP_SPEED_MPS,
+  engineRate,
+} from "./engineRate";
 
 /** Minimal audio parameter surface used by the arena synth. */
 export type AudioParamLike = {
@@ -84,6 +98,15 @@ export type AudioContextLike = {
 /** Factory used by production and replaced with a deterministic fake in tests. */
 export type AudioContextFactory = () => AudioContextLike | null;
 
+/** What the debug seam shows of the sound layer (`window.__arena.audio`, non-production). */
+export type AudioDebugSnapshot = {
+  /** Where the ears were last put, or `null` before the first frame. */
+  listener: Listener | null;
+  /** One-shots sounding now. */
+  oneShots: number;
+  world: WorldAudioSnapshot;
+};
+
 /** Arena sound controls consumed by the runtime. */
 export type ArenaSound = {
   unlock(): void;
@@ -95,8 +118,10 @@ export type ArenaSound = {
   updateEngine(speedMps: number, active: boolean): void;
   /** Footsteps and tyre squeals from the local player's own motion; call once per frame. */
   updateSelf(motion: SelfMotion): void;
-  /** Runs the siren loop while a police car is chasing within earshot; silent without its clip. */
-  updateSiren(on: boolean): void;
+  /** Moves the city's loops — traffic engines, sirens — for this frame's world; once per frame. */
+  updateWorld(world: WorldSounds): void;
+  /** A snapshot of the voices, for the debug seam. */
+  debug(): AudioDebugSnapshot;
   dispose(): void;
   /** The car radio (Plan 7), or `null` when there is none. */
   radio: RadioPlayer | null;
@@ -104,12 +129,6 @@ export type ArenaSound = {
 
 const MASTER_GAIN = 0.18;
 const ENGINE_GAIN = 0.06;
-/** The engine clip's playback rate at a standstill. */
-export const ENGINE_RATE_MIN = 0.7;
-/** The engine clip's playback rate at {@link ENGINE_RATE_TOP_SPEED_MPS} and above. */
-export const ENGINE_RATE_MAX = 2.2;
-/** The speed at which the engine clip reaches its top rate. */
-export const ENGINE_RATE_TOP_SPEED_MPS = 25;
 /** The drone's pitch at rest, and how much it rises per m/s, up to {@link DRONE_TOP_SPEED_MPS}. */
 const DRONE_BASE_HZ = 70;
 const DRONE_HZ_PER_MPS = 5;
@@ -118,17 +137,6 @@ const DRONE_TOP_SPEED_MPS = 30;
 export const RADIO_DUCK_MIN_GAIN = 0.2;
 /** Each footstep's rate is jittered by up to this share either way, so a walk is not a metronome. */
 export const FOOTSTEP_RATE_JITTER = 0.06;
-
-/**
- * The engine clip's playback rate for a speed: idle at rest, rising to the top rate at 25 m/s.
- *
- * @param speedMps - The car's speed.
- * @returns The rate to play the loop at.
- */
-export function engineRate(speedMps: number): number {
-  const share = Math.max(0, Math.min(1, speedMps / ENGINE_RATE_TOP_SPEED_MPS));
-  return ENGINE_RATE_MIN + share * (ENGINE_RATE_MAX - ENGINE_RATE_MIN);
-}
 
 /**
  * Reports an audio failure to Sentry, tagged so arena audio issues are easy to filter.
@@ -180,7 +188,7 @@ type SoundCore = {
   engine: OscillatorLike | null;
   engineGain: GainNodeLike | null;
   engineLoop: LoopHandle | null;
-  sirenLoop: LoopHandle | null;
+  world: WorldAudio;
   footsteps: SelfCue;
   skid: SelfCue;
   random: () => number;
@@ -205,7 +213,7 @@ function createCore(
     engine: null,
     engineGain: null,
     engineLoop: null,
-    sirenLoop: null,
+    world: createWorldAudio(() => core.player),
     footsteps: createFootsteps(),
     skid: createSkidDetector(),
     random,
@@ -319,6 +327,19 @@ function updateCoreSelf(core: SoundCore, motion: SelfMotion): void {
   if (skid) playOwn(core, "skid");
 }
 
+/** Moves the city's loops for this frame; they stop while sound is off or nobody is listening. */
+function updateCoreWorld(core: SoundCore, world: WorldSounds): void {
+  if (!audible(core) || !core.listener) {
+    core.world.stop();
+    return;
+  }
+  try {
+    core.world.update(world, core.listener);
+  } catch (error: unknown) {
+    reportAudioError(error, "audio-world");
+  }
+}
+
 /** Stops the oscillator drone, if it is running. */
 function stopDrone(core: SoundCore): void {
   if (!core.engine || !core.context) return;
@@ -338,12 +359,6 @@ function stopEngine(core: SoundCore): void {
   core.engineLoop?.stop();
   core.engineLoop = null;
   stopDrone(core);
-}
-
-/** Stops the siren, if it is sounding. */
-function stopSiren(core: SoundCore): void {
-  core.sirenLoop?.stop();
-  core.sirenLoop = null;
 }
 
 /**
@@ -447,7 +462,7 @@ function disposeCore(core: SoundCore): void {
   core.disposed = true;
   core.radio?.dispose();
   stopEngine(core);
-  stopSiren(core);
+  core.world.stop();
   try {
     core.master?.disconnect();
     const result = core.context?.close?.();
@@ -500,14 +515,12 @@ export function createArenaSound(
     updateEngine: (speedMps, active) =>
       updateCoreEngine(core, speedMps, active),
     updateSelf: (motion) => updateCoreSelf(core, motion),
-    updateSiren(on: boolean): void {
-      if (!core.enabled || !on || core.disposed) {
-        stopSiren(core);
-        return;
-      }
-      if (!core.player?.has("siren")) return;
-      core.sirenLoop ??= core.player.startLoop("siren");
-    },
+    updateWorld: (world) => updateCoreWorld(core, world),
+    debug: () => ({
+      listener: core.listener,
+      oneShots: core.player?.liveVoices() ?? 0,
+      world: core.world.snapshot(),
+    }),
     dispose: () => disposeCore(core),
     radio: core.radio,
   };

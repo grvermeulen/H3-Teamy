@@ -78,7 +78,7 @@ import {
 import { checkInvariants } from "@/lib/cityArena/sim/invariants";
 import { SIM_STEP_S } from "@/lib/cityArena/sim/player";
 import { createRng, seedFromString } from "@/lib/cityArena/sim/rng";
-import { policeCarIds, sirenWithin } from "@/lib/cityArena/sim/police";
+import { policeCarIds } from "@/lib/cityArena/sim/police";
 import { forwardSpeed } from "@/lib/cityArena/sim/vehicle";
 import { currentWantedLevel } from "@/lib/cityArena/sim/wanted";
 import { zoneSecondsLeft } from "@/lib/cityArena/sim/zoneRule";
@@ -764,12 +764,6 @@ function updateEngineSound(runtime: Runtime): void {
   );
 }
 
-/** Runs the siren while a police car is chasing within earshot of this player. */
-function updateSirenSound(runtime: Runtime): void {
-  const player = myPlayer(runtime);
-  runtime.sound.updateSiren(sirenWithin(runtime.state, [player.x, player.y]));
-}
-
 /** True when the input is doing anything, which is what unlocks audio on the first gesture. */
 function isActive(input: WorldInput): boolean {
   return (
@@ -852,7 +846,6 @@ function advanceNetworked(
   // The only real tally is the host's; a client's predicted kills are not.
   runtime.tally = net.loop.tally();
   updateEngineSound(runtime);
-  updateSirenSound(runtime);
   if (debug) recordViolations(runtime);
 }
 
@@ -904,7 +897,6 @@ function advanceSimulation(
       runtime.state.players,
     );
     updateEngineSound(runtime);
-    updateSirenSound(runtime);
     runtime.accumulator -= SIM_STEP_S;
     steps += 1;
     if (debug) recordViolations(runtime);
@@ -1208,7 +1200,7 @@ function runFrame(
     ? findZoneByKey(runtime.session.index(), runtime.state.zoneKey)
     : null;
   const scene = buildScene(runtime, frame, zone, pointer, timestamp);
-  updateFrameSound(runtime, scene, runtime3d ? runtime3d.look.yaw() : null);
+  updateFrameSound(runtime, scene, runtime3d ? runtime3d.look.yaw() : null, dt);
   const drawStats = runtime3d
     ? paint3d(canvas, rect, runtime3d, scene, timestamp, dt)
     : paintCanvas(
