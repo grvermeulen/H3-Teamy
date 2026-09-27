@@ -30,6 +30,7 @@ export function createTestMaterials(): WorldMaterials {
     facade: new MeshLambertMaterial({ vertexColors: true }),
     detail: new MeshLambertMaterial({ vertexColors: true }),
     roadMarking: plain(),
+    streetPaint: new MeshLambertMaterial({ vertexColors: true }),
     treeTrunk: plain(),
     canopies: [plain(), plain()],
     lampPole: plain(),

@@ -7,14 +7,18 @@
 import {
   distancePointToSegment,
   pointInPolygon,
+  pointInRect,
+  rectsIntersect,
   type Rect,
 } from "../mapBuild/geometry";
 import { ROAD_WIDTH_M } from "../render/palette";
 import type {
   DecodedBuilding,
+  DecodedGround,
   DecodedRoad,
   DecodedTile,
 } from "../world/decode";
+import type { GroundKind } from "../world/mapTypes";
 import type { Point } from "../world/projection";
 import {
   createBucketGrid,
@@ -27,6 +31,8 @@ import { tileBuildingsIn, tileRoadsIn } from "./tileIndex";
 
 /** Side of a grid bucket, metres. */
 const BUCKET_M = 16;
+/** Side of a ground polygon bucket, metres: the polygons are few and large. */
+const GROUND_BUCKET_M = 32;
 /** How far past the cell the context reaches, metres: the widest question asked. */
 export const CONTEXT_MARGIN_M = 48;
 
@@ -86,8 +92,17 @@ export type CellContext = {
     radius: number,
     accept?: (road: DecodedRoad) => boolean,
   ): RoadHit | null;
-  /** Whether a point lies on a carriageway, grown by `margin` metres. */
-  onCarriageway(point: Point, margin: number): boolean;
+  /**
+   * Whether a point lies on a carriageway, grown by `margin` metres; only roads passing `accept`
+   * count when it is given.
+   */
+  onCarriageway(
+    point: Point,
+    margin: number,
+    accept?: (road: DecodedRoad) => boolean,
+  ): boolean;
+  /** The ground a point lies on — the topmost fields, grass or wood polygon — or null (urban). */
+  groundAt(point: Point): GroundKind | null;
   /** Whether a point lies inside a building footprint, or within `margin` metres of one. */
   inFootprint(point: Point, margin: number): boolean;
   /** Centres of the landmark buildings in reach. */
@@ -163,6 +178,36 @@ function footprintAt(
   return hit;
 }
 
+/** How the ground kinds stack, bottom first, as the 2D map paints them. */
+const GROUND_STACK: readonly GroundKind[] = ["field", "grass", "forest"];
+
+/** The ground polygons of the tiles over an area, bucketed. */
+function groundGrid(
+  tiles: readonly DecodedTile[],
+  area: Rect,
+): BucketGrid<DecodedGround> {
+  const grid = createBucketGrid<DecodedGround>(area, GROUND_BUCKET_M);
+  for (const tile of tiles)
+    for (const polygon of tile.ground)
+      if (rectsIntersect(polygon.bounds, area))
+        insertItem(grid, polygon, polygon.bounds);
+  return grid;
+}
+
+/** The topmost ground kind under a point, or null. */
+function groundIn(
+  grid: BucketGrid<DecodedGround>,
+  point: Point,
+): GroundKind | null {
+  let best = -1;
+  visitNear(grid, point, 0, (polygon) => {
+    const rank = GROUND_STACK.indexOf(polygon.kind);
+    if (rank <= best || !pointInRect(point, polygon.bounds)) return;
+    if (pointInPolygon(point, polygon.ring)) best = rank;
+  });
+  return best < 0 ? null : GROUND_STACK[best];
+}
+
 /** Every distinct road and building of the tiles that reaches an area. */
 function gather(
   tiles: readonly DecodedTile[],
@@ -198,6 +243,7 @@ export function createCellContext(
     if (!destroyed.has(building.structureId))
       insertItem(footprints, building, building.bounds);
   }
+  const ground = groundGrid(tiles, area);
   const landmarks = buildings
     .filter((building) => building.landmark)
     .map(({ bounds: b }): Point => [
@@ -209,15 +255,16 @@ export function createCellContext(
     landmarks,
     nearestRoad: (point, radius, accept) =>
       nearestIn(grid, point, radius, accept),
-    onCarriageway: (point, margin) => {
+    onCarriageway: (point, margin, accept) => {
       let on = false;
       visitNear(grid, point, BUCKET_M, (segment) => {
-        if (on) return;
+        if (on || (accept && !accept(segment.road))) return;
         const reach = segment.halfWidth + margin;
         on = distancePointToSegment(point, segment.a, segment.b) < reach;
       });
       return on;
     },
+    groundAt: (point) => groundIn(ground, point),
     inFootprint: (point, margin) => footprintAt(footprints, point, margin),
   };
 }

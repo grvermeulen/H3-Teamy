@@ -52,7 +52,8 @@ export type GroundLayer =
   | "water"
   | "pavement"
   | "road"
-  | "marking";
+  | "marking"
+  | "paint";
 
 /**
  * The `renderOrder` of each ground layer's meshes. Coplanar layers cannot be told apart by depth
@@ -66,7 +67,7 @@ export type GroundLayer =
  * The contract this relies on:
  * - the renderer sorts objects (`renderer.sortObjects === true`, three.js's default), or the
  *   orders are ignored and the ground paints over whatever happened to be drawn before it;
- * - no other opaque object has a `renderOrder` at or below the highest ground order (−93);
+ * - no other opaque object has a `renderOrder` at or below the highest ground order (−92);
  * - no ancestor `Group` of the city or of any opaque object has a negative `renderOrder` (three.js
  *   sorts by the nearest group's order before an object's own).
  */
@@ -79,6 +80,7 @@ export const GROUND_RENDER_ORDER: Readonly<Record<GroundLayer, number>> = {
   pavement: -95,
   road: -94,
   marking: -93,
+  paint: -92,
 };
 
 /** Every material the city builder draws with; all are shared across cells. */
@@ -95,6 +97,8 @@ export type WorldMaterials = {
   detail: MeshLambertMaterial;
   /** The centre line on the bigger roads, the 2D map's amber. */
   roadMarking: MeshLambertMaterial;
+  /** Cycle paths and zebra crossings: flat, vertex-coloured, painted over the road in layer order. */
+  streetPaint: MeshLambertMaterial;
   /** Tree trunks. */
   treeTrunk: MeshLambertMaterial;
   /** The two canopy greens, alternated by tree id: a lighter yellow-green, then a deeper blue-green. */
@@ -204,6 +208,9 @@ export function createWorldMaterials(
     facade: createFacadeAtlasMaterial(),
     detail: new MeshLambertMaterial({ vertexColors: true }),
     roadMarking: paintInLayerOrder(matte(ROAD_CENTRE_LINE)),
+    streetPaint: paintInLayerOrder(
+      new MeshLambertMaterial({ vertexColors: true }),
+    ),
     treeTrunk: matte(TRUNK_COLOUR),
     canopies: [matte(CANOPY_LIGHT), matte(CANOPY_DEEP)],
     ...createLampMaterials(),
@@ -227,6 +234,7 @@ function listWorldMaterials(
     materials.facade,
     materials.detail,
     materials.roadMarking,
+    materials.streetPaint,
     materials.treeTrunk,
     ...materials.canopies,
     materials.lampPole,

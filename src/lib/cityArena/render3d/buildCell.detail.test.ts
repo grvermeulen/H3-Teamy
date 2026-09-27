@@ -10,8 +10,9 @@ import {
 import { buildCell, type CellInput } from "./buildCell";
 import type { CityDetail } from "./cityDetail";
 import { FACADE_BLOCK_ATTRIBUTE } from "./facadeAtlas";
+import { CYCLE_PATH_M } from "./streetMarkings";
 import { createTestMaterials, fixtureTown } from "./testing/cityFixture";
-import type { WorldMaterials } from "./worldMaterials";
+import { GROUND_RENDER_ORDER, type WorldMaterials } from "./worldMaterials";
 
 const CHURCH_STYLES = new Map([["cunerakerk", { style: "church" as const }]]);
 
@@ -109,6 +110,41 @@ describe("buildCell detail", () => {
       count(wallsOf(basic.group)),
     );
     expect(drawnWith(full.group, materials.facade)).toHaveLength(1);
+  });
+
+  it("paints cycle paths and zebras in one layer-ordered mesh on a full cell only", () => {
+    const materials = createTestMaterials();
+
+    const basic = townCell(materials, [0, 0], "basic");
+    const full = townCell(materials, [0, 0], "full");
+
+    expect(drawnWith(basic.group, materials.streetPaint)).toHaveLength(0);
+    const paint = drawnWith(full.group, materials.streetPaint);
+    expect(paint).toHaveLength(1);
+    expect(paint[0].renderOrder).toBe(GROUND_RENDER_ORDER.paint);
+    expect(paint[0].renderOrder).toBeGreaterThan(GROUND_RENDER_ORDER.marking);
+  });
+
+  it("moves the lamps of a road with cycle paths out past them on a full cell", () => {
+    const materials = createTestMaterials();
+    const lampsBy = (detail: CityDetail): number[] =>
+      townCell(materials, [0, 0], detail)
+        .furniture.filter(
+          (piece) =>
+            piece.kind === "lamp" &&
+            Math.abs(piece.x - 110) < 12 &&
+            piece.y > -40 &&
+            piece.y < 30,
+        )
+        .map((piece) => Math.abs(piece.x - 110));
+
+    const basic = lampsBy("basic");
+    const full = lampsBy("full");
+
+    expect(full.length).toBeGreaterThan(0);
+    expect(Math.min(...full)).toBeGreaterThan(Math.max(...basic));
+    for (const distance of full)
+      expect(distance).toBeGreaterThan(4.5 + CYCLE_PATH_M);
   });
 
   it("builds the same full cell every time", () => {

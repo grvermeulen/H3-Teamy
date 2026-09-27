@@ -59,10 +59,36 @@ describe("createCellContext", () => {
     expect(context.nearestRoad([55, 40], 3)).toBeNull();
   });
 
-  it("knows the carriageways, grown by a margin", () => {
+  it("knows the carriageways, grown by a margin, of the roads a filter accepts", () => {
     expect(context.onCarriageway([0, 4], 0)).toBe(true);
     expect(context.onCarriageway([0, 5], 0)).toBe(false);
     expect(context.onCarriageway([0, 5], 1)).toBe(true);
+    const residential = (road: { roadClass: string }): boolean =>
+      road.roadClass === "residential";
+    expect(context.onCarriageway([0, 4], 0, residential)).toBe(false);
+    expect(context.onCarriageway([60, 20], 0, residential)).toBe(true);
+  });
+
+  it("reads the topmost ground under a point, or none on the urban backdrop", () => {
+    const grounds = createCellContext(
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      [
+        fixtureTile(
+          { x: 0, y: 0, rect: FIXTURE_TILE_RECT },
+          {
+            ground: [
+              { ring: squareRing(0, 0, 100), kind: "field" },
+              { ring: squareRing(20, 20, 30), kind: "forest" },
+            ],
+          },
+        ),
+      ],
+      new Set(),
+    );
+
+    expect(grounds.groundAt([10, 10])).toBe("field");
+    expect(grounds.groundAt([30, 30])).toBe("forest");
+    expect(grounds.groundAt([110, 110])).toBeNull();
   });
 
   it("knows the footprints, grown by a margin, and forgets fallen ones", () => {
