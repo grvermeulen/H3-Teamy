@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createRng } from "../sim/rng";
 import type { StructureState } from "../sim/types";
 import type { DecodedBuilding, DecodedTile } from "../world/decode";
 import { structureIdOf } from "../world/structureId";
@@ -10,6 +11,12 @@ import {
   drawStructureDamage,
 } from "./drawStructures";
 import { createFakeContext } from "./testing/fakeContext";
+
+// Counted, not replaced: a ruin's rubble is scattered from one seeded generator per id.
+vi.mock("../sim/rng", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../sim/rng")>();
+  return { ...actual, createRng: vi.fn(actual.createRng) };
+});
 
 /** A 10×10 m square footprint at the given corner, one storey (`structureMaxHealth` = 120). */
 function house(structureId: number, x: number, y: number): DecodedBuilding {
@@ -148,5 +155,46 @@ describe("drawStructureDamage", () => {
       `fill(rgba(0,0,0,${DAMAGE_SHADE_MAX_ALPHA / 2}))`,
     );
     expect(context.calls).not.toContain(`fill(${RUBBLE_FILL})`);
+  });
+});
+
+describe("drawStructureDamage caches", () => {
+  /** Draws `structures` over `tiles` into a fresh context; returns its calls. */
+  function draw(tiles: DecodedTile[], structures: StructureState[]): string[] {
+    const context = createFakeContext();
+    drawStructureDamage(context, camera, viewport, tiles, structures);
+    return context.calls;
+  }
+
+  beforeEach(() => {
+    // An empty list forgets every ruin an earlier test left behind.
+    draw([], []);
+    vi.mocked(createRng).mockClear();
+  });
+
+  it("scatters a ruin's rubble once, not every frame, though each frame hands a fresh tile list", () => {
+    const tile = tileAt(0, 0, [house(STRUCTURE_ID, -5, -5)]);
+    const ruins = [destroyedEntry(STRUCTURE_ID)];
+    const first = draw([tile], ruins);
+    const second = draw([tile], ruins);
+    expect(second).toEqual(first);
+    expect(createRng).toHaveBeenCalledTimes(1);
+  });
+
+  it("scatters again over a reloaded tile's footprint", () => {
+    const ruins = [destroyedEntry(STRUCTURE_ID)];
+    const before = draw([tileAt(0, 0, [house(STRUCTURE_ID, -5, -5)])], ruins);
+    const after = draw([tileAt(0, 0, [house(STRUCTURE_ID, 5, 5)])], ruins);
+    expect(after).not.toEqual(before);
+    expect(createRng).toHaveBeenCalledTimes(2);
+  });
+
+  it("forgets a ruin once it leaves the list, and scatters it afresh if it falls again", () => {
+    const tile = tileAt(0, 0, [house(STRUCTURE_ID, -5, -5)]);
+    const ruins = [destroyedEntry(STRUCTURE_ID)];
+    draw([tile], ruins);
+    draw([tile], [{ ...ruins[0]!, destroyedAtTick: null, damage: 0 }]);
+    draw([tile], ruins);
+    expect(createRng).toHaveBeenCalledTimes(2);
   });
 });

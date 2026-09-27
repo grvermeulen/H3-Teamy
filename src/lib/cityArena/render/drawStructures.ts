@@ -109,7 +109,45 @@ function rubbleChunkPolygons(
   return chunks;
 }
 
-/** Paints a destroyed footprint: a flat rubble fill, then chunk polygons seeded by its id. */
+/** A ruin's rubble chunks, kept for as long as the ruin stays in the structure list. */
+type CachedRubble = {
+  /** The footprint the chunks were scattered over; a reloaded tile brings a new one. */
+  building: DecodedBuilding;
+  chunks: Point[][];
+  /** The {@link rubblePass} that last saw the ruin in the list. */
+  seenPass: number;
+};
+
+/**
+ * Rubble chunks per destroyed structure id, so a ruin is scattered once, not every frame. At most
+ * one entry per ruin in the list ({@link MAX_STRUCTURES}); a ruin that leaves it is dropped.
+ */
+const rubbleCache = new Map<number, CachedRubble>();
+/** Counts {@link drawStructureDamage} calls, to find the cached ruins the list no longer holds. */
+let rubblePass = 0;
+
+/** The chunks of a ruin's rubble, scattered (seeded by its id) the first time it is drawn. */
+function rubbleOf(id: number, building: DecodedBuilding): Point[][] {
+  const cached = rubbleCache.get(id);
+  if (cached && cached.building === building) return cached.chunks;
+  const rng = createRng(seedFromString(String(id)));
+  const chunks = rubbleChunkPolygons(building, rng);
+  rubbleCache.set(id, { building, chunks, seenPass: rubblePass });
+  return chunks;
+}
+
+/** Marks every ruin in `structures` as seen this pass and drops the cached ones that are not. */
+function pruneRubble(structures: readonly StructureState[]): void {
+  rubblePass += 1;
+  for (const entry of structures) {
+    const cached = rubbleCache.get(entry.id);
+    if (cached && entry.destroyedAtTick !== null) cached.seenPass = rubblePass;
+  }
+  for (const [id, cached] of rubbleCache)
+    if (cached.seenPass !== rubblePass) rubbleCache.delete(id);
+}
+
+/** Paints a destroyed footprint: a flat rubble fill, then its cached chunk polygons. */
 function drawRubble(
   context: RasterContext,
   camera: Camera,
@@ -118,8 +156,7 @@ function drawRubble(
   entry: StructureState,
 ): void {
   fillWorldRing(context, camera, size, building.ring, RUBBLE_FILL);
-  const rng = createRng(seedFromString(String(entry.id)));
-  for (const chunk of rubbleChunkPolygons(building, rng))
+  for (const chunk of rubbleOf(entry.id, building))
     fillWorldRing(context, camera, size, chunk, RUBBLE_CHUNK);
 }
 
@@ -147,6 +184,38 @@ function tileKey(x: number, y: number): string {
   return `${x}:${y}`;
 }
 
+/** The tile list the lookup was last built from, and the lookup by `x:y`. */
+let tileLookup: {
+  tiles: readonly DecodedTile[];
+  byCoord: ReadonlyMap<string, DecodedTile>;
+} | null = null;
+
+/** True when two tile lists hold the same tiles in the same order. */
+function sameTiles(
+  a: readonly DecodedTile[],
+  b: readonly DecodedTile[],
+): boolean {
+  if (a.length !== b.length) return false;
+  for (let index = 0; index < a.length; index += 1)
+    if (a[index] !== b[index]) return false;
+  return true;
+}
+
+/**
+ * The resident tiles by `x:y`, rebuilt only when the tiles themselves change — the session hands
+ * out a fresh array every frame, so the arrays are compared tile by tile.
+ */
+function tilesByCoordOf(
+  tiles: readonly DecodedTile[],
+): ReadonlyMap<string, DecodedTile> {
+  if (!tileLookup || !sameTiles(tileLookup.tiles, tiles))
+    tileLookup = {
+      tiles,
+      byCoord: new Map(tiles.map((tile) => [tileKey(tile.x, tile.y), tile])),
+    };
+  return tileLookup.byCoord;
+}
+
 /**
  * The building a structure id names, decoded straight from the id (spec §3.1: `id` packs the
  * tile and the piece's position in it) rather than by scanning every tile's building list.
@@ -163,8 +232,9 @@ function buildingFor(
 /**
  * Draws rubble over destroyed footprints and a dark shade over damaged ones, for every entry in
  * `structures` whose building is resident and in view. Resolves each entry directly by id — at
- * most {@link MAX_STRUCTURES} lookups — rather than scanning every building of every tile. Pure
- * canvas calls; no raster invalidation.
+ * most {@link MAX_STRUCTURES} lookups — rather than scanning every building of every tile. The
+ * tile lookup and each ruin's rubble are cached across frames (the rubble per id, until the ruin
+ * leaves the list). Pure canvas calls; no raster invalidation.
  *
  * @param context - The canvas, already in viewport-local pixel space.
  * @param camera - The active camera.
@@ -179,10 +249,9 @@ export function drawStructureDamage(
   tiles: readonly DecodedTile[],
   structures: readonly StructureState[],
 ): void {
+  pruneRubble(structures);
   if (structures.length === 0) return;
-  const tilesByCoord = new Map(
-    tiles.map((tile) => [tileKey(tile.x, tile.y), tile]),
-  );
+  const tilesByCoord = tilesByCoordOf(tiles);
   const view = visibleRect(camera, size);
   for (const entry of structures) {
     const building = buildingFor(tilesByCoord, entry.id);
