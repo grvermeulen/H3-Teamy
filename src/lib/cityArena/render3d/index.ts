@@ -20,6 +20,7 @@ import {
   type Renderer3d,
 } from "./renderer3d";
 import { createRuins3d, type Ruins3d } from "./ruins3d";
+import { disposeSharedAssets } from "./sharedAssets";
 import type { StructureView } from "./worldCells";
 
 export type { CameraMode } from "./cameraRig";
@@ -223,6 +224,8 @@ function startView(parts: View3dParts): View3dHandle {
       parts.city.dispose();
       parts.cast.dispose();
       parts.guidance.dispose();
+      // Before the renderer: freeing them lets its dispose listeners let go of them.
+      disposeSharedAssets();
       renderer.dispose();
     },
   };

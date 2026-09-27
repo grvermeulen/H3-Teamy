@@ -72,9 +72,15 @@ export type WheelLook = {
   hub: number;
 };
 
-/** Caches one value per key, so every caller asking for the same colour gets the same material. */
-function memoise<K, V>(create: (key: K) => V): (key: K) => V {
-  const cache = new Map<K, V>();
+/** Every per-colour material cache {@link memoise} made, for {@link disposeVehicleMaterials}. */
+const materialCaches: Map<number, Material>[] = [];
+
+/** Caches one material per colour, so every caller asking for the same colour gets the same one. */
+function memoise<V extends Material>(
+  create: (key: number) => V,
+): (key: number) => V {
+  const cache = new Map<number, V>();
+  materialCaches.push(cache);
   return (key) => {
     const hit = cache.get(key);
     if (hit !== undefined) return hit;
@@ -102,6 +108,19 @@ export const paintMaterial: (hex: number) => MeshPhongMaterial = memoise(
 
 /** The one vertex-coloured material, created on first use. */
 let sharedDetail: MeshPhongMaterial | null = null;
+
+/**
+ * Frees every material the vehicles share and forgets it, so a view that has gone keeps none (nor
+ * its renderer) reachable; the next view makes them afresh on first use.
+ */
+export function disposeVehicleMaterials(): void {
+  for (const cache of materialCaches) {
+    for (const material of cache.values()) material.dispose();
+    cache.clear();
+  }
+  sharedDetail?.dispose();
+  sharedDetail = null;
+}
 
 /**
  * The material of glass, trim, stripes and tyres: its colour comes from the vertices.

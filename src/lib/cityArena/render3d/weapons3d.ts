@@ -199,6 +199,15 @@ function partGeometry(part: WeaponPart): BufferGeometry {
 
 const geometryCache = new Map<WeaponKind, BufferGeometry>();
 
+/**
+ * Frees every weapon's merged geometry and forgets it, so a view that has gone keeps none (nor its
+ * renderer) reachable; the next view merges them afresh on first use.
+ */
+export function disposeWeaponGeometries(): void {
+  for (const geometry of geometryCache.values()) geometry.dispose();
+  geometryCache.clear();
+}
+
 /** The merged geometry of a weapon, built once; `null` for bare fists and the tank's cannon. */
 function weaponGeometry(kind: WeaponKind): BufferGeometry | null {
   const cached = geometryCache.get(kind);

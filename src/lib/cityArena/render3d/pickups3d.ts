@@ -152,6 +152,22 @@ function healthCross(): BufferGeometry {
   return healthCrossGeometry;
 }
 
+/**
+ * Frees the glow disc, the glow materials and the health box and cross every pickup shares, and
+ * forgets them, so a view that has gone keeps none (nor its renderer) reachable; the next view
+ * builds them afresh on first use.
+ */
+export function disposePickupAssets(): void {
+  glowDiscGeometry?.dispose();
+  glowDiscGeometry = null;
+  for (const material of glowMaterials.values()) material.dispose();
+  glowMaterials.clear();
+  healthBoxGeometry?.dispose();
+  healthBoxGeometry = null;
+  healthCrossGeometry?.dispose();
+  healthCrossGeometry = null;
+}
+
 /** The health pickup's model: a white box with a red cross on each side face. */
 function createHealthModel(): Object3D {
   const group = new Group();

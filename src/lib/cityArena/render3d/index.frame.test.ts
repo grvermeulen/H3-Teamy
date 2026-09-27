@@ -10,6 +10,7 @@ import type { Scene as ArenaScene } from "../render/renderScene";
 import type { EffectState, VehicleState } from "../sim/types";
 import { createVehicle } from "../sim/vehicle";
 import { structureIdOf } from "../world/structureId";
+import { characterMaterials } from "./characterRig";
 import { createCity3d } from "./city3d";
 import { createDestruction3d } from "./destruction3d";
 import { createEffects3d } from "./effects3d";
@@ -336,6 +337,19 @@ describe("createView3d frame path", () => {
 
     const renderer = vi.mocked(createRenderer3d).mock.results[0]!.value;
     expect(renderer.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("frees the shared character, vehicle, pickup and weapon assets before the renderer", () => {
+    const view = createView3d(document.createElement("canvas"));
+    const { renderer } = partsOfView();
+    const shared = characterMaterials().body;
+    const freeShared = vi.spyOn(shared, "dispose");
+    view.dispose();
+    expect(freeShared).toHaveBeenCalledTimes(1);
+    expect(freeShared.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(renderer.dispose).mock.invocationCallOrder[0]!,
+    );
+    expect(characterMaterials().body).not.toBe(shared);
   });
 
   it("frees the city, the cast, the effects, the guidance and the renderer on dispose", () => {

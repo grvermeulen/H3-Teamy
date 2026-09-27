@@ -310,7 +310,22 @@ function assemble(parts: RigPart[]): BufferGeometry {
 /** Hue steps in one turn when caching vest variants. */
 const VEST_HUE_STEPS = 360;
 
-const geometryCache = new WeakMap<LookSpec, Map<number, BufferGeometry>>();
+/** Merged geometry per look, then per vest hue; emptied by {@link disposeCharacterAssets}. */
+const geometryCache = new Map<LookSpec, Map<number, BufferGeometry>>();
+
+/**
+ * Frees the materials and merged geometries every character shares, and forgets them: a view that
+ * has gone keeps nothing GPU-bound alive — nor, through the dispose listeners three.js hangs on
+ * them, its renderer. The next view builds them afresh on first use.
+ */
+export function disposeCharacterAssets(): void {
+  sharedMaterials?.body.dispose();
+  sharedMaterials?.glow.dispose();
+  sharedMaterials = null;
+  for (const byHue of geometryCache.values())
+    for (const geometry of byHue.values()) geometry.dispose();
+  geometryCache.clear();
+}
 
 /** The look's vest hue snapped to a cacheable step, or `null` if it wears no vest. */
 function vestHueKey(
