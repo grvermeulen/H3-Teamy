@@ -164,6 +164,12 @@ function applyPalette(
   }
 }
 
+/** Takes off every accessory worn. */
+function takeOff(worn: Object3D[]): void {
+  for (const item of worn) item.removeFromParent();
+  worn.length = 0;
+}
+
 /** Takes off the accessories worn and puts on the appearance's. */
 function wear(
   body: Body,
@@ -171,8 +177,7 @@ function wear(
   appearance: Appearance,
   female: boolean,
 ): void {
-  for (const item of worn) item.removeFromParent();
-  worn.length = 0;
+  takeOff(worn);
   for (const extra of appearance.extras) {
     const { bone, object } = createAccessory(extra, female);
     object.scale.setScalar(body.unit);
@@ -292,7 +297,7 @@ export function createGltfCharacter(
     dress: (next, nextHeight) => dressParts(parts, next, nextHeight),
     dispose() {
       slot.hold(null);
-      wear(parts.body, parts.worn, { ...appearance, extras: [] }, false);
+      takeOff(parts.worn);
       animator.dispose();
       parts.body.palette.material.dispose();
       parts.body.mesh.skeleton.dispose();
