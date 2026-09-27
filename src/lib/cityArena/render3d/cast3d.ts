@@ -144,7 +144,7 @@ export function createCast3d(
       view.characterDetailM =
         frame.quality === "low" ? GLTF_LOD_DISTANCE_M : undefined;
       entities.update(frame.scene, frame.dt, focus, view);
-      street.update(contacts, frame.scene, focus);
+      street.update(contacts, frame.scene, focus, frame.dt);
       const drawn = handsInput(handsScratch, entities, frame);
       fx = fxFor(object, fx, frame.quality);
       // Your own flame moves to the hands' barrel only while the hands are there to show it.

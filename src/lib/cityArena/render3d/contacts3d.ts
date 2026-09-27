@@ -13,6 +13,7 @@ import { headingToRotationY, setWorldPosition } from "./coords";
 import {
   CHARACTER_DRAW_DISTANCE_M,
   FREE_LIST_CAP,
+  FULL_RATE_ANIMATION_M,
   type CharacterWho,
   type EntityFactories,
 } from "./entities";
@@ -47,11 +48,13 @@ export type Contacts3d = {
    * @param contacts - The mission markers' contacts.
    * @param scene - The frame's players and tick.
    * @param focus - The camera focus, world metres.
+   * @param dt - Seconds since the previous frame, which the characters animate by.
    */
   update(
     contacts: readonly ContactSpot[],
     scene: ContactsScene,
     focus: { x: number; y: number },
+    dt?: number,
   ): void;
   /** Disposes every character, standing or freed. */
   dispose(): void;
@@ -150,12 +153,14 @@ export function createContacts3d(factories: ContactFactories): Contacts3d {
   const who: CharacterWho = { id: 0, simple: false };
   return {
     object,
-    update(contacts, scene, focus) {
+    update(contacts, scene, focus, dt) {
       pool.begin();
       pose.tick = scene.tick;
+      pose.dt = dt;
       for (const contact of contacts) {
         if (!near(focus, contact.x, contact.y, CHARACTER_DRAW_DISTANCE_M))
           continue;
+        pose.far = !near(focus, contact.x, contact.y, FULL_RATE_ANIMATION_M);
         const character = contactSlot(factories, pool, contact, who).item;
         setWorldPosition(character.object.position, contact.x, contact.y);
         character.object.rotation.y = headingToRotationY(
