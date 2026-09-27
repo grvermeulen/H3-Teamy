@@ -2,9 +2,10 @@ import { describe, expect, it } from "vitest";
 import { createCamera } from "@/lib/cityArena/render/camera";
 import type { HostLoop } from "@/lib/cityArena/net/hostLoop";
 import { SIM_STEP_S } from "@/lib/cityArena/sim/player";
-import type { ArenaState } from "@/lib/cityArena/sim/types";
+import { createInput, type ArenaState } from "@/lib/cityArena/sim/types";
 import {
   canApplyRuntimeUpdate,
+  holdFireDuringOffer,
   nextCamera,
   recordStepped,
   renderAlpha,
@@ -100,5 +101,28 @@ describe("renderAlpha", () => {
         accumulator: 999,
       }),
     ).toBe(0.4);
+  });
+});
+
+describe("holdFireDuringOffer", () => {
+  const firing = createInput({ fire: true, move: [1, 0] });
+  const profile = {
+    lastCommand: 0,
+    offer: "bakker-bezorging",
+  } as unknown as NonNullable<
+    Parameters<typeof holdFireDuringOffer>[1]["mission"]
+  >;
+
+  it("lets go of the trigger behind an open mission offer, and nothing else", () => {
+    const held = holdFireDuringOffer(firing, { mission: profile });
+    expect(held.fire).toBe(false);
+    expect(held.move).toEqual(firing.move);
+  });
+
+  it("leaves the input alone without an offer", () => {
+    expect(holdFireDuringOffer(firing, {})).toBe(firing);
+    expect(
+      holdFireDuringOffer(firing, { mission: { ...profile, offer: null } }),
+    ).toBe(firing);
   });
 });

@@ -17,7 +17,6 @@ import {
 import type { Point } from "../world/projection";
 import { zoneCentreMetres, zoneRadiusMetres } from "../world/zone";
 import { resolveVehicleAgainstCircle } from "./collisions";
-import { EXPLOSION_DAMAGE, inBlastRadius } from "./damage";
 import { eventsOfKind, pushEvent } from "./events";
 import { PLAYER_RADIUS_M } from "./player";
 import { driverPlayer } from "./players";
@@ -429,21 +428,4 @@ export function stepPeds(
     if (next) peds.push(next);
   }
   return runOverPeds({ ...state, peds }, tick);
-}
-
-/** Damages living pedestrians inside an exploding car's blast radius. */
-export function blastPeds(
-  peds: PedState[],
-  vehicle: Pick<VehicleState, "x" | "y">,
-  tick: number,
-): { peds: PedState[]; killed: PedState[] } {
-  const killed: PedState[] = [];
-  const blasted = peds.map((ped) => {
-    if (ped.mode === "dead" || !inBlastRadius(vehicle, [ped.x, ped.y]))
-      return ped;
-    const hurt = damagePed(ped, EXPLOSION_DAMAGE, tick);
-    if (hurt.mode === "dead") killed.push(hurt);
-    return hurt;
-  });
-  return { peds: blasted, killed };
 }

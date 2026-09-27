@@ -7,13 +7,23 @@
  * snapshot is reconciled: adopt the host's version of you, replay the inputs the host had not seen
  * yet, and blend away whatever error is left. Health, ammo, kills and pickups are never predicted;
  * spec §6.5 makes them host-only, and predicting them produces flicker when the host disagrees.
+ *
+ * The host's events never cross the wire, so the explosions and collapses a snapshot reveals are
+ * made up here (`clientFeedback.ts`) and handed on with the next predicted tick.
  */
 
 import * as Sentry from "@sentry/nextjs";
 import type { stepArena, ArenaWorld } from "../sim/arena";
 import { playerById } from "../sim/players";
+import { pushEvent } from "../sim/events";
 import { cooldownTicks, hasAmmo } from "../sim/weapons";
-import { EMPTY_INPUT, type ArenaState, type WorldInput } from "../sim/types";
+import {
+  EMPTY_INPUT,
+  type ArenaEvent,
+  type ArenaState,
+  type WorldInput,
+} from "../sim/types";
+import { createFeedbackQueue } from "./clientFeedback";
 import { applySnapshot } from "./snapshotApply";
 import type { MatchState } from "./matchPhase";
 import { emptyTally, type Tally } from "./scoreboard";
@@ -109,6 +119,24 @@ type BufferedInput = { seq: number; input: WorldInput };
 type Reconciliation = { x: number; y: number; leftMs: number };
 
 /**
+ * The error left after a snapshot moved this client's player from where it predicted itself.
+ * A small disagreement is hidden by walking it off over {@link RECONCILE_BLEND_MS}; a large one
+ * means the client was wrong about something structural, and pretending otherwise just slides the
+ * player, so it snaps.
+ */
+function reconciliation(
+  before: { x: number; y: number } | null,
+  after: { x: number; y: number } | null,
+): Reconciliation {
+  if (!before || !after) return { x: 0, y: 0, leftMs: 0 };
+  const errorX = before.x - after.x;
+  const errorY = before.y - after.y;
+  return Math.hypot(errorX, errorY) > SNAP_DISTANCE_M
+    ? { x: 0, y: 0, leftMs: 0 }
+    : { x: errorX, y: errorY, leftMs: RECONCILE_BLEND_MS };
+}
+
+/**
  * Starts playing as a client.
  *
  * @param options - The transport, room, world and which player this client drives.
@@ -127,6 +155,10 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
 
   const buffered: BufferedInput[] = [];
   const frames: SnapshotFrame[] = [];
+  const feedback = createFeedbackQueue(
+    options.world.collision,
+    options.playerId,
+  );
 
   let predicted = options.state;
   let held: WorldInput = EMPTY_INPUT;
@@ -179,11 +211,8 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
     }
   });
 
-  /** Runs one predicted tick from the input this client is holding. */
-  function predictTick(): void {
-    seq += 1;
-    buffered.push({ seq, input: held });
-    if (buffered.length > MAX_BUFFERED_INPUTS) buffered.shift();
+  /** Latches the held buttons and publishes them when due: every 2 ticks while active, else 15. */
+  function publishIfDue(): void {
     latched = {
       fire: latched.fire || held.fire,
       enter: latched.enter || held.enter,
@@ -200,6 +229,38 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
       publishInput(outgoing);
       latched = { fire: false, enter: false, weaponNext: false };
     }
+  }
+
+  /**
+   * The shot this tick's trigger fires on this client's own screen, or `null`: combat is the
+   * host's (spec §6.5), but the shooter hears their own gun on the frame they pull the trigger.
+   */
+  function ownShot(): ArenaEvent | null {
+    const player = playerById(predicted, options.playerId);
+    if (
+      options.step ||
+      !held.fire ||
+      !player ||
+      player.health <= 0 ||
+      player.vehicleId !== null ||
+      seq < nextShotFeedback ||
+      !hasAmmo(player.ammo, player.weapon)
+    )
+      return null;
+    nextShotFeedback = seq + cooldownTicks(player.weapon);
+    const { weapon, id, x, y } = player;
+    return { kind: "shot", weapon, ownerId: id, x, y };
+  }
+
+  /**
+   * Runs one predicted tick from the input this client is holding, and hands it on with the
+   * explosions and collapses the last snapshot brought and this client's own shot.
+   */
+  function predictTick(): void {
+    seq += 1;
+    buffered.push({ seq, input: held });
+    if (buffered.length > MAX_BUFFERED_INPUTS) buffered.shift();
+    publishIfDue();
     predicted = step(
       predicted,
       new Map([[options.playerId, held]]),
@@ -207,30 +268,13 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
       options.world,
       options.random,
     );
-    const player = playerById(predicted, options.playerId);
-    if (
-      !options.step &&
-      held.fire &&
-      player &&
-      player.health > 0 &&
-      player.vehicleId === null &&
-      seq >= nextShotFeedback &&
-      hasAmmo(player.ammo, player.weapon)
-    ) {
-      nextShotFeedback = seq + cooldownTicks(player.weapon);
-      options.onTick?.({
-        ...predicted,
-        events: [
-          {
-            kind: "shot",
-            weapon: player.weapon,
-            ownerId: player.id,
-            x: player.x,
-            y: player.y,
-          },
-        ],
-      });
-    } else options.onTick?.(predicted);
+    const shot = ownShot();
+    let events = predicted.events;
+    for (const event of [...feedback.take(), ...(shot ? [shot] : [])])
+      events = pushEvent(events, event);
+    options.onTick?.(
+      events === predicted.events ? predicted : { ...predicted, events },
+    );
   }
 
   /** Re-applies every buffered input the host had not yet seen. */
@@ -264,23 +308,10 @@ export function createClientLoop(options: ClientLoopOptions): ClientLoop {
     const before = playerById(predicted, options.playerId);
     const acknowledged = view.lastInputSeqs[options.playerId] ?? 0;
     const replayed = replayFrom(applySnapshot(predicted, view), acknowledged);
-    const after = playerById(replayed, options.playerId);
-    predicted = replayed;
+    predicted = feedback.fold(predicted, replayed);
     while (buffered.length > 0 && (buffered[0]?.seq ?? 0) <= acknowledged)
       buffered.shift();
-
-    if (!before || !after) {
-      offset = { x: 0, y: 0, leftMs: 0 };
-      return;
-    }
-    const errorX = before.x - after.x;
-    const errorY = before.y - after.y;
-    // A small disagreement is hidden by walking it off over 100 ms; a large one means the client
-    // was wrong about something structural, and pretending otherwise just slides the player.
-    offset =
-      Math.hypot(errorX, errorY) > SNAP_DISTANCE_M
-        ? { x: 0, y: 0, leftMs: 0 }
-        : { x: errorX, y: errorY, leftMs: RECONCILE_BLEND_MS };
+    offset = reconciliation(before, playerById(predicted, options.playerId));
   }
 
   /** Decays the reconciliation offset towards zero. */

@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_ARENA_SETTINGS } from "@/lib/cityArena/schemas";
 import { ArenaSettingsSheet } from "./ArenaSettingsSheet";
@@ -109,6 +115,61 @@ describe("ArenaSettingsSheet", () => {
     expect(handlers.onChange).toHaveBeenLastCalledWith({
       forceLayout: undefined,
     });
+  });
+
+  it("shows Weergave and 3D-camera segmented controls, the camera disabled until 3D", () => {
+    const handlers = renderSheet();
+    expect(screen.getByRole("button", { name: "2D" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "3D" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(
+      screen.getByRole("button", { name: "Derde persoon" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Eerste persoon" }),
+    ).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "3D" }));
+    expect(handlers.onChange).toHaveBeenLastCalledWith({ view: "3d" });
+  });
+
+  it("names Weergave and 3D-camera as groups of their own, each with its own buttons", () => {
+    renderSheet();
+    const view = screen.getByRole("group", { name: "Weergave" });
+    const camera = screen.getByRole("group", { name: "3D-camera" });
+    expect(
+      within(view)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["2D", "3D"]);
+    expect(
+      within(camera)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Derde persoon", "Eerste persoon"]);
+  });
+
+  it("leaves out Weergave and 3D-camera on a shared screen, where 3D cannot run", () => {
+    renderSheet({ hideView: true });
+    expect(screen.queryByRole("group", { name: "Weergave" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "3D-camera" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "3D" })).toBeNull();
+    expect(screen.getByLabelText("Beeldkwaliteit")).toBeInTheDocument();
+  });
+
+  it("enables the 3D-camera control once the view is 3d, and reports the picked camera", () => {
+    const handlers = renderSheet({
+      settings: { ...DEFAULT_ARENA_SETTINGS, view: "3d" },
+    });
+    const third = screen.getByRole("button", { name: "Derde persoon" });
+    expect(third).not.toBeDisabled();
+    expect(third).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Eerste persoon" }));
+    expect(handlers.onChange).toHaveBeenLastCalledWith({ camera3d: "first" });
   });
 
   it("offers the way out and the way back, and closes on Escape", () => {

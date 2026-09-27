@@ -22,33 +22,45 @@ const PRIMARY_BUTTON = 0;
  */
 const PRIMARY_BUTTON_MASK = 1;
 
-/** Binds mouse movement (aim position) and the left button (fire) on the canvas; touch pointers belong to the stick and the buttons. */
+/** Releases the pointer's fire once the event says the primary button is no longer held. */
+function releaseFireIfPrimaryUp(state: InputState, event: PointerEvent): void {
+  if ((event.buttons & PRIMARY_BUTTON_MASK) === 0)
+    state.setButton("pointer", "fire", false);
+}
+
+/**
+ * Binds mouse movement (aim position) and the left button (fire) on the canvas; touch pointers
+ * belong to the stick and the buttons.
+ *
+ * @param target - The playfield canvas.
+ * @param state - The input state the fire button is written to.
+ * @param onUserGesture - Called on a primary click, e.g. to unlock audio.
+ * @param claimsClick - True when another binding owns the next click — the 3D view's click that
+ * takes the pointer lock (spec §6.3) — so that click aims but does not shoot.
+ * @returns The live pointer position and the detach function.
+ */
 export function attachPointerAim(
   target: PointerAimTarget,
   state: InputState,
   onUserGesture?: () => void,
+  claimsClick?: () => boolean,
 ): PointerAim {
   let position: [number, number] | null = null;
-  const releaseFireIfPrimaryUp = (event: PointerEvent): void => {
-    if ((event.buttons & PRIMARY_BUTTON_MASK) === 0) {
-      state.setButton("pointer", "fire", false);
-    }
-  };
   const onMove = (event: PointerEvent): void => {
     if (event.pointerType !== "mouse") return;
     const rect = target.getBoundingClientRect();
     position = [event.clientX - rect.left, event.clientY - rect.top];
-    releaseFireIfPrimaryUp(event);
+    releaseFireIfPrimaryUp(state, event);
   };
   const onDown = (event: PointerEvent): void => {
     if (event.pointerType !== "mouse" || event.button !== PRIMARY_BUTTON)
       return;
     onUserGesture?.();
     onMove(event);
-    state.setButton("pointer", "fire", true);
+    if (!claimsClick?.()) state.setButton("pointer", "fire", true);
   };
   const onUp = (event: PointerEvent): void => {
-    if (event.pointerType === "mouse") releaseFireIfPrimaryUp(event);
+    if (event.pointerType === "mouse") releaseFireIfPrimaryUp(state, event);
   };
   const onLeave = (event: PointerEvent): void => {
     if (event.pointerType !== "mouse") return;

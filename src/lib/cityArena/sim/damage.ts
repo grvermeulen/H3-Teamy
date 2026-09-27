@@ -1,4 +1,3 @@
-import type { Point } from "../world/projection";
 import type { ArenaPlayerState, VehicleState } from "./types";
 import { activeBonus, BONUS_BALANCE } from "./landmarkBonuses";
 
@@ -61,14 +60,4 @@ export function damageVehicle(
 ): VehicleState {
   if (amount <= 0 || vehicle.wrecked) return vehicle;
   return { ...vehicle, health: Math.max(0, vehicle.health - amount) };
-}
-
-/** True when `point` lies inside the blast radius around the car. */
-export function inBlastRadius(
-  vehicle: Pick<VehicleState, "x" | "y">,
-  point: Point,
-): boolean {
-  return (
-    Math.hypot(point[0] - vehicle.x, point[1] - vehicle.y) < EXPLOSION_RADIUS_M
-  );
 }

@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { createCamera } from "./camera";
 import { drawPickups, pickupBob, pickupColour } from "./drawPickups";
-import { PICKUP_BACKDROP, PICKUP_HEALTH, PICKUP_UZI } from "./palette";
+import {
+  PICKUP_BACKDROP,
+  PICKUP_BAT,
+  PICKUP_HEALTH,
+  PICKUP_RIFLE,
+  PICKUP_ROCKET,
+  PICKUP_SHOTGUN,
+  PICKUP_UZI,
+  ROCKET_TIP,
+  ROCKET_TUBE,
+} from "./palette";
 import { createFakeContext } from "./testing/fakeContext";
 
 const camera = createCamera([0, 0], 4);
@@ -45,6 +55,36 @@ describe("drawPickups", () => {
     expect(context.calls.filter((call) => call.startsWith("lineTo("))).toEqual(
       [],
     );
+  });
+
+  it("gives every pickup kind its own colour", () => {
+    expect(
+      (["uzi", "shotgun", "rifle", "bat", "health", "rocket"] as const).map(
+        pickupColour,
+      ),
+    ).toEqual([
+      PICKUP_UZI,
+      PICKUP_SHOTGUN,
+      PICKUP_RIFLE,
+      PICKUP_BAT,
+      PICKUP_HEALTH,
+      PICKUP_ROCKET,
+    ]);
+  });
+
+  it("draws a rocket pickup as the launcher's vector icon while it has no art", () => {
+    const context = createFakeContext();
+    drawPickups(
+      context,
+      camera,
+      viewport,
+      [{ id: 5, kind: "rocket", x: 0, y: 0, takenAtTick: null }],
+      0,
+    );
+    expect(context.calls).toContain(`fill(${PICKUP_BACKDROP})`);
+    expect(context.calls).toContain(`fill(${ROCKET_TUBE})`);
+    expect(context.calls).toContain(`fill(${ROCKET_TIP})`);
+    expect(context.calls).not.toContain(`fill(${PICKUP_ROCKET})`);
   });
 
   it("draws a health diamond and white cross", () => {

@@ -78,7 +78,9 @@ export type WeaponKind =
   | "bat"
   | "rifle"
   /** The tank's gun; never carried, fired from the driver's seat of a tank. */
-  | "cannon";
+  | "cannon"
+  /** The rocket launcher (Raketwerper): carried, its rockets detonate like the tank's shell. */
+  | "rocket";
 
 /** Car kinds (spec §5). */
 export type VehicleKind =
@@ -145,10 +147,15 @@ export type EffectState = {
   angle: number;
   bornTick: number;
   ttlTicks: number;
+  /**
+   * An explosion's reach, metres: the blast's radius against people (`applyBlast`). Absent on
+   * other effects, and drawn at a car blast's radius when missing. Effects never cross the wire.
+   */
+  radius?: number;
 };
 
 /** Rounds left for the magazine weapons; pistol and fist are unlimited. */
-export type MagazineWeapon = "uzi" | "shotgun" | "rifle" | "bat";
+export type MagazineWeapon = "uzi" | "shotgun" | "rifle" | "bat" | "rocket";
 /** Rounds carried per magazine weapon; the bat's are swings before it breaks. */
 export type AmmoState = Record<MagazineWeapon, number>;
 
@@ -187,8 +194,9 @@ export type ArenaPlayerState = PlayerState & {
 /** Buttons whose previous held state the simulation remembers for edge detection. */
 export type HeldButtons = { enter: boolean; weaponNext: boolean };
 
-/** Kinds of pickups: magazine ammunition or health. */
-export type PickupKind = "uzi" | "shotgun" | "health" | "rifle" | "bat";
+/** Kinds of pickups: magazine ammunition (rockets included) or health. */
+export type PickupKind =
+  "uzi" | "shotgun" | "health" | "rifle" | "bat" | "rocket";
 
 /** A pickup spot; taken pickups wait for their respawn timer. */
 export type PickupState = {
@@ -309,7 +317,31 @@ export type ArenaEvent =
   | { kind: "wanted"; playerId: number; level: number }
   | { kind: "zone"; playerId: number; phase: "warning" | "damage" }
   /** A beer ordered at the brewery, for the sound and the haptics. */
-  | { kind: "beer"; playerId: number; x: number; y: number };
+  | { kind: "beer"; playerId: number; x: number; y: number }
+  /** A building fell (spec §3.5): sound, haptics and the collapse animation key on this. */
+  | {
+      kind: "collapse";
+      structureId: number;
+      x: number;
+      y: number;
+      killerId: number | null;
+    };
+
+/**
+ * Damage and lifecycle of one building the simulation has touched (spec §3.4). Buildings nobody has
+ * hit have no entry and are implicitly at full health; only damaged or destroyed ones are listed,
+ * up to `MAX_STRUCTURES` (`sim/structures.ts`).
+ */
+export type StructureState = {
+  id: number;
+  damage: number;
+  destroyedAtTick: number | null;
+  lastHitTick: number;
+  /** Footprint centre and circumradius, metres; 0 on a client that adopted the row from the wire. */
+  x: number;
+  y: number;
+  radius: number;
+};
 
 /** Full arena simulation state: plain, JSON-serialisable data. */
 export type ArenaState = {
@@ -333,4 +365,6 @@ export type ArenaState = {
   /** Zone selected when the out-of-zone rule was enabled; population may move independently. */
   enforcedZoneKey?: ZoneKey | null;
   zoneEnforced: boolean;
+  /** Damaged or destroyed buildings (spec §3.4); absent or missing ids are at full health. */
+  structures?: StructureState[];
 };

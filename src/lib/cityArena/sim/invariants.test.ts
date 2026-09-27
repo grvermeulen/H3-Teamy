@@ -61,6 +61,18 @@ describe("checkInvariants", () => {
         players: [{ ...localPlayer(healthy), x: Number.NaN }],
       }),
     ).toContain("player 0 position is not finite");
+    for (const kind of ["rifle", "bat", "rocket"] as const)
+      expect(
+        checkInvariants({
+          ...healthy,
+          players: [
+            {
+              ...localPlayer(healthy),
+              ammo: { ...localPlayer(healthy).ammo, [kind]: -1 },
+            },
+          ],
+        }),
+      ).toContain("player 0 ammo negative");
     expect(
       checkInvariants({
         ...healthy,

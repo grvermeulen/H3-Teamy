@@ -35,6 +35,24 @@ describe("attachPointerAim", () => {
     expect(state.snapshot().fire).toBe(false);
   });
 
+  it("does not shoot on a click another binding claims, such as the one taking the pointer lock", () => {
+    const canvas = document.createElement("canvas");
+    const state = createInputState();
+    let claimed = true;
+    const aim = attachPointerAim(canvas, state, undefined, () => claimed);
+    const press = (): void => {
+      canvas.dispatchEvent(
+        new PointerEvent("pointerdown", { pointerType: "mouse", button: 0 }),
+      );
+    };
+    press();
+    expect(state.snapshot().fire).toBe(false);
+    claimed = false;
+    press();
+    expect(state.snapshot().fire).toBe(true);
+    aim.detach();
+  });
+
   it("does not preventDefault on a primary-button pointerdown, so focus can leave other elements", () => {
     const canvas = document.createElement("canvas");
     const state = createInputState();

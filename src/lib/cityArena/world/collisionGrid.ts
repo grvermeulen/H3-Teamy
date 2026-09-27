@@ -5,6 +5,7 @@ import {
 } from "../mapBuild/geometry";
 import type { DecodedTile } from "./decode";
 import type { Point } from "./projection";
+import { structureMaxHealth } from "./structureId";
 
 /** Cell size of the uniform grid in metres. */
 export const COLLISION_CELL_M = 16;
@@ -17,6 +18,8 @@ export type Obstacle = {
   ring: Point[];
   bounds: Rect;
   kind: "building" | "water" | "tree";
+  /** Present only for a `"building"` obstacle: its structure id and collapse threshold. */
+  structure?: { id: number; maxHealth: number };
 };
 
 /**
@@ -33,6 +36,13 @@ export type CollisionGrid = {
   removeTile(x: number, y: number): void;
   query(rect: Rect): Obstacle[];
   resolveCircle(centre: Point, radius: number): Point;
+  /** Like `resolveCircle`, but ignores every obstacle `skip` returns `true` for (used to let a
+   * destroyed building's footprint through without removing it from the grid). */
+  resolveCircleSkipping(
+    centre: Point,
+    radius: number,
+    skip: (obstacle: Obstacle) => boolean,
+  ): Point;
   obstacleCount(): number;
   /** Installs (or clears with `null`) the corridors that make water crossable on a road. */
   setRoadCorridors(corridors: RoadCorridorTest | null): void;
@@ -162,6 +172,14 @@ function buildObstaclesForTile(tile: DecodedTile): Obstacle[] {
       ring: building.ring,
       bounds: building.bounds,
       kind: "building" as const,
+      structure: {
+        id: building.structureId,
+        maxHealth: structureMaxHealth(
+          building.ring,
+          building.levels,
+          Boolean(building.landmark),
+        ),
+      },
     })),
     ...tile.water.map((water) => ({
       ring: water.ring,
@@ -281,16 +299,23 @@ function crossesOnBridge(
   return corridors.isOnRoad(centre, radius);
 }
 
+/** Always includes the obstacle; the default `skip` for `resolveCircleAgainst`. */
+function skipNone(): boolean {
+  return false;
+}
+
 /**
  * Iteratively pushes a circle out of every obstacle in `index` that overlaps it, re-querying
  * after each pass so a push out of one obstacle can be resolved against its neighbours too.
- * Water obstacles a road corridor covers are skipped so bridges stay crossable.
+ * Water obstacles a road corridor covers are skipped so bridges stay crossable, and any obstacle
+ * `skip` marks (a destroyed building, say) is ignored too.
  */
 function resolveCircleAgainst(
   index: SpatialIndex,
   centre: Point,
   radius: number,
   corridors: RoadCorridorTest | null,
+  skip: (obstacle: Obstacle) => boolean = skipNone,
 ): Point {
   let position: Point = [centre[0], centre[1]];
   for (let pass = 0; pass < MAX_RESOLVE_PASSES; pass++) {
@@ -302,6 +327,7 @@ function resolveCircleAgainst(
     };
     let moved = false;
     for (const obstacle of index.query(probe)) {
+      if (skip(obstacle)) continue;
       if (crossesOnBridge(obstacle, position, radius, corridors)) continue;
       const pushed = pushCircleOutOfRing(position, radius, obstacle.ring);
       if (pushed) {
@@ -336,6 +362,8 @@ export function createCollisionGrid(
     query: index.query,
     resolveCircle: (centre, radius) =>
       resolveCircleAgainst(index, centre, radius, roadCorridors),
+    resolveCircleSkipping: (centre, radius, skip) =>
+      resolveCircleAgainst(index, centre, radius, roadCorridors, skip),
     obstacleCount: index.obstacleCount,
     setRoadCorridors: (next) => {
       roadCorridors = next;

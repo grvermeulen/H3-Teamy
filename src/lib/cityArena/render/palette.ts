@@ -111,8 +111,16 @@ export const PLACEHOLDER_FILL = "#1e2024";
 export const PLAYER_FILL = "#f5f5f5";
 /** Player sprite outline ring colour. */
 export const PLAYER_RING = "#e11d48";
+/** The zone boundary's blue as red, green, blue (0–255): the 2D ring and the 3D wall share it. */
+export const ZONE_RGB: readonly [number, number, number] = [29, 78, 216];
 /** Zone boundary ring. */
-export const ZONE_RING = "rgba(29,78,216,0.7)";
+export const ZONE_RING = `rgba(${ZONE_RGB.join(",")},0.7)`;
+/** The navigation route's cyan as red, green, blue (0–255): the 2D ribbon and the 3D glow share it. */
+export const ROUTE_RGB: readonly [number, number, number] = [34, 211, 238];
+/** The 2D route ribbon along the road: {@link ROUTE_RGB}, translucent. */
+export const ROUTE_RIBBON = `rgba(${ROUTE_RGB.join(",")},0.28)`;
+/** The 2D route's chevrons and the ring at its destination. */
+export const ROUTE_ARROW = "#a5f3fc";
 /** Car body colours indexed by `VehicleState.colour` (ten entries, matching `VEHICLE_COLOUR_COUNT`). */
 export const CAR_BODY_COLOURS: string[] = [
   "#c0392b",
@@ -144,6 +152,12 @@ export const IMPACT_FILL = "#f5f5f5";
 export const EXPLOSION_FILL = "rgba(255,140,0,0.8)";
 /** Explosion ring. */
 export const EXPLOSION_RING = "#ff5722";
+/** Rocket body. */
+export const ROCKET_BODY_FILL = "#5f6b2e";
+/** Rocket smoke puff. */
+export const ROCKET_SMOKE_FILL = "#c9c9c9";
+/** Outline that gives the tank's cannon shell a heavier look. */
+export const SHELL_OUTLINE_STROKE = "#4a3418";
 /** Mouse crosshair. */
 export const CROSSHAIR_STROKE = "rgba(255,255,255,0.9)";
 /** Body of a player waiting to respawn. */
@@ -176,6 +190,12 @@ export const PICKUP_SHOTGUN = "#f97316";
 export const PICKUP_RIFLE = "#0ea5e9";
 /** Bat pickup diamond. */
 export const PICKUP_BAT = "#a16207";
+/** Rocket pickup on the radar: the warhead's red, unlike any other mark there. */
+export const PICKUP_ROCKET = "#ef4444";
+/** The rocket launcher's vector stand-in: an olive tube… */
+export const ROCKET_TUBE = "#556b2f";
+/** …with the rocket's red tip showing at the muzzle. */
+export const ROCKET_TIP = "#dc2626";
 /** Health pickup diamond. */
 export const PICKUP_HEALTH = "#22c55e";
 /** Health pickup cross. */

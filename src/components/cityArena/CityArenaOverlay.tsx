@@ -16,7 +16,7 @@ import { ArenaRoomLocation } from "./ArenaRoomLocation";
 import { ArenaPhaseScreens } from "./ArenaPhaseScreens";
 import { ArenaSettingsSheet, MENU_LABEL } from "./ArenaSettingsSheet";
 import { ArenaTouchTip } from "./ArenaTouchTip";
-import type { ArenaLayout } from "@/lib/cityArena/schemas";
+import type { ArenaLayout, ArenaSettings } from "@/lib/cityArena/schemas";
 import {
   hasSeenArenaTouchTip,
   markArenaTouchTipSeen,
@@ -56,6 +56,8 @@ import {
   type ArenaNetplayOptions,
 } from "./useArenaGame";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
+import { View3dLayer } from "./view3d/View3dLayers";
+import { useReleaseLockWhile } from "./view3d/useView3d";
 
 /** Media query matching phones and other coarse-pointer devices: shows the touch stick. */
 const TOUCH_MEDIA_QUERY = "(max-width: 768px), (pointer: coarse)";
@@ -183,18 +185,81 @@ function ArenaZonePicker({
   );
 }
 
+/** HUD switch between the 2D and 3D view (spec §7); its label names the view a click switches *to*. */
+function ArenaViewToggleButton({
+  view,
+  onToggle,
+}: {
+  view: ArenaSettings["view"];
+  onToggle: () => void;
+}): React.JSX.Element {
+  const target = view === "3d" ? "2d" : "3d";
+  return (
+    <button
+      className="min-h-11 min-w-11 rounded border border-[var(--arena-line)] px-2 text-xs"
+      type="button"
+      aria-label={target === "3d" ? "Wissel naar 3D" : "Wissel naar 2D"}
+      onClick={onToggle}
+    >
+      {target.toUpperCase()}
+    </button>
+  );
+}
+
 /** Props for {@link ArenaHudBar}. */
 type ArenaHudBarProps = {
   hud: ArenaHud;
   showLoadWarning: boolean;
+  view: ArenaSettings["view"];
+  onToggleView: () => void;
+  /** Hides the 3D toggle on a shared/split screen, which 3D does not support (spec §10). */
+  hideViewToggle: boolean;
   onMenu: () => void;
   onClose: () => void;
 };
 
-/** Top strip: zone/street, vitals, an optional load warning, the zone picker, the menu and the close button. */
+/** The HUD's top-right button cluster: the optional 3D toggle, Menu and Sluiten. */
+function ArenaHudActions({
+  view,
+  onToggleView,
+  hideViewToggle,
+  onMenu,
+  onClose,
+}: Pick<
+  ArenaHudBarProps,
+  "view" | "onToggleView" | "hideViewToggle" | "onMenu" | "onClose"
+>): React.JSX.Element {
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      {hideViewToggle ? null : (
+        <ArenaViewToggleButton view={view} onToggle={onToggleView} />
+      )}
+      <button
+        className="min-h-11 min-w-11 rounded border border-[var(--arena-line)] px-2 text-xs"
+        type="button"
+        onClick={onMenu}
+      >
+        {MENU_LABEL}
+      </button>
+      <button
+        className="min-h-11 min-w-11 rounded text-xl"
+        aria-label="Sluiten"
+        type="button"
+        onClick={onClose}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+/** Top strip: zone/street, vitals, an optional load warning, the zone picker, the view toggle, the menu and the close button. */
 function ArenaHudBar({
   hud,
   showLoadWarning,
+  view,
+  onToggleView,
+  hideViewToggle,
   onMenu,
   onClose,
 }: ArenaHudBarProps): React.JSX.Element {
@@ -228,23 +293,13 @@ function ArenaHudBar({
           </span>
         ) : null}
       </div>
-      <div className="flex shrink-0 items-center gap-1">
-        <button
-          className="min-h-11 min-w-11 rounded border border-[var(--arena-line)] px-2 text-xs"
-          type="button"
-          onClick={onMenu}
-        >
-          {MENU_LABEL}
-        </button>
-        <button
-          className="min-h-11 min-w-11 rounded text-xl"
-          aria-label="Sluiten"
-          type="button"
-          onClick={onClose}
-        >
-          ×
-        </button>
-      </div>
+      <ArenaHudActions
+        view={view}
+        onToggleView={onToggleView}
+        hideViewToggle={hideViewToggle}
+        onMenu={onMenu}
+        onClose={onClose}
+      />
     </div>
   );
 }
@@ -292,9 +347,10 @@ function ArenaPlayfield({
   const twinStick = game.settings.twinStick;
   return (
     <div className="relative min-h-0 flex-1">
+      <View3dLayer {...game.view3d} />
       <canvas
         ref={canvasRef}
-        className="block h-full w-full touch-none [@media(pointer:fine)]:cursor-none"
+        className="relative block h-full w-full touch-none [@media(pointer:fine)]:cursor-none"
         aria-label="GTA H3 speelveld"
       />
       <ArenaRadar
@@ -378,12 +434,24 @@ function ArenaPlayfield({
 }
 
 /** Props for {@link ArenaFooter}. */
-type ArenaFooterProps = { showTouch: boolean; twinStick: boolean };
+type ArenaFooterProps = {
+  showTouch: boolean;
+  twinStick: boolean;
+  /** The 3D view is running, where V switches between third and first person. */
+  view3d: boolean;
+};
 
-/** The hint for each control scheme (spec §7). */
-function controlsHint(showTouch: boolean, twinStick: boolean): string {
+/**
+ * The hint for each control scheme (spec §7); "V camera" only in 3D, the one view where V does
+ * anything.
+ */
+function controlsHint(
+  showTouch: boolean,
+  twinStick: boolean,
+  view3d: boolean,
+): string {
   if (!showTouch)
-    return "WASD of pijltjes lopen of sturen · muis richt en schiet · E instappen of biertje bestellen · Q, wiel of 1-5 wapen · R radio · Tab scorebord · Esc menu.";
+    return `WASD of pijltjes lopen of sturen · muis richt en schiet · E instappen of biertje bestellen · Q, wiel of 1-6 wapens · ${view3d ? "V camera · " : ""}R radio · Tab scorebord · Esc menu.`;
   return twinStick
     ? "Sleep links op het scherm om te lopen of te sturen; sleep rechts om te richten en te schieten."
     : "Sleep links op het scherm om te lopen of te sturen; rechts: Schieten, Instappen, Wapen.";
@@ -393,11 +461,12 @@ function controlsHint(showTouch: boolean, twinStick: boolean): string {
 function ArenaFooter({
   showTouch,
   twinStick,
+  view3d,
 }: ArenaFooterProps): React.JSX.Element {
   return (
     <p className="muted mx-2 my-1 shrink-0 text-center text-xs">
       <span className="hidden sm:inline">
-        {controlsHint(showTouch, twinStick)}
+        {controlsHint(showTouch, twinStick, view3d)}
       </span>{" "}
       <span>{ATTRIBUTION_TEXT}</span>
     </p>
@@ -458,6 +527,7 @@ export default function CityArenaOverlay({
   const [mapData, setMapData] = useState<NavigationMapData | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [scoreboardHeld, setScoreboardHeld] = useState(false);
+  const openMenu = useCallback(() => setMenuOpen(true), []);
   const game = useArenaGame({
     zoneKey: zone,
     canvasRef,
@@ -467,6 +537,7 @@ export default function CityArenaOverlay({
     keys: {
       onScoreboard: setScoreboardHeld,
       suspended: menuOpen || mapData !== null,
+      onPause: openMenu,
     },
     sharedScreen:
       entry.role === "hybrid"
@@ -478,22 +549,23 @@ export default function CityArenaOverlay({
   });
   const showTouch = useShowTouchControls(game.settings.forceLayout);
   const tip = useTouchTip(showTouch && game.phase === "playing");
-  const openMenu = useCallback(() => setMenuOpen(true), []);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const closeMap = useCallback(() => setMapData(null), []);
   const openMap = (): void => setMapData(game.navigationMap());
+  const toggleView = (): void =>
+    game.updateSettings({ view: game.settings.view === "3d" ? "2d" : "3d" });
   const leave = useCallback(() => {
     room.leave();
     onClose();
   }, [room, onClose]);
+  const modalOpen =
+    menuOpen || mapData !== null || Boolean(game.hud.mission?.offer);
   // Escape opens the menu (spec §7); the menu's own trap closes it again, and "Sluiten" is the
   // way out of the overlay.
   // Stood down while the sheet is open: the sheet's own trap owns Tab and Escape until then.
-  useDialogFocusTrap(
-    dialogRef,
-    openMenu,
-    !menuOpen && !mapData && !game.hud.mission?.offer,
-  );
+  useDialogFocusTrap(dialogRef, openMenu, !modalOpen);
+  // In 3D the pointer lock hides the mouse: a menu, the map or an offer needs it back.
+  useReleaseLockWhile(modalOpen, game.view3d.release);
   useLockBodyScroll();
   useWarmDeathArtwork();
 
@@ -515,6 +587,9 @@ export default function CityArenaOverlay({
       <ArenaHudBar
         hud={game.hud}
         showLoadWarning={game.phase === "playing" && game.failed}
+        view={game.settings.view}
+        onToggleView={toggleView}
+        hideViewToggle={entry.role === "hybrid"}
         onMenu={openMenu}
         onClose={onClose}
       />
@@ -530,7 +605,11 @@ export default function CityArenaOverlay({
         sharedScreen={entry.role === "hybrid"}
         onOpenMap={openMap}
       />
-      <ArenaFooter showTouch={showTouch} twinStick={game.settings.twinStick} />
+      <ArenaFooter
+        showTouch={showTouch}
+        twinStick={game.settings.twinStick}
+        view3d={game.view3d.active}
+      />
       {entry.kind !== "solo" && (
         <ArenaPhaseScreens
           game={game}
@@ -553,6 +632,7 @@ export default function CityArenaOverlay({
           onChange={game.updateSettings}
           onLeave={leave}
           onClose={closeMenu}
+          hideView={entry.role === "hybrid"}
         >
           <button
             type="button"

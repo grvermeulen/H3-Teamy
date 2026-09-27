@@ -22,6 +22,7 @@ import { POST, PATCH, GET } from "../../src/app/api/arena/display-token/route";
 import { GET as playerToken } from "../../src/app/api/arena/realtime-token/route";
 import { POST as displayMatch } from "../../src/app/api/arena/display-matches/route";
 import {
+  ARENA_PROTOCOL_VERSION,
   arenaChannels,
   type ArenaRoomTicket,
 } from "../../src/lib/cityArena/net/roomProtocol";
@@ -45,7 +46,7 @@ function request(
       cookie,
       origin,
       "content-type": "application/json",
-      "X-Arena-Protocol": "3",
+      "X-Arena-Protocol": String(ARENA_PROTOCOL_VERSION),
       "x-forwarded-for": address,
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),

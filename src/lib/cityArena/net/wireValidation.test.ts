@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MAX_STRUCTURES } from "../sim/structures";
 import { isInputFrame, isSnapshot } from "./wireValidation";
 import type { Snapshot } from "./snapshotWire";
 
@@ -58,5 +59,51 @@ describe("untrusted arena wire messages", () => {
     ]) {
       expect(isSnapshot(value)).toBe(false);
     }
+  });
+});
+
+describe("structures and rockets on the wire (Task 5)", () => {
+  it("accepts every player-row width the wire has ever used: 19, 22 and 23 columns", () => {
+    for (const width of [19, 22, 23]) {
+      expect(isSnapshot({ ...snapshot, p: [Array(width).fill(0)] })).toBe(true);
+    }
+  });
+
+  it("accepts a bullet row from before and after the rocket launcher: 7 and 8 columns", () => {
+    for (const width of [7, 8]) {
+      expect(isSnapshot({ ...snapshot, b: [Array(width).fill(0)] })).toBe(true);
+    }
+  });
+
+  it("rejects a bullet's weapon index once it is out of the wire table's range", () => {
+    expect(isSnapshot({ ...snapshot, b: [[0, 0, 0, 0, 0, 0, 0, 99]] })).toBe(
+      false,
+    );
+  });
+
+  it("accepts a z row at every valid value, including NONE for destroyedAtTick", () => {
+    expect(isSnapshot({ ...snapshot, z: [[1, 200, -1, 40]] })).toBe(true);
+    expect(isSnapshot({ ...snapshot, z: [[2, 480, 90, 90]] })).toBe(true);
+  });
+
+  it("accepts up to MAX_STRUCTURES rows but rejects one more", () => {
+    const atCap = Array.from({ length: MAX_STRUCTURES }, (_, index) => [
+      index,
+      0,
+      -1,
+      0,
+    ]);
+    expect(isSnapshot({ ...snapshot, z: atCap })).toBe(true);
+    const overCap = [...atCap, [MAX_STRUCTURES, 0, -1, 0]];
+    expect(isSnapshot({ ...snapshot, z: overCap })).toBe(false);
+  });
+
+  it("rejects a structure row that is not exactly 4 columns", () => {
+    expect(isSnapshot({ ...snapshot, z: [[1, 200, -1]] })).toBe(false);
+    expect(isSnapshot({ ...snapshot, z: [[1, 200, -1, 40, 0]] })).toBe(false);
+  });
+
+  it("rejects a destroyedAtTick below NONE", () => {
+    expect(isSnapshot({ ...snapshot, z: [[1, 200, -2, 40]] })).toBe(false);
   });
 });

@@ -20,7 +20,10 @@ import type {
   FrameMetrics,
   MetricsSnapshot,
 } from "@/lib/cityArena/debugMetrics";
+import type { CarLook } from "@/lib/cityArena/input/cameraYaw";
 import type { InputState } from "@/lib/cityArena/input/inputState";
+import type { Rect } from "@/lib/cityArena/mapBuild/geometry";
+import type { MouseLook } from "@/lib/cityArena/input/mouseLook";
 import type { PointerAim } from "@/lib/cityArena/input/pointerAim";
 import {
   createCamera,
@@ -37,6 +40,7 @@ import {
   type DeathScreenPhase,
 } from "@/lib/cityArena/render/deathScreen";
 import { renderScene, type Scene } from "@/lib/cityArena/render/renderScene";
+import type { View3dHandle } from "@/lib/cityArena/render3d";
 import {
   createArenaNavigation,
   type ArenaNavigation,
@@ -116,6 +120,14 @@ import {
   withCut,
 } from "@/lib/cityArena/render/feedback";
 import { feelTick } from "./arenaFeel";
+import { prepareCanvas } from "./hudCanvas";
+import {
+  input3d,
+  paint3d,
+  populationRect3d,
+  view3dRuntime,
+  type Runtime3d,
+} from "./view3d/frame3d";
 import {
   createArenaSound,
   type ArenaSound,
@@ -254,6 +266,19 @@ export type Runtime = {
   sharedScreen?: { clientId: string; name: string }[];
   split?: SplitScreen;
   inputSuspended?: boolean;
+  /**
+   * The 3D view while it is on (spec §6), attached by `view3d/useView3d.ts`. With it and
+   * {@link look} set and no shared screen, the frame takes the 3D input and paint path.
+   */
+  view3d?: View3dHandle | null;
+  /** Mouse-look driving the 3D camera, attached alongside {@link view3d}. */
+  look?: MouseLook | null;
+  /** The chosen 3D camera; third person when unset. */
+  camera3d?: ArenaSettings["camera3d"];
+  /** What the 3D car camera remembers between frames: mouse idle time and last heading. */
+  carLook?: CarLook;
+  /** The heading the 3D input last sent the simulation to shoot along; the crosshair follows it. */
+  aim3d?: number;
 };
 
 /**
@@ -375,6 +400,7 @@ function buildScene(
     pickups: state.pickups,
     vehicles: frame.vehicles,
     bullets: frame.bullets,
+    structures: state.structures,
     effects: runtime.reducedMotion
       ? []
       : runtime.renderScale === 1
@@ -409,17 +435,8 @@ function paintCanvas(
   split?: SplitScreen,
   names?: ReadonlyMap<number, string>,
 ): DrawStats {
-  const dpr = Math.min(renderScale === 1 ? 2 : 1, window.devicePixelRatio || 1);
-  const targetWidth = Math.round(rect.width * dpr);
-  const targetHeight = Math.round(rect.height * dpr);
-  if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
-  }
-  const ctx = canvas.getContext("2d");
+  const ctx = prepareCanvas(canvas, rect, renderScale);
   if (!ctx) return { missing: 0, rasterised: false, rasterMs: 0 };
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, rect.width, rect.height);
   const stats = split
     ? renderSplitScreen(ctx, split, scene, names)
     : renderScene(
@@ -850,7 +867,7 @@ function advanceSimulation(
   input: WorldInput,
   nowMs: number,
   debug: boolean,
-  viewport: Viewport,
+  viewRect: Rect,
 ): void {
   if (runtime.netplay.kind !== "offline") {
     advanceNetworked(runtime, dt, input, debug);
@@ -861,7 +878,7 @@ function advanceSimulation(
     collision: runtime.session.collision,
     index: runtime.session.index(),
     graph: runtime.session.graph(),
-    viewRect: visibleRect(runtime.camera, viewport),
+    viewRect,
   };
   let steps = 0;
   while (runtime.accumulator >= SIM_STEP_S && steps < MAX_SIM_STEPS_PER_FRAME) {
@@ -1037,6 +1054,74 @@ function refreshThrottled(
   }
 }
 
+/**
+ * Points this frame's aim at the mouse on the canvas — or, on a split screen, in the player's own
+ * view. In 3D the camera aims instead (`view3d/frame3d.ts`), so the pointer's aim is cleared.
+ */
+function aimAtPointer(
+  runtime: Runtime,
+  input: InputState,
+  pointer: [number, number] | null,
+  size: Viewport,
+  in3d: boolean,
+): void {
+  if (in3d) {
+    input.setAim(null);
+    return;
+  }
+  const player = myPlayer(runtime);
+  const ownView = runtime.split?.views.find((view) =>
+    view.ids.includes(player.id),
+  );
+  const aimPoint =
+    pointer && ownView
+      ? [
+          ownView.camera.x +
+            (pointer[0] - ownView.rect.x - ownView.rect.width / 2) /
+              ownView.zoom,
+          ownView.camera.y +
+            (pointer[1] - ownView.rect.y - ownView.rect.height / 2) /
+              ownView.zoom,
+        ]
+      : null;
+  input.setAim(
+    aimPoint
+      ? Math.atan2(aimPoint[1]! - player.y, aimPoint[0]! - player.x)
+      : aimAngle(runtime.camera, size, [player.x, player.y], pointer),
+  );
+}
+
+/**
+ * `input` with the trigger let go while the player's mission offer is open. The offer is a modal
+ * over the playfield, and a click or pad press meant for "Aannemen" must not fire behind it — in a
+ * room the match runs on. Everything else still flows: accepting the offer travels as input too.
+ *
+ * @param input - This frame's input.
+ * @param player - The local player, whose mission profile holds the open offer.
+ * @returns `input`, without `fire` while an offer is open.
+ */
+export function holdFireDuringOffer(
+  input: WorldInput,
+  player: Pick<ArenaPlayerState, "mission">,
+): WorldInput {
+  return input.fire && player.mission?.offer
+    ? { ...input, fire: false }
+    : input;
+}
+
+/** This frame's live input: the input state and any gamepad, turned by the camera in 3D. */
+function liveInput(
+  runtime: Runtime,
+  runtime3d: Runtime3d | null,
+  input: InputState,
+  dt: number,
+): WorldInput {
+  if (runtime.inputSuspended) return EMPTY_INPUT;
+  const live = readArenaGamepad(input.snapshot());
+  const turned = runtime3d ? input3d(runtime3d, live, dt) : live;
+  return holdFireDuringOffer(turned, myPlayer(runtime));
+}
+
 /** Aims, simulates, paints and records metrics for one frame, then runs the throttled refreshes. */
 function runFrame(
   timestamp: number,
@@ -1065,34 +1150,15 @@ function runFrame(
   const pointer = options.pointerRef.current?.position() ?? null;
   const player = myPlayer(runtime);
   options.inputRef.current.acknowledgeMission(player.mission?.lastCommand ?? 0);
-  const ownView = runtime.split?.views.find((view) =>
-    view.ids.includes(player.id),
-  );
-  const aimPoint =
-    pointer && ownView
-      ? [
-          ownView.camera.x +
-            (pointer[0] - ownView.rect.x - ownView.rect.width / 2) /
-              ownView.zoom,
-          ownView.camera.y +
-            (pointer[1] - ownView.rect.y - ownView.rect.height / 2) /
-              ownView.zoom,
-        ]
-      : null;
-  options.inputRef.current.setAim(
-    aimPoint
-      ? Math.atan2(aimPoint[1]! - player.y, aimPoint[0]! - player.x)
-      : aimAngle(runtime.camera, size, [player.x, player.y], pointer),
-  );
+  const runtime3d = view3dRuntime(runtime);
+  aimAtPointer(runtime, options.inputRef.current, pointer, size, !!runtime3d);
   advanceSimulation(
     runtime,
     dt,
-    runtime.inputSuspended
-      ? EMPTY_INPUT
-      : readArenaGamepad(options.inputRef.current.snapshot()),
+    liveInput(runtime, runtime3d, options.inputRef.current, dt),
     timestamp,
     options.debug,
-    size,
+    runtime3d ? populationRect3d(player) : visibleRect(runtime.camera, size),
   );
   // Blended before the camera moves, so the car and the camera chasing it are placed for the same
   // moment; smoothing one without the other would only make the other's jump easier to see.
@@ -1140,16 +1206,19 @@ function runFrame(
   const zone = runtime.state.zoneKey
     ? findZoneByKey(runtime.session.index(), runtime.state.zoneKey)
     : null;
-  const drawStats = paintCanvas(
-    canvas,
-    rect,
-    runtime.camera,
-    buildScene(runtime, frame, zone, pointer, timestamp),
-    runtime.feedback,
-    runtime.renderScale,
-    runtime.split,
-    names,
-  );
+  const scene = buildScene(runtime, frame, zone, pointer, timestamp);
+  const drawStats = runtime3d
+    ? paint3d(canvas, rect, runtime3d, scene, timestamp, dt)
+    : paintCanvas(
+        canvas,
+        rect,
+        runtime.camera,
+        scene,
+        runtime.feedback,
+        runtime.renderScale,
+        runtime.split,
+        names,
+      );
   const drawEnd = performance.now();
   options.metricsRef.current.record({
     frameMs: rawFrameMs,

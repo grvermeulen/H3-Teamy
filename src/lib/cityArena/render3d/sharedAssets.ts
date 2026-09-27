@@ -1,0 +1,23 @@
+/**
+ * The geometries and materials render3d modules build once and share between every character,
+ * vehicle, pickup and weapon — cached at module level, so they would outlive the view that made
+ * them. Once three.js has drawn them they carry its dispose listeners, which keep that view's
+ * renderer reachable; a player toggling 2D↔3D would pile up old renderers. The view frees them all
+ * on `dispose()`, and the next view rebuilds each on first use.
+ */
+import { disposeCharacterAssets } from "./characterRig";
+import { disposePickupAssets } from "./pickups3d";
+import { disposeVehicleMaterials } from "./vehicleParts";
+import { disposeWeaponGeometries } from "./weapons3d";
+
+/**
+ * Frees and forgets every module-level shared geometry and material: the characters' materials and
+ * merged looks, the vehicles' paint, detail, lamp and matte materials, the pickups' glow and health
+ * box, and the weapons' merged models. Call once the view using them is torn down.
+ */
+export function disposeSharedAssets(): void {
+  disposeCharacterAssets();
+  disposeVehicleMaterials();
+  disposePickupAssets();
+  disposeWeaponGeometries();
+}

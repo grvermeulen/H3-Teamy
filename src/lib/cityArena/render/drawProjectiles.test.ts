@@ -7,6 +7,9 @@ import {
   CROSSHAIR_STROKE,
   EXPLOSION_RING,
   MUZZLE_FILL,
+  ROCKET_BODY_FILL,
+  ROCKET_SMOKE_FILL,
+  SHELL_OUTLINE_STROKE,
 } from "./palette";
 import { createFakeContext } from "./testing/fakeContext";
 
@@ -76,6 +79,45 @@ describe("drawProjectiles", () => {
     expect(context.calls).toContain(`fill(${MUZZLE_FILL})`);
     expect(context.calls).toContain("arc(100,50,12,0,6.28,false)");
     expect(context.calls).toContain(`stroke(${EXPLOSION_RING},3)`);
+  });
+
+  it("grows an explosion to the reach its effect carries: 4 m for a rocket, not a car's 3 m", () => {
+    const context = createFakeContext();
+    const rocketBlast = {
+      id: 4,
+      kind: "explosion" as const,
+      x: 10,
+      y: 10,
+      angle: 0,
+      bornTick: 0,
+      ttlTicks: 18,
+      radius: 4,
+    };
+    drawEffects(context, camera, viewport, [rocketBlast], 9);
+    // Half way: 4 m × 0.5 × 8 px/m.
+    expect(context.calls).toContain("arc(100,50,16,0,6.28,false)");
+  });
+
+  it("draws a rocket as an olive body with fading smoke puffs, and no plain tracer", () => {
+    const rocket: BulletState = { ...bullet, id: 2, weapon: "rocket" };
+    const context = createFakeContext();
+    drawBullets(context, camera, viewport, [rocket]);
+    expect(context.calls).toContain(`fill(${ROCKET_BODY_FILL})`);
+    expect(context.calls).not.toContain(`stroke(${BULLET_STROKE},2)`);
+    const smokeFills = context.calls.filter(
+      (call) => call === `fill(${ROCKET_SMOKE_FILL})`,
+    );
+    expect(smokeFills).toHaveLength(6);
+    // Nearest puff sits just behind the body's tail, in line with the rocket's heading.
+    expect(context.calls).toContain("arc(104.8,50,2.4,0,6.28,false)");
+  });
+
+  it("gives the tank's cannon shell an outline for a heavier look", () => {
+    const shell: BulletState = { ...bullet, id: 3, weapon: "cannon" };
+    const context = createFakeContext();
+    drawBullets(context, camera, viewport, [shell]);
+    expect(context.calls).toContain(`fill(${BULLET_STROKE})`);
+    expect(context.calls).toContain(`stroke(${SHELL_OUTLINE_STROKE},1)`);
   });
 
   it("draws the crosshair at the pointer", () => {

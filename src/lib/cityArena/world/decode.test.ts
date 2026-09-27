@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MapIndex, MapTile } from "./mapTypes";
 import { decodeTile, flatUnitsToPoints, tileRectMetres } from "./decode";
+import { structureIdOf } from "./structureId";
 
 const index: MapIndex = {
   version: 1,
@@ -70,11 +71,29 @@ describe("decode", () => {
       landmark: "grote-kerk-wageningen",
     });
     expect(decoded.buildings[0].ring).toHaveLength(4);
+    expect(decoded.buildings[0].structureId).toBe(structureIdOf(4, 2, 0));
     expect(decoded.ground[0].kind).toBe("grass");
     expect(decoded.water[0].ring[2]).toEqual([10, 10]);
     expect(decoded.rect).toEqual(tileRectMetres(4, 2, index));
     expect(decoded.trees).toEqual([]);
     expect(decoded.furniture).toEqual([]);
+  });
+
+  it("gives each building piece of a tile its own structure id, in list order", () => {
+    const tile: MapTile = {
+      x: 4,
+      y: 2,
+      roads: [],
+      buildings: [
+        { points: [0, 0, 40, 0, 40, 40, 0, 40], levels: 1 },
+        { points: [80, 0, 120, 0, 120, 40, 80, 40], levels: 1 },
+      ],
+      ground: [],
+      water: [],
+    };
+    const decoded = decodeTile(tile, index);
+    expect(decoded.buildings[0].structureId).toBe(structureIdOf(4, 2, 0));
+    expect(decoded.buildings[1].structureId).toBe(structureIdOf(4, 2, 1));
   });
 
   it("decodes trees with their canopy boxes and furniture with headings in radians", () => {

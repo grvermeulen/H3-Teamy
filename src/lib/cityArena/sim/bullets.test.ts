@@ -15,6 +15,7 @@ import {
 import type { BulletState } from "./types";
 import { createVehicle } from "./vehicle";
 import { WEAPONS } from "./weapons";
+import { structureIdOf } from "../world/structureId";
 
 const square: Point[] = [
   [10, -5],
@@ -33,7 +34,8 @@ function tileWith(buildings: Point[][]): DecodedTile {
     trees: [],
     furniture: [],
     roads: [],
-    buildings: buildings.map((ring) => ({
+    buildings: buildings.map((ring, index) => ({
+      structureId: structureIdOf(0, 0, index),
       ring,
       bounds: boundsOf(ring),
       levels: 2,
@@ -135,10 +137,20 @@ describe("stepBullets", () => {
     expect(first.bullets[0].x).toBeCloseTo(4);
     expect(first.bullets[0].rangeLeftM).toBeCloseTo(36);
     expect(first.hits).toEqual([]);
+    expect(first.expired).toEqual([]);
     let bullets = first.bullets;
-    for (let tick = 0; tick < 9; tick++)
-      bullets = stepBullets(bullets, step, world).bullets;
+    let last = first;
+    for (let tick = 0; tick < 9; tick++) {
+      last = stepBullets(bullets, step, world);
+      bullets = last.bullets;
+    }
     expect(bullets).toEqual([]);
+    // The pistol's 40 m range runs out exactly on this last tick, with nothing in its way.
+    expect(last.expired).toHaveLength(1);
+    expect(last.expired[0]).toMatchObject({
+      x: expect.closeTo(40, 5),
+      rangeLeftM: 0,
+    });
   });
 
   it("stops at the first building outline", () => {
@@ -154,7 +166,7 @@ describe("stepBullets", () => {
     }
     expect(lastHits[0]).toMatchObject({
       point: [10, 0],
-      target: { kind: "building" },
+      target: { kind: "building", structureId: structureIdOf(0, 0, 0) },
     });
     expect(bullets).toEqual([]);
   });

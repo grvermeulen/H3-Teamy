@@ -3,10 +3,8 @@ import { fromUnits, type Point } from "../world/projection";
 import type { RoadGraph } from "../world/roadGraph";
 import type { NavigationSnapshot } from "../world/navigation";
 import type { PickupKind } from "../sim/types";
+import { pickupColour } from "./drawPickups";
 import {
-  PICKUP_HEALTH,
-  PICKUP_SHOTGUN,
-  PICKUP_UZI,
   RADAR_BACKGROUND,
   RADAR_PLAYER,
   RADAR_POLICE,
@@ -151,11 +149,6 @@ export function radarRoads(
   return nearbyRadarRoads(createRadarRoadIndex(nodes, edges), centre, rangeM);
 }
 
-function pickupRadarColour(kind: PickupKind): string {
-  if (kind === "health") return PICKUP_HEALTH;
-  return kind === "uzi" ? PICKUP_UZI : PICKUP_SHOTGUN;
-}
-
 function radarPoint(
   point: Point,
   centre: Point,
@@ -244,7 +237,7 @@ export function drawRadar(
       size,
       RADAR_RANGE_M,
     );
-    context.fillStyle = pickupRadarColour(pickup.kind);
+    context.fillStyle = pickupColour(pickup.kind);
     context.beginPath();
     context.moveTo(x, y - 3);
     context.lineTo(x + 3, y);
