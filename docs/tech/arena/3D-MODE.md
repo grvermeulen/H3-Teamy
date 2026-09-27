@@ -43,12 +43,21 @@ client or the HUD state; it only changes which renderer reads that frame's `Scen
 
 `src/components/cityArena/view3d/useView3d.ts` loads the whole module with one dynamic
 `import("@/lib/cityArena/render3d")`, the first time a player switches to 3D — so three.js and
-every render3d file stay out of the 2D game's bundle for players who never open 3D. A device
-without WebGL2 throws `WebGl2UnavailableError` from `createView3d`, which the hook catches, shows
-"3D werkt niet op dit apparaat" for 4 seconds and falls back to 2D; that failure is reported as a
-Sentry breadcrumb, not an exception (AGENTS.md's Sentry-noise policy — no WebGL2 is expected on
-some devices). Any other failure while starting or rendering 3D goes to Sentry as a real error and
-also falls back to 2D.
+every render3d file stay out of the 2D game's bundle for players who never open 3D. Before that
+download it asks a throwaway canvas for a WebGL2 context (`hasWebGl2` in
+`src/lib/cityArena/webgl2.ts`, which loses the probe's context straight away), so a device without
+WebGL2 never fetches three.js; `createView3d` still throws `WebGl2UnavailableError` if the real
+canvas refuses. Either way the hook shows "3D werkt niet op dit apparaat" for 4 seconds and falls
+back to 2D, and the failure is a Sentry breadcrumb, not an exception (AGENTS.md's Sentry-noise
+policy — no WebGL2 is expected on some devices). The same goes for the render3d chunk failing to
+download — a `ChunkLoadError` from a tab still on the previous deploy, or a dropped connection
+(`isChunkLoadError` in `src/lib/cityArena/chunkLoadError.ts`). Any other failure while starting or
+rendering 3D goes to Sentry as a real error and also falls back to 2D.
+
+When the view is disposed (back to 2D, a new boot, leaving the game) it frees the module-level
+geometries and materials that characters, vehicles, pickups and weapons share
+(`disposeSharedAssets` in `render3d/sharedAssets.ts`) before the renderer, so toggling 2D↔3D does
+not keep old renderers reachable through three.js's dispose listeners; the next view rebuilds them.
 
 ### Canvas stacking
 
@@ -67,18 +76,20 @@ Grouped by responsibility; every exported symbol carries its own JSDoc.
 
 **Entry point, renderer and shared plumbing**
 
-| File             | Responsibility                                                                                                     |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `index.ts`       | `createView3d(canvas)`: wires every layer together, places the camera, drives one frame                            |
-| `renderer3d.ts`  | WebGL renderer, three.js scene, camera, evening lights, fog; `RenderQuality`, view distance and pixel-ratio tables |
-| `cameraRig.ts`   | Third-person and first-person rigs, pitch limits per mode, car chase and death-orbit poses                         |
-| `coords.ts`      | The one world ↔ three.js mapping (`(x, y)` metres → `(x, height, y)`) and angle helpers                            |
-| `idHash.ts`      | Deterministic per-id "randomness" (façade choice, tree size/turn) so every device builds the same town             |
-| `disposal.ts`    | `disposeObject`: frees geometries, materials and textures of a whole `Object3D` subtree                            |
-| `meshBuffers.ts` | Growable vertex/index buffers the city builders fill, turned into one indexed `BufferGeometry`                     |
-| `lowPoly.ts`     | Bevelled/tapered block and faceted-rod primitives, vertex-coloured and flat-shaded                                 |
-| `footprint.ts`   | Footprint measurements (centre, longest edge) shared by roofs, landmark dressing and ruins                         |
-| `testing/`       | Shared test doubles/helpers for render3d's own test suite                                                          |
+| File              | Responsibility                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `index.ts`        | `createView3d(canvas)`: wires every layer together, places the camera, drives one frame                            |
+| `renderer3d.ts`   | WebGL renderer, three.js scene, camera, evening lights, fog; `RenderQuality`, view distance and pixel-ratio tables |
+| `cameraRig.ts`    | Third-person and first-person rigs, pitch limits per mode, car chase and death-orbit poses                         |
+| `cameraFeel.ts`   | The 2D feedback's screen shake (`SHAKE_METRES_PER_PX`) and drunk sway, as a camera nudge and roll                  |
+| `sharedAssets.ts` | `disposeSharedAssets`: frees the module-level character, vehicle, pickup and weapon caches on dispose              |
+| `coords.ts`       | The one world ↔ three.js mapping (`(x, y)` metres → `(x, height, y)`) and angle helpers                            |
+| `idHash.ts`       | Deterministic per-id "randomness" (façade choice, tree size/turn) so every device builds the same town             |
+| `disposal.ts`     | `disposeObject`: frees geometries, materials and textures of a whole `Object3D` subtree                            |
+| `meshBuffers.ts`  | Growable vertex/index buffers the city builders fill, turned into one indexed `BufferGeometry`                     |
+| `lowPoly.ts`      | Bevelled/tapered block and faceted-rod primitives, vertex-coloured and flat-shaded                                 |
+| `footprint.ts`    | Footprint measurements (centre, longest edge) shared by roofs, landmark dressing and ruins                         |
+| `testing/`        | Shared test doubles/helpers for render3d's own test suite                                                          |
 
 **The streamed city**
 
@@ -187,6 +198,14 @@ the canvas turn the camera without any button held, and every click still retrie
 `View3dLayer` shows "Klik om te richten · V wisselt camera" on a fine (mouse) pointer until the
 player has either locked the pointer or triggered the lock-free fallback.
 
+When anything modal opens over the playfield — the menu, the map or a mission offer —
+`CityArenaOverlay` calls `MouseLook.release()` (through `useReleaseLockWhile` and the view's
+`release` control): it exits the pointer lock **without** the lock-lost callback, so the mouse can
+reach the dialog's buttons and no pause menu opens over it. The next click on the playfield takes
+the lock again. While a mission offer is open the trigger is held off (`holdFireDuringOffer` in
+`arenaRuntime.ts`), so a click or pad press meant for "Aannemen" never fires behind it — movement
+and the accept command itself still flow.
+
 ### V — camera toggle
 
 `KeyV` (`src/lib/cityArena/input/keyboard.ts`, `TOGGLE_CAMERA_KEY`) switches between third and
@@ -245,6 +264,30 @@ structure — `[id, damage, destroyedAtTick | NONE, lastHitTick]` — and is omi
 structure has ever been hit, so an untouched city costs nothing on the wire. Older protocol-3 rows
 are rejected outright by the version bump rather than silently misread, since the rocket weapon and
 its pickup also widened the wire's weapon/pickup-kind lists in the same release.
+
+### Client-side explosion and collapse feedback
+
+Events and effects never cross the wire, so a non-host client would see a rocket or shell vanish
+without a fireball, a car wreck without a blast, and a building fall (the 3D collapse plays from the
+structure list) without a sound, a shake or a pulse. `net/clientFeedback.ts` makes those up on the
+client alone: the client loop folds every adopted snapshot through `createFeedbackQueue`, which
+compares it with the previous one and adds
+
+- an `explosion` event and effect where an explosive round (`isExplosive`: rocket, cannon) was in
+  the previous snapshot and is gone from this one, at its last known position, and where a car was
+  intact and is now wrecked (at the car blast's 3 m);
+- a `collapse` event for every structure newly destroyed in `z`, at its own footprint centre when
+  the client knew it, else at the footprint the collision grid holds within
+  `COLLAPSE_LOCATE_RADIUS_M` (60 m, the farthest a collapse is felt or shakes the screen) of the
+  player.
+
+The events ride on the next predicted tick's `onTick` state, so sound, haptics and shake treat them
+like the host's. The made-up effects take ids counting down from `FIRST_CLIENT_EFFECT_ID` (−1): host
+entity ids are never negative, so they cannot collide, and the 3D view bursts each id once. The
+first snapshot a loop adopts is never compared (the world before it was the client's own), and
+`predictLocal` expires effects as the host step does. The host and offline play never run this, so
+nobody hears a blast twice. A round first seen on the wire gets its weapon's speed and a range left
+estimated from its distance to its shooter, so other players' 3D tracers have a tail.
 
 ### Client prediction through ruins
 
@@ -310,3 +353,26 @@ damage sources table above.
   (`CityArenaOverlay.tsx`/`useArenaGame.ts`) alone.
 - **Mission boarding passengers are not drawn in 3D.** A scripted mission passenger who boards a
   vehicle is a 2D-only visual; the 3D cast does not yet seat one in the car model.
+- **The structure cap has an edge.** At most `MAX_STRUCTURES` = 48 structures are tracked. When the
+  list is full, the least-damaged standing entry is dropped first — which can be the building just
+  hit, so fresh damage may be lost; once all 48 are ruins, the oldest ruin is dropped and so stands
+  up again early.
+- **A ruin never rebuilds while someone stands in it.** The 4-minute rebuild waits for its footprint
+  to be empty of living players, pedestrians, cops and cars; a car parked in the rubble keeps it a
+  ruin for as long as it stays.
+- **After a host handover, adopted ruins carry radius 0 until rebuilt.** Footprint centre and
+  radius are not on the wire, so a client that becomes host holds rows it only adopted with
+  `radius` 0: the occupancy check skips them (they rebuild on the timer alone) until they are
+  rebuilt and re-enter with their real footprint.
+- **Traffic can pop in beyond 80 m.** In 3D the simulation's out-of-sight rect is a square
+  `VIEW3D_POPULATION_HALF_M` = 80 m each way around the player, while the fog closes at 260–520 m,
+  so cars and pedestrians may visibly spawn or despawn between 80 m and the fog.
+- **Phones at "laag" still need a smoke test.** A dense view draws roughly 190–290 calls (see
+  Performance notes), above spec §8's budget; 30 fps on a mid-range phone at "laag" is unverified
+  on real hardware.
+- **Made-up client feedback is approximate.** A client's fireball sits where the rocket or shell
+  was last seen, up to one snapshot interval (about 4.5 m for a rocket, 9 m for a shell) short of
+  where it burst; a projectile fired and burst between two snapshots is never seen, so it makes no
+  blast on other clients; a collapse the client can place neither by its own footprint nor within
+  60 m of its player makes no sound there. The 3D fireball keeps one size; only the 2D ring grows
+  to the blast's reach (4 m for a rocket or shell, 3 m for a car).
