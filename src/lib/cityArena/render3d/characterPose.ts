@@ -26,6 +26,13 @@ export type PoseInput = {
   tick: number;
   /** 0…1: 1 as a shot fires or a swing lands, easing back to 0. */
   recoil: number;
+  /**
+   * Seconds since the previous frame, for characters that play clips (the glTF cast); without it
+   * they step by the ticks that passed. The procedural pose ignores it.
+   */
+  dt?: number;
+  /** Far from the camera: a clip-playing character may animate at a reduced rate. */
+  far?: boolean;
 };
 
 /** An Euler rotation `[x, y, z]`, radians. */

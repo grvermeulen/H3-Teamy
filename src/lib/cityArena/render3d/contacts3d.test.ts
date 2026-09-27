@@ -8,8 +8,12 @@ import {
   CONTACT_FACE_RANGE_M,
   createContacts3d,
   type ContactsScene,
+  contactSeed,
 } from "./contacts3d";
-import { CHARACTER_DRAW_DISTANCE_M } from "./entities";
+import {
+  CHARACTER_DRAW_DISTANCE_M,
+  FULL_RATE_ANIMATION_M,
+} from "./entities";
 import type { ContactSpot } from "./missionMarkers";
 
 type Fake = {
@@ -17,6 +21,7 @@ type Fake = {
   look: CharacterLook;
   pose: PoseInput | null;
   update: ReturnType<typeof vi.fn>;
+  muzzleWorld: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
 };
 
@@ -33,6 +38,7 @@ function fakes(): {
         look,
         pose: null,
         update: vi.fn((pose: PoseInput) => (fake.pose = { ...pose })),
+        muzzleWorld: vi.fn(() => false),
         dispose: vi.fn(),
       };
       made.push(fake);
@@ -101,6 +107,17 @@ describe("createContacts3d", () => {
     expect(made).toHaveLength(1);
   });
 
+  it("animates each contact by the frame's time, at half rate when far", () => {
+    const { character, made } = fakes();
+    const contacts = createContacts3d({ character });
+    const distant = { ...VERA, x: FULL_RATE_ANIMATION_M + 5, y: 0 };
+
+    contacts.update([NOOR, distant], sceneAt(0, 0), { x: 0, y: 0 }, 0.016);
+
+    expect(made[0]!.pose).toMatchObject({ dt: 0.016, far: false });
+    expect(made[1]!.pose).toMatchObject({ dt: 0.016, far: true });
+  });
+
   it("keeps each contact's own character by their id, never taking it down between frames", () => {
     const { character, made } = fakes();
     const contacts = createContacts3d({ character });
@@ -130,5 +147,13 @@ describe("createContacts3d", () => {
     expect(made[0]!.object.parent).toBeNull();
     contacts.dispose();
     expect(made[0]!.dispose).toHaveBeenCalledOnce();
+  });
+});
+
+describe("contactSeed", () => {
+  it("gives a contact the same number every time, and different contacts different ones", () => {
+    expect(contactSeed("noor")).toBe(contactSeed("noor"));
+    expect(contactSeed("noor")).not.toBe(contactSeed("bram"));
+    expect(Number.isInteger(contactSeed("noor"))).toBe(true);
   });
 });

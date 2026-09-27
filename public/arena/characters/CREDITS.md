@@ -1,0 +1,23 @@
+# Character credits
+
+Every file under `public/arena/characters/`, where it came from, and the licence it carries. Modified by `npm run arena:pack-characters`: each model's meshes are merged into one, its materials become a recolourable palette, its normals, UVs and animations are dropped; each rig's animation file keeps only the clips the game plays.
+
+| File                 | Source                                                                                  | Author     | Licence                                                       | URL                             |
+| -------------------- | --------------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------- | ------------------------------- |
+| casual-man.glb       | Casual Character (Quaternius — Ultimate Modular Men/Women, via Poly Pizza)              | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://poly.pizza/m/kZ3DmIoGip |
+| business-man.glb     | Business Man (Quaternius — Ultimate Modular Men/Women, via Poly Pizza)                  | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://poly.pizza/m/JFrLIKqvCH |
+| hoodie-man.glb       | Hoodie Character (Quaternius — Ultimate Modular Men/Women, via Poly Pizza)              | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://poly.pizza/m/gKLBoRsyKe |
+| worker-man.glb       | Worker (Quaternius — Ultimate Modular Men/Women, via Poly Pizza)                        | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://poly.pizza/m/Yg2bQZO6Hj |
+| punk-man.glb         | Punk (Quaternius — Ultimate Modular Men/Women, via Poly Pizza)                          | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://poly.pizza/m/BTALZymknF |
+| beach-man.glb        | Beach Character (Quaternius — Ultimate Modular Men/Women, via Poly Pizza)               | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://poly.pizza/m/DojKLcO34E |
+| farmer-man.glb       | Farmer (Quaternius — Ultimate Modular Men/Women, via Poly Pizza)                        | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://poly.pizza/m/7pn3R6hPvE |
+| swat.glb             | SWAT (Quaternius — Ultimate Modular Men/Women, via Poly Pizza)                          | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://poly.pizza/m/Btfn3G5Xv4 |
+| woman-a.glb          | Animated Woman (Quaternius — Ultimate Modular Men/Women, via Poly Pizza)                | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://poly.pizza/m/nIItLV9nxS |
+| woman-b.glb          | Animated Woman (Quaternius — Ultimate Modular Men/Women, via Poly Pizza)                | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://poly.pizza/m/qJ2gsTUBHL |
+| punk-woman.glb       | Punk (Quaternius — Ultimate Modular Men/Women, via Poly Pizza)                          | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://poly.pizza/m/djXoqejw6w |
+| adventurer-woman.glb | Adventurer (Quaternius — Ultimate Modular Men/Women, via Poly Pizza)                    | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://poly.pizza/m/ZwF0K7WBmu |
+| hooded-woman.glb     | Hooded Adventurer (Quaternius — Ultimate Modular Men/Women, via Poly Pizza)             | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://poly.pizza/m/y9KWOVG21R |
+| suit-woman.glb       | Suit (Quaternius — Ultimate Modular Men/Women, via Poly Pizza)                          | Quaternius | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)     | https://poly.pizza/m/sOUciDsoVV |
+| worker-woman.glb     | Worker (Quaternius — Ultimate Modular Men/Women, via Poly Pizza)                        | Quaternius | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)     | https://poly.pizza/m/E8079Ahx7k |
+| anim-men.glb         | Casual Character — animations (Quaternius — Ultimate Modular Men/Women, via Poly Pizza) | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://poly.pizza/m/kZ3DmIoGip |
+| anim-women.glb       | Animated Woman — animations (Quaternius — Ultimate Modular Men/Women, via Poly Pizza)   | Quaternius | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | https://poly.pizza/m/nIItLV9nxS |
