@@ -70,3 +70,6 @@ jobs:
 
       - name: Arena sprites (files and credits)
         run: npm run arena:check-sprites
+
+      - name: Arena characters (files, budget and credits)
+        run: npm run arena:check-characters
