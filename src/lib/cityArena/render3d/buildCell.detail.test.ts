@@ -73,11 +73,13 @@ function wallsOf(root: Object3D): Mesh {
   return walls;
 }
 
-/** The meshes drawn with a material. */
+/** The merged (not instanced) meshes drawn with a material. */
 function drawnWith(root: Object3D, material: unknown): Mesh[] {
   return root.children.filter(
     (child): child is Mesh =>
-      child instanceof Mesh && child.material === material,
+      child instanceof Mesh &&
+      !(child instanceof InstancedMesh) &&
+      child.material === material,
   );
 }
 

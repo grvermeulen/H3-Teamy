@@ -18,6 +18,7 @@ import type { DecodedRoad } from "../world/decode";
 import type { RoadClass } from "../world/mapTypes";
 import type { Point } from "../world/projection";
 import type { CellContext } from "./cellContext";
+import type { SignKind } from "./clutterShapes";
 import { pushDetailQuad, type DetailBuffers } from "./detailBuffers";
 import { idUnit } from "./idHash";
 import {
@@ -607,4 +608,103 @@ export function pushZebras(
       );
     }
   }
+}
+
+/** A road sign by a junction: where its pole stands, the way its face looks, and which sign. */
+export type SignSite = { at: Point; facing: Point; kind: SignKind };
+
+/** Roads whose mouths onto a bigger road get a give-way sign. */
+const GIVE_WAY_CLASSES: readonly RoadClass[] = [
+  "tertiary",
+  "unclassified",
+  "residential",
+  "living_street",
+];
+/** Roads entered past a 30 km/h zone sign. */
+const ZONE_CLASSES: readonly RoadClass[] = ["residential", "living_street"];
+/** A sign stands this far past the bigger road's pavement, and this far out from the kerb, metres. */
+const SIGN_SETBACK_M = 1.5;
+const SIGN_KERB_M = 0.5;
+/** The zone sign stands this much further into the side road than the give-way sign, metres. */
+const ZONE_SIGN_STEP_M = 1.2;
+/** Share of the side-road mouths that are signed. */
+const SIGN_SHARE = 0.7;
+/** Salt of the sign choice. */
+const SIGN_SALT = 0x82;
+
+/** The point to a traveller's right, `distance` metres from `at` (the map's y runs south). */
+function rightOf(at: Point, travel: Point, distance: number): Point {
+  return [at[0] - travel[1] * distance, at[1] + travel[0] * distance];
+}
+
+/** The biggest road among some, by rank. */
+function biggest(roads: readonly DecodedRoad[]): DecodedRoad {
+  return roads.reduce((best, road) =>
+    ROAD_RANK[road.roadClass] > ROAD_RANK[best.roadClass] ? road : best,
+  );
+}
+
+/** The signs on one side road's approach to a bigger road, from the node at `index`, going `step`. */
+function approachSigns(
+  road: DecodedRoad,
+  index: number,
+  step: 1 | -1,
+  major: DecodedRoad,
+  nodes: Map<string, Set<DecodedRoad>>,
+): SignSite[] {
+  const bands = sideBands(major.roadClass);
+  const setback = bands.edge + bands.cycle + bands.pavement + SIGN_SETBACK_M;
+  const found = walk(road, index, step, setback, nodes);
+  if (!found) return [];
+  const away = found.direction;
+  const toward: Point = [-away[0], -away[1]];
+  const reach = ROAD_WIDTH_M[road.roadClass] / 2 + SIGN_KERB_M;
+  const signs: SignSite[] = [
+    { at: rightOf(found.at, toward, reach), facing: away, kind: "giveWay" },
+  ];
+  if (ZONE_CLASSES.includes(road.roadClass)) {
+    const further: Point = [
+      found.at[0] + away[0] * ZONE_SIGN_STEP_M,
+      found.at[1] + away[1] * ZONE_SIGN_STEP_M,
+    ];
+    signs.push({
+      at: rightOf(further, away, reach),
+      facing: toward,
+      kind: "zone",
+    });
+  }
+  return signs;
+}
+
+/**
+ * The give-way and zone signs where side roads meet bigger ones (tertiary and up): on the side
+ * road's right as a driver approaches the junction, facing them, and a 30 km/h zone sign facing
+ * traffic turning into a residential street — on about seven in ten mouths, seeded per node.
+ *
+ * @param roads - The roads around a cell.
+ * @returns The signs.
+ */
+export function signSites(roads: readonly DecodedRoad[]): SignSite[] {
+  const nodes = junctionNodes(roads);
+  const sites: SignSite[] = [];
+  for (const road of roads) {
+    if (!GIVE_WAY_CLASSES.includes(road.roadClass)) continue;
+    road.points.forEach((point, index) => {
+      const meeting = [...(nodes.get(nodeKey(point)) ?? [])];
+      const bigger = meeting.filter(
+        (other) =>
+          ROAD_RANK[other.roadClass] > ROAD_RANK[road.roadClass] &&
+          ROAD_RANK[other.roadClass] >= ROAD_RANK.tertiary,
+      );
+      if (bigger.length === 0) return;
+      for (const step of [1, -1] as const) {
+        const seed = seedFromString(
+          `${nodeKey(point)}:${nodeKey(road.points[0])}:${step}`,
+        );
+        if (idUnit(seed, SIGN_SALT) >= SIGN_SHARE) continue;
+        sites.push(...approachSigns(road, index, step, biggest(bigger), nodes));
+      }
+    });
+  }
+  return sites;
 }

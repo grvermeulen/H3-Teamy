@@ -46,6 +46,7 @@ import {
   pushDetailedWalls,
   wallGeometry,
   type WallBuffers,
+  type WallEdge,
 } from "./wallQuads";
 
 export { STOREY_M } from "./wallQuads";
@@ -118,6 +119,13 @@ export type BuildingGeometryOptions = {
   plan?: (building: DecodedBuilding) => BuildingPlan;
   /** Where a detailed build's small detail goes; fresh buffers by default. */
   detail?: DetailBuffers;
+};
+
+/** A detailed building as laid out: its plan and its walls, for the clutter along its fronts. */
+export type LaidBuilding = {
+  building: DecodedBuilding;
+  plan: BuildingPlan;
+  edges: WallEdge[];
 };
 
 /** The buffers one set of buildings is built into. */
@@ -219,13 +227,16 @@ function pushDetailedRoof(
   }
 }
 
-/** One building into the buffers, basic or detailed; its walls (and gables) stay in one range. */
+/**
+ * One building into the buffers, basic or detailed; its walls (and gables) stay in one range.
+ * Returns a detailed building as laid out, null for a basic one.
+ */
 function pushBuilding(
   buffers: BuildingBuffers,
   building: DecodedBuilding,
   options: BuildingGeometryOptions,
   origin: Point,
-): void {
+): LaidBuilding | null {
   const height = buildingHeight(building.levels);
   const withRoof = !options.roofless?.has(building.structureId);
   if (!options.plan) {
@@ -237,7 +248,7 @@ function pushBuilding(
       origin,
     );
     if (withRoof) pushRoof(buffers.tiled, buffers.flat, building, origin);
-    return;
+    return null;
   }
   const plan = options.plan(building);
   const edges = pushDetailedWalls(
@@ -253,6 +264,7 @@ function pushBuilding(
   if (plan.awning !== null)
     pushAwnings(buffers.detail, edges, { colour: plan.awning, origin });
   if (withRoof) pushDetailedRoof(buffers, building, plan, origin);
+  return { building, plan, edges };
 }
 
 /**
@@ -269,7 +281,8 @@ function pushBuilding(
  *   default the world origin); `roofless`: ids whose walls are built but whose roof is left to a
  *   landmark dressing; `plan`: plans each building's detail (a detailed build); `detail`: the
  *   buffers the detail goes into.
- * @returns The three geometries, the detail buffers and each built building's wall range.
+ * @returns The three geometries, the detail buffers, each built building's wall range, and (on a
+ *   detailed build) each building as laid out.
  */
 export function buildBuildingGeometry(
   buildings: readonly DecodedBuilding[],
@@ -281,6 +294,7 @@ export function buildBuildingGeometry(
   roofsFlat: BufferGeometry;
   detail: DetailBuffers;
   ranges: BuildingRange[];
+  laid: LaidBuilding[];
 } {
   const buffers: BuildingBuffers = {
     walls: createWallBuffers(),
@@ -290,9 +304,11 @@ export function buildBuildingGeometry(
   };
   const { origin = [0, 0] } = options;
   const ranges: BuildingRange[] = [];
+  const laid: LaidBuilding[] = [];
   for (const building of buildable(buildings, skip)) {
     const start = vertexCount(buffers.walls);
-    pushBuilding(buffers, building, options, origin);
+    const detailed = pushBuilding(buffers, building, options, origin);
+    if (detailed) laid.push(detailed);
     ranges.push({
       structureId: building.structureId,
       start,
@@ -305,6 +321,7 @@ export function buildBuildingGeometry(
     roofsFlat: toGeometry(buffers.flat),
     detail: buffers.detail,
     ranges,
+    laid,
   };
 }
 

@@ -46,6 +46,7 @@ import {
   buildBuildingGeometry,
   buildingHeight,
   type BuildingRange,
+  type LaidBuilding,
 } from "./buildingMesh";
 import { createCellContext, type CellContext } from "./cellContext";
 import type { CityDetail } from "./cityDetail";
@@ -93,11 +94,15 @@ import {
   pushStreetSides,
   pushZebras,
   sideBands,
+  signSites,
   zebraSites,
+  type SignSite,
   type StreetLook,
   type StreetTargets,
   type ZebraSite,
 } from "./streetMarkings";
+import { pushStreetClutter } from "./streetClutter";
+import { buildBikes } from "./clutterShapes";
 import { TEXTURE_REPEAT_M } from "./textures";
 import { tileBuildingsIn, tileRoadsIn } from "./tileIndex";
 import { buildTreeLayer, type TreeInput } from "./treeMesh";
@@ -187,6 +192,7 @@ type DetailBuild = {
   buffers: DetailBuffers;
   paint: DetailBuffers;
   zebras: ZebraSite[];
+  signs: SignSite[];
 };
 
 /** The overlap of two rectangles, or null when they share no area. */
@@ -511,7 +517,11 @@ function addBuildings(
   input: CellInput,
   origin: Point,
   detailed: DetailBuild | null,
-): { ranges: BuildingRange[]; walls: BufferGeometry | null } {
+): {
+  ranges: BuildingRange[];
+  walls: BufferGeometry | null;
+  laid: LaidBuilding[];
+} {
   const shapes = buildings.map((building) => building.shape);
   const built = buildBuildingGeometry(shapes, input.destroyed, {
     origin,
@@ -535,7 +545,11 @@ function addBuildings(
   }
   addLandmarks(group, owned, shapes, input, origin);
   const hasWalls = built.walls.getAttribute("position").count > 0;
-  return { ranges: built.ranges, walls: hasWalls ? built.walls : null };
+  return {
+    ranges: built.ranges,
+    walls: hasWalls ? built.walls : null,
+    laid: built.laid,
+  };
 }
 
 /** The cell's merged detail and its street paint, each one vertex-coloured mesh when it holds anything. */
@@ -760,6 +774,40 @@ function addScenery(
   return { furniture: furniture.furniture, sync: furniture.sync };
 }
 
+/** Puts a detailed cell's street clutter into its detail, and its bicycles in one instanced mesh. */
+function dressStreets(
+  group: Group,
+  owned: Ownership,
+  detailed: DetailBuild,
+  input: {
+    laid: readonly LaidBuilding[];
+    cell: CellCoord;
+    materials: WorldMaterials;
+    origin: Point;
+  },
+): void {
+  const { origin } = input;
+  const { bikes } = pushStreetClutter(detailed.buffers, {
+    context: detailed.context,
+    buildings: input.laid,
+    zebras: detailed.zebras,
+    signs: detailed.signs,
+    owns: (point) => inCell(point, input.cell),
+    ground: PAVEMENT_Y_M,
+    origin,
+  });
+  const mesh = buildBikes(bikes, input.materials.detail, {
+    ground: PAVEMENT_Y_M,
+    origin,
+  });
+  if (!mesh) return;
+  group.add(mesh);
+  owned.disposers.push(() => {
+    mesh.geometry.dispose();
+    mesh.dispose();
+  });
+}
+
 /** The shared state of a detailed build, or null for a basic one. */
 function detailBuildFor(input: CellInput): DetailBuild | null {
   if (input.detail !== "full") return null;
@@ -773,6 +821,7 @@ function detailBuildFor(input: CellInput): DetailBuild | null {
     buffers: createDetailBuffers(),
     paint: createDetailBuffers(),
     zebras: zebraSites(context.roads),
+    signs: signSites(context.roads),
   };
 }
 
@@ -813,7 +862,7 @@ export function buildCell(input: CellInput): BuiltCell {
   );
   addGround(group, owned, ground, input.materials);
   const buildings = ownedBuildings(cell, regions);
-  const { ranges, walls } = addBuildings(
+  const { ranges, walls, laid } = addBuildings(
     group,
     owned,
     buildings,
@@ -822,9 +871,12 @@ export function buildCell(input: CellInput): BuiltCell {
     detailed,
   );
   const scenery = addScenery(group, owned, regions, input, origin);
+  if (detailed) {
+    const look = { laid, cell, materials: input.materials, origin };
+    dressStreets(group, owned, detailed, look);
+  }
   addDetail(group, owned, detailed, input.materials);
   freeze(group);
-  let disposed = false;
   return {
     group,
     ranges,
@@ -832,12 +884,18 @@ export function buildCell(input: CellInput): BuiltCell {
     furniture: scenery.furniture,
     buildings: buildings.map((building) => building.original),
     syncFurniture: scenery.sync,
-    dispose: () => {
-      if (disposed) return;
-      disposed = true;
-      group.removeFromParent();
-      for (const geometry of owned.geometries) geometry.dispose();
-      for (const dispose of owned.disposers) dispose();
-    },
+    dispose: disposerOf(group, owned),
+  };
+}
+
+/** Frees a cell's own geometry and dressing once, however often it is called. */
+function disposerOf(group: Group, owned: Ownership): () => void {
+  let disposed = false;
+  return () => {
+    if (disposed) return;
+    disposed = true;
+    group.removeFromParent();
+    for (const geometry of owned.geometries) geometry.dispose();
+    for (const dispose of owned.disposers) dispose();
   };
 }

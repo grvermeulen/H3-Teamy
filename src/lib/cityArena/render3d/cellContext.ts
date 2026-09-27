@@ -5,7 +5,6 @@
  * cell build, and only when the cell is built with full detail.
  */
 import {
-  distancePointToSegment,
   pointInPolygon,
   pointInRect,
   rectsIntersect,
@@ -52,6 +51,25 @@ export type RoadHit = {
   /** The closest point on the centre line. */
   closest: Point;
 };
+
+/** The widest carriageway's half width, metres: the farthest a carriageway reaches from its centre line. */
+const MAX_HALF_ROAD_M = Math.max(...Object.values(ROAD_WIDTH_M)) / 2;
+
+/**
+ * The squared distance from a point to segment a–b: the context's questions compare it against a
+ * squared reach, which skips a square root and an allocation per segment.
+ */
+function segmentDistanceSquared(point: Point, a: Point, b: Point): number {
+  const [sx, sy] = [b[0] - a[0], b[1] - a[1]];
+  const [px, py] = [point[0] - a[0], point[1] - a[1]];
+  const lengthSquared = sx * sx + sy * sy;
+  const t =
+    lengthSquared === 0
+      ? 0
+      : Math.max(0, Math.min(1, (px * sx + py * sy) / lengthSquared));
+  const [dx, dy] = [px - t * sx, py - t * sy];
+  return dx * dx + dy * dy;
+}
 
 /** The bounds of a segment. */
 function segmentBounds(a: Point, b: Point): Rect {
@@ -135,7 +153,9 @@ function nearestIn(
   let best: RoadHit | null = null;
   visitNear(grid, point, radius, (segment) => {
     if (accept && !accept(segment.road)) return;
-    const distance = distancePointToSegment(point, segment.a, segment.b);
+    const distance = Math.sqrt(
+      segmentDistanceSquared(point, segment.a, segment.b),
+    );
     if (distance > radius || (best && distance >= best.distance)) return;
     best = {
       segment,
@@ -154,7 +174,8 @@ function nearEdge(
 ): boolean {
   for (let index = 0; index < ring.length; index++) {
     const next = ring[(index + 1) % ring.length];
-    if (distancePointToSegment(point, ring[index], next) < margin) return true;
+    if (segmentDistanceSquared(point, ring[index], next) < margin * margin)
+      return true;
   }
   return false;
 }
@@ -257,10 +278,11 @@ export function createCellContext(
       nearestIn(grid, point, radius, accept),
     onCarriageway: (point, margin, accept) => {
       let on = false;
-      visitNear(grid, point, BUCKET_M, (segment) => {
+      visitNear(grid, point, MAX_HALF_ROAD_M + margin, (segment) => {
         if (on || (accept && !accept(segment.road))) return;
         const reach = segment.halfWidth + margin;
-        on = distancePointToSegment(point, segment.a, segment.b) < reach;
+        on =
+          segmentDistanceSquared(point, segment.a, segment.b) < reach * reach;
       });
       return on;
     },
