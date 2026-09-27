@@ -207,7 +207,7 @@ function meshOf(
 /** One hand on the wheel or a grip: where it rests and the turn that points its forearm home. */
 type Hand = { object: Object3D; rest: Quaternion };
 
-/** The +Z the forearm runs along in the arm geometry, and world up. */
+/** World up: the hands' knuckles face it. */
 const UP = new Vector3(0, 1, 0);
 
 /**
