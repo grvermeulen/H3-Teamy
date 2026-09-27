@@ -6,6 +6,7 @@
 import type { Scene as ArenaScene } from "../render/renderScene";
 import { lengthOf } from "../sim/vehicle";
 import type { DecodedTile } from "../world/decode";
+import { applyCameraFeel, cameraFeelOf } from "./cameraFeel";
 import { applyRigPose, rigPose, type CameraMode } from "./cameraRig";
 import { createCast3d, type Cast3d } from "./cast3d";
 import { createCity3d, type City3d } from "./city3d";
@@ -107,7 +108,10 @@ type View3dParts = {
   knocks: KnockOvers;
 };
 
-/** Puts the camera where the frame's mode, look and focus place it. */
+/**
+ * Puts the camera where the frame's mode, look and focus place it, then shakes and sways it as the
+ * 2D view would (`cameraFeel.ts`).
+ */
 function placeCamera(
   camera: Renderer3d["camera"],
   frame: View3dFrame,
@@ -126,6 +130,7 @@ function placeCamera(
       dt: frame.dt,
     }),
   );
+  applyCameraFeel(camera, cameraFeelOf(frame.scene));
 }
 
 /**
