@@ -79,6 +79,29 @@ describe("createCharacter", () => {
     expect(hand?.children).toHaveLength(0);
   });
 
+  it("finds the held gun's muzzle in the world, ahead of the aiming hand", () => {
+    const character = createCharacter("player");
+    character.object.position.set(10, 0, 20);
+    character.update({ ...REST, weapon: "rifle", aiming: true });
+    const muzzle = new Vector3();
+    expect(character.muzzleWorld(muzzle)).toBe(true);
+    const hand = boneWorldPosition(character.object, "handR");
+    expect(muzzle.x).toBeGreaterThan(hand.x + 0.3);
+    expect(muzzle.y).toBeGreaterThan(1);
+    expect(muzzle.y).toBeLessThan(1.8);
+    expect(Math.abs(muzzle.z - 20)).toBeLessThan(0.6);
+  });
+
+  it("has no muzzle for fists, the bat or empty hands, and leaves the target alone", () => {
+    const character = createCharacter("cop");
+    const target = new Vector3(7, 7, 7);
+    for (const weapon of [null, "fist", "bat"] as const) {
+      character.update({ ...REST, weapon });
+      expect(character.muzzleWorld(target)).toBe(false);
+    }
+    expect(target.toArray()).toEqual([7, 7, 7]);
+  });
+
   it("lies on the ground when dead, and stands up again", () => {
     const character = createCharacter("ped3");
     character.update({ ...REST, dead: true });

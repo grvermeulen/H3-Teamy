@@ -2,7 +2,7 @@
  * A posable 3D person: one skinned mesh of a look, driven each frame by {@link poseFor}, holding
  * its weapon in the right hand and lying down when dead.
  */
-import { Group, type Bone, type Object3D } from "three";
+import { Group, type Bone, type Object3D, type Vector3 } from "three";
 import type { WeaponKind } from "../sim/types";
 import { LOOKS, type CharacterLook } from "./characterLooks";
 import { createPose, poseInto, type PoseInput } from "./characterPose";
@@ -12,7 +12,8 @@ import {
   proportionsOf,
   type BoneName,
 } from "./characterRig";
-import { createWeaponModel } from "./weapons3d";
+import type { Vec3 } from "./lowPoly";
+import { createWeaponModel, muzzleTipOf } from "./weapons3d";
 
 /** A character in the scene. */
 export type Character3d = {
@@ -20,6 +21,14 @@ export type Character3d = {
   object: Object3D;
   /** Poses the character for this frame. */
   update(pose: PoseInput): void;
+  /**
+   * Where the held gun's muzzle is in the world, as posed by the last `update` — where this
+   * character's shots should be seen to leave from.
+   *
+   * @param target - Receives the world position; untouched when there is no muzzle.
+   * @returns `false` for empty hands, fists and the bat.
+   */
+  muzzleWorld(target: Vector3): boolean;
   /** Detaches the character and frees its skeleton; the shared geometry and materials stay. */
   dispose(): void;
 };
@@ -31,24 +40,37 @@ const LYING_LIFT_SHARE = 0.72;
 /** Where a held weapon's grip sits in the hand bone's frame: the centre of the fist. */
 const GRIP_OFFSET: [number, number, number] = [0.004, -0.052, 0];
 
-/** Swaps the model in a hand as the held weapon changes. */
-function createWeaponSlot(hand: Bone): {
+/** The weapon in a hand, swapped as the held weapon changes. */
+type WeaponSlot = {
   hold(weapon: WeaponKind | null): void;
-} {
+  /** See {@link Character3d.muzzleWorld}. */
+  muzzleWorld(target: Vector3): boolean;
+};
+
+/** Swaps the model in a hand as the held weapon changes, and finds its muzzle. */
+function createWeaponSlot(hand: Bone): WeaponSlot {
   let held: WeaponKind | null = null;
   let model: Object3D | null = null;
+  let tip: Vec3 | null = null;
   return {
     hold(weapon) {
       if (weapon === held) return;
       model?.removeFromParent();
       held = weapon;
       model = weapon === null ? null : createWeaponModel(weapon);
+      tip = weapon === null ? null : muzzleTipOf(weapon);
       if (!model || model.children.length === 0) {
         model = null;
         return;
       }
       model.position.set(...GRIP_OFFSET);
       hand.add(model);
+    },
+    muzzleWorld(target) {
+      if (!model || !tip) return false;
+      model.updateWorldMatrix(true, false);
+      model.localToWorld(target.set(tip[0], tip[1], tip[2]));
+      return true;
     },
   };
 }
@@ -114,6 +136,7 @@ export function createCharacter(
       layDown(body, pose.lying, pose.pelvisHeight, lift);
       slot.hold(input.weapon);
     },
+    muzzleWorld: (target) => slot.muzzleWorld(target),
     dispose() {
       slot.hold(null);
       object.removeFromParent();

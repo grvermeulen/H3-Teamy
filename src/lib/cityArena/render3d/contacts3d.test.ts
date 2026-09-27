@@ -17,6 +17,7 @@ type Fake = {
   look: CharacterLook;
   pose: PoseInput | null;
   update: ReturnType<typeof vi.fn>;
+  muzzleWorld: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
 };
 
@@ -33,6 +34,7 @@ function fakes(): {
         look,
         pose: null,
         update: vi.fn((pose: PoseInput) => (fake.pose = { ...pose })),
+        muzzleWorld: vi.fn(() => false),
         dispose: vi.fn(),
       };
       made.push(fake);

@@ -88,7 +88,7 @@ function fakeFactories(): EntityFactories & {
     dispose: vi.fn(),
   });
   return {
-    character: vi.fn(poseable),
+    character: vi.fn(() => ({ ...poseable(), muzzleWorld: vi.fn(() => false) })),
     vehicle: vi.fn(poseable),
     pickup: vi.fn(poseable),
   };
