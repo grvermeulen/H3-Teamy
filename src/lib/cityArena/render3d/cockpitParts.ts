@@ -414,27 +414,10 @@ const CONSOLE_DEPTH_M = 0.22;
 /** The console's pedestal reaches this far down to the cab floor. */
 const CONSOLE_PEDESTAL_M = 0.6;
 
-/** The tractor's open cab: corner posts, a top frame without a roof, floor, console, exhaust. */
-function openShell(spec: CockpitSpec): BufferGeometry[] {
+/** The tractor's open frame: corner posts and a top frame without a roof, back to `backX`. */
+function openFrameParts(spec: CockpitSpec, backX: number): BufferGeometry[] {
   const { footX, headX, baseY, headY, footHalf } = screenOf(spec);
-  const eye = eyeOf(spec);
-  const backX = spec.eyeForwardM - spec.cabinBackM;
-  const consoleX = eye[0] + spec.dash.aheadM + CONSOLE_DEPTH_M / 2;
   const parts = [
-    ...dialParts(spec),
-    block({
-      size: [CONSOLE_DEPTH_M, CONSOLE_PEDESTAL_M, CONSOLE_WIDTH_M],
-      at: [consoleX, spec.dash.heightM - CONSOLE_PEDESTAL_M / 2, eye[2]],
-      colour: DASH_PLASTIC,
-      chamfer: BEAM_CHAMFER,
-    }),
-    block({
-      size: [footX - backX, PILLAR_M, 2 * footHalf],
-      at: [(footX + backX) / 2, baseY - PILLAR_M / 2, 0],
-      colour: FRAME_STEEL,
-      gradient: 0,
-    }),
-    rod({ ...TRACTOR_EXHAUST, axis: "y", colour: EXHAUST_BLACK }),
     beam(
       [headX, headY, -footHalf],
       [headX, headY, footHalf],
@@ -457,6 +440,31 @@ function openShell(spec: CockpitSpec): BufferGeometry[] {
     );
   }
   return parts;
+}
+
+/** The tractor's open cab: the open frame, floor, console on the column, exhaust. */
+function openShell(spec: CockpitSpec): BufferGeometry[] {
+  const { footX, baseY, footHalf } = screenOf(spec);
+  const eye = eyeOf(spec);
+  const backX = spec.eyeForwardM - spec.cabinBackM;
+  const consoleX = eye[0] + spec.dash.aheadM + CONSOLE_DEPTH_M / 2;
+  return [
+    ...dialParts(spec),
+    block({
+      size: [CONSOLE_DEPTH_M, CONSOLE_PEDESTAL_M, CONSOLE_WIDTH_M],
+      at: [consoleX, spec.dash.heightM - CONSOLE_PEDESTAL_M / 2, eye[2]],
+      colour: DASH_PLASTIC,
+      chamfer: BEAM_CHAMFER,
+    }),
+    block({
+      size: [footX - backX, PILLAR_M, 2 * footHalf],
+      at: [(footX + backX) / 2, baseY - PILLAR_M / 2, 0],
+      colour: FRAME_STEEL,
+      gradient: 0,
+    }),
+    rod({ ...TRACTOR_EXHAUST, axis: "y", colour: EXHAUST_BLACK }),
+    ...openFrameParts(spec, backX),
+  ];
 }
 
 /** Section of the coaming ring. */
