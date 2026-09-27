@@ -6,6 +6,7 @@
  * on `dispose()`, and the next view rebuilds each on first use.
  */
 import { disposeCharacterAssets } from "./characterRig";
+import { disposeCockpitAssets } from "./cockpit3d";
 import { disposePickupAssets } from "./pickups3d";
 import { disposeVehicleMaterials } from "./vehicleParts";
 import { disposeWeaponGeometries } from "./weapons3d";
@@ -13,11 +14,13 @@ import { disposeWeaponGeometries } from "./weapons3d";
 /**
  * Frees and forgets every module-level shared geometry and material: the characters' materials and
  * merged looks, the vehicles' paint, detail, lamp and matte materials, the pickups' glow and health
- * box, and the weapons' merged models. Call once the view using them is torn down.
+ * box, the weapons' merged models, and the first-person cockpits' geometry and glass. Call once the
+ * view using them is torn down.
  */
 export function disposeSharedAssets(): void {
   disposeCharacterAssets();
   disposeVehicleMaterials();
   disposePickupAssets();
   disposeWeaponGeometries();
+  disposeCockpitAssets();
 }

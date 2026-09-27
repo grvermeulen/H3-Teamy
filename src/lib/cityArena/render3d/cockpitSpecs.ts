@@ -45,6 +45,17 @@ export type CockpitGlass = {
   rakeM: number;
 };
 
+/** The bonnet (or a tank's glacis) in the body colour, running from the windscreen's foot. */
+export type CockpitBonnet = {
+  /** Length toward the nose; 0 for a flat-fronted bus. */
+  lengthM: number;
+  widthM: number;
+  /** Height of its top at the windscreen. */
+  heightM: number;
+  /** How much lower its top is at the nose end: a tank's glacis falls steeply. */
+  dropM: number;
+};
+
 /** One kind's cockpit. */
 export type CockpitSpec = {
   /** Eye above the ground, metres. */
@@ -55,14 +66,15 @@ export type CockpitSpec = {
   eyeLeftM: number;
   /** The steering wheel, or `null` for the tank's grips. */
   wheel: CockpitWheel | null;
-  /** Dashboard top height above the ground, and its near edge's distance ahead of the eye. */
-  dash: { heightM: number; aheadM: number };
   /**
-   * The bonnet in the body colour, from the windscreen's foot toward the nose: length (0 for a
-   * flat-fronted bus), width, and the height of its top at the windscreen.
+   * Dashboard top height above the ground, and its near edge's distance ahead of the eye; the
+   * speedometer sits just under that edge. For the tank: the hatch coaming's top and radius.
    */
-  bonnet: { lengthM: number; widthM: number; heightM: number };
+  dash: { heightM: number; aheadM: number };
+  bonnet: CockpitBonnet;
   glass: CockpitGlass;
+  /** Where the cab's roof and doors end behind the eye, at the rear window's frame, metres. */
+  cabinBackM: number;
   frame: CockpitFrame;
 };
 
@@ -72,8 +84,8 @@ const SEDAN_COCKPIT: CockpitSpec = {
   eyeForwardM: -0.2,
   eyeLeftM: 0.38,
   wheel: { radiusM: 0.19, aheadM: 0.46, dropM: 0.3, tiltRad: 0.42 },
-  dash: { heightM: 0.9, aheadM: 0.62 },
-  bonnet: { lengthM: 1.08, widthM: 1.5, heightM: 0.84 },
+  dash: { heightM: 0.92, aheadM: 0.62 },
+  bonnet: { lengthM: 1.08, widthM: 1.5, heightM: 0.84, dropM: 0.07 },
   glass: {
     baseM: 0.84,
     headerM: 1.38,
@@ -81,22 +93,26 @@ const SEDAN_COCKPIT: CockpitSpec = {
     aheadM: 1.15,
     rakeM: 0.55,
   },
+  cabinBackM: 0.95,
   frame: "car",
 };
 
 /**
- * Every kind's cockpit, in car space. Bus: a high seat behind a big, nearly flat wheel and an
- * upright screen with nothing ahead of it. Tractor: a central seat in an open frame over a long
- * narrow bonnet. Tank: head out of the driver's hatch at the hull's front left, the glacis ahead.
+ * Every kind's cockpit, in car space. The dashboards and wheels are placed so the speedometer and
+ * both hands sit within the first-person camera's view at level pitch. Bus: a high seat behind a
+ * big, nearly flat wheel and an upright screen with nothing ahead of it. Tractor: a central seat
+ * in an open frame over a long narrow bonnet. Tank: head out of the driver's hatch at the hull's
+ * front left, the glacis falling away ahead.
  */
 export const COCKPITS: Readonly<Record<VehicleKind, CockpitSpec>> = {
   compact: {
     ...SEDAN_COCKPIT,
     eyeHeightM: 1.2,
     eyeForwardM: -0.15,
-    dash: { heightM: 0.92, aheadM: 0.62 },
-    bonnet: { lengthM: 1.02, widthM: 1.5, heightM: 0.86 },
+    dash: { heightM: 0.96, aheadM: 0.62 },
+    bonnet: { lengthM: 1.02, widthM: 1.5, heightM: 0.86, dropM: 0.08 },
     glass: { ...SEDAN_COCKPIT.glass, baseM: 0.86, headerM: 1.45, rakeM: 0.6 },
+    cabinBackM: 1.1,
   },
   sedan: SEDAN_COCKPIT,
   sport: {
@@ -104,8 +120,8 @@ export const COCKPITS: Readonly<Record<VehicleKind, CockpitSpec>> = {
     eyeHeightM: 0.98,
     eyeForwardM: -0.45,
     wheel: { radiusM: 0.18, aheadM: 0.46, dropM: 0.27, tiltRad: 0.5 },
-    dash: { heightM: 0.75, aheadM: 0.62 },
-    bonnet: { lengthM: 1.33, widthM: 1.5, heightM: 0.7 },
+    dash: { heightM: 0.74, aheadM: 0.62 },
+    bonnet: { lengthM: 1.33, widthM: 1.5, heightM: 0.7, dropM: 0.06 },
     glass: {
       ...SEDAN_COCKPIT.glass,
       baseM: 0.7,
@@ -113,15 +129,16 @@ export const COCKPITS: Readonly<Record<VehicleKind, CockpitSpec>> = {
       pillarHalfM: 0.67,
       rakeM: 0.62,
     },
+    cabinBackM: 0.85,
   },
   police: SEDAN_COCKPIT,
   van: {
     eyeHeightM: 1.78,
     eyeForwardM: 0.9,
     eyeLeftM: 0.46,
-    wheel: { radiusM: 0.2, aheadM: 0.45, dropM: 0.42, tiltRad: 0.62 },
-    dash: { heightM: 1.26, aheadM: 0.62 },
-    bonnet: { lengthM: 0.48, widthM: 1.7, heightM: 1.15 },
+    wheel: { radiusM: 0.2, aheadM: 0.45, dropM: 0.33, tiltRad: 0.62 },
+    dash: { heightM: 1.54, aheadM: 0.62 },
+    bonnet: { lengthM: 0.48, widthM: 1.7, heightM: 1.15, dropM: 0.1 },
     glass: {
       baseM: 1.15,
       headerM: 2.12,
@@ -129,15 +146,16 @@ export const COCKPITS: Readonly<Record<VehicleKind, CockpitSpec>> = {
       aheadM: 1.05,
       rakeM: 0.45,
     },
+    cabinBackM: 0.55,
     frame: "car",
   },
   pickup: {
     eyeHeightM: 1.52,
     eyeForwardM: 0.3,
     eyeLeftM: 0.4,
-    wheel: { radiusM: 0.2, aheadM: 0.46, dropM: 0.36, tiltRad: 0.5 },
-    dash: { heightM: 1.06, aheadM: 0.62 },
-    bonnet: { lengthM: 1.33, widthM: 1.6, heightM: 1.02 },
+    wheel: { radiusM: 0.2, aheadM: 0.46, dropM: 0.33, tiltRad: 0.5 },
+    dash: { heightM: 1.28, aheadM: 0.62 },
+    bonnet: { lengthM: 1.33, widthM: 1.6, heightM: 1.02, dropM: 0.06 },
     glass: {
       baseM: 1.02,
       headerM: 1.78,
@@ -145,15 +163,16 @@ export const COCKPITS: Readonly<Record<VehicleKind, CockpitSpec>> = {
       aheadM: 0.9,
       rakeM: 0.45,
     },
+    cabinBackM: 0.55,
     frame: "car",
   },
   bus: {
     eyeHeightM: 2.3,
     eyeForwardM: 4.95,
     eyeLeftM: 0.72,
-    wheel: { radiusM: 0.26, aheadM: 0.5, dropM: 0.52, tiltRad: 1.05 },
-    dash: { heightM: 1.62, aheadM: 0.7 },
-    bonnet: { lengthM: 0, widthM: 2.3, heightM: 0.95 },
+    wheel: { radiusM: 0.26, aheadM: 0.55, dropM: 0.34, tiltRad: 1.05 },
+    dash: { heightM: 1.97, aheadM: 0.8 },
+    bonnet: { lengthM: 0, widthM: 2.3, heightM: 0.95, dropM: 0 },
     glass: {
       baseM: 0.95,
       headerM: 2.6,
@@ -161,6 +180,7 @@ export const COCKPITS: Readonly<Record<VehicleKind, CockpitSpec>> = {
       aheadM: 0.99,
       rakeM: 0,
     },
+    cabinBackM: 1.2,
     frame: "car",
   },
   oldtimer: {
@@ -168,8 +188,8 @@ export const COCKPITS: Readonly<Record<VehicleKind, CockpitSpec>> = {
     eyeForwardM: -0.62,
     eyeLeftM: 0.3,
     wheel: { radiusM: 0.21, aheadM: 0.48, dropM: 0.32, tiltRad: 0.36 },
-    dash: { heightM: 1.02, aheadM: 0.66 },
-    bonnet: { lengthM: 1.75, widthM: 0.95, heightM: 0.97 },
+    dash: { heightM: 1.06, aheadM: 0.66 },
+    bonnet: { lengthM: 1.75, widthM: 0.95, heightM: 0.97, dropM: 0.1 },
     glass: {
       baseM: 0.97,
       headerM: 1.53,
@@ -177,22 +197,24 @@ export const COCKPITS: Readonly<Record<VehicleKind, CockpitSpec>> = {
       aheadM: 0.97,
       rakeM: 0.18,
     },
+    cabinBackM: 0.9,
     frame: "car",
   },
   tractor: {
     eyeHeightM: 2.08,
-    eyeForwardM: -0.58,
+    eyeForwardM: -0.75,
     eyeLeftM: 0,
-    wheel: { radiusM: 0.2, aheadM: 0.46, dropM: 0.5, tiltRad: 0.85 },
-    dash: { heightM: 1.5, aheadM: 0.55 },
-    bonnet: { lengthM: 1.68, widthM: 0.8, heightM: 1.42 },
+    wheel: { radiusM: 0.2, aheadM: 0.46, dropM: 0.32, tiltRad: 0.85 },
+    dash: { heightM: 1.82, aheadM: 0.66 },
+    bonnet: { lengthM: 1.68, widthM: 0.8, heightM: 1.42, dropM: 0.12 },
     glass: {
       baseM: 1.28,
       headerM: 2.44,
       pillarHalfM: 0.65,
-      aheadM: 0.7,
+      aheadM: 0.87,
       rakeM: 0.08,
     },
+    cabinBackM: 0.55,
     frame: "open",
   },
   tank: {
@@ -200,15 +222,16 @@ export const COCKPITS: Readonly<Record<VehicleKind, CockpitSpec>> = {
     eyeForwardM: 0.95,
     eyeLeftM: 0.45,
     wheel: null,
-    dash: { heightM: 1.4, aheadM: 0.34 },
-    bonnet: { lengthM: 0.95, widthM: 1.74, heightM: 1.38 },
+    dash: { heightM: 1.5, aheadM: 0.42 },
+    bonnet: { lengthM: 0.93, widthM: 1.74, heightM: 1.38, dropM: 0.98 },
     glass: {
-      baseM: 1.38,
+      baseM: 1.5,
       headerM: 1.62,
       pillarHalfM: 0.3,
-      aheadM: 0.4,
+      aheadM: 0.42,
       rakeM: 0,
     },
+    cabinBackM: 0,
     frame: "hatch",
   },
 };

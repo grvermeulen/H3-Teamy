@@ -173,8 +173,15 @@ const LAYOUTS: Record<WeaponKind, ViewLayout> = {
   },
 };
 
-/** Fist, knuckles, thumb and forearm, fist at the origin, forearm running back along +Z. */
-function armGeometry(side: "L" | "R"): BufferGeometry {
+/**
+ * The player's forearm and fist in their skin tone — the right one with the bead bracelet —
+ * shared by the first-person hands and the cockpit's hands on the wheel.
+ *
+ * @param side - `L` or `R`; the thumb sits on the inner side.
+ * @returns A new merged geometry: fist at the origin, knuckles up (+Y), forearm running back
+ *   along +Z.
+ */
+export function armGeometry(side: "L" | "R"): BufferGeometry {
   const skin = LOOKS.player.skin;
   const inward = side === "R" ? -1 : 1;
   const parts = [
