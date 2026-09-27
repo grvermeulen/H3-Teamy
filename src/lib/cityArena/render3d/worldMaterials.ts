@@ -8,12 +8,14 @@ import {
   DataTexture,
   DoubleSide,
   LinearFilter,
+  MeshBasicMaterial,
   MeshLambertMaterial,
   PointsMaterial,
   type Texture,
 } from "three";
 import { FURNITURE_FILL, ROAD_CENTRE_LINE } from "../render/palette";
 import { createFacadeAtlasMaterial } from "./facadeAtlas";
+import { createLampPoolMaterial } from "./lampPools";
 import { LAMP_GLOW } from "./palette3d";
 import { createSurfaceMaterials, type SurfaceKey } from "./textures";
 
@@ -114,6 +116,8 @@ export type WorldMaterials = {
   lampHead: MeshLambertMaterial;
   /** The additive halo around a lamp head, drawn as one point sprite per lamp; no depth writes. */
   lampGlow: PointsMaterial;
+  /** The additive pools of light on the street under the lamps. */
+  lampPool: MeshBasicMaterial;
   /** Weathered wooden benches. */
   bench: MeshLambertMaterial;
   /** The bus shelter's see-through glass back panel, visible from both sides. */
@@ -177,7 +181,7 @@ function matte(colour: number | string): MeshLambertMaterial {
 /** The street's lamps: pole, glowing head and its halo. */
 function createLampMaterials(): Pick<
   WorldMaterials,
-  "lampPole" | "lampHead" | "lampGlow"
+  "lampPole" | "lampHead" | "lampGlow" | "lampPool"
 > {
   return {
     lampPole: matte(FURNITURE_FILL.lamp),
@@ -194,6 +198,7 @@ function createLampMaterials(): Pick<
       transparent: true,
       depthWrite: false,
     }),
+    lampPool: createLampPoolMaterial(LAMP_GLOW),
   };
 }
 
@@ -234,7 +239,7 @@ export function createWorldMaterials(
 /** Every material in a set, each once. */
 function listWorldMaterials(
   materials: WorldMaterials,
-): (MeshLambertMaterial | PointsMaterial)[] {
+): (MeshLambertMaterial | MeshBasicMaterial | PointsMaterial)[] {
   return [
     ...Object.values(materials.surfaces),
     materials.facade,
@@ -247,6 +252,7 @@ function listWorldMaterials(
     materials.lampPole,
     materials.lampHead,
     materials.lampGlow,
+    materials.lampPool,
     materials.bench,
     materials.shelterGlass,
   ];

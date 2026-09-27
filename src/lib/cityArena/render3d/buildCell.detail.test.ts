@@ -149,6 +149,31 @@ describe("buildCell detail", () => {
       expect(distance).toBeGreaterThan(4.5 + CYCLE_PATH_M);
   });
 
+  it("lays one pool of light per lamp on a full cell and none on a basic one", () => {
+    const materials = createTestMaterials();
+    const poolsOf = (detail: CityDetail): InstancedMesh[] => {
+      const pools: InstancedMesh[] = [];
+      townCell(materials, [0, 0], detail).group.traverse((node) => {
+        if (
+          node instanceof InstancedMesh &&
+          node.material === materials.lampPool
+        )
+          pools.push(node);
+      });
+      return pools;
+    };
+    const lamps = townCell(materials, [0, 0], "full").furniture.filter(
+      (piece) => piece.kind === "lamp",
+    );
+
+    const full = poolsOf("full");
+
+    expect(lamps.length).toBeGreaterThan(0);
+    expect(full).toHaveLength(1);
+    expect(full[0].count).toBe(lamps.length);
+    expect(poolsOf("basic")).toEqual([]);
+  });
+
   it("builds the same full cell every time", () => {
     const materials = createTestMaterials();
     const positions = (): number[] => {

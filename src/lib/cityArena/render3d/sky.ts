@@ -1,10 +1,20 @@
 /**
  * The evening sky (spec §6.5): a large inverted sphere that follows the camera, shaded from the
  * deep blue zenith down to the horizon with a warm band of the last light, and fog-coloured
- * below the horizon so the ground's fogged edge meets it without a seam.
+ * below the horizon so the ground's fogged edge meets it without a seam. At full city detail
+ * stars and the moon hang inside it.
  */
-import { BackSide, Color, Mesh, ShaderMaterial, SphereGeometry } from "three";
+import {
+  BackSide,
+  Color,
+  Mesh,
+  ShaderMaterial,
+  SphereGeometry,
+  type Object3D,
+} from "three";
+import type { CityDetail } from "./cityDetail";
 import { FOG_COLOUR, HORIZON_GLOW, SKY_HORIZON, SKY_TOP } from "./palette3d";
+import { createMoon, createStarField } from "./skyDetail";
 
 /** Radius of the sky dome, metres; inside the camera's far plane, beyond the fog. */
 export const SKY_RADIUS_M = 900;
@@ -41,12 +51,15 @@ void main() {
 `;
 
 /**
- * Builds the sky dome. It draws first and writes no depth, so the city always covers it; move it
- * to the camera's position every frame.
+ * Builds the sky dome with the stars and the moon inside it. It draws first and writes no depth,
+ * so the city always covers it; move it to the camera's position every frame.
  *
- * @returns The dome mesh, owning its geometry and material.
+ * @param moonLight - The moonlight's direction (where it shines from), y up: the moon hangs on its bearing.
+ * @returns The dome mesh, owning its geometry, material, stars and moon.
  */
-export function createSkyDome(): Mesh {
+export function createSkyDome(
+  moonLight: readonly [number, number, number],
+): Mesh {
   const material = new ShaderMaterial({
     uniforms: {
       topColour: { value: new Color(SKY_TOP) },
@@ -65,5 +78,16 @@ export function createSkyDome(): Mesh {
   );
   dome.renderOrder = -1;
   dome.frustumCulled = false;
+  dome.add(createStarField(SKY_RADIUS_M), createMoon(SKY_RADIUS_M, moonLight));
   return dome;
+}
+
+/**
+ * Shows the stars and the moon at full city detail; "laag" keeps the plain evening gradient.
+ *
+ * @param dome - The dome from {@link createSkyDome}.
+ * @param detail - The city detail the quality builds.
+ */
+export function setSkyDetail(dome: Object3D, detail: CityDetail): void {
+  for (const child of dome.children) child.visible = detail === "full";
 }

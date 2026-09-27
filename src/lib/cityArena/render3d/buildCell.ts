@@ -769,7 +769,9 @@ function addScenery(
     ...ownedFurniture(cell, regions),
     ...streetLamps(cell, regions, input.detail === "full"),
   ];
-  const furniture = buildFurnitureLayer(pieces, input.materials, origin);
+  const furniture = buildFurnitureLayer(pieces, input.materials, origin, {
+    pools: input.detail === "full",
+  });
   for (const object of [...trees.meshes, ...furniture.objects])
     group.add(object);
   owned.disposers.push(trees.dispose, furniture.dispose);

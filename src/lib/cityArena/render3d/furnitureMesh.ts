@@ -21,6 +21,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { FURNITURE_SIZE_M, type FurnitureKind } from "../world/mapTypes";
 import type { Point } from "../world/projection";
 import { headingToRotationY } from "./coords";
+import { createLampPools, lampPoolMatrix } from "./lampPools";
 import type { WorldMaterials } from "./worldMaterials";
 
 /** A lamp's pole height, metres. */
@@ -229,6 +230,8 @@ const GLOW_AT = new Vector3(
   LAMP_HEAD_AT[1] - GLOW_DROP_M,
   LAMP_HEAD_AT[2],
 );
+/** The lamp head's middle in a lamp's frame, which its pool of light lies under. */
+const HEAD_AT = new Vector3(...LAMP_HEAD_AT);
 /** Scale that hides a piece whose proxy is invisible. */
 const HIDDEN = new Vector3(0, 0, 0);
 
@@ -282,18 +285,20 @@ function glowPoints(count: number, materials: WorldMaterials): Points {
 
 /**
  * Instanced furniture for one cell: per kind one mesh per part (lamp: pole with arm, glowing
- * head; bench; shelter: frame, glass, lit poster), one halo point per lamp, and a pose proxy per
- * piece (see {@link FurnitureInstance.object}).
+ * head; bench; shelter: frame, glass, lit poster), one halo point per lamp, a pool of light under
+ * each lamp when asked, and a pose proxy per piece (see {@link FurnitureInstance.object}).
  *
  * @param pieces - The cell's furniture, headings already turned to face the road.
  * @param materials - The shared set.
  * @param origin - The world point that is the cell's local zero.
+ * @param options - `pools`: lay a pool of light on the street under every lamp.
  * @returns The layer; call `sync` each frame and `dispose` with the cell.
  */
 export function buildFurnitureLayer(
   pieces: readonly PlacedFurniture[],
   materials: WorldMaterials,
   origin: Point,
+  options: { pools?: boolean } = {},
 ): FurnitureLayer {
   const furniture = pieces.map((piece) => ({
     ...piece,
@@ -310,12 +315,17 @@ export function buildFurnitureLayer(
     .map(({ kind, indices }) => kindMeshes(kind, indices, materials));
   const lamps = kinds.find((entry) => entry.kind === "lamp");
   const glow = lamps ? glowPoints(lamps.pieces.length, materials) : null;
-  const poser = createPoser(furniture, kinds, glow, origin);
+  const pools =
+    lamps && options.pools
+      ? createLampPools(lamps.pieces.length, materials.lampPool)
+      : null;
+  const poser = createPoser(furniture, kinds, { glow, pools }, origin);
   for (const piece of furniture) writePose(poser, piece);
   flushPoses(poser);
   const objects: Object3D[] = [
     ...kinds.flatMap((entry) => entry.meshes),
     ...(glow ? [glow] : []),
+    ...(pools ? [pools] : []),
   ];
   return {
     objects,
@@ -333,6 +343,8 @@ export function buildFurnitureLayer(
         mesh.dispose();
       }
       glow?.geometry.dispose();
+      pools?.geometry.dispose();
+      pools?.dispose();
     },
   };
 }
@@ -347,21 +359,24 @@ type PieceSlot = {
   visible: boolean;
 };
 
-/** A layer's pieces by proxy, its halo points, and scratch space for writing poses. */
-type Poser = {
+/** What lights the lamps: their halo points and the pools of light under them, when built. */
+type LampLights = { glow: Points | null; pools: InstancedMesh | null };
+
+/** A layer's pieces by proxy, its lamps' lights, and scratch space for writing poses. */
+type Poser = LampLights & {
   slots: Map<FurnitureInstance, PieceSlot>;
   kinds: readonly KindMeshes[];
-  glow: Points | null;
   shift: Matrix4;
   pose: Matrix4;
   glowAt: Vector3;
+  poolPose: Matrix4;
 };
 
 /** A poser for the layer's pieces, each mapped to its kind and slot. */
 function createPoser(
   furniture: readonly FurnitureInstance[],
   kinds: readonly KindMeshes[],
-  glow: Points | null,
+  lights: LampLights,
   origin: Point,
 ): Poser {
   const slots = new Map<FurnitureInstance, PieceSlot>();
@@ -381,10 +396,11 @@ function createPoser(
   return {
     slots,
     kinds,
-    glow,
+    ...lights,
     shift,
     pose: new Matrix4(),
     glowAt: new Vector3(),
+    poolPose: new Matrix4(),
   };
 }
 
@@ -398,7 +414,27 @@ function hasMoved(slot: PieceSlot, proxy: Object3D): boolean {
   );
 }
 
-/** Writes a piece's proxy pose into its instances (and its lamp's halo), marking its kind dirty. */
+/** Moves a lamp's halo and pool with its pose; a hidden lamp's halo sinks underground. */
+function writeLampLights(
+  poser: Poser,
+  slot: number,
+  pose: Matrix4,
+  shown: boolean,
+): void {
+  if (poser.pools)
+    poser.pools.setMatrixAt(
+      slot,
+      lampPoolMatrix(pose, HEAD_AT, shown, poser.poolPose),
+    );
+  if (!poser.glow) return;
+  const glowAt = poser.glowAt.copy(GLOW_AT).applyMatrix4(pose);
+  if (!shown) glowAt.y = -HIDDEN_GLOW_DEPTH_M;
+  poser.glow.geometry
+    .getAttribute("position")
+    .setXYZ(slot, glowAt.x, glowAt.y, glowAt.z);
+}
+
+/** Writes a piece's proxy pose into its instances (and its lamp's lights), marking its kind dirty. */
 function writePose(poser: Poser, piece: FurnitureInstance): void {
   const slot = poser.slots.get(piece);
   if (!slot) return;
@@ -412,15 +448,23 @@ function writePose(poser: Poser, piece: FurnitureInstance): void {
   if (!proxy.visible) pose.scale(HIDDEN);
   for (const mesh of slot.kind.meshes) mesh.setMatrixAt(slot.slot, pose);
   slot.kind.dirty = true;
-  if (slot.kind.kind !== "lamp" || !poser.glow) return;
-  const glowAt = poser.glowAt.copy(GLOW_AT).applyMatrix4(pose);
-  if (!proxy.visible) glowAt.y = -HIDDEN_GLOW_DEPTH_M;
-  poser.glow.geometry
-    .getAttribute("position")
-    .setXYZ(slot.slot, glowAt.x, glowAt.y, glowAt.z);
+  if (slot.kind.kind === "lamp")
+    writeLampLights(poser, slot.slot, pose, proxy.visible);
 }
 
-/** Uploads the instances (and halos) of every kind a pose was written to since the last flush. */
+/** Uploads the lamps' halos and pools after a pose was written to them. */
+function flushLampLights(poser: Poser): void {
+  if (poser.glow) {
+    poser.glow.geometry.getAttribute("position").needsUpdate = true;
+    poser.glow.geometry.computeBoundingSphere();
+  }
+  if (poser.pools) {
+    poser.pools.instanceMatrix.needsUpdate = true;
+    poser.pools.computeBoundingSphere();
+  }
+}
+
+/** Uploads the instances (and lamp lights) of every kind a pose was written to since the last flush. */
 function flushPoses(poser: Poser): void {
   for (const kind of poser.kinds) {
     if (!kind.dirty) continue;
@@ -429,8 +473,6 @@ function flushPoses(poser: Poser): void {
       mesh.instanceMatrix.needsUpdate = true;
       mesh.computeBoundingSphere();
     }
-    if (kind.kind !== "lamp" || !poser.glow) continue;
-    poser.glow.geometry.getAttribute("position").needsUpdate = true;
-    poser.glow.geometry.computeBoundingSphere();
+    if (kind.kind === "lamp") flushLampLights(poser);
   }
 }

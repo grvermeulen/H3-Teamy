@@ -1,4 +1,4 @@
-import { MeshLambertMaterial, PointsMaterial } from "three";
+import { MeshBasicMaterial, MeshLambertMaterial, PointsMaterial } from "three";
 import { boundsOf, type Rect } from "../../mapBuild/geometry";
 import type {
   DecodedBuilding,
@@ -37,6 +37,7 @@ export function createTestMaterials(): WorldMaterials {
     lampPole: plain(),
     lampHead: plain(),
     lampGlow: new PointsMaterial(),
+    lampPool: new MeshBasicMaterial(),
     bench: plain(),
     shelterGlass: plain(),
   };
