@@ -210,6 +210,22 @@ export function healthMaxOf(kind: VehicleKind): number {
   return VEHICLE_SPECS[kind].healthMax;
 }
 
+/**
+ * Clamps a car's health to `[0, healthMaxOf(kind)]`, repairing non-finite values from a bad
+ * snapshot or a kind/health mismatch on the wire.
+ */
+export function clampVehicleHealth(kind: VehicleKind, health: number): number {
+  const max = healthMaxOf(kind);
+  if (!Number.isFinite(health)) return max;
+  return Math.min(max, Math.max(0, health));
+}
+
+/** Returns `vehicle` with its health clamped to its kind's maximum. */
+export function normalizeVehicleHealth(vehicle: VehicleState): VehicleState {
+  const health = clampVehicleHealth(vehicle.kind, vehicle.health);
+  return health === vehicle.health ? vehicle : { ...vehicle, health };
+}
+
 /** Below this health a kind smokes. */
 export function smokeHealthOf(kind: VehicleKind): number {
   return VEHICLE_SPECS[kind].healthMax * SMOKE_HEALTH_SHARE;

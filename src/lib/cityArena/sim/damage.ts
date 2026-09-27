@@ -1,5 +1,6 @@
 import type { ArenaPlayerState, VehicleState } from "./types";
 import { activeBonus, BONUS_BALANCE } from "./landmarkBonuses";
+import { normalizeVehicleHealth } from "./vehicle";
 
 /** Health at spawn (spec §5). */
 export const PLAYER_MAX_HEALTH = 100;
@@ -53,11 +54,14 @@ export function damagePlayer(
   return { ...player, health, diedAtTick: health === 0 ? tick : null };
 }
 
-/** Applies damage to a car, clamping at 0; wrecking (the explosion) is the arena step's job. */
+/** Applies damage to a car, clamping at 0 and its kind's maximum; wrecking is the arena step's job. */
 export function damageVehicle(
   vehicle: VehicleState,
   amount: number,
 ): VehicleState {
   if (amount <= 0 || vehicle.wrecked) return vehicle;
-  return { ...vehicle, health: Math.max(0, vehicle.health - amount) };
+  return normalizeVehicleHealth({
+    ...vehicle,
+    health: vehicle.health - amount,
+  });
 }

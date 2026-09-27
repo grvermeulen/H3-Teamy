@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DbUnavailableError } from "@/lib/dbUnavailableError";
 const { list, limit, capture } = vi.hoisted(() => ({
   list: vi.fn(),
   limit: vi.fn(),
@@ -44,6 +45,17 @@ describe("server-registered arena rooms", () => {
     expect(response.status).toBe(503);
     expect((await response.json()).error).toMatch(/beschikbaar/);
     expect(capture).toHaveBeenCalledTimes(1);
+  });
+  it("returns 503 without Sentry when arena tables are missing", async () => {
+    list.mockRejectedValueOnce(new DbUnavailableError());
+    const response = await GET(request());
+    expect(response.status).toBe(503);
+    const body = await response.json();
+    expect(body).toEqual({
+      rooms: [],
+      error: "Actieve potjes zijn even niet beschikbaar",
+    });
+    expect(capture).not.toHaveBeenCalled();
   });
   it("limits room reads before database work", async () => {
     limit.mockResolvedValue({ allowed: false, retryAfterSec: 15 });

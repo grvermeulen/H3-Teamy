@@ -7,10 +7,12 @@ import {
   NO_CONTROLS,
   VEHICLE_KINDS,
   VEHICLE_SPECS,
+  clampVehicleHealth,
   createVehicle,
   distanceToVehicle,
   forwardSpeed,
   healthMaxOf,
+  normalizeVehicleHealth,
   hullCircles,
   hullLayout,
   localToWorld,
@@ -242,6 +244,14 @@ describe("vehicle kinds", () => {
     expect(healthMaxOf("oldtimer")).toBe(120);
     expect(smokeHealthOf("bus")).toBeCloseTo(140);
     expect(smokeHealthOf("sedan")).toBeCloseTo(72);
+  });
+
+  it("clamps health to the kind's maximum and repairs non-finite values", () => {
+    const sedan = createVehicle(1, "sedan", [0, 0], 0, 0);
+    expect(clampVehicleHealth("sedan", 200)).toBe(180);
+    expect(clampVehicleHealth("tank", 900)).toBe(750);
+    expect(clampVehicleHealth("compact", Number.NaN)).toBe(160);
+    expect(normalizeVehicleHealth({ ...sedan, health: 200 }).health).toBe(180);
   });
 
   it("turns a bus more slowly than a compact at the same speed", () => {

@@ -60,10 +60,44 @@ export const FREE_LIST_CAP = 32;
 export const TANK_BARREL_HEIGHT_M = 1.73;
 /** An officer raises the gun while a living player is this close, metres. */
 export const COP_AIM_RANGE_M = 30;
+/** Characters beyond this animate at a reduced rate (clip-playing ones), metres. */
+export const FULL_RATE_ANIMATION_M = 40;
+/** A detailed character turns simple only this much beyond the detail range, so none flickers. */
+const DETAIL_HYSTERESIS = 1.1;
 
-/** Builds the models; the real ones are `createCharacter`, `createVehicle3d`, `createPickup3d`. */
+/**
+ * Who a character is built for: the entity's id (a pedestrian's looks are drawn from it) and
+ * whether it is far enough to be drawn simply. Borrowed for the call; do not keep it.
+ */
+export type CharacterWho = { id: number; simple: boolean };
+
+/**
+ * Builds the models; the real ones are the character factory, `createVehicle3d` and
+ * `createPickup3d`. The character hooks are optional: without them a character's pool variant is
+ * its look (a one-off for a vest hue) and a reused character needs no re-dressing.
+ */
 export type EntityFactories = {
-  character(look: CharacterLook, vestHue?: number): Character3d;
+  character(
+    look: CharacterLook,
+    vestHue?: number,
+    who?: CharacterWho,
+  ): Character3d;
+  /**
+   * The pool variant a character built now would be (say, a glTF model once they have loaded);
+   * a kept character of another variant is rebuilt. Called every frame: must not allocate.
+   */
+  characterVariant?(
+    look: CharacterLook,
+    vestHue: number | undefined,
+    who: CharacterWho,
+  ): string | null;
+  /** Re-dresses a pooled character for its new owner. */
+  dressCharacter?(
+    character: Character3d,
+    look: CharacterLook,
+    vestHue: number | undefined,
+    who: CharacterWho,
+  ): void;
   vehicle(kind: VehicleKind, colour: number): Vehicle3d;
   pickup(kind: PickupKind): Pickup3d;
 };
@@ -74,6 +108,8 @@ export type EntityView = {
   firstPerson: boolean;
   /** The local player's aim, radians — a tank they drive turns its turret to it. */
   aim: number;
+  /** Characters beyond this distance are drawn simply (the "laag" quality); unset: all detailed. */
+  characterDetailM?: number;
 };
 
 /** The car the local player drives, as the first-person cockpit needs it. */
@@ -144,6 +180,8 @@ type CharacterState = {
   shots: ShotMemory;
   /** A player's next-shot tick last frame; a swing moves it on without a muzzle flash. */
   nextShotTick: number | null;
+  /** Built to be drawn simply (beyond the detail range). */
+  simple: boolean;
 };
 
 /** What a vehicle remembers between frames. */
@@ -181,6 +219,8 @@ type Frame = {
   readonly vehicleInput: Vehicle3dInput;
   readonly steerSample: SteerSample;
   readonly pickupInput: { taken: boolean; tick: number };
+  /** Who the character being synced is for, rewritten per character. */
+  readonly who: CharacterWho;
   dt: number;
   /** The scene's tick. */
   tick: number;
@@ -227,30 +267,83 @@ function driverOf(
   return undefined;
 }
 
+/** The pool variant of a character for `frame.who`: the factory's, else its look (a vest hue: none). */
+function variantOf(
+  frame: Frame,
+  look: CharacterLook,
+  vestHue?: number,
+): string | null {
+  const { factories } = frame;
+  if (factories.characterVariant)
+    return factories.characterVariant(look, vestHue, frame.who);
+  return vestHue === undefined ? look : null;
+}
+
 /**
- * A new character slot for `id`: a freed model of the look, or a fresh one. A vest hue belongs to
- * one player only, so a hued model is a one-off, disposed when that player leaves.
+ * Sets `frame.who` for an entity at `(x, y)`: simple beyond the view's detail range, with a
+ * little slack before a detailed character turns simple.
+ */
+function aimWho(
+  frame: Frame,
+  id: number,
+  kept: CharacterSlot | undefined,
+  entity: { x: number; y: number },
+): void {
+  frame.who.id = id;
+  const range = frame.view.characterDetailM;
+  if (range === undefined) {
+    frame.who.simple = false;
+    return;
+  }
+  const reach =
+    kept?.state.simple === false ? range * DETAIL_HYSTERESIS : range;
+  frame.who.simple = !within(frame.focus, entity.x, entity.y, reach);
+}
+
+/** True when a kept character still fits: the same look and the variant the factory would build. */
+function fits(
+  frame: Frame,
+  kept: CharacterSlot,
+  look: CharacterLook,
+  vestHue?: number,
+): boolean {
+  return (
+    kept.state.look === look && kept.variant === variantOf(frame, look, vestHue)
+  );
+}
+
+/**
+ * A new character slot for `frame.who`: a freed model of its variant (re-dressed for this owner),
+ * or a fresh one. A rebuilt entity keeps its motion and shots. A vest hue belongs to one player
+ * only, so without a factory variant a hued model is a one-off, disposed when that player leaves.
  */
 function claimCharacter(
   frame: Frame,
   pool: CharacterPool,
-  id: number,
   look: CharacterLook,
   vestHue?: number,
+  previous?: CharacterState,
 ): CharacterSlot {
-  const variant = vestHue === undefined ? look : null;
+  const { factories, who } = frame;
   const state: CharacterState = {
     look,
-    motion: createMotion(),
-    shots: createShotMemory(),
-    nextShotTick: null,
+    motion: previous?.motion ?? createMotion(),
+    shots: previous?.shots ?? createShotMemory(),
+    nextShotTick: previous?.nextShotTick ?? null,
+    simple: who.simple,
   };
-  return pool.claim(
-    id,
-    variant,
-    () => frame.factories.character(look, vestHue),
+  let built = false;
+  const slot = pool.claim(
+    who.id,
+    variantOf(frame, look, vestHue),
+    () => {
+      built = true;
+      return factories.character(look, vestHue, who);
+    },
     state,
   );
+  if (!built) factories.dressCharacter?.(slot.item, look, vestHue, who);
+  return slot;
 }
 
 /** A player's slot, rebuilt when they became or stopped being this client's own player. */
@@ -262,9 +355,10 @@ function playerSlot(
   const look: CharacterLook = local ? "player" : "otherPlayer";
   const pool = frame.pools.players;
   const kept = pool.keep(player.id);
-  if (kept?.state.look === look) return kept;
   const hue = local ? undefined : vestHueOf(player.id);
-  return claimCharacter(frame, pool, player.id, look, hue);
+  aimWho(frame, player.id, kept, player);
+  if (kept && fits(frame, kept, look, hue)) return kept;
+  return claimCharacter(frame, pool, look, hue, kept?.state);
 }
 
 /** Records where a posed character's gun points from, if it holds one. */
@@ -285,6 +379,8 @@ function placeCharacter(
   pose.phaseM = slot.state.motion.phaseM;
   pose.recoil = slot.state.shots.recoil;
   pose.tick = tick;
+  pose.dt = frame.dt;
+  pose.far = !within(frame.focus, entity.x, entity.y, FULL_RATE_ANIMATION_M);
   const { object } = slot.item;
   setWorldPosition(object.position, entity.x, entity.y);
   object.rotation.y = headingToRotationY(entity.facing);
@@ -362,8 +458,13 @@ function syncPlayer(
 function syncPed(frame: Frame, scene: Scene, ped: PedState): void {
   if (!within(frame.focus, ped.x, ped.y, CHARACTER_DRAW_DISTANCE_M)) return;
   const { peds } = frame.pools;
+  const look = pedLookOf(ped.id);
+  const kept = peds.keep(ped.id);
+  aimWho(frame, ped.id, kept, ped);
   const slot =
-    peds.keep(ped.id) ?? claimCharacter(frame, peds, ped.id, pedLookOf(ped.id));
+    kept && fits(frame, kept, look)
+      ? kept
+      : claimCharacter(frame, peds, look, undefined, kept?.state);
   trackMotion(slot.state.motion, ped.x, ped.y, frame.dt, null);
   frame.pose.weapon = null;
   frame.pose.aiming = false;
@@ -376,7 +477,12 @@ function syncPed(frame: Frame, scene: Scene, ped: PedState): void {
 function syncCop(frame: Frame, scene: Scene, cop: CopState): void {
   if (!within(frame.focus, cop.x, cop.y, CHARACTER_DRAW_DISTANCE_M)) return;
   const { cops } = frame.pools;
-  const slot = cops.keep(cop.id) ?? claimCharacter(frame, cops, cop.id, "cop");
+  const kept = cops.keep(cop.id);
+  aimWho(frame, cop.id, kept, cop);
+  const slot =
+    kept && fits(frame, kept, "cop")
+      ? kept
+      : claimCharacter(frame, cops, "cop", undefined, kept?.state);
   const dead = cop.diedAtTick !== null;
   trackMotion(slot.state.motion, cop.x, cop.y, frame.dt, null);
   const fired = muzzleTickNear(frame.muzzles, cop.x, cop.y);
@@ -612,6 +718,7 @@ function createFrame(factories: EntityFactories, group: Group): Frame {
       driverSteer: null,
     },
     pickupInput: { taken: false, tick: 0 },
+    who: { id: 0, simple: false },
     dt: 0,
     tick: 0,
     focus: { x: 0, y: 0 },
