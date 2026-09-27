@@ -1,8 +1,9 @@
 /**
  * The city heard around the listener (immersion spec §6): engine loops on the nearest moving
- * cars, the siren on the nearest police cars, and the ambient bed levelled from the surroundings.
- * Fed once per frame by the sound layer with the scene; everything here is loops that follow what
- * they are told, so a car can be heard coming, passing and driving off.
+ * cars, the siren on the nearest police cars, the ambient bed levelled from the surroundings, and
+ * the street life — spot sounds and passers-by's steps. Fed once per frame by the sound layer with
+ * the scene; the loops follow what they are told, so a car can be heard coming, passing and
+ * driving off.
  */
 
 import type { DecodedTile } from "../world/decode";
@@ -13,6 +14,8 @@ import type { SoundPoint } from "./eventVoices";
 import { engineRate } from "./engineRate";
 import { createLoopSlot, type LoopSlot, type LoopTarget } from "./loopSlot";
 import type { SamplePlayer } from "./samples";
+import type { SpotLandmark, SpotRequest } from "./spotSounds";
+import { createStreetLife } from "./streetLife";
 import { SOUND_PROFILES, spatialMix, type Listener } from "./spatial";
 import type { Surroundings } from "./surroundings";
 import {
@@ -32,6 +35,8 @@ export type WorldSounds = {
   peds: readonly SoundPoint[];
   /** The decoded map tiles around the listener. */
   tiles: readonly DecodedTile[];
+  /** The landmarks, in metres: the church bell tolls from one. */
+  landmarks: readonly SpotLandmark[];
 };
 
 /** What the debug seam shows of the world's voices. */
@@ -44,6 +49,8 @@ export type WorldAudioSnapshot = {
   ambience: Record<AmbienceLoop, number>;
   /** What the ambience last read around the listener. */
   surroundings: Surroundings;
+  /** The last few spot sounds, newest last. */
+  spots: SpotRequest[];
 };
 
 /** The city's loops. */
@@ -144,22 +151,26 @@ function updatePool(
 }
 
 /**
- * Creates the city's loops over the sample player.
+ * Creates the city's sound over the sample player.
  *
  * @param player - The sample player, looked up each frame: it may not exist yet.
- * @returns The loops, silent until {@link WorldAudio.update} is first called.
+ * @param seed - Seeds the spot sounds.
+ * @returns The city, silent until {@link WorldAudio.update} is first called.
  */
 export function createWorldAudio(
   player: () => SamplePlayer | null,
+  seed: number,
 ): WorldAudio {
   const engines = pool(player, "engine", ENGINE_VOICES, ENGINE_RULES);
   const sirens = pool(player, "siren", SIREN_VOICES, SIREN_RULES);
   const pools = [engines, sirens];
   const bed = createAmbienceBed(player);
+  const street = createStreetLife(player, seed);
   return {
     update(world: WorldSounds, listener: Listener, ambience: boolean): void {
       for (const traffic of pools) updatePool(traffic, world, listener);
       bed.update(world, listener, ambience);
+      street.update(world, listener, bed.surroundings(), ambience);
     },
     stop(): void {
       for (const traffic of pools) {
@@ -173,6 +184,7 @@ export function createWorldAudio(
       sirens: [...sirens.cars],
       ambience: bed.levels(),
       surroundings: bed.surroundings(),
+      spots: street.recent(),
     }),
   };
 }

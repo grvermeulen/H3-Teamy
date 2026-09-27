@@ -135,6 +135,8 @@ const DRONE_HZ_PER_MPS = 5;
 const DRONE_TOP_SPEED_MPS = 30;
 /** A loud event ducks the radio only when it is heard at least this loud: not a distant shot. */
 export const RADIO_DUCK_MIN_GAIN = 0.2;
+/** Spot-sound seeds are drawn from this many values. */
+const SPOT_SEED_RANGE = 2 ** 32;
 /** Each footstep's rate is jittered by up to this share either way, so a walk is not a metronome. */
 export const FOOTSTEP_RATE_JITTER = 0.06;
 
@@ -216,7 +218,10 @@ function createCore(
     engine: null,
     engineGain: null,
     engineLoop: null,
-    world: createWorldAudio(() => core.player),
+    world: createWorldAudio(
+      () => core.player,
+      Math.floor(random() * SPOT_SEED_RANGE),
+    ),
     footsteps: createFootsteps(),
     skid: createSkidDetector(),
     random,

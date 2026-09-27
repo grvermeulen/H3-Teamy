@@ -25,7 +25,16 @@ export type ClipName =
   | "amb-crowd"
   | "amb-birds"
   | "amb-wind"
-  | "amb-water";
+  | "amb-water"
+  | "chatter-1"
+  | "chatter-2"
+  | "chatter-3"
+  | "chatter-4"
+  | "bike-bell"
+  | "dog"
+  | "horn"
+  | "church-bell"
+  | "scooter";
 
 /** How one clip plays: its file, its level relative to the master, and whether it loops. */
 export type ClipSpec = {
@@ -60,6 +69,16 @@ export const AUDIO_CLIPS: Record<ClipName, ClipSpec> = {
   "amb-birds": { file: "amb-birds.mp3", gain: 0.3, loop: true },
   "amb-wind": { file: "amb-wind.mp3", gain: 0.3, loop: true },
   "amb-water": { file: "amb-water.mp3", gain: 0.3, loop: true },
+  // Spot sounds (spec §6): short, placed where their source is.
+  "chatter-1": { file: "chatter-1.mp3", gain: 0.35, loop: false },
+  "chatter-2": { file: "chatter-2.mp3", gain: 0.35, loop: false },
+  "chatter-3": { file: "chatter-3.mp3", gain: 0.35, loop: false },
+  "chatter-4": { file: "chatter-4.mp3", gain: 0.35, loop: false },
+  "bike-bell": { file: "bike-bell.mp3", gain: 0.4, loop: false },
+  dog: { file: "dog.mp3", gain: 0.4, loop: false },
+  horn: { file: "horn.mp3", gain: 0.45, loop: false },
+  "church-bell": { file: "church-bell.mp3", gain: 0.7, loop: false },
+  scooter: { file: "scooter.mp3", gain: 0.4, loop: false },
 };
 
 /** Every clip name, in table order. */

@@ -8,12 +8,15 @@
 
 import type { SelfMotion } from "@/lib/cityArena/audio/selfSounds";
 import { listenerAt } from "@/lib/cityArena/audio/spatial";
+import type { SpotLandmark } from "@/lib/cityArena/audio/spotSounds";
 import type { TrafficSource } from "@/lib/cityArena/audio/trafficVoices";
 import type { Scene } from "@/lib/cityArena/render/renderScene";
 import { occupiedVehicle } from "@/lib/cityArena/sim/boarding";
 import { playerById } from "@/lib/cityArena/sim/players";
 import type { ArenaPlayerState, ArenaState } from "@/lib/cityArena/sim/types";
 import { forwardSpeed } from "@/lib/cityArena/sim/vehicle";
+import type { MapIndex } from "@/lib/cityArena/world/mapTypes";
+import { landmarkCentreMetres } from "@/lib/cityArena/world/zone";
 import type { Runtime } from "./arenaRuntime";
 
 /** The slice of the scene the frame's sound reads. */
@@ -23,7 +26,29 @@ export type FrameSoundScene = Pick<
 > & { world: Pick<Scene["world"], "tiles"> };
 
 /** The slice of the runtime the frame's sound touches. */
-export type FrameSoundRuntime = Pick<Runtime, "sound" | "state" | "netplay">;
+export type FrameSoundRuntime = Pick<Runtime, "sound" | "state" | "netplay"> & {
+  session: Pick<Runtime["session"], "index">;
+};
+
+/** The landmarks in metres, per map index: converted once rather than every frame. */
+const landmarksByIndex = new WeakMap<MapIndex, SpotLandmark[]>();
+
+/**
+ * The map's landmarks as places a spot sound can come from (the church bell), in metres.
+ *
+ * @param index - The map index.
+ * @returns Its landmarks, keyed and in metres; the same array for the same index.
+ */
+export function spotLandmarks(index: MapIndex): SpotLandmark[] {
+  const known = landmarksByIndex.get(index);
+  if (known) return known;
+  const landmarks = index.landmarks.map((landmark) => {
+    const [x, y] = landmarkCentreMetres(landmark);
+    return { id: landmark.key, x, y };
+  });
+  landmarksByIndex.set(index, landmarks);
+  return landmarks;
+}
 
 /**
  * The local player's motion this tick, as the footsteps and the skid detector need it.
@@ -98,5 +123,6 @@ export function updateFrameSound(
     traffic: trafficSources(scene, me.vehicleId),
     peds: scene.peds.filter((ped) => ped.mode !== "dead"),
     tiles: scene.world.tiles,
+    landmarks: spotLandmarks(runtime.session.index()),
   });
 }

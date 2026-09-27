@@ -9,6 +9,7 @@ import {
 } from "./samples";
 import { listenerAt, type SpatialMix } from "./spatial";
 import { createFakeAudioContext } from "./testing/fakeAudioContext";
+import { CHATTER_CLIPS } from "./spotSounds";
 import type { TrafficSource } from "./trafficVoices";
 import {
   ENGINE_RATE_MAX,
@@ -529,7 +530,7 @@ describe("the city's loops", () => {
     traffic: TrafficSource[],
     dt = 0.016,
   ): Parameters<ArenaSound["updateWorld"]>[0] {
-    return { dt, traffic, peds: [], tiles: [] };
+    return { dt, traffic, peds: [], tiles: [], landmarks: [] };
   }
 
   /** A car `id` at (`x`, `y`) moving at `speedMps`. */
@@ -590,5 +591,36 @@ describe("the city's loops", () => {
     for (let frame = 0; frame < 40; frame++)
       sound.updateWorld(streetWith([car(1, 400, 0)], 0.1));
     expect(loop.stop).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the street around the listener", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("murmurs from someone walking by, placed on them, and steps where they walk", () => {
+    const player = playerWith([...CHATTER_CLIPS, "footstep"]);
+    const { factory } = createFakeAudioContext();
+    const sound = createArenaSound(factory, true, () => player);
+    sound.setListener(listenerAt(0, 0, null));
+    const walker = { x: 4, y: 0 };
+    for (let frame = 0; frame < 100; frame++)
+      sound.updateWorld({
+        dt: 0.1,
+        traffic: [],
+        peds: [walker],
+        tiles: [],
+        landmarks: [],
+      });
+    const calls = vi.mocked(player.play).mock.calls;
+    const chatter = calls.filter(([clip]) => CHATTER_CLIPS.includes(clip));
+    expect(chatter.length).toBeGreaterThanOrEqual(1);
+    expect(chatter[0]![3]!.pan).toBeGreaterThan(0);
+    expect(calls.some(([clip]) => clip === "footstep")).toBe(true);
+    expect(sound.debug().world.spots[0]).toMatchObject({
+      kind: "chatter",
+      x: 4,
+    });
   });
 });

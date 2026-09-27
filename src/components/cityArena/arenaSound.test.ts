@@ -3,13 +3,17 @@ import type { ArenaSound } from "@/lib/cityArena/audio/sound";
 import { createArenaPlayer } from "@/lib/cityArena/sim/roster";
 import type { ArenaState } from "@/lib/cityArena/sim/types";
 import { createVehicle } from "@/lib/cityArena/sim/vehicle";
+import type { MapIndex } from "@/lib/cityArena/world/mapTypes";
 import {
   selfMotion,
+  spotLandmarks,
   trafficSources,
   updateFrameSound,
   type FrameSoundRuntime,
   type FrameSoundScene,
 } from "./arenaSound";
+
+const NO_LANDMARKS = { landmarks: [] } as unknown as MapIndex;
 
 /** A scene with the blended `players`, and the `vehicles` and `peds` given. */
 function sceneWith(
@@ -61,6 +65,7 @@ describe("updateFrameSound", () => {
       sound: spySound(),
       state,
       netplay: { kind: "offline", playerId: 0 },
+      session: { index: () => NO_LANDMARKS },
     };
   }
 
@@ -138,6 +143,7 @@ describe("trafficSources", () => {
       sound: spySound(),
       state,
       netplay: { kind: "offline", playerId: 0 },
+      session: { index: () => NO_LANDMARKS },
     };
     const car = { ...createVehicle(7, "sedan", [4, 0], 0, 0), velocityX: 3 };
     const walker = { id: 1, x: 2, y: 2, mode: "walk" };
@@ -156,6 +162,26 @@ describe("trafficSources", () => {
       traffic: [{ id: 7, x: 4, y: 0, speedMps: 3, siren: false }],
       peds: [walker],
       tiles: [],
+      landmarks: [],
     });
+  });
+});
+
+describe("spotLandmarks", () => {
+  it("turns the map's landmarks into metres once per map", () => {
+    const index = {
+      landmarks: [
+        {
+          key: "cunerakerk",
+          name: "Cunerakerk",
+          style: "church",
+          center: [-16628, 10271],
+          tile: { x: 1, y: 3 },
+        },
+      ],
+    } as unknown as MapIndex;
+    const landmarks = spotLandmarks(index);
+    expect(landmarks).toEqual([{ id: "cunerakerk", x: -4157, y: 2567.75 }]);
+    expect(spotLandmarks(index)).toBe(landmarks);
   });
 });

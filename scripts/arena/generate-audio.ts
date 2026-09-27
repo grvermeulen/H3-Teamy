@@ -136,6 +136,46 @@ const PROMPTS: Record<
     format: AMBIENCE_FORMAT,
     influence: LITERAL_INFLUENCE,
   },
+  // Chatter is murmur the game never has to own: no clear words, in any language.
+  "chatter-1": {
+    text: "two women talking quietly nearby in Dutch, indistinct murmur, no clear words, no music, outdoors",
+    seconds: 3,
+  },
+  "chatter-2": {
+    text: "a man and a woman chatting and laughing softly nearby in Dutch, indistinct murmur, no clear words, no music, outdoors",
+    seconds: 3,
+  },
+  "chatter-3": {
+    text: "a few teenagers talking and laughing nearby in Dutch, indistinct murmur, no clear words, no music, outdoors",
+    seconds: 3,
+  },
+  "chatter-4": {
+    text: "an older man saying a few words to a friend nearby in Dutch, indistinct low murmur, no clear words, no music, outdoors",
+    seconds: 2.5,
+  },
+  "bike-bell": {
+    text: "classic Dutch bicycle bell rung twice, bright metallic ring ring, outdoors, no traffic, no voices",
+    seconds: 1.5,
+    influence: LITERAL_INFLUENCE,
+  },
+  dog: {
+    text: "a medium-sized dog barking twice in a quiet park, a little way off, no other sounds",
+    seconds: 2,
+  },
+  horn: {
+    text: "a small European car horn honking once, short, outdoors on a street, no voices",
+    seconds: 1.2,
+    influence: LITERAL_INFLUENCE,
+  },
+  "church-bell": {
+    text: "single large church bell tolling three times, distant, reverberant, no other sounds",
+    seconds: 5,
+    influence: LITERAL_INFLUENCE,
+  },
+  scooter: {
+    text: "a moped scooter passing by on a town street, two-stroke engine buzz rising and fading away, no horn, no voices",
+    seconds: 4,
+  },
 };
 
 /** True when the file exists. */
