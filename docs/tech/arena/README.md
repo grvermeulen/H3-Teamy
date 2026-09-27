@@ -413,6 +413,79 @@ is a leaf of the sound layer that follows the same "in a car" signal the engine 
   knobs, `npm run arena:generate-radio <station>` regenerates a station — and the device check
   on a phone.
 
+## Geluid in de stad (immersion track 2 — city ambience and spatial audio)
+
+The city is audible, and every sound sits where it happens: louder close by, panned left or right,
+muffled far away. Nothing in the simulation, the wire or the netcode changed; the sound layer reads
+the frame the renderer draws. Works the same in 2D and 3D.
+
+- **Listener.** Each rendered frame `components/cityArena/arenaSound.ts` (`updateFrameSound`) puts
+  the listener on the local player's blended position (their car's, when driving) and faces it the
+  3D camera's yaw (`look.yaw()`, sim radians) while 3D is on, north (`TOP_DOWN_FACING`, −π/2) in
+  2D. Until the first frame every sound plays as if at the listener.
+- **Spatial model** (`audio/spatial.ts`, pure). `spatialMix(listener, x, y, profile)` gives gain
+  (full within `refDistanceM`, inverse rolloff past it, faded to silence over the last 15 % of
+  `maxDistanceM`), pan (`sin` of the bearing relative to the facing, grown in over the reference
+  distance so a source on top of you is centred, capped at ±0.85) and a low-pass cutoff closing
+  exponentially from 18 kHz to 1.5 kHz. A source behind is up to 20 % quieter and duller, easing in
+  with the angle so a passing car never steps. `SOUND_PROFILES` per class: gunshot 8/150 m,
+  explosion 15/300 m, impact 6/90 m, hit 4/40 m, door 3/30 m, pickup 3/25 m, footstep 2/20 m,
+  engine 6/90 m, siren 15/220 m, chatter 2/18 m, spot 5/70 m, bell 60/900 m.
+- **Placed voices.** `AudioContextLike` gained optional `createStereoPanner` / `createBiquadFilter`;
+  `audio/voiceChain.ts` builds gain → low-pass → panner (a context without them plays unpanned or
+  unfiltered, never silent) and eases a moving voice with `setTargetAtTime` over ≈ 0.1 s.
+  `SamplePlayer.play(clip, rate, gainScale, placement)`, `startLoop(clip, placement)` and
+  `LoopHandle.setPlacement(mix)`. At most `MAX_ONE_SHOTS = 24` one-shots sound at once: a louder
+  newcomer cuts the quietest short, a quieter one is turned away — and still counts as handled, so
+  a full house never hands the sound back to the synth. `audio/eventVoices.ts` holds the event →
+  clip / synth tone / sound class tables; `handleEvents(events, sources)` places every event with a
+  position (impacts at their car through `eventSources(state, selfId)` from `feelTick`), skips a
+  placement under `MIN_AUDIBLE_GAIN = 0.01` entirely, places the synth fallback the same way, and
+  ducks the radio only for a loud event heard at ≥ 0.2 (a distant shot no longer does).
+- **Your own sounds** (`audio/selfSounds.ts`, pure, counted in ticks so the cadence does not depend
+  on the frame rate): a `footstep` at every footfall — 0.7 m walking, 1.1 m running above 4 m/s,
+  half the gait cycles of `render3d/characterPose.ts`, duplicated so the 2D bundle never imports the
+  3D chunk — with the rate jittered ±6 %; one `skid` per slide when speed × turn rate passes
+  24 m/s² or braking passes 12 m/s² (a crash stop past 40 m/s² is the impact's, not a skid) above
+  10 m/s, with a 1.5 s cooldown; the `death` sting on your own death only.
+- **Traffic and sirens** (`audio/trafficVoices.ts` pure, `audio/worldAudio.ts`, `audio/loopSlot.ts`).
+  `ENGINE_VOICES = 4` engine loops follow the nearest moving cars within 90 m (rate `engineRate`,
+  level × speed share up to 12 m/s, parked cars never), `SIREN_VOICES = 2` siren loops the nearest
+  police cars (`scene.sirenVehicleIds`) within 220 m. `assignVoices` keeps a car on its voice while
+  it stays among the nearest (a newcomer must be 5 m closer to take it). A voice without a car fades
+  out and stops after 3 s; your own engine stays unplaced. The old global `updateSiren` is gone.
+- **Ambience** (`audio/surroundings.ts` + `audio/ambience.ts` pure, `audio/ambienceBed.ts`). Every
+  0.5 s `readSurroundings` reads the tiles near the listener: road metres within 80 m weighted by
+  class (motorway 3 … residential 0.5, pedestrian 0.1), moving cars within 80 m, people within 30 m,
+  trees within 60 m and a 15 m grid of ground samples within 60 m (water over buildings over
+  grass/forest/field). `ambienceLevels` turns that into `amb-traffic`, `amb-crowd`, `amb-birds`
+  (masked by traffic), `amb-wind` (fields, sheltered by buildings) and `amb-water`; each eases at a
+  full swing per 1.5 s, and a loop starts on first need and stops after 5 s silent. There is no
+  synthesised ambience: a missing clip is silent. On the real map: Rhenen centre traffic 0.6 /
+  birds 0.09, Bennekom birds 0.76, the Rhine water 1, a polder field wind 1, a wood birds 0.8. A read
+  takes ≈ 0.9 ms.
+- **Spot sounds** (`audio/spotSounds.ts` pure and seeded, `audio/streetLife.ts`). Chatter every
+  4–9 s from a person within 18 m (`chatter-1..4`), a bike bell (25–60 s) and a scooter (30–70 s)
+  near the nearest road point, a dog (40–90 s) in the green, a horn (20–45 s) from a moving car
+  within 60 m, and the `church-bell` every 3–5 minutes within 700 m of the Cunerakerk
+  (`CHURCH_LANDMARK_ID = "cunerakerk"`). People within 6 m are heard walking (a quieter footstep
+  every 0.5 s).
+- **Setting.** `ambience` (default `true`) in `ArenaSettings`, the Omgevingsgeluid switch in the
+  menu next to Geluid and Radio: off fades the bed out and stops the spot sounds and the passers-by;
+  traffic, sirens and events stay. Geluid off still mutes everything.
+- **Debug seam.** With `?debug=1` (non-production) `window.__arena.audio.levels()` returns the
+  ambience levels and `voices()` the listener, live one-shots, the last eight events with their
+  placement, the car each engine and siren voice follows, the surroundings and the last spot sounds.
+  A browser check cannot listen; it reads these.
+- **Clips.** Fourteen new names in `audio/clips.ts`: five 22 s ambience loops requested at 64 kbps
+  (`AMBIENCE_FORMAT`, ≈ 172 KB each, under the 200 KB per-clip cap) and nine one-shots (1.2–5 s,
+  96 kbps), ≈ 1.2 MB together against the 2.5 MB budget. Prompts in
+  `scripts/arena/generate-audio.ts`; generate them by name with
+  `npm run arena:generate-audio -- <clips>` and `ELEVENLABS_API_KEY` in the environment. The
+  ElevenLabs account refused the first request on 2026-09-27 (an open invoice, subscription
+  `past_due`), so the files and their credit rows are still to land and `npm run arena:check-audio`
+  lists them until they do; the game is complete without them — the new sounds are simply silent.
+
 ## Runtime (Plan 8 — netcode follow-ups and the lobby code)
 
 Two gaps left open by Plans 3b and 6, and one request from the owner.
