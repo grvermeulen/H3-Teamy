@@ -13,15 +13,26 @@ import { headingToRotationY, setWorldPosition } from "./coords";
 import {
   CHARACTER_DRAW_DISTANCE_M,
   FREE_LIST_CAP,
+  type CharacterWho,
   type EntityFactories,
 } from "./entities";
-import { createEntityPool } from "./entityPool";
+import { createEntityPool, type EntityPool, type PoolSlot } from "./entityPool";
 import type { ContactSpot } from "./missionMarkers";
 
 /** A contact turns to face you within this distance, metres. */
 export const CONTACT_FACE_RANGE_M = 12;
 /** Otherwise they face south, toward the viewer, as the 2D map draws them. */
 const CONTACT_REST_FACING = Math.PI / 2;
+/** FNV-1a's offset basis and prime, for a contact's id as a number. */
+const FNV_OFFSET = 0x811c9dc5;
+const FNV_PRIME = 0x01000193;
+
+/** The factory hooks the contacts use. */
+type ContactFactories = Pick<
+  EntityFactories,
+  "character" | "characterVariant" | "dressCharacter"
+>;
+type ContactPool = EntityPool<Character3d, CharacterLook, string>;
 
 /** What the contacts read from a frame's scene. */
 export type ContactsScene = Pick<Scene, "players" | "localPlayerId" | "tick">;
@@ -69,14 +80,58 @@ function facingOf(contact: ContactSpot, scene: ContactsScene): number {
 }
 
 /**
+ * A contact's id as a stable number (32-bit FNV-1a), which dresses their glTF character.
+ *
+ * @param id - The contact's id.
+ * @returns An unsigned 32-bit integer.
+ */
+export function contactSeed(id: string): number {
+  let hash = FNV_OFFSET;
+  for (let index = 0; index < id.length; index += 1) {
+    hash ^= id.charCodeAt(index);
+    hash = Math.imul(hash, FNV_PRIME);
+  }
+  return hash >>> 0;
+}
+
+/** The pool variant of a contact's character: the factory's, else the look. */
+function variantOf(
+  factories: ContactFactories,
+  look: CharacterLook,
+  who: CharacterWho,
+): string | null {
+  return factories.characterVariant?.(look, undefined, who) ?? look;
+}
+
+/** A contact's character: kept while it still fits, else a freed one re-dressed, else a new one. */
+function contactSlot(
+  factories: ContactFactories,
+  pool: ContactPool,
+  contact: ContactSpot,
+  who: CharacterWho,
+): PoolSlot<Character3d, CharacterLook> {
+  const { look } = contact;
+  who.id = contactSeed(contact.id);
+  const variant = variantOf(factories, look, who);
+  const kept = pool.keep(contact.id);
+  if (kept?.state === look && kept.variant === variant) return kept;
+  let built = false;
+  const create = (): Character3d => {
+    built = true;
+    return factories.character(look, undefined, who);
+  };
+  const slot = pool.claim(contact.id, variant, create, look);
+  if (!built) factories.dressCharacter?.(slot.item, look, undefined, who);
+  return slot;
+}
+
+/**
  * Creates the contacts.
  *
  * @param factories - Builds the characters: the cast's factory.
  * @returns The contacts; call `update` every frame with the mission markers' contacts.
  */
-export function createContacts3d(
-  factories: Pick<EntityFactories, "character">,
-): Contacts3d {
+export function createContacts3d(factories: ContactFactories): Contacts3d {
   const object = new Group();
   object.name = "contacts";
   const pool = createEntityPool<Character3d, CharacterLook, string>(
@@ -92,6 +147,7 @@ export function createContacts3d(
     tick: 0,
     recoil: 0,
   };
+  const who: CharacterWho = { id: 0, simple: false };
   return {
     object,
     update(contacts, scene, focus) {
@@ -100,17 +156,7 @@ export function createContacts3d(
       for (const contact of contacts) {
         if (!near(focus, contact.x, contact.y, CHARACTER_DRAW_DISTANCE_M))
           continue;
-        const kept = pool.keep(contact.id);
-        const slot =
-          kept?.state === contact.look
-            ? kept
-            : pool.claim(
-                contact.id,
-                contact.look,
-                () => factories.character(contact.look),
-                contact.look,
-              );
-        const character = slot.item;
+        const character = contactSlot(factories, pool, contact, who).item;
         setWorldPosition(character.object.position, contact.x, contact.y);
         character.object.rotation.y = headingToRotationY(
           facingOf(contact, scene),

@@ -513,6 +513,74 @@ describe("createEntitySync: characters", () => {
   });
 });
 
+describe("createEntitySync: the glTF cast", () => {
+  /** A sync whose characters turn glTF once `loaded` is set. */
+  function gltfSync(): ReturnType<typeof syncOf> & {
+    loaded: { value: boolean };
+    dressed: number[];
+  } {
+    const synced = syncOf();
+    const loaded = { value: false };
+    const dressed: number[] = [];
+    synced.factories.characterVariant = (look, hue, who) =>
+      loaded.value && !who.simple ? "gltf" : hue === undefined ? look : null;
+    synced.factories.dressCharacter = (_character, _look, _hue, who) => {
+      dressed.push(who.id);
+    };
+    return { ...synced, loaded, dressed };
+  }
+
+  it("swaps a character once when the glTF cast arrives, keeping its motion", () => {
+    const { sync, factories, characters, loaded } = gltfSync();
+    for (let frame = 0; frame < 30; frame += 1)
+      sync.update(
+        sceneOf({ peds: [ped(20, frame * 0.05, 0)] }),
+        FRAME_S,
+        ORIGIN,
+        THIRD,
+      );
+    expect(factories.character).toHaveBeenCalledTimes(1);
+    loaded.value = true;
+    sync.update(sceneOf({ peds: [ped(20, 1.5, 0)] }), FRAME_S, ORIGIN, THIRD);
+    sync.update(sceneOf({ peds: [ped(20, 1.55, 0)] }), FRAME_S, ORIGIN, THIRD);
+    expect(factories.character).toHaveBeenCalledTimes(2);
+    expect(characters[0]!.object.parent).toBeNull();
+    expect(characters[1]!.pose!.speed).toBeGreaterThan(1);
+  });
+
+  it("re-dresses a pooled glTF character for its next owner", () => {
+    const { sync, factories, loaded, dressed } = gltfSync();
+    loaded.value = true;
+    sync.update(sceneOf({ peds: [ped(20, 0, 0)] }), FRAME_S, ORIGIN, THIRD);
+    sync.update(sceneOf({}), FRAME_S, ORIGIN, THIRD);
+    sync.update(sceneOf({ peds: [ped(57, 0, 0)] }), FRAME_S, ORIGIN, THIRD);
+    expect(factories.character).toHaveBeenCalledTimes(1);
+    expect(dressed).toEqual([57]);
+  });
+
+  it("draws characters beyond the detail range simply, with slack before turning back", () => {
+    const { sync, factories, loaded } = gltfSync();
+    loaded.value = true;
+    const view = { ...THIRD, characterDetailM: 45 };
+    sync.update(sceneOf({ peds: [ped(20, 40, 0)] }), FRAME_S, ORIGIN, view);
+    sync.update(sceneOf({ peds: [ped(20, 47, 0)] }), FRAME_S, ORIGIN, view);
+    expect(factories.character).toHaveBeenCalledTimes(1);
+    sync.update(sceneOf({ peds: [ped(20, 60, 0)] }), FRAME_S, ORIGIN, view);
+    expect(factories.character).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(factories.character).mock.calls[1]![2]).toMatchObject({
+      id: 20,
+    });
+  });
+
+  it("hands every character the frame's time and whether it is far", () => {
+    const { sync, characters } = syncOf();
+    const scene = sceneOf({ peds: [ped(20, 10, 0), ped(21, 50, 0)] });
+    sync.update(scene, FRAME_S, ORIGIN, THIRD);
+    expect(characters[0]!.pose).toMatchObject({ dt: FRAME_S, far: false });
+    expect(characters[1]!.pose).toMatchObject({ dt: FRAME_S, far: true });
+  });
+});
+
 describe("createEntitySync: vehicles", () => {
   it("turns each car to its heading before updating it, with speed, siren and wreck", () => {
     const { sync, vehicles } = syncOf();

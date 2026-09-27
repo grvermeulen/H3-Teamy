@@ -20,6 +20,7 @@ import type { Appearance } from "./characterAppearance";
 import type { CharacterAssets, ModelAsset, RigAsset } from "./characterAssets";
 import {
   createPaletteMaterial,
+  hidePaletteSlot,
   writePaletteSlot,
   type PaletteMaterial,
 } from "./characterPalette";
@@ -146,16 +147,20 @@ function cloneBody(model: ModelAsset): Body {
   return { root, mesh: found, palette, hand, bones, unit };
 }
 
-/** The model's own colours with the appearance's tints over them. */
+/** The model's own colours with the appearance's tints over them, and its hidden slots. */
 function applyPalette(
   body: Body,
   model: ModelAsset,
-  tints: Appearance["tints"],
+  appearance: Appearance,
 ): void {
   body.palette.colours.set(model.palette);
-  for (const [slot, hex] of Object.entries(tints)) {
+  for (const [slot, hex] of Object.entries(appearance.tints)) {
     const index = model.slots.indexOf(slot);
     if (index >= 0) writePaletteSlot(body.palette.colours, index, hex);
+  }
+  for (const slot of appearance.hidden) {
+    const index = model.slots.indexOf(slot);
+    if (index >= 0) hidePaletteSlot(body.palette.colours, index);
   }
 }
 
@@ -244,7 +249,7 @@ function dressParts(
   height: number,
 ): void {
   const { model, rig } = parts;
-  applyPalette(parts.body, model, appearance.tints);
+  applyPalette(parts.body, model, appearance);
   const share = model.female ? FEMALE_HEIGHT_SHARE : 1;
   const scale = (height * appearance.scale * share) / rig.referenceHeight;
   parts.scaled.scale.setScalar(scale);

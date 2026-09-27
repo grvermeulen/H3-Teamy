@@ -1,5 +1,10 @@
 import { Mesh, type BufferGeometry, type Material } from "three";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  characterAssetsReady,
+  loadCharacterAssets,
+  resetCharacterAssetsForTests,
+} from "./characterAssets";
 import { buildCharacterMesh, characterMaterials } from "./characterRig";
 import { LOOKS } from "./characterLooks";
 import { createPickup3d } from "./pickups3d";
@@ -10,6 +15,11 @@ import {
   matteMaterial,
   paintMaterial,
 } from "./vehicleParts";
+import {
+  fixtureManifest,
+  fixtureModelGltf,
+  fixtureRigGltf,
+} from "./testing/gltfFixture";
 import { createWeaponModel } from "./weapons3d";
 
 /** Every mesh's geometry and material under a pickup's object. */
@@ -72,5 +82,24 @@ describe("disposeSharedAssets", () => {
     disposeSharedAssets();
     disposeSharedAssets();
     expect(free).toHaveBeenCalledTimes(1);
+  });
+
+  it("frees the loaded glTF cast, so the next view loads it afresh", async () => {
+    resetCharacterAssetsForTests();
+    const manifest = new TextEncoder().encode(
+      JSON.stringify(fixtureManifest()),
+    );
+    await loadCharacterAssets({
+      fetch: async (url) =>
+        new Response(url.endsWith("manifest.json") ? manifest : url),
+      parse: async (bytes) =>
+        new TextDecoder().decode(bytes).includes("anim-")
+          ? fixtureRigGltf()
+          : fixtureModelGltf(),
+    });
+    expect(characterAssetsReady()).not.toBeNull();
+    disposeSharedAssets();
+    expect(characterAssetsReady()).toBeNull();
+    resetCharacterAssetsForTests();
   });
 });

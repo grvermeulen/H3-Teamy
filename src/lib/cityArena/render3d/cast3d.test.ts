@@ -9,7 +9,6 @@ import {
   createCast3d,
   type CastFrame,
 } from "./cast3d";
-import { createCharacter } from "./characters";
 import { createDestruction3d } from "./destruction3d";
 import { createEffects3d } from "./effects3d";
 import type { EntityFactories } from "./entities";
@@ -88,7 +87,10 @@ function fakeFactories(): EntityFactories & {
     dispose: vi.fn(),
   });
   return {
-    character: vi.fn(() => ({ ...poseable(), muzzleWorld: vi.fn(() => false) })),
+    character: vi.fn(() => ({
+      ...poseable(),
+      muzzleWorld: vi.fn(() => false),
+    })),
     vehicle: vi.fn(poseable),
     pickup: vi.fn(poseable),
   };
@@ -122,8 +124,10 @@ function frameOf(partial: Partial<CastFrame> = {}): CastFrame {
 
 describe("createCast3d", () => {
   it("builds the real characters, vehicles and pickups by default", () => {
-    expect(REAL_ENTITY_FACTORIES).toEqual({
-      character: createCharacter,
+    expect(REAL_ENTITY_FACTORIES).toMatchObject({
+      character: expect.any(Function),
+      characterVariant: expect.any(Function),
+      dressCharacter: expect.any(Function),
       vehicle: createVehicle3d,
       pickup: createPickup3d,
     });
@@ -134,7 +138,11 @@ describe("createCast3d", () => {
     const cast = createCast3d(factories);
     const frame = frameOf();
     cast.update(frame, FOCUS, new PerspectiveCamera());
-    expect(factories.character).toHaveBeenCalledWith("player", undefined);
+    expect(factories.character).toHaveBeenCalledWith(
+      "player",
+      undefined,
+      expect.objectContaining({ id: expect.any(Number) }),
+    );
     const [effects] = effectsMade;
     expect(effects!.object).toBeInstanceOf(Group);
     expect((effects!.object as Group).parent).toBe(cast.object);
@@ -213,6 +221,33 @@ describe("createCast3d", () => {
     );
   });
 
+  it("draws characters beyond 45 m simply at 'laag', and every one detailed otherwise", () => {
+    const simple: boolean[] = [];
+    const factories = fakeFactories();
+    const build = factories.character.getMockImplementation();
+    factories.character.mockImplementation(
+      (look: string, hue?: number, who?: { simple: boolean }) => {
+        simple.push(who?.simple ?? false);
+        return build?.(look, hue, who);
+      },
+    );
+    const far = you({ id: 2, x: FOCUS.x + 60, y: FOCUS.y });
+    const scene = { ...frameOf().scene, players: [you(), far] } as Scene;
+    createCast3d(factories).update(
+      frameOf({ scene, quality: "low" }),
+      FOCUS,
+      new PerspectiveCamera(),
+    );
+    expect(simple).toEqual([false, true]);
+    simple.length = 0;
+    createCast3d(factories).update(
+      frameOf({ scene, quality: "auto" }),
+      FOCUS,
+      new PerspectiveCamera(),
+    );
+    expect(simple).toEqual([false, false]);
+  });
+
   it("stands the mission contacts in the street with the cast's own characters", () => {
     const factories = fakeFactories();
     const cast = createCast3d(factories);
@@ -220,7 +255,11 @@ describe("createCast3d", () => {
 
     cast.update(frameOf(), FOCUS, new PerspectiveCamera(), [noor]);
 
-    expect(factories.character).toHaveBeenCalledWith("ped2");
+    expect(factories.character).toHaveBeenCalledWith(
+      "ped2",
+      undefined,
+      expect.objectContaining({ simple: false }),
+    );
     const contact = factories.character.mock.results.at(-1)!.value as {
       object: Group;
     };

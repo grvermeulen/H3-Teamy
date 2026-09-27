@@ -42,6 +42,8 @@ export type Appearance = {
   model: CharacterModelKey;
   /** Palette slot → sRGB hex colour, replacing the model's own colour for that slot. */
   tints: Readonly<Record<string, number>>;
+  /** Palette slots not drawn at all (the player's hair). */
+  hidden: readonly string[];
   /** Uniform scale around 1. */
   scale: number;
   extras: readonly AppearanceExtra[];
@@ -160,6 +162,7 @@ export const MODEL_SLOT_ROLES: Record<
     ...SKIN_AND_FEET,
     Hair: "hair",
     Eyebrows: "brows",
+    LightBrown: "top",
     Red_Dark: "bottom",
     "Feet/Red_Dark": "shoes",
   },
@@ -363,18 +366,28 @@ export function modelOf(look: CharacterLook, id: number): CharacterModelKey {
   return pick(CITY_MODELS, id, SALT.model);
 }
 
-/** The player: the beach model, bald (the hair takes the skin), mint shorts, barefoot. */
+/** Nothing hidden. */
+const NONE_HIDDEN: readonly string[] = [];
+/** The player's hair goes: bald. */
+const PLAYER_HIDDEN: readonly string[] = ["Hair"];
+
+/**
+ * The player: the beach model, bald (the hair is hidden), shirtless (the vest takes the skin),
+ * mint shorts, barefoot (the flip-flops take the skin).
+ */
 function playerAppearance(): Appearance {
   const outfit = outfitOf(0, {
     skin: PLAYER_SKIN,
     hair: PLAYER_SKIN,
     brows: PLAYER_BROWS,
+    top: PLAYER_SKIN,
     bottom: MINT,
     shoes: PLAYER_SKIN,
   });
   return {
     model: "beach-man",
     tints: tintsFor("beach-man", outfit),
+    hidden: PLAYER_HIDDEN,
     scale: 1,
     extras: [
       { kind: "sunglasses", colour: PLAYER_LENS },
@@ -393,6 +406,7 @@ function copAppearance(id: number): Appearance {
   return {
     model: "swat",
     tints: tintsFor("swat", outfit),
+    hidden: NONE_HIDDEN,
     scale: 1,
     extras: [{ kind: "badge", colour: POLICE_BADGE }],
   };
@@ -420,7 +434,13 @@ export function appearanceOf(
       skin: PLAYER_SKIN,
       top: vestColour(vestHue),
     });
-    return { model, tints: tintsFor(model, outfit), scale: 1, extras: [] };
+    return {
+      model,
+      tints: tintsFor(model, outfit),
+      hidden: NONE_HIDDEN,
+      scale: 1,
+      extras: [],
+    };
   }
   const scale =
     APPEARANCE_SCALE_MIN +
@@ -428,6 +448,7 @@ export function appearanceOf(
   return {
     model,
     tints: tintsFor(model, outfitOf(id)),
+    hidden: NONE_HIDDEN,
     scale,
     extras: pedExtras(model, id),
   };

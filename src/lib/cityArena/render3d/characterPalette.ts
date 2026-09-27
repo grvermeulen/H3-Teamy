@@ -23,6 +23,11 @@ export type PaletteMaterial = {
   colours: Float32Array;
 };
 
+/**
+ * A slot whose red is below zero is hidden: its triangles are sent past the far plane, so a model
+ * can drop a part (the player's hair) without a second mesh.
+ */
+const HIDDEN_RED = -1;
 /** Declares the slot attribute and the table, and hands each vertex its slot's colour. */
 const VERTEX_HEADER = `#include <common>
 attribute float ${PALETTE_ATTRIBUTE_NAME};
@@ -30,6 +35,8 @@ uniform vec3 paletteColours[${PALETTE_SLOTS}];
 varying vec3 vPaletteColour;`;
 const VERTEX_BODY = `#include <begin_vertex>
 vPaletteColour = paletteColours[int(${PALETTE_ATTRIBUTE_NAME} + 0.5)];`;
+const VERTEX_TAIL = `#include <fog_vertex>
+if (vPaletteColour.r < 0.0) gl_Position = vec4(0.0, 0.0, 2.0, 1.0);`;
 const FRAGMENT_HEADER = `#include <common>
 varying vec3 vPaletteColour;`;
 const DIFFUSE_LINE = "vec4 diffuseColor = vec4( diffuse, opacity );";
@@ -49,7 +56,8 @@ export function createPaletteMaterial(): PaletteMaterial {
     shader.uniforms.paletteColours = { value: colours };
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", VERTEX_HEADER)
-      .replace("#include <begin_vertex>", VERTEX_BODY);
+      .replace("#include <begin_vertex>", VERTEX_BODY)
+      .replace("#include <fog_vertex>", VERTEX_TAIL);
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", FRAGMENT_HEADER)
       .replace(DIFFUSE_LINE, DIFFUSE_PALETTE);
@@ -74,4 +82,14 @@ export function writePaletteSlot(
   colours[slot * RGB] = SCRATCH.r;
   colours[slot * RGB + 1] = SCRATCH.g;
   colours[slot * RGB + 2] = SCRATCH.b;
+}
+
+/**
+ * Hides one slot of a colour table: its triangles are not drawn.
+ *
+ * @param colours - The table.
+ * @param slot - The slot, 0…{@link PALETTE_SLOTS} − 1.
+ */
+export function hidePaletteSlot(colours: Float32Array, slot: number): void {
+  colours[slot * RGB] = HIDDEN_RED;
 }

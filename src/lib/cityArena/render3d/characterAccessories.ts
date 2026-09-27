@@ -31,7 +31,7 @@ type AccessorySpec = {
 };
 
 /** Height of the eyes above the head bone, and the face's front, metres. */
-const EYE_Y = 0.15;
+const EYE_Y = 0.125;
 const FACE_Z = 0.14;
 /** Half the width of the head at the temples, metres. */
 const TEMPLE_X = 0.115;

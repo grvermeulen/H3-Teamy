@@ -8,6 +8,7 @@ import {
   CONTACT_FACE_RANGE_M,
   createContacts3d,
   type ContactsScene,
+  contactSeed,
 } from "./contacts3d";
 import { CHARACTER_DRAW_DISTANCE_M } from "./entities";
 import type { ContactSpot } from "./missionMarkers";
@@ -132,5 +133,13 @@ describe("createContacts3d", () => {
     expect(made[0]!.object.parent).toBeNull();
     contacts.dispose();
     expect(made[0]!.dispose).toHaveBeenCalledOnce();
+  });
+});
+
+describe("contactSeed", () => {
+  it("gives a contact the same number every time, and different contacts different ones", () => {
+    expect(contactSeed("noor")).toBe(contactSeed("noor"));
+    expect(contactSeed("noor")).not.toBe(contactSeed("bram"));
+    expect(Number.isInteger(contactSeed("noor"))).toBe(true);
   });
 });

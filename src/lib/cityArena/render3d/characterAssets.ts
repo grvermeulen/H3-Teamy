@@ -375,6 +375,15 @@ export function loadCharacterAssets(
 }
 
 /**
+ * Starts loading the characters in the browser unless they are loaded, loading or failed. Cheap
+ * enough to call every frame: it allocates nothing once loading has started.
+ */
+export function requestCharacterAssets(): void {
+  if (state.assets || state.pending || state.failed) return;
+  state.pending = load(browserIo(), state.generation);
+}
+
+/**
  * The loaded characters, or `null` while they load, after a failure, or before anyone asked.
  *
  * @returns The assets or `null`.

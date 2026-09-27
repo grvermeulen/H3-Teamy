@@ -5,7 +5,11 @@ import {
   createAccessory,
   disposeAccessoryGeometries,
 } from "./characterAccessories";
-import { createPaletteMaterial, writePaletteSlot } from "./characterPalette";
+import {
+  createPaletteMaterial,
+  hidePaletteSlot,
+  writePaletteSlot,
+} from "./characterPalette";
 
 /** Runs a material's shader hook over the Lambert shader. */
 function compiled(
@@ -50,6 +54,16 @@ describe("writePaletteSlot", () => {
     expect(colours[6]).toBeCloseTo(1);
     expect(colours[7]).toBeCloseTo(0.2158, 3);
     expect(colours[8]).toBe(0);
+  });
+});
+
+describe("hidePaletteSlot", () => {
+  it("marks a slot hidden, which the shader sends past the far plane", () => {
+    const colours = new Float32Array(PALETTE_SLOTS * 3).fill(1);
+    hidePaletteSlot(colours, 1);
+    expect(colours[3]).toBeLessThan(0);
+    const shader = compiled(createPaletteMaterial().material);
+    expect(shader.vertexShader).toContain("if (vPaletteColour.r < 0.0)");
   });
 });
 

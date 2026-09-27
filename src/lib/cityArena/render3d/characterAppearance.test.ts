@@ -52,7 +52,7 @@ describe("appearanceOf", () => {
       const player = appearanceOf("player", id);
       expect(player.model).toBe("beach-man");
       expect(player.scale).toBe(1);
-      expect(player.tints.Hair).toBe(player.tints["Head/Skin"]);
+      expect(player.hidden).toEqual(["Hair"]);
       expect(player.tints.Red_Dark).toBe(0x9fe0c4);
       expect(player.extras.map((extra) => extra.kind)).toEqual(
         expect.arrayContaining(["sunglasses", "bracelet"]),
