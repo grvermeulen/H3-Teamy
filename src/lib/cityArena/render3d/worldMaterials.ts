@@ -13,20 +13,10 @@ import {
   type Texture,
 } from "three";
 import { FURNITURE_FILL, ROAD_CENTRE_LINE } from "../render/palette";
-import { seedFromString } from "../sim/rng";
+import { createFacadeAtlasMaterial } from "./facadeAtlas";
 import { LAMP_GLOW } from "./palette3d";
-import {
-  FACADE_STYLES,
-  createFacadeMaterial,
-  createSurfaceMaterials,
-  type FacadeStyle,
-  type SurfaceKey,
-} from "./textures";
+import { createSurfaceMaterials, type SurfaceKey } from "./textures";
 
-/** Seeded façade variants per style, so neighbouring buildings of one style differ. */
-export const FACADE_VARIANTS = 3;
-/** Lit window share of each variant, around a third, as in an evening town. */
-const FACADE_LIT_SHARES: readonly number[] = [0.28, 0.35, 0.42];
 /** Bark brown of a tree trunk. */
 const TRUNK_COLOUR = 0x4a3728;
 /** The lighter canopy: a yellowish olive green that catches the last light. */
@@ -96,11 +86,13 @@ export type WorldMaterials = {
   /** Ground, road, pavement, water and roofs; UVs are world metres / `TEXTURE_REPEAT_M`. */
   surfaces: Record<SurfaceKey, MeshLambertMaterial>;
   /**
-   * {@link FACADE_VARIANTS} wall materials per style (pick one by structure id). UVs run along the
-   * perimeter in metres / `FACADE_MODULE_M` and up in storeys; the walls geometry must carry a
-   * `color` attribute (vertex colours are on for damage shading), and lit windows are emissive.
+   * Every wall, through the façade atlas: the walls geometry carries each vertex's atlas block in
+   * `facadeBlock` and UVs in block units, and a `color` attribute (vertex colours are on for
+   * damage shading); lit windows and shopfronts are emissive.
    */
-  facades: Record<FacadeStyle, readonly MeshLambertMaterial[]>;
+  facade: MeshLambertMaterial;
+  /** The cells' small detail — sills, balconies, awnings, boards, kerbs, clutter: vertex-coloured. */
+  detail: MeshLambertMaterial;
   /** The centre line on the bigger roads, the 2D map's amber. */
   roadMarking: MeshLambertMaterial;
   /** Tree trunks. */
@@ -118,17 +110,6 @@ export type WorldMaterials = {
   /** The bus shelter's see-through glass back panel, visible from both sides. */
   shelterGlass: MeshLambertMaterial;
 };
-
-/** {@link FACADE_VARIANTS} seeded wall materials for one style. */
-function createFacadeVariants(style: FacadeStyle): MeshLambertMaterial[] {
-  return Array.from({ length: FACADE_VARIANTS }, (_, variant) =>
-    createFacadeMaterial(
-      style,
-      seedFromString(`${style}:${variant}`),
-      FACADE_LIT_SHARES[variant % FACADE_LIT_SHARES.length],
-    ),
-  );
-}
 
 /** A white disc whose alpha falls from the centre to nothing at the rim. */
 function createGlowTexture(): DataTexture {
@@ -208,8 +189,9 @@ function createLampMaterials(): Pick<
 }
 
 /**
- * Creates the city's shared materials: the 2D surface art as repeating textures, seeded façades
- * (brick, plaster, concrete, glass; windows lit warm and cold at random), trees and furniture.
+ * Creates the city's shared materials: the 2D surface art as repeating textures, the façade
+ * atlas (every colourway of brick, plaster, panels, concrete and glass; windows lit warm and cold
+ * at random; shopfronts), the vertex-coloured detail, trees and furniture.
  *
  * @param load - Loads a texture by URL, e.g. `TextureLoader.load`; called once per surface.
  * @returns The materials; free them with {@link disposeWorldMaterials}.
@@ -219,12 +201,8 @@ export function createWorldMaterials(
 ): WorldMaterials {
   return {
     surfaces: createGroundAwareSurfaces(load),
-    facades: {
-      brick: createFacadeVariants("brick"),
-      plaster: createFacadeVariants("plaster"),
-      concrete: createFacadeVariants("concrete"),
-      glass: createFacadeVariants("glass"),
-    },
+    facade: createFacadeAtlasMaterial(),
+    detail: new MeshLambertMaterial({ vertexColors: true }),
     roadMarking: paintInLayerOrder(matte(ROAD_CENTRE_LINE)),
     treeTrunk: matte(TRUNK_COLOUR),
     canopies: [matte(CANOPY_LIGHT), matte(CANOPY_DEEP)],
@@ -246,7 +224,8 @@ function listWorldMaterials(
 ): (MeshLambertMaterial | PointsMaterial)[] {
   return [
     ...Object.values(materials.surfaces),
-    ...FACADE_STYLES.flatMap((style) => materials.facades[style]),
+    materials.facade,
+    materials.detail,
     materials.roadMarking,
     materials.treeTrunk,
     ...materials.canopies,

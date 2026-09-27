@@ -15,6 +15,7 @@ import { createCity3d } from "./city3d";
 import { createDestruction3d } from "./destruction3d";
 import { createEffects3d } from "./effects3d";
 import { createEntitySync } from "./entities";
+import { FACADE_BLOCK_ATTRIBUTE } from "./facadeAtlas";
 import { createView3d, type StructureView, type View3dFrame } from "./index";
 import { drawOverlay3d } from "./overlay3d";
 import { createRenderer3d } from "./renderer3d";
@@ -168,7 +169,7 @@ function destructionOfView(): Record<
 
 /**
  * Wall vertices standing in the city's cell (0, 0), where the fixture's house is: the merged walls
- * mesh is the one drawn with a material list.
+ * mesh is the one carrying façade blocks.
  */
 function homeWallVertices(city: Object3D): number {
   let count = 0;
@@ -176,7 +177,10 @@ function homeWallVertices(city: Object3D): number {
     const home = node.parent?.parent === city && node.position.lengthSq() === 0;
     if (!home) return;
     for (const part of node.children)
-      if (part instanceof Mesh && Array.isArray(part.material))
+      if (
+        part instanceof Mesh &&
+        part.geometry.getAttribute(FACADE_BLOCK_ATTRIBUTE) !== undefined
+      )
         count += (part.geometry as BufferGeometry).getAttribute(
           "position",
         ).count;

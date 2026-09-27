@@ -45,9 +45,17 @@ import {
 import {
   buildBuildingGeometry,
   buildingHeight,
-  facadeMaterials,
   type BuildingRange,
 } from "./buildingMesh";
+import { createCellContext, type CellContext } from "./cellContext";
+import type { CityDetail } from "./cityDetail";
+import {
+  createDetailBuffers,
+  detailGeometry,
+  detailVertexCount,
+  type DetailBuffers,
+} from "./detailBuffers";
+import { planBuilding } from "./facadePlan";
 import {
   CELL_M,
   cellKey,
@@ -80,6 +88,7 @@ import {
   type RoadPiece,
 } from "./roadMesh";
 import { TEXTURE_REPEAT_M } from "./textures";
+import { tileBuildingsIn, tileRoadsIn } from "./tileIndex";
 import { buildTreeLayer, type TreeInput } from "./treeMesh";
 import {
   GROUND_RENDER_ORDER,
@@ -120,6 +129,8 @@ export type CellInput = {
   materials: WorldMaterials;
   /** Landmark styles by key; without one a landmark is built as a plain building. */
   landmarks?: LandmarkStyles;
+  /** How much detail to build (see `cityDetail.ts`); the first city's `basic` by default. */
+  detail?: CityDetail;
 };
 
 /** A built cell. */
@@ -150,6 +161,9 @@ type OwnedBuilding = { original: DecodedBuilding; shape: DecodedBuilding };
 
 /** Collects what a cell must free when it goes. */
 type Ownership = { geometries: BufferGeometry[]; disposers: (() => void)[] };
+
+/** What a detailed build shares between its layers: the surroundings and the detail buffers. */
+type DetailBuild = { context: CellContext; buffers: DetailBuffers };
 
 /** The overlap of two rectangles, or null when they share no area. */
 function overlap(a: Rect, b: Rect): Rect | null {
@@ -333,10 +347,8 @@ function addStreets(
     marking: createMeshBuffers(),
   };
   for (const { tile, rect } of regions) {
-    for (const road of tile.roads) {
-      if (rectsIntersect(road.bounds, rect))
-        pushRoad(buffers, road, rect, origin);
-    }
+    for (const road of tileRoadsIn(tile, rect))
+      pushRoad(buffers, road, rect, origin);
   }
   addLayer(
     group,
@@ -367,8 +379,7 @@ function ownedBuildings(
   const key = cellKey(cell);
   const bounds = cellRect(cell);
   return regions.flatMap(({ tile }) =>
-    tile.buildings.flatMap((original) => {
-      if (!rectsIntersect(original.bounds, bounds)) return [];
+    tileBuildingsIn(tile, bounds).flatMap((original) => {
       const ring = within(original.bounds, tile.rect)
         ? original.ring
         : clipPolygonToRect(original.ring, tile.rect);
@@ -414,15 +425,21 @@ function addBuildings(
   buildings: readonly OwnedBuilding[],
   input: CellInput,
   origin: Point,
+  detailed: DetailBuild | null,
 ): { ranges: BuildingRange[]; walls: BufferGeometry | null } {
   const shapes = buildings.map((building) => building.shape);
   const built = buildBuildingGeometry(shapes, input.destroyed, {
     origin,
     roofless: rooflessIds(shapes, input),
+    ...(detailed && {
+      plan: (building: DecodedBuilding) =>
+        planBuilding(building, detailed.context),
+      detail: detailed.buffers,
+    }),
   });
   const { surfaces } = input.materials;
-  const parts: [BufferGeometry, Material | Material[]][] = [
-    [built.walls, facadeMaterials(input.materials)],
+  const parts: [BufferGeometry, Material][] = [
+    [built.walls, input.materials.facade],
     [built.roofsTiled, surfaces.roofTiles],
     [built.roofsFlat, surfaces.roofFlat],
   ];
@@ -434,6 +451,19 @@ function addBuildings(
   addLandmarks(group, owned, shapes, input, origin);
   const hasWalls = built.walls.getAttribute("position").count > 0;
   return { ranges: built.ranges, walls: hasWalls ? built.walls : null };
+}
+
+/** The cell's merged detail as one vertex-coloured mesh, when it holds anything. */
+function addDetail(
+  group: Group,
+  owned: Ownership,
+  detailed: DetailBuild | null,
+  materials: WorldMaterials,
+): void {
+  if (!detailed || detailVertexCount(detailed.buffers) === 0) return;
+  const geometry = detailGeometry(detailed.buffers);
+  owned.geometries.push(geometry);
+  group.add(new Mesh(geometry, materials.detail));
 }
 
 /** The dressing of every standing landmark among the buildings. */
@@ -489,9 +519,12 @@ function nearestRoadPoint(
   regions: readonly Region[],
 ): Point | null {
   let best: { at: Point; distance: number } | null = null;
+  const around = grown(
+    { minX: point[0], minY: point[1], maxX: point[0], maxY: point[1] },
+    FACE_ROAD_M,
+  );
   for (const { tile } of regions) {
-    for (const road of tile.roads) {
-      if (!inRegion(point, grown(road.bounds, FACE_ROAD_M))) continue;
+    for (const road of tileRoadsIn(tile, around)) {
       for (let index = 0; index + 1 < road.points.length; index++) {
         const [a, b] = [road.points[index], road.points[index + 1]];
         const distance = distancePointToSegment(point, a, b);
@@ -580,9 +613,7 @@ function streetLamps(
 ): PlacedFurniture[] {
   const bounds = cellRect(cell);
   const footprints = regions.flatMap(({ tile }) =>
-    tile.buildings.filter((building) =>
-      rectsIntersect(building.bounds, bounds),
-    ),
+    tileBuildingsIn(tile, bounds),
   );
   const clear = (point: Point): boolean =>
     !footprints.some(
@@ -591,12 +622,8 @@ function streetLamps(
         pointInPolygon(point, building.ring),
     );
   return regions.flatMap(({ tile, rect }) =>
-    tile.roads
-      .filter(
-        (road) =>
-          PAVEMENT_CLASSES.includes(road.roadClass) &&
-          rectsIntersect(road.bounds, grown(rect, LAMP_REACH_M)),
-      )
+    tileRoadsIn(tile, grown(rect, LAMP_REACH_M))
+      .filter((road) => PAVEMENT_CLASSES.includes(road.roadClass))
       .flatMap((road) =>
         lampsAlong(road.points, ROAD_WIDTH_M[road.roadClass], rect),
       )
@@ -633,6 +660,19 @@ function addScenery(
   return { furniture: furniture.furniture, sync: furniture.sync };
 }
 
+/** The shared state of a detailed build, or null for a basic one. */
+function detailBuildFor(input: CellInput): DetailBuild | null {
+  if (input.detail !== "full") return null;
+  return {
+    context: createCellContext(
+      cellRect(input.cell),
+      input.tiles,
+      input.destroyed,
+    ),
+    buffers: createDetailBuffers(),
+  };
+}
+
 /** Freezes the matrices of a static subtree: nothing in a cell moves but furniture instances. */
 function freeze(root: Object3D): void {
   root.traverse((node) => {
@@ -658,6 +698,7 @@ export function buildCell(input: CellInput): BuiltCell {
   const group = new Group();
   group.position.set(origin[0], 0, origin[1]);
   const owned: Ownership = { geometries: [], disposers: [] };
+  const detailed = detailBuildFor(input);
   addGround(group, owned, regions, input.materials, origin);
   addStreets(group, owned, regions, input.materials, origin);
   const buildings = ownedBuildings(cell, regions);
@@ -667,8 +708,10 @@ export function buildCell(input: CellInput): BuiltCell {
     buildings,
     input,
     origin,
+    detailed,
   );
   const scenery = addScenery(group, owned, regions, input, origin);
+  addDetail(group, owned, detailed, input.materials);
   freeze(group);
   let disposed = false;
   return {

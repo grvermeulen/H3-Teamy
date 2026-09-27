@@ -81,7 +81,7 @@ describe("createCity3d", () => {
     expect(cellsMade()[0]!.group.renderOrder).toBe(0);
   });
 
-  it("builds out to the quality's view distance within a 4 ms budget", () => {
+  it("builds out to the quality's view distance and detail within a 4 ms budget", () => {
     expect(WORLD_BUILD_BUDGET_MS).toBe(4);
     const city = createCity3d(createTestMaterials());
     const landmarks: LandmarkLookup = new Map();
@@ -102,6 +102,7 @@ describe("createCity3d", () => {
       frame.structures,
       520,
       WORLD_BUILD_BUDGET_MS,
+      "full",
     ]);
     expect(update.mock.calls[1]![3]).toBe(260);
   });

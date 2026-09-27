@@ -12,7 +12,7 @@ import type { GroundKind, RoadClass, TreeSize } from "../../world/mapTypes";
 import type { Point } from "../../world/projection";
 import { structureIdOf } from "../../world/structureId";
 import { SURFACE_KEYS, type SurfaceKey } from "../textures";
-import { FACADE_VARIANTS, type WorldMaterials } from "../worldMaterials";
+import type { WorldMaterials } from "../worldMaterials";
 
 /**
  * A full set of world materials without textures, so geometry tests need no canvas: every slot is
@@ -22,22 +22,13 @@ import { FACADE_VARIANTS, type WorldMaterials } from "../worldMaterials";
  */
 export function createTestMaterials(): WorldMaterials {
   const plain = (): MeshLambertMaterial => new MeshLambertMaterial();
-  const variants = (): MeshLambertMaterial[] =>
-    Array.from(
-      { length: FACADE_VARIANTS },
-      () => new MeshLambertMaterial({ vertexColors: true }),
-    );
   const surfaces = Object.fromEntries(
     SURFACE_KEYS.map((key) => [key, plain()]),
   ) as Record<SurfaceKey, MeshLambertMaterial>;
   return {
     surfaces,
-    facades: {
-      brick: variants(),
-      plaster: variants(),
-      concrete: variants(),
-      glass: variants(),
-    },
+    facade: new MeshLambertMaterial({ vertexColors: true }),
+    detail: new MeshLambertMaterial({ vertexColors: true }),
     roadMarking: plain(),
     treeTrunk: plain(),
     canopies: [plain(), plain()],
