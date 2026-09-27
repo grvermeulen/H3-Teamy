@@ -481,10 +481,9 @@ the frame the renderer draws. Works the same in 2D and 3D.
   (`AMBIENCE_FORMAT`, ≈ 172 KB each, under the 200 KB per-clip cap) and nine one-shots (1.2–5 s,
   96 kbps), ≈ 1.2 MB together against the 2.5 MB budget. Prompts in
   `scripts/arena/generate-audio.ts`; generate them by name with
-  `npm run arena:generate-audio -- <clips>` and `ELEVENLABS_API_KEY` in the environment. The
-  ElevenLabs account refused the first request on 2026-09-27 (an open invoice, subscription
-  `past_due`), so the files and their credit rows are still to land and `npm run arena:check-audio`
-  lists them until they do; the game is complete without them — the new sounds are simply silent.
+  `npm run arena:generate-audio -- <clips>` and `ELEVENLABS_API_KEY` in the environment. All
+  fourteen are generated and credited in `public/arena/audio/CREDITS.md`; a clip that is missing
+  (say, a failed download) is simply silent — ambience and spot sounds have no synth fallback.
 
 ## Runtime (Plan 8 — netcode follow-ups and the lobby code)
 

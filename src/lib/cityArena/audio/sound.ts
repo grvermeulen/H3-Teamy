@@ -29,7 +29,11 @@ import {
   type Listener,
   type SpatialMix,
 } from "./spatial";
-import { buildVoiceChain } from "./voiceChain";
+import {
+  buildVoiceChain,
+  disconnectVoiceChain,
+  type VoiceChain,
+} from "./voiceChain";
 import {
   createWorldAudio,
   type WorldAudio,
@@ -65,6 +69,8 @@ export type OscillatorLike = AudioNodeLike & {
   frequency: AudioParamLike;
   start(when?: number): void;
   stop(when?: number): void;
+  /** Called once the tone has stopped. */
+  onended?: (() => void) | null;
 };
 
 /** Minimal gain surface used by the arena synth. */
@@ -283,11 +289,28 @@ function playTone(core: SoundCore, tone: Tone, mix: SpatialMix | null): void {
     const chain = buildVoiceChain(context, core.master, tone.gain, mix);
     rampParam(chain.input.gain, 0, now + tone.duration);
     oscillator.connect(chain.input);
+    releaseToneWhenEnded(oscillator, chain);
     oscillator.start(now);
     oscillator.stop(now + tone.duration);
   } catch (error: unknown) {
     reportAudioError(error, "audio-voice");
   }
+}
+
+/** Frees a synthesised voice's nodes once its tone has stopped, as sampled one-shots do. */
+function releaseToneWhenEnded(
+  oscillator: OscillatorLike,
+  chain: VoiceChain,
+): void {
+  oscillator.onended = () => {
+    oscillator.onended = null;
+    try {
+      oscillator.disconnect();
+      disconnectVoiceChain(chain);
+    } catch (error: unknown) {
+      reportAudioError(error, "audio-voice-release");
+    }
+  };
 }
 
 /** Where an event sits for the listener, or `null` for one heard as if at the listener. */

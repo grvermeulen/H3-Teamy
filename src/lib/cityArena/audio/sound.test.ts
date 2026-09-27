@@ -367,6 +367,25 @@ describe("placing sounds around the listener", () => {
     expect(context.panners[0]!.pan.value).toBeGreaterThan(0.5);
   });
 
+  it("disconnects a synthesised voice's nodes once its tone has ended", () => {
+    const { context, factory } = createFakeAudioContext();
+    const sound = createArenaSound(factory, true);
+    sound.setListener(northUp);
+    sound.handleEvents([
+      { kind: "hit", target: "ped", ownerId: 1, x: 20, y: 0 },
+    ]);
+    const oscillator = context.oscillators[0]!;
+    const nodes = [
+      context.gains.at(-1)!,
+      context.filters[0]!,
+      context.panners[0]!,
+    ];
+    oscillator.onended?.();
+    expect(oscillator.operations).toContainEqual({ kind: "disconnect" });
+    for (const node of nodes)
+      expect(node.operations).toContainEqual({ kind: "disconnect" });
+  });
+
   it("plays nothing at all for a shot past its reach", () => {
     const player = playerWith(["pistol"]);
     const { context, factory } = createFakeAudioContext();
