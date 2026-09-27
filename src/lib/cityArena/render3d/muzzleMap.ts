@@ -7,10 +7,13 @@
  */
 import { Vector3 } from "three";
 
+/** Muzzle points by owner id, three.js space: what the effects read. */
+export type MuzzlePoints = ReadonlyMap<number, Readonly<Vector3>>;
+
 /** The frame's muzzles. */
 export type MuzzleMap = {
   /** Muzzle points by owner id, three.js space; valid until the next `begin`. */
-  readonly points: ReadonlyMap<number, Readonly<Vector3>>;
+  readonly points: MuzzlePoints;
   /** Starts a frame: every owner must be written again to stay. */
   begin(): void;
   /**

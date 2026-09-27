@@ -1,4 +1,4 @@
-import { Group, PerspectiveCamera } from "three";
+import { Group, PerspectiveCamera, type Vector3 } from "three";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Scene } from "../render/renderScene";
 import { createArenaPlayer } from "../sim/roster";
@@ -100,7 +100,10 @@ function fakeFactories(): EntityFactories & {
 }
 
 /** A hands-and-cockpit pass that records what it was asked to show. */
-function fakePass(): ViewModelPass & { update: ReturnType<typeof vi.fn> } {
+function fakePass(): ViewModelPass & {
+  update: ReturnType<typeof vi.fn>;
+  muzzleWorld: ReturnType<typeof vi.fn>;
+} {
   return {
     update: vi.fn(() => null),
     muzzleWorld: vi.fn(() => false),
@@ -152,7 +155,12 @@ describe("createCast3d", () => {
     const [effects] = effectsMade;
     expect(effects!.object).toBeInstanceOf(Group);
     expect((effects!.object as Group).parent).toBe(cast.object);
-    expect(effects!.sync).toHaveBeenCalledWith(frame.scene, FOCUS, false);
+    expect(effects!.sync).toHaveBeenCalledWith(
+      frame.scene,
+      FOCUS,
+      false,
+      expect.any(Map),
+    );
     expect(effects!.update).toHaveBeenCalledWith(0.02);
     const [synced] = effects!.sync.mock.invocationCallOrder;
     const [updated] = effects!.update.mock.invocationCallOrder;
@@ -261,7 +269,12 @@ describe("createCast3d", () => {
     const cast = createCast3d(fakeFactories());
     const first = frameOf({ mode: "first" });
     cast.update(first, FOCUS, new PerspectiveCamera());
-    expect(effectsMade[0]!.sync).toHaveBeenCalledWith(first.scene, FOCUS, true);
+    expect(effectsMade[0]!.sync).toHaveBeenCalledWith(
+      first.scene,
+      FOCUS,
+      true,
+      expect.any(Map),
+    );
   });
 
   it("keeps your own muzzle flame in the world when no hands are drawn: a first-person drive-by", () => {
@@ -276,7 +289,43 @@ describe("createCast3d", () => {
       driving.scene,
       FOCUS,
       false,
+      expect.any(Map),
     );
+  });
+
+  it("hands the effects every shooter's muzzle, yours from the drawn gun in first person", () => {
+    const pass = fakePass();
+    // Like the real pass: a muzzle only in a frame that showed the hands.
+    pass.muzzleWorld.mockImplementation((target: Vector3) => {
+      if (pass.update.mock.calls.at(-1)?.[1] === null) return false;
+      target.set(3.4, 1.5, 4.1);
+      return true;
+    });
+    const factories = fakeFactories();
+    factories.character.mockImplementation(() => ({
+      object: new Group(),
+      update: vi.fn(),
+      dispose: vi.fn(),
+      muzzleWorld: vi.fn((target: Vector3) => {
+        target.set(3.6, 1.4, 4);
+        return true;
+      }),
+    }));
+    const cast = createCast3d(factories, pass);
+    const camera = new PerspectiveCamera();
+    cast.update(frameOf(), FOCUS, camera);
+    const [, , , thirdPerson] = effectsMade[0]!.sync.mock.calls.at(-1)!;
+    expect((thirdPerson as Map<number, Vector3>).get(1)!.toArray()).toEqual([
+      3.6, 1.4, 4,
+    ]);
+    cast.update(frameOf({ mode: "first" }), FOCUS, camera);
+    const [, , , firstPerson] = effectsMade[0]!.sync.mock.calls.at(-1)!;
+    expect((firstPerson as Map<number, Vector3>).get(1)!.toArray()).toEqual([
+      3.4, 1.5, 4.1,
+    ]);
+    const [posed] = pass.update.mock.invocationCallOrder.slice(-1);
+    const [synced] = effectsMade[0]!.sync.mock.invocationCallOrder.slice(-1);
+    expect(posed).toBeLessThan(synced!);
   });
 
   it("stands the mission contacts in the street with the cast's own characters", () => {

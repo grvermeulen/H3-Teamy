@@ -2,7 +2,8 @@
  * Bullet tracers: a thin additive line per round in flight, bright at the round and fading to
  * nothing behind it (spec §6.8). All tracers share one `LineSegments` draw call whose buffers are
  * sized once; the tail's colour is black, which additive blending turns into "no light", so the
- * fade needs no per-vertex alpha.
+ * fade needs no per-vertex alpha. A round whose shooter's muzzle is known is drawn out of that
+ * muzzle, converging onto its flat line (`muzzleBlend.ts`).
  */
 import {
   AdditiveBlending,
@@ -11,10 +12,10 @@ import {
   Color,
   LineBasicMaterial,
   LineSegments,
+  Vector3,
 } from "three";
 import type { BulletState } from "../sim/types";
-import { WEAPONS, type WeaponSpec } from "../sim/weapons";
-import { PERSON_CHEST_HEIGHT_M } from "./coords";
+import { blendedRoundPoint, roundFlownM } from "./muzzleBlend";
 
 /** Length of a tracer behind its round, metres (spec §6.8). */
 export const TRACER_LENGTH_M = 3;
@@ -33,19 +34,18 @@ export type Tracers = {
   object: LineSegments;
   /** Starts a frame's tracers; follow with `add` per round and `commit`. */
   begin(): void;
-  /** Draws a tracer behind a round. */
-  add(bullet: BulletState): void;
+  /**
+   * Draws a tracer behind a round.
+   *
+   * @param bullet - The round in flight.
+   * @param muzzle - Its shooter's muzzle, three.js space; `null` draws it on its flat line.
+   */
+  add(bullet: BulletState, muzzle?: Readonly<Vector3> | null): void;
   /** Uploads the frame's tracers. */
   commit(): void;
   /** Frees the geometry and material; detach `object` yourself. */
   dispose(): void;
 };
-
-/** How far a round has flown since it left the barrel, as far as the tracer is concerned. */
-function flown(bullet: Pick<BulletState, "weapon" | "rangeLeftM">): number {
-  const spec: WeaponSpec | undefined = WEAPONS[bullet.weapon];
-  return spec ? spec.rangeM - bullet.rangeLeftM : TRACER_LENGTH_M;
-}
 
 /**
  * Length of a round's tracer: how far it has flown, capped at {@link TRACER_LENGTH_M}, so a round
@@ -57,7 +57,7 @@ function flown(bullet: Pick<BulletState, "weapon" | "rangeLeftM">): number {
 export function tracerTail(
   bullet: Pick<BulletState, "weapon" | "rangeLeftM">,
 ): number {
-  return Math.max(0, Math.min(TRACER_LENGTH_M, flown(bullet)));
+  return Math.min(TRACER_LENGTH_M, roundFlownM(bullet));
 }
 
 function createGeometry(): BufferGeometry {
@@ -91,23 +91,22 @@ export function createTracers(): Tracers {
   lines.name = "tracers";
   lines.frustumCulled = false;
   const positions = geometry.getAttribute("position") as BufferAttribute;
+  const head = new Vector3();
+  const tail = new Vector3();
   let count = 0;
   return {
     object: lines,
     begin() {
       count = 0;
     },
-    add(bullet) {
+    add(bullet, muzzle = null) {
       if (count >= MAX_TRACERS) return;
-      const tail = tracerTail(bullet);
+      const flown = roundFlownM(bullet);
+      blendedRoundPoint(bullet, flown, muzzle, head);
+      blendedRoundPoint(bullet, flown, muzzle, tail, TRACER_LENGTH_M);
       const at = count * ENDS;
-      positions.setXYZ(at, bullet.x, PERSON_CHEST_HEIGHT_M, bullet.y);
-      positions.setXYZ(
-        at + 1,
-        bullet.x - bullet.directionX * tail,
-        PERSON_CHEST_HEIGHT_M,
-        bullet.y - bullet.directionY * tail,
-      );
+      positions.setXYZ(at, head.x, head.y, head.z);
+      positions.setXYZ(at + 1, tail.x, tail.y, tail.z);
       count += 1;
     },
     commit() {

@@ -34,7 +34,7 @@ const IMPACT_DUST_COUNT = 2;
 const MUZZLE_TONGUE_COUNT = 2;
 /** Height of an explosion's centre above the ground, metres. */
 const EXPLOSION_HEIGHT_M = 1;
-/** How far ahead of the shooter the muzzle is, metres. */
+/** How far ahead of the shooter the muzzle is when its gun is not drawn, metres. */
 const MUZZLE_OFFSET_M = 0.7;
 
 /** Dark smoke billowing up out of the blast. */
@@ -197,11 +197,14 @@ function muzzle(
  * @param effect - The effect, seen for the first time.
  * @param muzzleFlame - For a muzzle flash: false lights the street but draws no flame, for a
  *   flash the first-person view model draws at its own barrel.
+ * @param muzzleAt - For a muzzle flash: its shooter's muzzle in three.js space, where the flame
+ *   and its light go; `null` puts them just ahead of the shooter at chest height.
  */
 export function burst(
   targets: BurstTargets,
   effect: EffectState,
   muzzleFlame = true,
+  muzzleAt: Readonly<Emitter> | null = null,
 ): void {
   const rng = rngFor(effect.kind, effect.id);
   if (effect.kind === "explosion") {
@@ -216,10 +219,10 @@ export function burst(
     });
     return;
   }
-  const muzzleAt = {
+  const at = muzzleAt ?? {
     x: effect.x + Math.cos(effect.angle) * MUZZLE_OFFSET_M,
     y: PERSON_CHEST_HEIGHT_M,
     z: effect.y + Math.sin(effect.angle) * MUZZLE_OFFSET_M,
   };
-  muzzle(targets, rng, muzzleAt, effect.angle, muzzleFlame);
+  muzzle(targets, rng, at, effect.angle, muzzleFlame);
 }

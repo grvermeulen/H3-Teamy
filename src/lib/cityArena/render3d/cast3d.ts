@@ -4,7 +4,7 @@
  * falling furniture) and the first-person hands — one frame step for `index.ts` to call between
  * placing the camera and rendering.
  */
-import { Group, type Object3D, type PerspectiveCamera } from "three";
+import { Group, Vector3, type Object3D, type PerspectiveCamera } from "three";
 import type { Scene } from "../render/renderScene";
 import type { CameraMode } from "./cameraRig";
 import { createCharacter } from "./characters";
@@ -156,6 +156,47 @@ function handsInput(
   return hands;
 }
 
+/** The first-person pass and the inputs it is handed, all reused every frame. */
+type FirstPersonView = {
+  hands: ViewModelPass;
+  input: ViewModelInput;
+  cockpit: CockpitPose;
+  /** Receives your muzzle from the drawn gun. */
+  muzzle: Vector3;
+  /** Whether this frame drew the hands. */
+  handsShown: boolean;
+};
+
+/** A first-person view around a pass, nothing shown yet. */
+function createFirstPersonView(hands: ViewModelPass): FirstPersonView {
+  return {
+    hands,
+    input: { weapon: "fist", firedTick: null, tick: 0, speed: 0, dt: 0 },
+    cockpit: createCockpitPose(),
+    muzzle: new Vector3(),
+    handsShown: false,
+  };
+}
+
+/**
+ * Poses the hands on foot or the cockpit at the wheel, in first person; with the hands out, your
+ * muzzle becomes the drawn gun's, so your shots leave it rather than the hidden body's.
+ */
+function poseFirstPerson(
+  view: FirstPersonView,
+  entities: EntitySync,
+  frame: CastFrame,
+  camera: PerspectiveCamera,
+): OverlayPass | null {
+  const drawn = handsInput(view.input, entities, frame);
+  view.handsShown = drawn !== null;
+  const cockpit = cockpitPose(view.cockpit, entities, frame);
+  const pass = view.hands.update(camera, drawn, cockpit);
+  if (view.hands.muzzleWorld(view.muzzle))
+    entities.muzzles.set(frame.scene.localPlayerId, view.muzzle);
+  return pass;
+}
+
 /**
  * The cast, effects and hands of the 3D view.
  *
@@ -173,14 +214,7 @@ export function createCast3d(
   const street = createContacts3d(factories);
   object.add(entities.group, street.object);
   const view: EntityView = { firstPerson: false, aim: 0 };
-  const handsScratch: ViewModelInput = {
-    weapon: "fist",
-    firedTick: null,
-    tick: 0,
-    speed: 0,
-    dt: 0,
-  };
-  const cockpitScratch = createCockpitPose();
+  const firstPerson = createFirstPersonView(hands);
   let fx: Fx | null = null;
   return {
     object,
@@ -189,14 +223,18 @@ export function createCast3d(
       view.aim = frame.aim;
       entities.update(frame.scene, frame.dt, focus, view);
       street.update(contacts, frame.scene, focus);
-      const drawn = handsInput(handsScratch, entities, frame);
+      const pass = poseFirstPerson(firstPerson, entities, frame, camera);
       fx = fxFor(object, fx, frame.quality);
       // Your own flame moves to the hands' barrel only while the hands are there to show it.
-      fx.effects.sync(frame.scene, focus, drawn !== null);
+      fx.effects.sync(
+        frame.scene,
+        focus,
+        firstPerson.handsShown,
+        entities.muzzles.points,
+      );
       fx.effects.update(frame.dt);
       fx.destruction.update(frame.dt);
-      const cockpit = cockpitPose(cockpitScratch, entities, frame);
-      return hands.update(camera, drawn, cockpit);
+      return pass;
     },
     destruction: () => fx?.destruction ?? null,
     dispose() {
