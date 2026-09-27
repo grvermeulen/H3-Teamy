@@ -120,6 +120,7 @@ import {
   withCut,
 } from "@/lib/cityArena/render/feedback";
 import { feelTick } from "./arenaFeel";
+import { updateFrameSound } from "./arenaSound";
 import { prepareCanvas } from "./hudCanvas";
 import {
   input3d,
@@ -1207,6 +1208,7 @@ function runFrame(
     ? findZoneByKey(runtime.session.index(), runtime.state.zoneKey)
     : null;
   const scene = buildScene(runtime, frame, zone, pointer, timestamp);
+  updateFrameSound(runtime, scene, runtime3d ? runtime3d.look.yaw() : null);
   const drawStats = runtime3d
     ? paint3d(canvas, rect, runtime3d, scene, timestamp, dt)
     : paintCanvas(

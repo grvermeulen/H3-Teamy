@@ -9,6 +9,7 @@ import {
   ENGINE_RATE_MAX,
   ENGINE_RATE_MIN,
   ENGINE_RATE_TOP_SPEED_MPS,
+  FOOTSTEP_RATE_JITTER,
   createArenaSound,
   engineRate,
 } from "./sound";
@@ -440,5 +441,92 @@ describe("placing sounds around the listener", () => {
       { kind: "shot", weapon: "pistol", ownerId: 1, x: 0, y: -5 },
     ]);
     expect(duck).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the local player's own sounds", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /** The clips a player was asked to play, in order. */
+  function played(player: SamplePlayer): ClipName[] {
+    return vi.mocked(player.play).mock.calls.map(([clip]) => clip);
+  }
+
+  it("plays footsteps at the walking cadence, a little detuned, and none in a car", () => {
+    const player = playerWith(["footstep"]);
+    const { factory } = createFakeAudioContext();
+    const sound = createArenaSound(
+      factory,
+      true,
+      () => player,
+      undefined,
+      () => 1,
+    );
+    for (let tick = 0; tick <= 20; tick++)
+      sound.updateSelf({ tick, onFoot: true, speedMps: 1.4, car: null });
+    expect(played(player)).toEqual(["footstep"]);
+    expect(vi.mocked(player.play).mock.calls[0]![1]).toBeCloseTo(
+      1 + FOOTSTEP_RATE_JITTER,
+    );
+    for (let tick = 21; tick <= 120; tick++)
+      sound.updateSelf({
+        tick,
+        onFoot: false,
+        speedMps: 0,
+        car: { forwardMps: 12, heading: 0 },
+      });
+    expect(played(player)).toEqual(["footstep"]);
+  });
+
+  it("squeals once when the car turns hard", () => {
+    const player = playerWith(["skid"]);
+    const { factory } = createFakeAudioContext();
+    const sound = createArenaSound(factory, true, () => player);
+    for (let tick = 0; tick < 10; tick++)
+      sound.updateSelf({
+        tick,
+        onFoot: false,
+        speedMps: 0,
+        car: { forwardMps: 20, heading: tick * 0.08 },
+      });
+    expect(played(player)).toEqual(["skid"]);
+  });
+
+  it("plays the death sting for this player's own death only", () => {
+    const player = playerWith(["death"]);
+    const { factory } = createFakeAudioContext();
+    const sound = createArenaSound(factory, true, () => player);
+    const sources = { selfId: 2, vehicleAt: () => null };
+    sound.handleEvents(
+      [
+        {
+          kind: "kill",
+          victim: "player",
+          victimId: 5,
+          killerId: 2,
+          x: 0,
+          y: 0,
+        },
+        { kind: "kill", victim: "ped", victimId: 2, killerId: 5, x: 0, y: 0 },
+      ],
+      sources,
+    );
+    expect(player.play).not.toHaveBeenCalled();
+    sound.handleEvents(
+      [
+        {
+          kind: "kill",
+          victim: "player",
+          victimId: 2,
+          killerId: 5,
+          x: 9,
+          y: 9,
+        },
+      ],
+      sources,
+    );
+    expect(played(player)).toEqual(["death"]);
   });
 });

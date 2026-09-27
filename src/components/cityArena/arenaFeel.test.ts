@@ -22,6 +22,7 @@ function runtime(): FeelRuntime {
       setListener: vi.fn(),
       handleEvents: vi.fn(),
       updateEngine: vi.fn(),
+      updateSelf: vi.fn(),
       updateSiren: vi.fn(),
       dispose: vi.fn(),
     },

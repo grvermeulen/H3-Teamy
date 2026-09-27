@@ -1,18 +1,26 @@
 import * as Sentry from "@sentry/nextjs";
 import { MAX_EVENTS } from "../sim/limits";
 import type { ArenaEvent } from "../sim/types";
+import type { ClipName } from "./clips";
 import {
   clipFor,
   clipGainFor,
   ducksRadio,
   eventPosition,
   fallbackTones,
+  isOwnDeath,
   soundClassFor,
   type EventSources,
   type Tone,
 } from "./eventVoices";
 import type { RadioFactory, RadioPlayer } from "./radio/radio";
 import type { LoopHandle, SamplePlayer, SamplePlayerFactory } from "./samples";
+import {
+  createFootsteps,
+  createSkidDetector,
+  type SelfCue,
+  type SelfMotion,
+} from "./selfSounds";
 import {
   MIN_AUDIBLE_GAIN,
   SOUND_PROFILES,
@@ -85,6 +93,8 @@ export type ArenaSound = {
   /** Voices a tick's events, each placed around the listener; `sources` fills in what they lack. */
   handleEvents(events: ArenaEvent[], sources?: EventSources): void;
   updateEngine(speedMps: number, active: boolean): void;
+  /** Footsteps and tyre squeals from the local player's own motion; call once per frame. */
+  updateSelf(motion: SelfMotion): void;
   /** Runs the siren loop while a police car is chasing within earshot; silent without its clip. */
   updateSiren(on: boolean): void;
   dispose(): void;
@@ -106,6 +116,8 @@ const DRONE_HZ_PER_MPS = 5;
 const DRONE_TOP_SPEED_MPS = 30;
 /** A loud event ducks the radio only when it is heard at least this loud: not a distant shot. */
 export const RADIO_DUCK_MIN_GAIN = 0.2;
+/** Each footstep's rate is jittered by up to this share either way, so a walk is not a metronome. */
+export const FOOTSTEP_RATE_JITTER = 0.06;
 
 /**
  * The engine clip's playback rate for a speed: idle at rest, rising to the top rate at 25 m/s.
@@ -169,14 +181,17 @@ type SoundCore = {
   engineGain: GainNodeLike | null;
   engineLoop: LoopHandle | null;
   sirenLoop: LoopHandle | null;
+  footsteps: SelfCue;
+  skid: SelfCue;
+  random: () => number;
 };
 
 /** Builds the context, the master gain, the sample player and the radio; a failure costs them all. */
 function createCore(
   factory: AudioContextFactory,
   enabled: boolean,
-  samples: SamplePlayerFactory | undefined,
-  radio: RadioFactory | undefined,
+  attach: { samples?: SamplePlayerFactory; radio?: RadioFactory },
+  random: () => number,
 ): SoundCore {
   const core: SoundCore = {
     context: null,
@@ -191,6 +206,9 @@ function createCore(
     engineGain: null,
     engineLoop: null,
     sirenLoop: null,
+    footsteps: createFootsteps(),
+    skid: createSkidDetector(),
+    random,
   };
   try {
     const context = factory();
@@ -200,8 +218,8 @@ function createCore(
     setParam(master.gain, enabled ? MASTER_GAIN : 0, context.currentTime);
     core.context = context;
     core.master = master;
-    core.player = samples?.(context, master) ?? null;
-    core.radio = radio?.(context, master) ?? null;
+    core.player = attach.samples?.(context, master) ?? null;
+    core.radio = attach.radio?.(context, master) ?? null;
   } catch (error: unknown) {
     reportAudioError(error, "audio-init");
     Object.assign(core, {
@@ -268,6 +286,10 @@ function handleEvent(
   event: ArenaEvent,
   sources: EventSources | undefined,
 ): void {
+  if (isOwnDeath(event, sources)) {
+    playOwn(core, "death");
+    return;
+  }
   const mix = placeEvent(core, event, sources);
   const gain = mix?.gain ?? 1;
   if (gain < MIN_AUDIBLE_GAIN) return;
@@ -279,6 +301,22 @@ function handleEvent(
   )
     return;
   for (const tone of fallbackTones(event)) playTone(core, tone, mix);
+}
+
+/** Plays one of the local player's own clips, centred and at full level; silent without it. */
+function playOwn(core: SoundCore, clip: ClipName, rate = 1): void {
+  if (audible(core)) core.player?.play(clip, rate);
+}
+
+/** Footsteps and skids from the local player's motion this frame. */
+function updateCoreSelf(core: SoundCore, motion: SelfMotion): void {
+  const footstep = core.footsteps.step(motion);
+  const skid = core.skid.step(motion);
+  if (footstep) {
+    const jitter = (core.random() * 2 - 1) * FOOTSTEP_RATE_JITTER;
+    playOwn(core, "footstep", 1 + jitter);
+  }
+  if (skid) playOwn(core, "skid");
 }
 
 /** Stops the oscillator drone, if it is running. */
@@ -432,6 +470,7 @@ function disposeCore(core: SoundCore): void {
  * @param initiallyEnabled - Whether sound starts on.
  * @param samples - Attaches a sample player to the context; omitted, everything is synthesised.
  * @param radio - Attaches the car radio to the context; omitted, there is no radio.
+ * @param random - Jitters footsteps; seeded in tests.
  * @returns The controls the runtime drives.
  */
 export function createArenaSound(
@@ -439,8 +478,14 @@ export function createArenaSound(
   initiallyEnabled = true,
   samples?: SamplePlayerFactory,
   radio?: RadioFactory,
+  random: () => number = Math.random,
 ): ArenaSound {
-  const core = createCore(factory, initiallyEnabled, samples, radio);
+  const core = createCore(
+    factory,
+    initiallyEnabled,
+    { samples, radio },
+    random,
+  );
   return {
     unlock: () => unlockCore(core),
     setEnabled: (next) => setCoreEnabled(core, next),
@@ -454,6 +499,7 @@ export function createArenaSound(
     },
     updateEngine: (speedMps, active) =>
       updateCoreEngine(core, speedMps, active),
+    updateSelf: (motion) => updateCoreSelf(core, motion),
     updateSiren(on: boolean): void {
       if (!core.enabled || !on || core.disposed) {
         stopSiren(core);
