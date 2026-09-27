@@ -6,6 +6,7 @@ import {
   clientAddress,
   rateLimited,
 } from "@/lib/rateLimit";
+import { isDbUnavailableError } from "@/lib/dbUnavailableError";
 import { listArenaRooms } from "@/lib/services/arenaRoomService";
 
 export const runtime = "nodejs";
@@ -25,7 +26,9 @@ export async function GET(req: NextRequest): Promise<Response> {
       },
     );
   } catch (error: unknown) {
-    Sentry.captureException(error, { tags: { area: "arena", kind: "rooms" } });
+    if (!isDbUnavailableError(error)) {
+      Sentry.captureException(error, { tags: { area: "arena", kind: "rooms" } });
+    }
     return NextResponse.json(
       { rooms: [], error: "Actieve potjes zijn even niet beschikbaar" },
       { status: 503 },
