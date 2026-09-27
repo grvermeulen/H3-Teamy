@@ -24,6 +24,12 @@ Captured in the dev build (Wageningen, dusk):
 
 The same ruins in the 2D view: ![2D rubble and damage shading](img/3d/2d-ruins-row.jpg)
 
+The glTF cast (see [Characters: the glTF cast](#characters-the-gltf-cast)):
+
+|                                                                                       |                                                                                              |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| ![A street of pedestrians, each dressed differently](img/3d/3d-characters-street.jpg) | ![The player: bald, red shades, mint shorts, pistol raised](img/3d/3d-characters-player.jpg) |
+
 ## Architecture
 
 ### A second renderer, not a replacement
@@ -82,14 +88,14 @@ Grouped by responsibility; every exported symbol carries its own JSDoc.
 | `renderer3d.ts`   | WebGL renderer, three.js scene, camera, evening lights, fog; `RenderQuality`, view distance and pixel-ratio tables |
 | `cameraRig.ts`    | Third-person and first-person rigs, pitch limits per mode, car chase and death-orbit poses                         |
 | `cameraFeel.ts`   | The 2D feedback's screen shake (`SHAKE_METRES_PER_PX`) and drunk sway, as a camera nudge and roll                  |
-| `sharedAssets.ts` | `disposeSharedAssets`: frees the module-level character, vehicle, pickup and weapon caches on dispose              |
+| `sharedAssets.ts` | `disposeSharedAssets`: frees the module-level character (procedural and glTF), vehicle, pickup and weapon caches   |
 | `coords.ts`       | The one world ↔ three.js mapping (`(x, y)` metres → `(x, height, y)`) and angle helpers                            |
 | `idHash.ts`       | Deterministic per-id "randomness" (façade choice, tree size/turn) so every device builds the same town             |
 | `disposal.ts`     | `disposeObject`: frees geometries, materials and textures of a whole `Object3D` subtree                            |
 | `meshBuffers.ts`  | Growable vertex/index buffers the city builders fill, turned into one indexed `BufferGeometry`                     |
 | `lowPoly.ts`      | Bevelled/tapered block and faceted-rod primitives, vertex-coloured and flat-shaded                                 |
 | `footprint.ts`    | Footprint measurements (centre, longest edge) shared by roofs, landmark dressing and ruins                         |
-| `testing/`        | Shared test doubles/helpers for render3d's own test suite                                                          |
+| `testing/`        | Shared test doubles/helpers for render3d's own test suite (`gltfFixture.ts`: in-code glTF characters)              |
 
 **The streamed city**
 
@@ -111,19 +117,25 @@ Grouped by responsibility; every exported symbol carries its own JSDoc.
 
 **Characters and vehicles**
 
-| File                                         | Responsibility                                                                      |
-| -------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `characters.ts`                              | A posable 3D person: one rigid-skinned mesh, weapon in hand, lies down when dead    |
-| `characterRig.ts`                            | The shared 17-bone rig and per-look merged geometry                                 |
-| `characterPose.ts`                           | Pure procedural poses: idle, walk/run (phased by distance), aim, death              |
-| `characterLooks.ts`                          | The cast's looks, translated from the 2D sprites' sampled colours                   |
-| `characterParts.ts`                          | Body/face/hair as rigid low-poly parts bound to one bone each                       |
-| `characterExtras.ts`                         | Accessories (shades, caps, hoods, backpack, hi-vis) layered over a look             |
-| `vehicles3d.ts`                              | A live vehicle: wheel roll, light bar, tank turret follow, wreck look, over a model |
-| `vehicleModels.ts`                           | Procedural low-poly model per vehicle kind, one merged body mesh + wheels           |
-| `vehicleParts.ts`                            | Shared material cache and primitive shapes vehicles are cut from                    |
-| `vehicleShapes.ts` / `vehicleShapesHeavy.ts` | Per-kind shape builders (passenger kinds; bus/tractor/tank)                         |
-| `vehicleSmoke.ts`                            | Wreck column smoke and bonnet smoke below the 2D `smokeHealthOf` threshold          |
+| File                                         | Responsibility                                                                         |
+| -------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `characters.ts`                              | The character factory (glTF cast, procedural fallback, LOD) and the procedural person  |
+| `characterAssets.ts`                         | Lazily loaded glTF cast: manifest, models, rig clips split per layer                   |
+| `characterAppearance.ts`                     | Pure: look + id → model, palette colours, hidden slots, scale, accessories             |
+| `characterAnimation.ts`                      | Pure: pose → clip weights and gait pace (`clipMix`)                                    |
+| `gltfCharacter.ts` / `gltfAnimator.ts`       | A glTF `Character3d` and its layered `AnimationMixer`                                  |
+| `characterPalette.ts`                        | The palette-slot Lambert material the glTF cast draws with                             |
+| `characterAccessories.ts`                    | Accessories on the glTF cast's bones (cap, glasses, shades, bracelet, backpack, badge) |
+| `characterRig.ts`                            | The shared 17-bone rig and per-look merged geometry                                    |
+| `characterPose.ts`                           | Pure procedural poses: idle, walk/run (phased by distance), aim, death                 |
+| `characterLooks.ts`                          | The cast's looks, translated from the 2D sprites' sampled colours                      |
+| `characterParts.ts`                          | Body/face/hair as rigid low-poly parts bound to one bone each                          |
+| `characterExtras.ts`                         | Accessories (shades, caps, hoods, backpack, hi-vis) layered over a look                |
+| `vehicles3d.ts`                              | A live vehicle: wheel roll, light bar, tank turret follow, wreck look, over a model    |
+| `vehicleModels.ts`                           | Procedural low-poly model per vehicle kind, one merged body mesh + wheels              |
+| `vehicleParts.ts`                            | Shared material cache and primitive shapes vehicles are cut from                       |
+| `vehicleShapes.ts` / `vehicleShapesHeavy.ts` | Per-kind shape builders (passenger kinds; bus/tractor/tank)                            |
+| `vehicleSmoke.ts`                            | Wreck column smoke and bonnet smoke below the 2D `smokeHealthOf` threshold             |
 
 **Weapons, view model and projectiles**
 
@@ -165,12 +177,104 @@ Grouped by responsibility; every exported symbol carries its own JSDoc.
 | `guidance3d.ts`      | Owns the route, beacons, zone wall and player markers layers                            |
 | `route3d.ts`         | The glowing navigation band along the route, rebuilt only when the route changes        |
 | `beacons3d.ts`       | Pulsing light columns over mission contacts/objectives, readable from far away          |
-| `contacts3d.ts`      | Mission contacts as idle characters in their 2D look                                    |
+| `contacts3d.ts`      | Mission contacts as idle characters, dressed by a hash of their id                      |
 | `zoneWall3d.ts`      | The match zone's edge as a wall of light, built only near the player                    |
 | `playerMarkers3d.ts` | A camera-facing diamond over every other living player                                  |
 | `playerArrows.ts`    | Edge-of-screen arrows toward friends who are out of view                                |
 | `missionMarkers.ts`  | Pure read of the scene's mission contacts/objectives for `guidance3d`/`contacts3d`      |
 | `overlay3d.ts`       | The 2D HUD canvas overlay: crosshair and off-screen arrows                              |
+
+## Characters: the glTF cast
+
+Spec: `docs/superpowers/specs/2026-09-27-arena-immersion-design.md` §7. The people in the street
+are Quaternius' low-poly characters ("Ultimate Modular Men/Women", 15 models from Poly Pizza, CC0
+and two CC-BY 3.0 — see `public/arena/characters/CREDITS.md`), animated, and every pedestrian is
+dressed differently — deterministically from its id, so every device shows the same crowd and
+nothing new goes on the wire. The procedural characters (`characters.ts` and the `character*`
+modules) stay as the fallback.
+
+### Pipeline: `npm run arena:pack-characters`
+
+`scripts/arena/pack-characters.ts` (pure half and tests: `packCharacters.ts`) downloads each
+owner-approved GLB once into `.cache/arena/characters/` (gitignored), pinned by URL and sha256 —
+a file whose hash moved is refused — and writes `public/arena/characters/`:
+
+- **One file per model** (`<key>.glb`): the four body-part meshes joined into **one skinned
+  primitive**; every material becomes a **palette slot** — each vertex carries its former
+  material's slot in a `_PALETTE` byte attribute and the file has one white material. A material
+  that colours the head or feet _and_ another part gets a slot of its own there (`Head/Red`,
+  `Feet/Black`), so hair and shoes recolour apart from clothes. Normals, UVs and vertex colours are
+  dropped (the vertices then weld to about a quarter), joints become bytes and weights normalised
+  bytes (core glTF, no extensions), animations and the hooded adventurer's sword are removed.
+- **One animation file per rig** (`anim-men.glb`, `anim-women.glb`): every man shares one
+  skeleton and every woman the other (same 62 bone names, different proportions and timing), so
+  the eight clips the game plays are kept once per rig from `casual-man` and `woman-a`, without
+  the channels that only hold the rest pose.
+- **`manifest.json`** (schema `CharacterManifestSchema` in `src/lib/cityArena/characterManifest.ts`,
+  shared by the script and the view): per model its file, rig, gender, slot names, original
+  colours (sRGB) and bind-pose height; per rig its file and the clip playing each role.
+- **`CREDITS.md`**: one row per file (title, author, licence, page).
+
+`--probe` prints each source's meshes, materials, bones and clips instead. Findings: 62 bones
+(`Root Body Hips Abdomen Torso Chest Neck Head`, `Shoulder/UpperArm/LowerArm/Wrist` and five
+fingers per side, `UpperLeg/LowerLeg/Foot` and an IK pole `PT` per side); 4–11 flat-colour
+materials per model, no textures; 24 clips per rig (`Idle`, `Walk`, `Run`, `Death`,
+`Punch_Right`, `Idle_Gun_Pointing`, `Gun_Shoot`, `Sword_Slash` are kept). Packed: 2.3 MB for all
+17 files (models 121–166 KB each, animations 136/143 KB); the budget is 3 MB.
+
+`npm run arena:check-characters` (CI verify job, next to `arena:check-audio`) checks that every
+manifest file exists, no stray `.glb` sits beside them, the set stays within 3 MB and every file
+has exactly one credits row.
+
+### Runtime
+
+| Module                    | Responsibility                                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `characterAssets.ts`      | Loads the manifest and files lazily with `GLTFLoader`, rebuilds creased normals, splits clips per layer |
+| `characterAppearance.ts`  | Pure: look + id → model, colour per palette slot, hidden slots, scale 0.92–1.08, accessories            |
+| `characterAnimation.ts`   | Pure: `PoseInput` → clip weights (`clipMix`), gait pace from each rig's measured stride                 |
+| `gltfCharacter.ts`        | `Character3d` over a `SkeletonUtils` clone: palette material, animator, weapon slot, re-dressing        |
+| `gltfAnimator.ts`         | Layers the clips on an `AnimationMixer`: legs, upper body, one-off clips, death; eased weights          |
+| `characterPalette.ts`     | The Lambert material that colours each vertex from its slot (one program, one table per character)      |
+| `characterAccessories.ts` | Cap, glasses, the player's red shades and bead bracelet, backpack, badge — rigid meshes on bones        |
+
+- **Loading and fallback.** The first character asked for starts the download
+  (`requestCharacterAssets`). Until it lands — and for the rest of the session if it fails — the
+  factory builds procedural characters. A network failure is a Sentry breadcrumb
+  (`isBenignTransientClientFetchError`); a missing or broken file is `captureException` with
+  `area: characters`. When the cast arrives, each entity's pool **variant** (its glTF model, or
+  its look for a procedural one) no longer matches, so the entity sync re-claims it once, keeping
+  its motion and shot memory. `disposeSharedAssets` frees the cast with the other shared assets.
+- **Pooling.** glTF characters are pooled per model (`gltf:<key>`) and **re-dressed** for their
+  next owner (`EntityFactories.dressCharacter`): palette, scale and accessories change, the
+  animator resets. Ids come from the entity (players, peds, cops) or a hash of a mission
+  contact's id (`contactSeed`).
+- **Appearance.** Pedestrians get a model from the 14 city models, one of eight skin tones, hair
+  (black, browns, blond, red, grey), tops, bottoms and shoes from curated palettes, a scale and up
+  to two accessories. Colours **replace** the model's own per slot (`MODEL_SLOT_ROLES` maps each
+  model's slots to skin, hair, top, bottom, shoes…). The **player** is the beach model, bald (the
+  hair slot is hidden: its triangles are sent past the far plane), shirtless, in mint shorts,
+  barefoot, with red-lensed shades and the bead bracelet. **Other players** are a hoodie man or a
+  woman in a top of their vest hue. **Officers** are the SWAT model in police navy with a gold
+  badge.
+- **Animation.** Idle, walk and run cross-fade by speed; the walk and run advance on one shared
+  gait phase at `speed / stride` cycles per second (strides measured from the clips: men 1.84 m /
+  2.37 m per cycle, women 1.78 m / 2.39 m), so the feet stay planted through the blend. Aiming a
+  gun raises it with the upper body only (the legs keep the gait); a fresh recoil plays
+  `Gun_Shoot`, `Punch_Right` or `Sword_Slash` once on the upper body; death plays once and holds
+  its last frame (a character first seen dead lies down at once). Weights ease over about 0.2 s.
+  The model faces +Z and is turned to the game's +X; it is scaled to its look's height (women
+  0.95 of it).
+- **Weapons.** The procedural weapon models hang from the `WristR` bone, barrel along the fingers
+  (the bat leaves the fist like a sword); `muzzleWorld` reads the barrel tip as for the procedural
+  characters.
+- **Level of detail and cost.** At "laag", characters beyond `GLTF_LOD_DISTANCE_M` = 45 m (with
+  10 % slack before turning back) stay procedural. Characters beyond `FULL_RATE_ANIMATION_M` =
+  40 m advance their mixer every other frame with both frames' time; hidden characters (your own
+  body in first person) do not advance at all. Each glTF character is one draw call (plus one per
+  accessory), about 6 000 triangles against 1 600 for a procedural one. Measured on the dev
+  machine (Node, no GPU), 40 walking characters cost about 3 ms of CPU a frame (mixers, bone
+  matrices, skeleton upload data) against 0.2 ms procedural, about 1.9 ms when all are far.
 
 ## Input
 
@@ -336,7 +440,9 @@ damage sources table above.
   quality and shared with the destruction system's dust.
 - **Draw calls**: roughly 15–25 per dense city cell (190–290 across a typical view), 8–10 per
   vehicle, and characters/pickups/weapons each merge to one or two draw calls via shared,
-  vertex-coloured, per-look/per-kind geometry.
+  vertex-coloured, per-look/per-kind geometry. A glTF character is one draw call plus one per
+  accessory (see [Characters: the glTF cast](#characters-the-gltf-cast) for its CPU cost and
+  level of detail).
 
 ## Known limitations
 
@@ -370,6 +476,12 @@ damage sources table above.
 - **Phones at "laag" still need a smoke test.** A dense view draws roughly 190–290 calls (see
   Performance notes), above spec §8's budget; 30 fps on a mid-range phone at "laag" is unverified
   on real hardware.
+- **The glTF cast holds long guns like a pistol.** The packs' gun clips are one-handed, so the
+  shotgun, rifle and rocket launcher sit in the right hand with the left arm free; officers wear
+  the SWAT helmet, so there is no cap or light-blue shirt as on the procedural officer.
+- **The glTF cast's cost is measured in Node, not on a phone.** In the in-app browser the pane
+  was hidden (no animation frames), so frame rates there are not meaningful; the CPU numbers above
+  come from a Node benchmark of the same code.
 - **Made-up client feedback is approximate.** A client's fireball sits where the rocket or shell
   was last seen, up to one snapshot interval (about 4.5 m for a rocket, 9 m for a shell) short of
   where it burst; a projectile fired and burst between two snapshots is never seen, so it makes no

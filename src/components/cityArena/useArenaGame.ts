@@ -566,9 +566,11 @@ function useFrameLoop(phase: ArenaPhase, options: FrameLoopOptions): void {
 /** Builds the `window.__arena` seam over the runtime ref. */
 function createTestHooks(
   runtimeRef: RefObject<Runtime | null>,
+  metricsRef: RefObject<FrameMetrics>,
 ): ArenaTestHooks {
   return {
     getState: () => runtimeRef.current?.state ?? null,
+    getMetrics: () => metricsRef.current.snapshot(),
     dispatch(input, ticks = 1) {
       const runtime = runtimeRef.current;
       if (runtime)
@@ -611,11 +613,12 @@ function createTestHooks(
 function useArenaTestHooks(
   debug: boolean,
   runtimeRef: RefObject<Runtime | null>,
+  metricsRef: RefObject<FrameMetrics>,
 ): void {
   useEffect(() => {
     if (!debug) return undefined;
-    return installArenaHooks(window, createTestHooks(runtimeRef));
-  }, [debug, runtimeRef]);
+    return installArenaHooks(window, createTestHooks(runtimeRef, metricsRef));
+  }, [debug, metricsRef, runtimeRef]);
 }
 
 /** Keeps the reduced-motion preference on the boot ref and on the live runtime. */
@@ -784,7 +787,7 @@ export function useArenaGame({
     () => runtimeRef.current?.weapons.cycle(),
     [runtimeRef],
   );
-  useArenaTestHooks(debug, runtimeRef);
+  useArenaTestHooks(debug, runtimeRef, metricsRef);
   useFrameLoop(phase, {
     canvasRef,
     runtimeRef,

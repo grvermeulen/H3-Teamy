@@ -675,6 +675,11 @@ describe("debug hooks", () => {
       await Promise.resolve();
     });
     expect(window.__arena?.getState()?.tick).toBe(0);
+    expect(window.__arena?.getMetrics()).toMatchObject({
+      fps: 0,
+      samples: 0,
+      sessionFrames: 0,
+    });
     window.__arena?.dispatch({ fire: true }, 2);
     expect(window.__arena?.getViolations()).toBe(0);
     expect(window.__arena?.audio.levels()).toMatchObject({

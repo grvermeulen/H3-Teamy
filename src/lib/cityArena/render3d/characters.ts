@@ -1,9 +1,21 @@
 /**
- * A posable 3D person: one skinned mesh of a look, driven each frame by {@link poseFor}, holding
- * its weapon in the right hand and lying down when dead.
+ * A posable 3D person. The procedural one ({@link createCharacter}) is one skinned mesh of a look,
+ * driven each frame by {@link poseFor}, holding its weapon in the right hand and lying down when
+ * dead; it draws until the glTF cast has loaded, and wherever that cast cannot.
+ * {@link createCharacterFactory} picks between the two.
  */
 import { Group, type Bone, type Object3D, type Vector3 } from "three";
+import {
+  CHARACTER_MODEL_KEYS,
+  type CharacterModelKey,
+} from "../characterManifest";
 import type { WeaponKind } from "../sim/types";
+import { appearanceOf, modelOf } from "./characterAppearance";
+import {
+  characterAssetsReady,
+  requestCharacterAssets,
+  type CharacterAssets,
+} from "./characterAssets";
 import { LOOKS, type CharacterLook } from "./characterLooks";
 import { createPose, poseInto, type PoseInput } from "./characterPose";
 import {
@@ -12,6 +24,8 @@ import {
   proportionsOf,
   type BoneName,
 } from "./characterRig";
+import type { CharacterWho, EntityFactories } from "./entities";
+import { createGltfCharacter, isGltfCharacter } from "./gltfCharacter";
 import type { Vec3 } from "./lowPoly";
 import { createWeaponModel, muzzleTipOf } from "./weapons3d";
 
@@ -141,6 +155,75 @@ export function createCharacter(
       slot.hold(null);
       object.removeFromParent();
       mesh.skeleton.dispose();
+    },
+  };
+}
+
+/** At the "laag" quality, characters beyond this are drawn procedurally, metres (spec §7). */
+export const GLTF_LOD_DISTANCE_M = 45;
+
+/** The pool variant of each glTF model, interned so asking for it allocates nothing. */
+const GLTF_VARIANTS = Object.fromEntries(
+  CHARACTER_MODEL_KEYS.map((key) => [key, `gltf:${key}`]),
+) as Record<CharacterModelKey, string>;
+
+/** Where the character factory gets the glTF cast from; tests pass fakes. */
+export type CharacterAssetSource = {
+  /** The loaded characters, or `null` while loading, after a failure or before a request. */
+  ready(): CharacterAssets | null;
+  /** Starts loading if nothing has yet; must not allocate once it has. */
+  request(): void;
+};
+
+/** The session's glTF cast. */
+const LOADED_CHARACTERS: CharacterAssetSource = {
+  ready: characterAssetsReady,
+  request: requestCharacterAssets,
+};
+
+/** The character hooks of {@link EntityFactories}. */
+export type CharacterFactory = Pick<
+  EntityFactories,
+  "character" | "characterVariant" | "dressCharacter"
+>;
+
+/** The loaded cast when a character for `who` should be glTF; asks for it to load otherwise. */
+function gltfAssetsFor(
+  source: CharacterAssetSource,
+  who: CharacterWho | undefined,
+): CharacterAssets | null {
+  const assets = source.ready();
+  if (!assets) source.request();
+  return assets && who && !who.simple ? assets : null;
+}
+
+/**
+ * The character factory (spec §7): the glTF cast, dressed by id, once it has loaded and while the
+ * character is within the detail range; the procedural characters otherwise — before the files
+ * arrive, after they fail, and far away at "laag". Asking for a character starts the loading.
+ *
+ * @param source - The glTF cast; the session's by default.
+ * @returns The hooks for {@link EntityFactories}.
+ */
+export function createCharacterFactory(
+  source: CharacterAssetSource = LOADED_CHARACTERS,
+): CharacterFactory {
+  return {
+    character(look, vestHue, who) {
+      const assets = gltfAssetsFor(source, who);
+      if (!assets || !who) return createCharacter(look, vestHue);
+      const appearance = appearanceOf(look, who.id, vestHue);
+      return createGltfCharacter(assets, appearance, LOOKS[look].height);
+    },
+    characterVariant(look, vestHue, who) {
+      if (!gltfAssetsFor(source, who))
+        return vestHue === undefined ? look : null;
+      return GLTF_VARIANTS[modelOf(look, who.id)];
+    },
+    dressCharacter(character, look, vestHue, who) {
+      if (!isGltfCharacter(character)) return;
+      const appearance = appearanceOf(look, who.id, vestHue);
+      character.dress(appearance, LOOKS[look].height);
     },
   };
 }

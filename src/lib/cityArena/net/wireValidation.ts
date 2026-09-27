@@ -13,8 +13,9 @@ import {
   MAX_WIRE_WEAPON_INDEX,
   type Snapshot,
 } from "./snapshotWire";
-import { VEHICLE_KINDS } from "../sim/vehicle";
+import { healthMaxOf, VEHICLE_KINDS } from "../sim/vehicle";
 import type { InputFrame } from "./wire";
+import { entryAt } from "./wire";
 import { MISSION_COMMANDS } from "./wire";
 import { MissionProfileSchema } from "../missions/validation";
 import { VehicleBoardingSchema } from "./boardingValidation";
@@ -167,14 +168,16 @@ export function isSnapshot(value: unknown): value is Snapshot {
   )
     return false;
   if (
-    snapshot.v.some(
-      (row) =>
+    snapshot.v.some((row) => {
+      const kind = entryAt(VEHICLE_KINDS, row[1] ?? 0);
+      return (
         !integer(row[1], 0, VEHICLE_KINDS.length - 1) ||
         !integer(row[4], 0, 255) ||
-        !integer(row[7], 0, 10_000) ||
+        !integer(row[7], 0, healthMaxOf(kind)) ||
         !integer(row[8], 0, 1) ||
-        !integer(row[9], 0, 255),
-    )
+        !integer(row[9], 0, 255)
+      );
+    })
   )
     return false;
   if (

@@ -7,7 +7,7 @@
 import { Group, type Object3D, type PerspectiveCamera } from "three";
 import type { Scene } from "../render/renderScene";
 import type { CameraMode } from "./cameraRig";
-import { createCharacter } from "./characters";
+import { GLTF_LOD_DISTANCE_M, createCharacterFactory } from "./characters";
 import { createContacts3d } from "./contacts3d";
 import { createDestruction3d, type Destruction3d } from "./destruction3d";
 import { createEffects3d, type Effects3d } from "./effects3d";
@@ -24,9 +24,9 @@ import { createVehicle3d } from "./vehicles3d";
 import type { ViewModelInput } from "./viewmodel";
 import { createViewModelPass, type ViewModelPass } from "./viewModelPass";
 
-/** The real models: rigged characters, vehicles and pickups. */
+/** The real models: the glTF cast with its procedural fallback, vehicles and pickups. */
 export const REAL_ENTITY_FACTORIES: EntityFactories = {
-  character: createCharacter,
+  ...createCharacterFactory(),
   vehicle: createVehicle3d,
   pickup: createPickup3d,
 };
@@ -141,8 +141,10 @@ export function createCast3d(
     update(frame, focus, camera, contacts = NO_CONTACTS) {
       view.firstPerson = frame.mode === "first";
       view.aim = frame.aim;
+      view.characterDetailM =
+        frame.quality === "low" ? GLTF_LOD_DISTANCE_M : undefined;
       entities.update(frame.scene, frame.dt, focus, view);
-      street.update(contacts, frame.scene, focus);
+      street.update(contacts, frame.scene, focus, frame.dt);
       const drawn = handsInput(handsScratch, entities, frame);
       fx = fxFor(object, fx, frame.quality);
       // Your own flame moves to the hands' barrel only while the hands are there to show it.
