@@ -33,6 +33,7 @@ export function createTestMaterials(): WorldMaterials {
     streetPaint: new MeshLambertMaterial({ vertexColors: true }),
     treeTrunk: plain(),
     canopies: [plain(), plain()],
+    canopy: new MeshLambertMaterial({ vertexColors: true }),
     lampPole: plain(),
     lampHead: plain(),
     lampGlow: new PointsMaterial(),

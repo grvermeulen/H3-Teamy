@@ -103,6 +103,11 @@ export type WorldMaterials = {
   treeTrunk: MeshLambertMaterial;
   /** The two canopy greens, alternated by tree id: a lighter yellow-green, then a deeper blue-green. */
   canopies: readonly [MeshLambertMaterial, MeshLambertMaterial];
+  /**
+   * A detailed cell's crowns: white, shaded by the crown's vertex colours and tinted per tree by
+   * its instance colour.
+   */
+  canopy: MeshLambertMaterial;
   /** Galvanised street metal: lamp poles, and the bus shelter's frame. */
   lampPole: MeshLambertMaterial;
   /** A lamp head, emissive in the lamp colour so it shines without a light. */
@@ -213,6 +218,7 @@ export function createWorldMaterials(
     ),
     treeTrunk: matte(TRUNK_COLOUR),
     canopies: [matte(CANOPY_LIGHT), matte(CANOPY_DEEP)],
+    canopy: new MeshLambertMaterial({ vertexColors: true }),
     ...createLampMaterials(),
     bench: matte(FURNITURE_FILL.bench),
     shelterGlass: new MeshLambertMaterial({
@@ -237,6 +243,7 @@ function listWorldMaterials(
     materials.streetPaint,
     materials.treeTrunk,
     ...materials.canopies,
+    materials.canopy,
     materials.lampPole,
     materials.lampHead,
     materials.lampGlow,

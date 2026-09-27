@@ -105,7 +105,11 @@ import { pushStreetClutter } from "./streetClutter";
 import { buildBikes } from "./clutterShapes";
 import { TEXTURE_REPEAT_M } from "./textures";
 import { tileBuildingsIn, tileRoadsIn } from "./tileIndex";
-import { buildTreeLayer, type TreeInput } from "./treeMesh";
+import {
+  buildDetailedTreeLayer,
+  buildTreeLayer,
+  type TreeInput,
+} from "./treeMesh";
 import {
   GROUND_RENDER_ORDER,
   type GroundLayer,
@@ -758,11 +762,9 @@ function addScenery(
   sync: (pieces?: Iterable<FurnitureInstance>) => void;
 } {
   const { cell } = input;
-  const trees = buildTreeLayer(
-    ownedTrees(cell, regions),
-    input.materials,
-    origin,
-  );
+  const layer =
+    input.detail === "full" ? buildDetailedTreeLayer : buildTreeLayer;
+  const trees = layer(ownedTrees(cell, regions), input.materials, origin);
   const pieces = [
     ...ownedFurniture(cell, regions),
     ...streetLamps(cell, regions, input.detail === "full"),
