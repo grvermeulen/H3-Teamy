@@ -81,9 +81,11 @@ const WHEEL_EASE_S = 0.07;
  * Share of the wheel's turn the forearms take back: the fists ride the rim, the forearms keep
  * pointing mostly toward the elbows instead of swinging round with it.
  */
-const FOREARM_HOLD_SHARE = 0.65;
+const FOREARM_HOLD_SHARE = 0.85;
 /** The hands grip the rim at ten to two: this far either side of its top, radians. */
 const GRIP_ANGLE_RAD = Math.PI / 3;
+/** The hands are drawn a little under life size: this close to the eye they would crowd the view. */
+const HAND_SCALE = 0.75;
 /** The elbows the forearms point to: ahead of, below and either side of the eye, metres. */
 const ELBOW_AHEAD_M = 0.04;
 const ELBOW_DROP_M = 0.58;
@@ -225,6 +227,7 @@ function createHand(
     characterMaterials().body,
   );
   object.position.copy(grip);
+  object.scale.setScalar(HAND_SCALE);
   const rest = new Quaternion().setFromRotationMatrix(
     new Matrix4().lookAt(elbow, grip, up),
   );

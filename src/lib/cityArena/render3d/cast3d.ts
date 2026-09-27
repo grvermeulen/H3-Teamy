@@ -22,7 +22,11 @@ import { createPickup3d } from "./pickups3d";
 import type { OverlayPass, RenderQuality } from "./renderer3d";
 import { createVehicle3d } from "./vehicles3d";
 import type { ViewModelInput } from "./viewmodel";
-import { createViewModelPass, type ViewModelPass } from "./viewModelPass";
+import {
+  createViewModelPass,
+  type CockpitPose,
+  type ViewModelPass,
+} from "./viewModelPass";
 
 /** The real models: rigged characters, vehicles and pickups. */
 export const REAL_ENTITY_FACTORIES: EntityFactories = {
@@ -60,13 +64,13 @@ export type Cast3d = {
   object: Object3D;
   /**
    * Syncs the cast and the effects to a frame, advances the destruction and poses the
-   * first-person hands.
+   * first-person hands, or the cockpit of the car driven in first person.
    *
    * @param frame - The frame's scene, time step, camera mode, aim and quality.
    * @param focus - The camera focus, world metres: what the draw distances are measured from.
    * @param camera - The city camera, already placed for this frame.
    * @param contacts - The mission contacts to stand in the street (the mission markers').
-   * @returns The hands' pass to draw over the city, or `null` when they are hidden.
+   * @returns The hands' or cockpit's pass to draw over the city, or `null` when neither shows.
    */
   update(
     frame: CastFrame,
@@ -94,6 +98,47 @@ function fxFor(parent: Group, current: Fx | null, quality: RenderQuality): Fx {
   const destruction = createDestruction3d(effects.smoke);
   parent.add(effects.object, destruction.object);
   return { effects, destruction };
+}
+
+/**
+ * Fills the cockpit's reused pose from the car the local player drives in first person; `null`
+ * while on foot, dead, in third person or in a wreck (the death camera or the car's own body
+ * takes over).
+ */
+function cockpitPose(
+  pose: CockpitPose,
+  entities: EntitySync,
+  frame: CastFrame,
+): CockpitPose | null {
+  const car = entities.local.vehicle;
+  if (frame.mode !== "first" || !car || car.wrecked) return null;
+  pose.kind = car.kind;
+  pose.colour = car.colour;
+  pose.steer = car.steer;
+  pose.speedMps = car.speedMps;
+  pose.siren = car.siren;
+  pose.x = car.x;
+  pose.y = car.y;
+  pose.heading = car.heading;
+  pose.tick = frame.scene.tick;
+  pose.dt = frame.dt;
+  return pose;
+}
+
+/** A cockpit pose to reuse every frame. */
+function createCockpitPose(): CockpitPose {
+  return {
+    kind: "sedan",
+    colour: 0,
+    steer: 0,
+    speedMps: 0,
+    siren: false,
+    tick: 0,
+    dt: 0,
+    x: 0,
+    y: 0,
+    heading: 0,
+  };
 }
 
 /** Fills the hands' reused input from the entity sync's local player; `null` hides them. */
@@ -135,6 +180,7 @@ export function createCast3d(
     speed: 0,
     dt: 0,
   };
+  const cockpitScratch = createCockpitPose();
   let fx: Fx | null = null;
   return {
     object,
@@ -149,7 +195,8 @@ export function createCast3d(
       fx.effects.sync(frame.scene, focus, drawn !== null);
       fx.effects.update(frame.dt);
       fx.destruction.update(frame.dt);
-      return hands.update(camera, drawn);
+      const cockpit = cockpitPose(cockpitScratch, entities, frame);
+      return hands.update(camera, drawn, cockpit);
     },
     destruction: () => fx?.destruction ?? null,
     dispose() {

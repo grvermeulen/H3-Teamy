@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Scene } from "../render/renderScene";
 import { createArenaPlayer } from "../sim/roster";
 import type { ArenaPlayerState } from "../sim/types";
+import { createVehicle } from "../sim/vehicle";
 import {
   EFFECT_PARTICLES,
   REAL_ENTITY_FACTORIES,
@@ -15,6 +16,7 @@ import { createEffects3d } from "./effects3d";
 import type { EntityFactories } from "./entities";
 import { createPickup3d } from "./pickups3d";
 import { createVehicle3d } from "./vehicles3d";
+import type { ViewModelPass } from "./viewModelPass";
 
 const effectsMade = vi.hoisted(
   () =>
@@ -88,9 +90,20 @@ function fakeFactories(): EntityFactories & {
     dispose: vi.fn(),
   });
   return {
-    character: vi.fn(() => ({ ...poseable(), muzzleWorld: vi.fn(() => false) })),
+    character: vi.fn(() => ({
+      ...poseable(),
+      muzzleWorld: vi.fn(() => false),
+    })),
     vehicle: vi.fn(poseable),
     pickup: vi.fn(poseable),
+  };
+}
+
+/** A hands-and-cockpit pass that records what it was asked to show. */
+function fakePass(): ViewModelPass & { update: ReturnType<typeof vi.fn> } {
+  return {
+    update: vi.fn(() => null),
+    dispose: vi.fn(),
   };
 }
 
@@ -189,6 +202,58 @@ describe("createCast3d", () => {
     const dead = frameOf({ mode: "first" });
     dead.scene.players = [you({ diedAtTick: 80 })];
     expect(cast.update(dead, FOCUS, camera)).toBeNull();
+  });
+
+  it("asks for the cockpit at the wheel in first person, the hands on foot, and neither when dead", () => {
+    const pass = fakePass();
+    const cast = createCast3d(fakeFactories(), pass);
+    const camera = new PerspectiveCamera();
+    const driving = frameOf({ mode: "first" });
+    driving.scene.players = [you({ vehicleId: 9, driveSteer: 0.5 })];
+    driving.scene.vehicles = [
+      { ...createVehicle(9, "van", [3, 4], 0.3, 6), velocityX: 5 },
+    ];
+    cast.update(driving, FOCUS, camera);
+    expect(pass.update).toHaveBeenLastCalledWith(camera, null, {
+      kind: "van",
+      colour: 6,
+      steer: 0.5,
+      speedMps: expect.any(Number),
+      siren: false,
+      tick: 90,
+      dt: 0.02,
+      x: 3,
+      y: 4,
+      heading: 0.3,
+    });
+    cast.update(frameOf({ mode: "first" }), FOCUS, camera);
+    expect(pass.update).toHaveBeenLastCalledWith(
+      camera,
+      expect.objectContaining({ weapon: "pistol" }),
+      null,
+    );
+    const dead = frameOf({ mode: "first" });
+    dead.scene.players = [you({ diedAtTick: 80 })];
+    cast.update(dead, FOCUS, camera);
+    expect(pass.update).toHaveBeenLastCalledWith(camera, null, null);
+  });
+
+  it("drives from the chase camera without a cockpit, and from a wreck without one", () => {
+    const pass = fakePass();
+    const cast = createCast3d(fakeFactories(), pass);
+    const camera = new PerspectiveCamera();
+    const driving = frameOf();
+    driving.scene.players = [you({ vehicleId: 9 })];
+    driving.scene.vehicles = [createVehicle(9, "sedan", [3, 4], 0, 1)];
+    cast.update(driving, FOCUS, camera);
+    expect(pass.update).toHaveBeenLastCalledWith(camera, null, null);
+    const wreck = frameOf({ mode: "first" });
+    wreck.scene.players = [you({ vehicleId: 9 })];
+    wreck.scene.vehicles = [
+      { ...createVehicle(9, "sedan", [3, 4], 0, 1), wrecked: true },
+    ];
+    cast.update(wreck, FOCUS, camera);
+    expect(pass.update).toHaveBeenLastCalledWith(camera, null, null);
   });
 
   it("leaves your own muzzle flame to the hands in first person", () => {

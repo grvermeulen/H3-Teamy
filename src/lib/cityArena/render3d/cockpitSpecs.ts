@@ -72,6 +72,10 @@ export type CockpitSpec = {
    */
   dash: { heightM: number; aheadM: number };
   bonnet: CockpitBonnet;
+  /**
+   * The windscreen. For the tank: the deck its two vision blocks stand on, their tops, their
+   * spread either side of the eye, and the glacis's foot ahead of the eye.
+   */
   glass: CockpitGlass;
   /** Where the cab's roof and doors end behind the eye, at the rear window's frame, metres. */
   cabinBackM: number;
@@ -218,17 +222,17 @@ export const COCKPITS: Readonly<Record<VehicleKind, CockpitSpec>> = {
     frame: "open",
   },
   tank: {
-    eyeHeightM: 1.72,
-    eyeForwardM: 0.95,
+    eyeHeightM: 1.75,
+    eyeForwardM: 0.25,
     eyeLeftM: 0.45,
     wheel: null,
-    dash: { heightM: 1.5, aheadM: 0.42 },
+    dash: { heightM: 1.5, aheadM: 0.55 },
     bonnet: { lengthM: 0.93, widthM: 1.74, heightM: 1.38, dropM: 0.98 },
     glass: {
-      baseM: 1.5,
-      headerM: 1.62,
-      pillarHalfM: 0.3,
-      aheadM: 0.42,
+      baseM: 1.38,
+      headerM: 1.5,
+      pillarHalfM: 0.28,
+      aheadM: 1.1,
       rakeM: 0,
     },
     cabinBackM: 0,

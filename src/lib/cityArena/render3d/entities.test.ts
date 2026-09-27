@@ -588,6 +588,85 @@ describe("createEntitySync: vehicles", () => {
     ]);
   });
 
+  it("hides your own whole car in first person, and shows it in third person or as a wreck", () => {
+    const { sync, vehicles } = syncOf();
+    const scene = (wrecked: boolean): Scene =>
+      sceneOf({
+        players: [
+          player(1, 0, 0, { vehicleId: 50 }),
+          player(7, 20, 0, { vehicleId: 51 }),
+        ],
+        vehicles: [car(50, 0, 0, { wrecked }), car(51, 20, 0)],
+      });
+    sync.update(scene(false), FRAME_S, ORIGIN, FIRST);
+    const [yours, theirs] = vehicles;
+    expect(yours!.object.visible).toBe(false);
+    expect(theirs!.object.visible).toBe(true);
+    sync.update(scene(false), FRAME_S, ORIGIN, THIRD);
+    expect(yours!.object.visible).toBe(true);
+    sync.update(scene(true), FRAME_S, ORIGIN, FIRST);
+    expect(yours!.object.visible).toBe(true);
+    expect(sync.local.vehicle).toMatchObject({ id: 50, wrecked: true });
+  });
+
+  it("tells the cockpit your car's kind, paint, steering, speed, pose and siren", () => {
+    const { sync, vehicles } = syncOf();
+    const yours = car(50, 8, 9, {
+      kind: "police",
+      colour: 4,
+      heading: 0.7,
+      velocityX: 6,
+      velocityY: 2,
+    });
+    const scene = sceneOf({
+      players: [player(1, 8, 9, { vehicleId: 50, driveSteer: -0.6 })],
+      vehicles: [yours],
+      sirenVehicleIds: new Set([50]),
+    });
+    sync.update(scene, FRAME_S, ORIGIN, FIRST);
+    expect(sync.local.vehicle).toEqual({
+      id: 50,
+      kind: "police",
+      colour: 4,
+      steer: vehicles[0]!.input!.steer,
+      speedMps: forwardSpeed(yours),
+      heading: 0.7,
+      x: 8,
+      y: 9,
+      siren: true,
+      wrecked: false,
+    });
+    expect(sync.local.vehicle!.steer).toBe(-0.6);
+    expect(sync.local.onFoot).toBe(false);
+  });
+
+  it("has no car for the cockpit on foot, when dead, or when another player drives", () => {
+    const { sync } = syncOf();
+    sync.update(
+      sceneOf({ players: [player(1, 0, 0)], vehicles: [car(50, 0, 0)] }),
+      FRAME_S,
+      ORIGIN,
+      FIRST,
+    );
+    expect(sync.local.vehicle).toBeNull();
+    const dead = player(1, 0, 0, { vehicleId: 50, diedAtTick: 280 });
+    sync.update(
+      sceneOf({ players: [dead], vehicles: [car(50, 0, 0)] }),
+      FRAME_S,
+      ORIGIN,
+      FIRST,
+    );
+    expect(sync.local.vehicle).toBeNull();
+    const friend = player(7, 0, 0, { vehicleId: 50 });
+    sync.update(
+      sceneOf({ players: [friend], vehicles: [car(50, 0, 0)] }),
+      FRAME_S,
+      ORIGIN,
+      FIRST,
+    );
+    expect(sync.local.vehicle).toBeNull();
+  });
+
   it("draws vehicles within 320 m and rebuilds one whose kind changed under its id", () => {
     const { sync, vehicles } = syncOf();
     const scene = sceneOf({

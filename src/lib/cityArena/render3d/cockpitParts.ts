@@ -8,10 +8,12 @@
  */
 import {
   BufferGeometry,
+  Color,
   Euler,
   Float32BufferAttribute,
   Matrix4,
   Quaternion,
+  TorusGeometry,
   Vector3,
 } from "three";
 import type { CockpitSpec, CockpitWheel } from "./cockpitSpecs";
@@ -36,7 +38,7 @@ const EXHAUST_BLACK = 0x202225;
 /** The tank's hatch coaming and lid. */
 const HATCH_OLIVE = 0x3a4628;
 /** The tank's vision blocks. */
-const VISION_GLASS = 0x4f7f8c;
+const VISION_GLASS = 0x1d3036;
 /** The steering wheel's rim. */
 const RIM_BLACK = 0x18181a;
 /** Spokes, hub and column. */
@@ -89,9 +91,11 @@ const DIAL_TICKS = 9;
 export const DIAL_SWEEP_RAD = (240 * Math.PI) / 180;
 /** Faceting of round parts. */
 const ROUND_SIDES = 14;
-/** The wheel's rim: segments around, and section. */
-const RIM_SEGMENTS = 16;
-const RIM_M = 0.028;
+/** The wheel's rim section. */
+const RIM_M = 0.03;
+/** Rings (the rim, the hatch coaming): facets around and round the tube. */
+const RING_SEGMENTS = 24;
+const RING_TUBE_SIDES = 6;
 /** Spoke section, hub radius and depth, column radius and length. */
 const SPOKE_M = 0.024;
 const HUB_RADIUS_M = 0.055;
@@ -455,54 +459,64 @@ function openShell(spec: CockpitSpec): BufferGeometry[] {
   return parts;
 }
 
-/** Segments of the tank's hatch coaming ring. */
-const COAMING_SEGMENTS = 14;
 /** Section of the coaming ring. */
 const COAMING_M = 0.07;
-/** The vision blocks stand this far either side of straight ahead on the ring, radians. */
-const VISION_BLOCK_ANGLE_RAD = 0.5;
-/** A vision block's size: through the ring, up, across. */
-const VISION_BLOCK_SIZE: Vec3 = [0.1, 0.12, 0.2];
-/** The glass slit on a vision block's inner face. */
-const VISION_SLIT_SIZE: Vec3 = [0.012, 0.06, 0.15];
+/** A vision block's size: along the car, up, across; its bottom stands on the deck. */
+const VISION_BLOCK_SIZE: Vec3 = [0.1, 0.12, 0.16];
+/** The vision blocks stand this far ahead of the eye, on the deck in front of the hatch. */
+const VISION_BLOCK_AHEAD_M = 0.78;
+/** The glass slit on a vision block's face toward the driver. */
+const VISION_SLIT_SIZE: Vec3 = [0.012, 0.035, 0.11];
 /** The open hatch lid behind the driver: its size, and how far it leans back from upright. */
 const HATCH_LID_SIZE: Vec3 = [0.05, 0.62, 0.62];
 const HATCH_LID_LEAN_RAD = 0.35;
 
-/** A point on a circle of `radius` round the eye at `height`, `angle` from straight ahead. */
-function aroundEye(
-  eye: Vec3,
+/**
+ * A faceted ring about `axis` through `at`, for the steering wheel's rim and the hatch coaming.
+ * Non-indexed with flat normals and one colour, so it merges with the block and rod parts.
+ */
+function ringPart(
   radius: number,
-  angle: number,
-  height: number,
-): Vec3 {
-  return [
-    eye[0] + Math.cos(angle) * radius,
-    height,
-    eye[2] + Math.sin(angle) * radius,
-  ];
+  tube: number,
+  axis: "x" | "y",
+  at: Vec3,
+  colour: number,
+): BufferGeometry {
+  const torus = new TorusGeometry(radius, tube, RING_TUBE_SIDES, RING_SEGMENTS);
+  const geometry = torus.toNonIndexed();
+  torus.dispose();
+  geometry.deleteAttribute("uv");
+  geometry.deleteAttribute("normal");
+  if (axis === "x") geometry.rotateY(Math.PI / 2);
+  else geometry.rotateX(Math.PI / 2);
+  geometry.translate(at[0], at[1], at[2]);
+  const { r, g, b } = new Color(colour);
+  const count = geometry.getAttribute("position").count;
+  const colours = new Float32Array(count * 3);
+  for (let index = 0; index < count; index++) colours.set([r, g, b], index * 3);
+  geometry.setAttribute("color", new Float32BufferAttribute(colours, 3));
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
-/** The two vision blocks on the coaming's front, each framed round a glass slit facing the eye. */
+/** The two vision blocks on the deck ahead of the hatch, each with a glass slit toward the eye. */
 function visionBlocks(spec: CockpitSpec): BufferGeometry[] {
   const eye = eyeOf(spec);
-  const radius = spec.dash.aheadM;
-  const top = spec.glass.headerM - VISION_BLOCK_SIZE[1] / 2;
+  const x = eye[0] + VISION_BLOCK_AHEAD_M;
+  const y = spec.glass.baseM + VISION_BLOCK_SIZE[1] / 2;
   return [-1, 1].flatMap((side) => {
-    const angle = side * VISION_BLOCK_ANGLE_RAD;
+    const z = eye[2] + side * spec.glass.pillarHalfM;
     return [
       block({
         size: VISION_BLOCK_SIZE,
-        at: aroundEye(eye, radius, angle, top),
+        at: [x, y, z],
         colour: HATCH_OLIVE,
         chamfer: BEAM_CHAMFER,
-        rotation: [0, -angle, 0],
       }),
       block({
         size: VISION_SLIT_SIZE,
-        at: aroundEye(eye, radius - VISION_BLOCK_SIZE[0] / 2, angle, top),
+        at: [x - VISION_BLOCK_SIZE[0] / 2, y, z],
         colour: VISION_GLASS,
-        rotation: [0, -angle, 0],
         gradient: 0,
       }),
     ];
@@ -514,38 +528,28 @@ function hatchShell(spec: CockpitSpec): BufferGeometry[] {
   const eye = eyeOf(spec);
   const radius = spec.dash.aheadM;
   const ringY = spec.dash.heightM - COAMING_M / 2;
-  const step = (Math.PI * 2) / COAMING_SEGMENTS;
-  const parts = visionBlocks(spec);
-  for (let index = 0; index < COAMING_SEGMENTS; index++)
-    parts.push(
-      beam(
-        aroundEye(eye, radius, index * step, ringY),
-        aroundEye(eye, radius, (index + 1) * step, ringY),
-        COAMING_M,
-        HATCH_OLIVE,
-      ),
-    );
-  parts.push(
+  return [
+    ...visionBlocks(spec),
+    ringPart(radius, COAMING_M / 2, "y", [eye[0], ringY, eye[2]], HATCH_OLIVE),
     block({
       size: HATCH_LID_SIZE,
-      at: aroundEye(
-        eye,
-        radius + HATCH_LID_SIZE[0],
-        Math.PI,
+      at: [
+        eye[0] - radius - HATCH_LID_SIZE[0],
         ringY + HATCH_LID_SIZE[1] / 2,
-      ),
+        eye[2],
+      ],
       colour: HATCH_OLIVE,
       chamfer: BEAM_CHAMFER,
       rotation: [0, 0, HATCH_LID_LEAN_RAD],
     }),
-  );
-  return parts;
+  ];
 }
 
 /** Where the tank driver's hands hold the grips, ahead of the eye and either side of it. */
-const GRIP_AHEAD_M = 0.36;
-const GRIP_DROP_M = 0.2;
+const GRIP_AHEAD_M = 0.45;
+const GRIP_DROP_M = 0.24;
 const GRIP_SIDE_M = 0.2;
+
 /** A grip bar rises this far to the hand from the hatch's depths, leaning forward by this much. */
 const GRIP_RISE_M = 0.34;
 const GRIP_LEAN_M = 0.11;
@@ -674,12 +678,7 @@ export function wheelGeometry(wheel: CockpitWheel): BufferGeometry {
     Math.cos(angle) * radius,
     Math.sin(angle) * radius,
   ];
-  const step = (Math.PI * 2) / RIM_SEGMENTS;
-  const parts: BufferGeometry[] = [];
-  for (let index = 0; index < RIM_SEGMENTS; index++)
-    parts.push(
-      beam(rimAt(index * step), rimAt((index + 1) * step), RIM_M, RIM_BLACK),
-    );
+  const parts = [ringPart(radius, RIM_M / 2, "x", [0, 0, 0], RIM_BLACK)];
   for (const angle of [Math.PI / 2, Math.PI, (Math.PI * 3) / 2])
     parts.push(beam([0, 0, 0], rimAt(angle), SPOKE_M, HUB_GREY));
   parts.push(

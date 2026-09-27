@@ -73,6 +73,23 @@ export type EntityView = {
   aim: number;
 };
 
+/** The car the local player drives, as the first-person cockpit needs it. */
+export type LocalVehicle = {
+  id: number;
+  kind: VehicleKind;
+  colour: number;
+  /** The steering its front wheels show, −1…1, positive to the right. */
+  steer: number;
+  /** Speed along the heading, m/s; negative in reverse. */
+  speedMps: number;
+  heading: number;
+  /** World metres. */
+  x: number;
+  y: number;
+  siren: boolean;
+  wrecked: boolean;
+};
+
 /** The local player as the first-person view model needs it, rewritten by every update. */
 export type LocalCharacter = {
   /** In the scene, alive and on foot: the only time the hands show. */
@@ -82,6 +99,8 @@ export type LocalCharacter = {
   firedTick: number | null;
   /** Smoothed ground speed, m/s. */
   speed: number;
+  /** The car the player drives while alive, drawn or not; `null` on foot or dead. */
+  vehicle: LocalVehicle | null;
 };
 
 /** The 3D cast. */
@@ -142,6 +161,8 @@ type Frame = {
   readonly factories: EntityFactories;
   readonly pools: Pools;
   readonly local: LocalCharacter;
+  /** Reused for `local.vehicle` while the local player drives. */
+  readonly localVehicle: LocalVehicle;
   readonly muzzles: EffectState[];
   readonly pose: PoseInput;
   readonly vehicleInput: Vehicle3dInput;
@@ -393,7 +414,41 @@ function turretYawOf(
   return driver.id === scene.localPlayerId ? frame.view.aim : driver.facing;
 }
 
-/** Syncs one car; its hull is turned before `update`, which the tank's turret relies on. */
+/**
+ * Copies the car the local player drives into `local.vehicle`, from the input its model just got.
+ * In first person its own body is hidden (the cockpit shows instead) unless it is a wreck.
+ */
+function describeLocalVehicle(
+  frame: Frame,
+  car: VehicleState,
+  input: Vehicle3dInput,
+): void {
+  const vehicle = frame.localVehicle;
+  vehicle.id = car.id;
+  vehicle.kind = car.kind;
+  vehicle.colour = car.colour;
+  vehicle.steer = input.steer;
+  vehicle.speedMps = input.speed;
+  vehicle.heading = car.heading;
+  vehicle.x = car.x;
+  vehicle.y = car.y;
+  vehicle.siren = input.siren;
+  vehicle.wrecked = car.wrecked;
+  frame.local.vehicle = vehicle;
+}
+
+/** True when the living local player drives `driver`'s car. */
+function isLocalDriver(
+  scene: Scene,
+  driver: ArenaPlayerState | undefined,
+): boolean {
+  return driver?.id === scene.localPlayerId && driver.diedAtTick === null;
+}
+
+/**
+ * Syncs one car; its hull is turned before `update`, which the tank's turret relies on. The local
+ * player's own car hides in first person while it is whole: the cockpit is drawn instead.
+ */
 function syncVehicle(frame: Frame, scene: Scene, car: VehicleState): void {
   if (!within(frame.focus, car.x, car.y, VEHICLE_DRAW_DISTANCE_M)) return;
   const slot = vehicleSlot(frame, car);
@@ -412,6 +467,9 @@ function syncVehicle(frame: Frame, scene: Scene, car: VehicleState): void {
   input.turretYaw = turretYawOf(frame, scene, car, driver);
   input.dt = frame.dt;
   slot.item.update(input);
+  const own = isLocalDriver(scene, driver);
+  if (own) describeLocalVehicle(frame, car, input);
+  object.visible = !(own && frame.view.firstPerson && !car.wrecked);
 }
 
 /** A pickup's slot, rebuilt when a different kind appears under the same id. */
@@ -451,12 +509,37 @@ function createPools(group: Group): Pools {
   };
 }
 
+/** The local player's reused records: on foot with bare fists, no car. */
+function createLocal(): Pick<Frame, "local" | "localVehicle"> {
+  return {
+    local: {
+      onFoot: false,
+      weapon: "fist",
+      firedTick: null,
+      speed: 0,
+      vehicle: null,
+    },
+    localVehicle: {
+      id: 0,
+      kind: "sedan",
+      colour: 0,
+      steer: 0,
+      speedMps: 0,
+      heading: 0,
+      x: 0,
+      y: 0,
+      siren: false,
+      wrecked: false,
+    },
+  };
+}
+
 /** A sync's frame with its scratch inputs, all reused every frame. */
 function createFrame(factories: EntityFactories, group: Group): Frame {
   return {
     factories,
     pools: createPools(group),
-    local: { onFoot: false, weapon: "fist", firedTick: null, speed: 0 },
+    ...createLocal(),
     muzzles: [],
     pose: {
       speed: 0,
@@ -496,6 +579,7 @@ function createFrame(factories: EntityFactories, group: Group): Frame {
 function syncScene(frame: Frame, scene: Scene): void {
   collectFreshMuzzles(scene.effects, scene.tick, frame.muzzles);
   frame.local.onFoot = false;
+  frame.local.vehicle = null;
   for (const player of scene.players) syncPlayer(frame, scene, player);
   for (const ped of scene.peds) syncPed(frame, scene, ped);
   for (const cop of scene.cops) syncCop(frame, scene, cop);
