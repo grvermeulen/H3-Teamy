@@ -31,6 +31,13 @@ const CREDITS_FILE = path.join(AUDIO_DIR, "CREDITS.md");
 const ENDPOINT = "https://api.elevenlabs.io/v1/sound-generation";
 /** What the clip table expects: MP3, 44.1 kHz, 96 kbps. */
 const OUTPUT_FORMAT = "mp3_44100_96";
+/**
+ * The ambience beds are long, quiet noise-like loops mixed far under everything else: 64 kbps
+ * keeps a 22 s loop under the per-clip size cap without anyone hearing the difference.
+ */
+const AMBIENCE_FORMAT = "mp3_44100_64";
+/** Seconds of an ambience loop (spec §6: 20–30 s, so the repeat is not noticed). */
+const AMBIENCE_SECONDS = 22;
 /** How closely the model follows the prompt; higher is more literal, lower more creative. */
 const PROMPT_INFLUENCE = 0.4;
 /** For clips that must be one specific thing — a siren, a gunshot — the prompt is followed closely. */
@@ -41,7 +48,7 @@ const PAUSE_MS = 1500;
 /** What to ask for, how long, and — for clips that must be one specific thing — how literally. */
 const PROMPTS: Record<
   ClipName,
-  { text: string; seconds: number; influence?: number }
+  { text: string; seconds: number; influence?: number; format?: string }
 > = {
   pistol: {
     text: "single dry 9mm pistol gunshot, close up, short tail, no music, no voices",
@@ -103,6 +110,32 @@ const PROMPTS: Record<
     seconds: 1.2,
     influence: LITERAL_INFLUENCE,
   },
+  "amb-traffic": {
+    text: "evening city street ambience in a small Dutch town, steady distant traffic, cars passing at a moderate distance with soft tyre roll and engine hum, no horns, no sirens, no voices, no music, seamless loop",
+    seconds: AMBIENCE_SECONDS,
+    format: AMBIENCE_FORMAT,
+  },
+  "amb-crowd": {
+    text: "small town square in the evening, many people strolling and talking softly at a distance, an indistinct murmur of voices and footsteps, no clear words, no music, seamless loop",
+    seconds: AMBIENCE_SECONDS,
+    format: AMBIENCE_FORMAT,
+  },
+  "amb-birds": {
+    text: "evening birdsong in a quiet park with tall trees, blackbirds and robins singing, leaves rustling gently, no traffic, no voices, no music, seamless loop",
+    seconds: AMBIENCE_SECONDS,
+    format: AMBIENCE_FORMAT,
+  },
+  "amb-wind": {
+    text: "steady wind blowing across open flat Dutch farmland, soft gusts and grass rustling, no birds, no traffic, no voices, no music, seamless loop",
+    seconds: AMBIENCE_SECONDS,
+    format: AMBIENCE_FORMAT,
+  },
+  "amb-water": {
+    text: "a wide slow river flowing past a grassy riverbank, gentle lapping water, no boats, no birds, no voices, no music, seamless loop",
+    seconds: AMBIENCE_SECONDS,
+    format: AMBIENCE_FORMAT,
+    influence: LITERAL_INFLUENCE,
+  },
 };
 
 /** True when the file exists. */
@@ -118,7 +151,8 @@ async function exists(file: string): Promise<boolean> {
 /** Asks ElevenLabs for one clip and returns the MP3 bytes. */
 async function generate(key: string, clip: ClipName): Promise<Uint8Array> {
   const prompt = PROMPTS[clip];
-  const response = await fetch(`${ENDPOINT}?output_format=${OUTPUT_FORMAT}`, {
+  const format = prompt.format ?? OUTPUT_FORMAT;
+  const response = await fetch(`${ENDPOINT}?output_format=${format}`, {
     method: "POST",
     headers: { "xi-api-key": key, "Content-Type": "application/json" },
     body: JSON.stringify({

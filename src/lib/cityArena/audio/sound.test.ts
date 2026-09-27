@@ -17,6 +17,7 @@ import {
   FOOTSTEP_RATE_JITTER,
   createArenaSound,
   engineRate,
+  type ArenaSound,
 } from "./sound";
 
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
@@ -523,6 +524,14 @@ describe("the city's loops", () => {
     return { player, loops };
   }
 
+  /** A frame of a world with only `traffic` in it: no people, no map. */
+  function streetWith(
+    traffic: TrafficSource[],
+    dt = 0.016,
+  ): Parameters<ArenaSound["updateWorld"]>[0] {
+    return { dt, traffic, peds: [], tiles: [] };
+  }
+
   /** A car `id` at (`x`, `y`) moving at `speedMps`. */
   function car(
     id: number,
@@ -539,10 +548,9 @@ describe("the city's loops", () => {
     const { factory } = createFakeAudioContext();
     const sound = createArenaSound(factory, true, () => player);
     sound.setListener(listenerAt(0, 0, null));
-    sound.updateWorld({
-      dt: 0.016,
-      traffic: [car(1, 20, 0), car(2, -20, 0), car(3, 5, 0, 0)],
-    });
+    sound.updateWorld(
+      streetWith([car(1, 20, 0), car(2, -20, 0), car(3, 5, 0, 0)]),
+    );
     expect(loops.map(({ clip }) => clip)).toEqual(["engine", "engine"]);
     const [right, left] = vi
       .mocked(player.startLoop)
@@ -559,11 +567,11 @@ describe("the city's loops", () => {
     const sound = createArenaSound(factory, true, () => player);
     sound.setListener(listenerAt(0, 0, null));
     const traffic = [car(1, 0, -30, 10, true), car(2, 0, 30)];
-    sound.updateWorld({ dt: 0.016, traffic });
+    sound.updateWorld(streetWith(traffic));
     expect(sound.debug().world.sirens).toEqual([1, null]);
     expect(loops.filter(({ clip }) => clip === "siren")).toHaveLength(1);
     sound.setEnabled(false);
-    sound.updateWorld({ dt: 0.016, traffic });
+    sound.updateWorld(streetWith(traffic));
     expect(
       loops.every(({ loop }) => vi.mocked(loop.stop).mock.calls.length === 1),
     ).toBe(true);
@@ -574,13 +582,13 @@ describe("the city's loops", () => {
     const { factory } = createFakeAudioContext();
     const sound = createArenaSound(factory, true, () => player);
     sound.setListener(listenerAt(0, 0, null));
-    sound.updateWorld({ dt: 0.1, traffic: [car(1, 20, 0)] });
+    sound.updateWorld(streetWith([car(1, 20, 0)], 0.1));
     const loop = loops[0]!.loop;
-    sound.updateWorld({ dt: 0.1, traffic: [car(1, 400, 0)] });
+    sound.updateWorld(streetWith([car(1, 400, 0)], 0.1));
     expect(vi.mocked(loop.setPlacement).mock.lastCall![0].gain).toBe(0);
     expect(loop.stop).not.toHaveBeenCalled();
     for (let frame = 0; frame < 40; frame++)
-      sound.updateWorld({ dt: 0.1, traffic: [car(1, 400, 0)] });
+      sound.updateWorld(streetWith([car(1, 400, 0)], 0.1));
     expect(loop.stop).toHaveBeenCalledTimes(1);
   });
 });

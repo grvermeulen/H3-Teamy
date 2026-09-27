@@ -118,7 +118,7 @@ export type ArenaSound = {
   updateEngine(speedMps: number, active: boolean): void;
   /** Footsteps and tyre squeals from the local player's own motion; call once per frame. */
   updateSelf(motion: SelfMotion): void;
-  /** Moves the city's loops — traffic engines, sirens — for this frame's world; once per frame. */
+  /** Moves the city's loops — traffic, sirens, the ambient bed — for this frame; once per frame. */
   updateWorld(world: WorldSounds): void;
   /** A snapshot of the voices, for the debug seam. */
   debug(): AudioDebugSnapshot;
@@ -185,6 +185,8 @@ type SoundCore = {
   disposed: boolean;
   unlocked: boolean;
   listener: Listener | null;
+  /** Omgevingsgeluid: the ambient bed and the spot sounds. */
+  ambience: boolean;
   engine: OscillatorLike | null;
   engineGain: GainNodeLike | null;
   engineLoop: LoopHandle | null;
@@ -210,6 +212,7 @@ function createCore(
     disposed: false,
     unlocked: false,
     listener: null,
+    ambience: true,
     engine: null,
     engineGain: null,
     engineLoop: null,
@@ -334,7 +337,7 @@ function updateCoreWorld(core: SoundCore, world: WorldSounds): void {
     return;
   }
   try {
-    core.world.update(world, core.listener);
+    core.world.update(world, core.listener, core.ambience);
   } catch (error: unknown) {
     reportAudioError(error, "audio-world");
   }

@@ -11,9 +11,12 @@ import {
   type FrameSoundScene,
 } from "./arenaSound";
 
-/** A scene with the blended `players` and no cars. */
-function sceneWith(players: FrameSoundScene["players"]): FrameSoundScene {
-  return { players, vehicles: [] };
+/** A scene with the blended `players`, and the `vehicles` and `peds` given. */
+function sceneWith(
+  players: FrameSoundScene["players"],
+  extra: Partial<FrameSoundScene> = {},
+): FrameSoundScene {
+  return { players, vehicles: [], peds: [], world: { tiles: [] }, ...extra };
 }
 
 /** A sound whose every control is a spy. */
@@ -129,7 +132,7 @@ describe("trafficSources", () => {
     ]);
   });
 
-  it("hands the traffic and the frame time to the sound", () => {
+  it("hands the traffic, the living people and the frame time to the sound", () => {
     const state = stateWith(false);
     const runtime: FrameSoundRuntime = {
       sound: spySound(),
@@ -137,15 +140,22 @@ describe("trafficSources", () => {
       netplay: { kind: "offline", playerId: 0 },
     };
     const car = { ...createVehicle(7, "sedan", [4, 0], 0, 0), velocityX: 3 };
+    const walker = { id: 1, x: 2, y: 2, mode: "walk" };
+    const body = { id: 2, x: 3, y: 3, mode: "dead" };
     updateFrameSound(
       runtime,
-      { players: [], vehicles: [car], sirenVehicleIds: new Set() },
+      sceneWith([], {
+        vehicles: [car],
+        peds: [walker, body] as unknown as FrameSoundScene["peds"],
+      }),
       null,
       0.02,
     );
     expect(runtime.sound.updateWorld).toHaveBeenCalledWith({
       dt: 0.02,
       traffic: [{ id: 7, x: 4, y: 0, speedMps: 3, siren: false }],
+      peds: [walker],
+      tiles: [],
     });
   });
 });

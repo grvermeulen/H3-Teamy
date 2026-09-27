@@ -3,7 +3,7 @@
 /**
  * The runtime's per-frame hand-over to the sound layer (immersion spec §6): where the ears are —
  * the local player or the car they drive, facing the 3D camera or north — the local player's
- * own motion for footsteps and skids, and the traffic that can be heard around them.
+ * own motion for footsteps and skids, and the traffic, people and map that can be heard around them.
  */
 
 import type { SelfMotion } from "@/lib/cityArena/audio/selfSounds";
@@ -19,8 +19,8 @@ import type { Runtime } from "./arenaRuntime";
 /** The slice of the scene the frame's sound reads. */
 export type FrameSoundScene = Pick<
   Scene,
-  "players" | "vehicles" | "sirenVehicleIds"
->;
+  "players" | "vehicles" | "sirenVehicleIds" | "peds"
+> & { world: Pick<Scene["world"], "tiles"> };
 
 /** The slice of the runtime the frame's sound touches. */
 export type FrameSoundRuntime = Pick<Runtime, "sound" | "state" | "netplay">;
@@ -75,7 +75,7 @@ export function trafficSources(
 /**
  * Hands this frame to the sound: the listener at the local player's blended position (their
  * car's, when driving) facing the 3D camera's yaw or north, their motion for footsteps, and the
- * traffic around them.
+ * traffic, people and tiles around them.
  *
  * @param runtime - The runtime's sound, state and seat.
  * @param scene - The frame about to be drawn, with the blended players.
@@ -96,5 +96,7 @@ export function updateFrameSound(
   runtime.sound.updateWorld({
     dt,
     traffic: trafficSources(scene, me.vehicleId),
+    peds: scene.peds.filter((ped) => ped.mode !== "dead"),
+    tiles: scene.world.tiles,
   });
 }

@@ -20,14 +20,19 @@ export type ClipName =
   | "pickup"
   | "death"
   | "bat"
-  | "rifle";
+  | "rifle"
+  | "amb-traffic"
+  | "amb-crowd"
+  | "amb-birds"
+  | "amb-wind"
+  | "amb-water";
 
 /** How one clip plays: its file, its level relative to the master, and whether it loops. */
 export type ClipSpec = {
   file: string;
   /** Gain applied to the clip; the master gain and the Geluid toggle still sit on top. */
   gain: number;
-  /** True for a clip that runs until told to stop — the engine, the siren. */
+  /** True for a clip that runs until told to stop — the engine, the siren, the ambience beds. */
   loop: boolean;
 };
 
@@ -49,6 +54,12 @@ export const AUDIO_CLIPS: Record<ClipName, ClipSpec> = {
   death: { file: "death.mp3", gain: 0.6, loop: false },
   bat: { file: "bat.mp3", gain: 0.5, loop: false },
   rifle: { file: "rifle.mp3", gain: 0.75, loop: false },
+  // The ambient bed (immersion spec §6): quiet loops under everything, levelled by the surroundings.
+  "amb-traffic": { file: "amb-traffic.mp3", gain: 0.35, loop: true },
+  "amb-crowd": { file: "amb-crowd.mp3", gain: 0.3, loop: true },
+  "amb-birds": { file: "amb-birds.mp3", gain: 0.3, loop: true },
+  "amb-wind": { file: "amb-wind.mp3", gain: 0.3, loop: true },
+  "amb-water": { file: "amb-water.mp3", gain: 0.3, loop: true },
 };
 
 /** Every clip name, in table order. */

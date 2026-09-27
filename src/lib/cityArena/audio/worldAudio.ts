@@ -1,15 +1,20 @@
 /**
  * The city heard around the listener (immersion spec §6): engine loops on the nearest moving
- * cars and the siren on the nearest police cars. Fed once per frame by the sound layer with the
- * scene's traffic; everything here is loops that follow what they are told, so a car can be heard
- * coming, passing and driving off.
+ * cars, the siren on the nearest police cars, and the ambient bed levelled from the surroundings.
+ * Fed once per frame by the sound layer with the scene; everything here is loops that follow what
+ * they are told, so a car can be heard coming, passing and driving off.
  */
 
+import type { DecodedTile } from "../world/decode";
+import type { AmbienceLoop } from "./ambience";
+import { createAmbienceBed } from "./ambienceBed";
 import type { ClipName } from "./clips";
+import type { SoundPoint } from "./eventVoices";
 import { engineRate } from "./engineRate";
 import { createLoopSlot, type LoopSlot, type LoopTarget } from "./loopSlot";
 import type { SamplePlayer } from "./samples";
 import { SOUND_PROFILES, spatialMix, type Listener } from "./spatial";
+import type { Surroundings } from "./surroundings";
 import {
   ENGINE_VOICES,
   SIREN_VOICES,
@@ -23,6 +28,10 @@ export type WorldSounds = {
   dt: number;
   /** The cars that can be heard: moving traffic and other players' cars, not the listener's own. */
   traffic: readonly TrafficSource[];
+  /** The people about, alive, where they are drawn. */
+  peds: readonly SoundPoint[];
+  /** The decoded map tiles around the listener. */
+  tiles: readonly DecodedTile[];
 };
 
 /** What the debug seam shows of the world's voices. */
@@ -31,12 +40,16 @@ export type WorldAudioSnapshot = {
   engines: (number | null)[];
   /** The car each siren voice follows. */
   sirens: (number | null)[];
+  /** The level each ambience loop plays at, 0…1. */
+  ambience: Record<AmbienceLoop, number>;
+  /** What the ambience last read around the listener. */
+  surroundings: Surroundings;
 };
 
 /** The city's loops. */
 export type WorldAudio = {
-  /** Moves every loop for this frame's world and listener. */
-  update(world: WorldSounds, listener: Listener): void;
+  /** Moves every loop for this frame's world and listener; `ambience` is Omgevingsgeluid. */
+  update(world: WorldSounds, listener: Listener, ambience: boolean): void;
   /** Stops every loop. */
   stop(): void;
   snapshot(): WorldAudioSnapshot;
@@ -142,16 +155,24 @@ export function createWorldAudio(
   const engines = pool(player, "engine", ENGINE_VOICES, ENGINE_RULES);
   const sirens = pool(player, "siren", SIREN_VOICES, SIREN_RULES);
   const pools = [engines, sirens];
+  const bed = createAmbienceBed(player);
   return {
-    update(world: WorldSounds, listener: Listener): void {
+    update(world: WorldSounds, listener: Listener, ambience: boolean): void {
       for (const traffic of pools) updatePool(traffic, world, listener);
+      bed.update(world, listener, ambience);
     },
     stop(): void {
       for (const traffic of pools) {
         traffic.slots.forEach((slot) => slot.stop());
         traffic.cars = traffic.cars.map(() => null);
       }
+      bed.stop();
     },
-    snapshot: () => ({ engines: [...engines.cars], sirens: [...sirens.cars] }),
+    snapshot: () => ({
+      engines: [...engines.cars],
+      sirens: [...sirens.cars],
+      ambience: bed.levels(),
+      surroundings: bed.surroundings(),
+    }),
   };
 }
