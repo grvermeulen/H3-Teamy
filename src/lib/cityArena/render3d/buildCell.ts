@@ -92,6 +92,7 @@ import {
 import {
   lampRoadWidth,
   pushStreetSides,
+  isDeadEnd,
   pushZebras,
   sideBands,
   signSites,
@@ -346,7 +347,11 @@ type StreetBuffers = {
 /** How a detailed cell builds its streets' sides: where they go and what they look at. */
 type StreetDetail = { targets: StreetTargets; look: StreetLook };
 
-/** A paved road piece's sides on a detailed cell, and a pavement disc at each of its own ends. */
+/**
+ * A paved road piece's sides on a detailed cell, and a pavement disc at each end where the road
+ * really stops — not at a tile seam or a junction mouth, where the disc would lie across the
+ * crossing or show as a blob on a grass verge.
+ */
 function pushDetailedSides(
   buffers: StreetBuffers,
   road: DecodedRoad,
@@ -362,7 +367,8 @@ function pushDetailedSides(
     piece.capEnd ? piece.points[piece.points.length - 1] : null,
   ];
   for (const end of ends) {
-    if (end) pushDisc(buffers.pavement, end, radius, PAVEMENT_Y_M, origin, uv);
+    if (end && isDeadEnd(road, end, street.look.context))
+      pushDisc(buffers.pavement, end, radius, PAVEMENT_Y_M, origin, uv);
   }
 }
 

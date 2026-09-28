@@ -482,6 +482,30 @@ export function pushStreetSides(
   }
 }
 
+/** Another road's centre line this close to a road's end means it goes on or meets one, metres. */
+const DEAD_END_SNAP_M = 0.5;
+
+/**
+ * Whether a road really stops at `end`: no other road — not the next piece the map build cut it
+ * into at a tile seam, not a road it meets at a junction — has its centre line there. Only a dead
+ * end gets its pavement rounded off.
+ *
+ * @param road - The road the end belongs to.
+ * @param end - One of its pieces' ends.
+ * @param context - The cell's surroundings.
+ * @returns True when nothing else touches the end.
+ */
+export function isDeadEnd(
+  road: DecodedRoad,
+  end: Point,
+  context: CellContext,
+): boolean {
+  return (
+    context.nearestRoad(end, DEAD_END_SNAP_M, (other) => other !== road) ===
+    null
+  );
+}
+
 /** A zebra crossing: its middle, the road's direction there and the carriageway's width. */
 export type ZebraSite = { centre: Point; direction: Point; width: number };
 

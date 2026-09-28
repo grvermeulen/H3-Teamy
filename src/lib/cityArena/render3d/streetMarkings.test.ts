@@ -8,6 +8,7 @@ import { createMeshBuffers } from "./meshBuffers";
 import {
   CYCLE_PATH_M,
   KERB,
+  isDeadEnd,
   lampRoadWidth,
   pushStreetSides,
   pushZebras,
@@ -245,6 +246,75 @@ function crossroads(roadClass: RoadClass): DecodedRoad[] {
 function fromJunction([x, y]: Point): number {
   return Math.min(...[-120, -40, 40, 120].map((at) => Math.hypot(x - at, y)));
 }
+
+describe("isDeadEnd", () => {
+  /** The context of one tile holding `roads`. */
+  function contextOf(roads: { points: Point[]; roadClass: RoadClass }[]) {
+    const tile = fixtureTile(
+      { x: 0, y: 0, rect: FIXTURE_TILE_RECT },
+      { roads },
+    );
+    const context = createCellContext(
+      { minX: -64, minY: -64, maxX: 64, maxY: 64 },
+      [tile],
+      new Set(),
+    );
+    return { roads: tile.roads, context };
+  }
+
+  it("rounds off a road that just stops", () => {
+    const { roads, context } = contextOf([
+      {
+        points: [
+          [-40, 0],
+          [0, 0],
+        ],
+        roadClass: "residential",
+      },
+    ]);
+    expect(isDeadEnd(roads[0]!, [0, 0], context)).toBe(true);
+  });
+
+  it("does not round off a piece that goes on across a tile seam", () => {
+    const { roads, context } = contextOf([
+      {
+        points: [
+          [-40, 0],
+          [0, 0],
+        ],
+        roadClass: "residential",
+      },
+      {
+        points: [
+          [0, 0],
+          [40, 0],
+        ],
+        roadClass: "residential",
+      },
+    ]);
+    expect(isDeadEnd(roads[0]!, [0, 0], context)).toBe(false);
+  });
+
+  it("does not round off a side street where it meets a bigger road", () => {
+    const { roads, context } = contextOf([
+      {
+        points: [
+          [0, 0],
+          [0, 40],
+        ],
+        roadClass: "residential",
+      },
+      {
+        points: [
+          [-40, 0],
+          [40, 0],
+        ],
+        roadClass: "primary",
+      },
+    ]);
+    expect(isDeadEnd(roads[0]!, [0, 0], context)).toBe(false);
+  });
+});
 
 describe("zebraSites", () => {
   it("puts crossings only on approaches to junctions, set back past the other road", () => {
