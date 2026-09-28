@@ -184,6 +184,19 @@ const CROWNS = new WeakMap<
   Record<TreeSpecies, BufferGeometry>
 >();
 
+/**
+ * Frees the crown templates made for a material set; with the materials, when the city goes. A
+ * later detailed cell for the same set would make them afresh.
+ *
+ * @param materials - The material set the templates were made for.
+ */
+export function disposeSharedCrowns(materials: WorldMaterials): void {
+  const templates = CROWNS.get(materials);
+  if (!templates) return;
+  for (const geometry of Object.values(templates)) geometry.dispose();
+  CROWNS.delete(materials);
+}
+
 /** The shared crown templates of a material set, made on first use. */
 function sharedCrowns(
   materials: WorldMaterials,

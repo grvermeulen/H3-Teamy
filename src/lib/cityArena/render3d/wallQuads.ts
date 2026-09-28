@@ -259,6 +259,19 @@ function shopRow(building: DecodedBuilding): number {
 }
 
 /**
+ * Where a shop wall's first module starts, in modules: whole shopfronts centred on the wall, and
+ * on a wall shorter than one module that one shopfront centred on it — never two half fronts
+ * meeting in a seam at the middle.
+ *
+ * @param length - The wall's length, metres.
+ * @returns The u of the wall's start.
+ */
+export function shopStart(length: number): number {
+  const modules = length / FACADE_MODULE_M;
+  return (Math.max(1, Math.floor(modules)) - modules) / 2;
+}
+
+/**
  * Detailed walls: per edge a ground storey (the sheet's ground floor, or a shopfront on the edges
  * the plan names) and the floors above in the upper block, each wall's windows centred on it and
  * the grid shifted by a seeded whole module so neighbours differ.
@@ -284,9 +297,7 @@ export function pushDetailedWalls(
   return wallEdges(building).map((edge) => {
     const shop = plan.shopEdges.has(edge.index);
     const start =
-      (shop
-        ? -(edge.length % FACADE_MODULE_M) / 2 / FACADE_MODULE_M
-        : centredStart(edge.length)) + shift;
+      (shop ? shopStart(edge.length) : centredStart(edge.length)) + shift;
     const laid = { ...edge, uStart: start, shop };
     const u: [number, number] = [start, start + edge.length / FACADE_MODULE_M];
     const ground = shop

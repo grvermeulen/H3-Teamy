@@ -13,12 +13,20 @@ import {
 import { createColourRecordingContext } from "./testing/recordingCanvas";
 import { createTestMaterials, fixtureTown } from "./testing/cityFixture";
 import { PAVEMENT_DUSK_SHADE, SURFACE_KEYS, surfaceUrl } from "./textures";
+import { disposeSharedCrowns } from "./treeMesh";
 import { disposeWorldMaterials } from "./worldMaterials";
 import { createWorldCells, type StructureView } from "./worldCells";
 
 vi.mock("./worldCells", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./worldCells")>();
   return { ...actual, createWorldCells: vi.fn(actual.createWorldCells) };
+});
+vi.mock("./treeMesh", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./treeMesh")>();
+  return {
+    ...actual,
+    disposeSharedCrowns: vi.fn(actual.disposeSharedCrowns),
+  };
 });
 vi.mock("./worldMaterials", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./worldMaterials")>();
@@ -159,6 +167,7 @@ describe("createCity3d", () => {
 
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(disposeWorldMaterials).toHaveBeenCalledWith(materials);
+    expect(disposeSharedCrowns).toHaveBeenCalledWith(materials);
   });
 });
 

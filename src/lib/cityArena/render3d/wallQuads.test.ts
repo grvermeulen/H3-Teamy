@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Vector3, type BufferAttribute } from "three";
 import { boundsOf } from "../mapBuild/geometry";
 import type { DecodedBuilding } from "../world/decode";
-import { facadeBlockRect } from "./facadeAtlas";
+import { BLOCK_MODULES, facadeBlockRect } from "./facadeAtlas";
 import { squareRing } from "./testing/cityFixture";
 import { FACADE_MODULE_M } from "./textures";
 import {
@@ -137,6 +137,36 @@ describe("pushDetailedWalls", () => {
     expect(edges.filter((edge) => edge.shop).map((edge) => edge.index)).toEqual(
       [shopEdge],
     );
+  });
+
+  it("shows one whole shopfront on a shop wall shorter than a module", () => {
+    const buffers = createWallBuffers();
+    const building = house(5);
+    const shopEdge = wallEdges(building)[1].index;
+    pushDetailedWalls(
+      buffers,
+      building,
+      { sheet: 0, shopEdges: new Set([shopEdge]) },
+      6.2,
+      [0, 0],
+    );
+
+    const geometry = wallGeometry(buffers);
+    const blocks = geometry.getAttribute("facadeBlock") as BufferAttribute;
+    const uvs = geometry.getAttribute("uv") as BufferAttribute;
+    const shop = facadeBlockRect("shop", 0);
+    const us = Array.from({ length: blocks.count }, (_, vertex) => vertex)
+      .filter(
+        (vertex) =>
+          Math.abs(blocks.getX(vertex) - shop[0]) < 1e-6 &&
+          Math.abs(blocks.getY(vertex) - shop[1]) < 1e-6,
+      )
+      .map((vertex) => uvs.getX(vertex) * BLOCK_MODULES.shop[0]);
+    const [low, high] = [Math.min(...us), Math.max(...us)];
+
+    expect(us).toHaveLength(4);
+    expect(Math.floor(low)).toBe(Math.floor(high - 1e-9));
+    expect((low + high) / 2 - Math.floor(low)).toBeCloseTo(0.5);
   });
 
   it("points every edge's normal out of the building, whichever way the ring runs", () => {

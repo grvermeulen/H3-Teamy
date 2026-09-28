@@ -1,10 +1,17 @@
-import { describe, expect, it } from "vitest";
-import { Color, Matrix4, Vector3, type InstancedMesh } from "three";
+import { describe, expect, it, vi } from "vitest";
+import {
+  BufferGeometry,
+  Color,
+  Matrix4,
+  Vector3,
+  type InstancedMesh,
+} from "three";
 import { TREE_CANOPY_M } from "../world/mapTypes";
 import { createTestMaterials } from "./testing/cityFixture";
 import {
   buildDetailedTreeLayer,
   buildTreeLayer,
+  disposeSharedCrowns,
   type TreeInput,
 } from "./treeMesh";
 import { TREE_SPECIES, speciesOf } from "./treeSpecies";
@@ -44,6 +51,20 @@ describe("speciesOf", () => {
 });
 
 describe("buildDetailedTreeLayer", () => {
+  it("frees the crown templates it shares across cells, once, with their materials", () => {
+    const materials = createTestMaterials();
+    buildDetailedTreeLayer(grove(12), materials, [0, 0]);
+    const dispose = vi.spyOn(BufferGeometry.prototype, "dispose");
+
+    disposeSharedCrowns(materials);
+    const freed = dispose.mock.calls.length;
+    disposeSharedCrowns(materials);
+
+    expect(freed).toBe(TREE_SPECIES.length);
+    expect(dispose).toHaveBeenCalledTimes(freed);
+    dispose.mockRestore();
+  });
+
   it("draws one trunk per tree and one crown per tree across the species' meshes", () => {
     const materials = createTestMaterials();
     const trees = grove(120);

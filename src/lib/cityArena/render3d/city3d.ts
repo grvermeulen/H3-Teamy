@@ -17,6 +17,7 @@ import {
   type StructureView,
   type WorldCells,
 } from "./worldCells";
+import { disposeSharedCrowns } from "./treeMesh";
 import {
   createWorldMaterials,
   disposeWorldMaterials,
@@ -170,6 +171,7 @@ export function createCity3d(
     dispose() {
       streamed?.cells.dispose();
       streamed = null;
+      disposeSharedCrowns(materials);
       disposeWorldMaterials(materials);
     },
   };
