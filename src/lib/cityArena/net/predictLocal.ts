@@ -11,6 +11,7 @@ import { landmarkSpeedFactor } from "../sim/landmarkBonuses";
 import { playerById, replacePlayer } from "../sim/players";
 import { destroyedStructureIds } from "../sim/structures";
 import { forwardSpeed, NO_CONTROLS, stepVehicle } from "../sim/vehicle";
+import { walkingInput } from "../sim/weapons";
 import { withoutStructures } from "../world/collisionView";
 
 /** Predicts only the controlled player's motion; combat, AI and other bodies remain authoritative. */
@@ -73,7 +74,7 @@ export const predictLocal: typeof stepArena = (state, inputs, dt, world) => {
     ...player,
     ...stepPlayer(
       player,
-      input,
+      walkingInput(input, player.weapon),
       dt,
       collision,
       landmarkSpeedFactor(player, next.tick),

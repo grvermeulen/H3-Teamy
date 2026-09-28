@@ -18,8 +18,10 @@ import {
   type EntityView,
 } from "./entities";
 import type { ContactSpot } from "./missionMarkers";
+import type { MuzzlePoints } from "./muzzleMap";
 import { createPickup3d } from "./pickups3d";
 import type { OverlayPass, RenderQuality } from "./renderer3d";
+import type { ShooterAim } from "./roundAims";
 import { createVehicleFactory } from "./vehicles3d";
 import type { ViewModelInput } from "./viewmodel";
 import {
@@ -58,6 +60,17 @@ export type CastFrame = {
   quality: RenderQuality;
 };
 
+/** The local player's aim this frame (aim spec §5), from the view's probe. */
+export type CastAim = {
+  /** Where the crosshair points, for the local player's rounds; `null` while there is none. */
+  shot: Readonly<ShooterAim> | null;
+  /** How far the sights are up, 0 (at the hip) … 1: the hands raise the gun by it. */
+  sights: number;
+};
+
+/** No aim: everyone's rounds converge onto their flat line, the hands stay at the hip. */
+const NO_AIM: CastAim = { shot: null, sights: 0 };
+
 /** The moving part of the 3D view. */
 export type Cast3d = {
   /** Add to the scene once. */
@@ -70,6 +83,7 @@ export type Cast3d = {
    * @param focus - The camera focus, world metres: what the draw distances are measured from.
    * @param camera - The city camera, already placed for this frame.
    * @param contacts - The mission contacts to stand in the street (the mission markers').
+   * @param aim - The local player's aim: where their rounds are drawn heading.
    * @returns The hands' or cockpit's pass to draw over the city, or `null` when neither shows.
    */
   update(
@@ -77,6 +91,7 @@ export type Cast3d = {
     focus: { x: number; y: number },
     camera: PerspectiveCamera,
     contacts?: readonly ContactSpot[],
+    aim?: CastAim,
   ): OverlayPass | null;
   /**
    * The collapses, rubble and falling furniture, made with the effects by the first `update`
@@ -98,6 +113,25 @@ function fxFor(parent: Group, current: Fx | null, quality: RenderQuality): Fx {
   const destruction = createDestruction3d(effects.smoke);
   parent.add(effects.object, destruction.object);
   return { effects, destruction };
+}
+
+/**
+ * Brings the effects (made by the first frame) to the frame and steps them and the destruction.
+ * Your own flame moves to the hands' barrel only while the hands are there to show it.
+ */
+function stepFx(
+  parent: Group,
+  current: Fx | null,
+  frame: CastFrame,
+  focus: { x: number; y: number },
+  own: { handsShown: boolean; muzzles: MuzzlePoints; aim: CastAim },
+): Fx {
+  const fx = fxFor(parent, current, frame.quality);
+  const { handsShown, muzzles, aim } = own;
+  fx.effects.sync(frame.scene, focus, handsShown, muzzles, aim.shot);
+  fx.effects.update(frame.dt);
+  fx.destruction.update(frame.dt);
+  return fx;
 }
 
 /**
@@ -141,13 +175,18 @@ function createCockpitPose(): CockpitPose {
   };
 }
 
-/** Fills the hands' reused input from the entity sync's local player; `null` hides them. */
+/**
+ * Fills the hands' reused input from the entity sync's local player and the sights; `null` hides
+ * them.
+ */
 function handsInput(
   hands: ViewModelInput,
   entities: EntitySync,
   frame: CastFrame,
+  sights: number,
 ): ViewModelInput | null {
   if (frame.mode !== "first" || !entities.local.onFoot) return null;
+  hands.sights = sights;
   hands.weapon = entities.local.weapon;
   hands.firedTick = entities.local.firedTick;
   hands.speed = entities.local.speed;
@@ -171,7 +210,14 @@ type FirstPersonView = {
 function createFirstPersonView(hands: ViewModelPass): FirstPersonView {
   return {
     hands,
-    input: { weapon: "fist", firedTick: null, tick: 0, speed: 0, dt: 0 },
+    input: {
+      weapon: "fist",
+      firedTick: null,
+      tick: 0,
+      speed: 0,
+      dt: 0,
+      sights: 0,
+    },
     cockpit: createCockpitPose(),
     muzzle: new Vector3(),
     handsShown: false,
@@ -187,8 +233,9 @@ function poseFirstPerson(
   entities: EntitySync,
   frame: CastFrame,
   camera: PerspectiveCamera,
+  sights: number,
 ): OverlayPass | null {
-  const drawn = handsInput(view.input, entities, frame);
+  const drawn = handsInput(view.input, entities, frame, sights);
   view.handsShown = drawn !== null;
   const cockpit = cockpitPose(view.cockpit, entities, frame);
   const pass = view.hands.update(camera, drawn, cockpit);
@@ -218,24 +265,25 @@ export function createCast3d(
   let fx: Fx | null = null;
   return {
     object,
-    update(frame, focus, camera, contacts = NO_CONTACTS) {
+    update(frame, focus, camera, contacts = NO_CONTACTS, aim = NO_AIM) {
       view.firstPerson = frame.mode === "first";
       view.aim = frame.aim;
       view.characterDetailM =
         frame.quality === "low" ? GLTF_LOD_DISTANCE_M : undefined;
       entities.update(frame.scene, frame.dt, focus, view);
       street.update(contacts, frame.scene, focus, frame.dt);
-      const pass = poseFirstPerson(firstPerson, entities, frame, camera);
-      fx = fxFor(object, fx, frame.quality);
-      // Your own flame moves to the hands' barrel only while the hands are there to show it.
-      fx.effects.sync(
-        frame.scene,
-        focus,
-        firstPerson.handsShown,
-        entities.muzzles.points,
+      const pass = poseFirstPerson(
+        firstPerson,
+        entities,
+        frame,
+        camera,
+        aim.sights,
       );
-      fx.effects.update(frame.dt);
-      fx.destruction.update(frame.dt);
+      fx = stepFx(object, fx, frame, focus, {
+        handsShown: firstPerson.handsShown,
+        muzzles: entities.muzzles.points,
+        aim,
+      });
       return pass;
     },
     destruction: () => fx?.destruction ?? null,

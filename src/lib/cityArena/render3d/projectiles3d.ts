@@ -3,14 +3,15 @@
  * tank's shell as a glowing slug with a faint trail. Rocket and shell models are pooled by bullet
  * id; trails are laid by distance flown, so they look the same at 30 or 144 frames per second.
  * Everything a shooter fires is drawn out of their muzzle and converges onto its flat line over
- * the first metres (`muzzleBlend.ts`).
+ * the first metres (`muzzleBlend.ts`); the local shooter's rounds and rockets climb or dip toward
+ * the height of what their crosshair covered (`roundAims.ts`).
  */
 import { Group, Vector3 } from "three";
 import type { BulletState } from "../sim/types";
 import { isMelee } from "../sim/weapons";
-import { headingToRotationY } from "./coords";
+import { PERSON_CHEST_HEIGHT_M, headingToRotationY } from "./coords";
 import { emitPuff, type PuffSpec, type Rng } from "./fxEmit";
-import { blendedRoundPoint, roundFlownM } from "./muzzleBlend";
+import { blendedRoundPoint, roundFlownM, type RoundAim } from "./muzzleBlend";
 import type { MuzzlePoints } from "./muzzleMap";
 import { createRng } from "../sim/rng";
 import type { ParticleSystem } from "./particles";
@@ -19,6 +20,7 @@ import {
   type ProjectileKit,
   type ProjectileLook,
 } from "./projectileModels";
+import { createRoundAims, type ShooterAim } from "./roundAims";
 import { createTracers } from "./tracers";
 
 export { ROCKET_LENGTH_M } from "./projectileModels";
@@ -134,8 +136,13 @@ export type Projectiles3d = {
    * @param bullets - The scene's bullets.
    * @param muzzles - Every shooter's muzzle by owner id: rounds, rockets and shells are drawn out
    *   of their shooter's, converging onto their flat line.
+   * @param aim - Where the local shooter's crosshair points: their rounds climb or dip toward it.
    */
-  sync(bullets: readonly BulletState[], muzzles?: MuzzlePoints): void;
+  sync(
+    bullets: readonly BulletState[],
+    muzzles?: MuzzlePoints,
+    aim?: Readonly<ShooterAim> | null,
+  ): void;
   /** Frees the geometry and materials; detach `object` yourself. */
   dispose(): void;
 };
@@ -160,6 +167,7 @@ function layTrail(
   flight: Flight,
   bullet: BulletState,
   flown: number,
+  aim: RoundAim | null,
 ): void {
   const trail = TRAILS[flight.look];
   const distance = Math.hypot(bullet.x - flight.lastX, bullet.y - flight.lastY);
@@ -173,6 +181,7 @@ function layTrail(
       muzzleOf(flight),
       trailPoint,
       distance - along,
+      aim,
     );
     for (const { additive, spec, every } of trail.puffs)
       if (flight.steps % every === 0)
@@ -186,14 +195,27 @@ function layTrail(
   flight.lastY = bullet.y;
 }
 
-/** Shows a flight's body where the round is drawn, turned along its flight. */
-function place(flight: Flight, bullet: BulletState, flown: number): void {
+/** How steeply an aimed flight climbs (radians, nose up), level once it runs along the ground. */
+function climbOf(flight: Flight, aim: RoundAim | null): number {
+  if (!aim || flight.body.position.y <= 0) return 0;
+  const from = flight.fromMuzzle ? flight.muzzle.y : PERSON_CHEST_HEIGHT_M;
+  return Math.atan((aim.height - from) / aim.distance);
+}
+
+/** Shows a flight's body where the round is drawn, turned along its flight and its climb. */
+function place(
+  flight: Flight,
+  bullet: BulletState,
+  flown: number,
+  aim: RoundAim | null,
+): void {
   const { body } = flight;
   body.visible = true;
-  blendedRoundPoint(bullet, flown, muzzleOf(flight), body.position);
+  blendedRoundPoint(bullet, flown, muzzleOf(flight), body.position, 0, aim);
   body.rotation.y = headingToRotationY(
     Math.atan2(bullet.directionY, bullet.directionX),
   );
+  body.rotation.z = climbOf(flight, aim);
 }
 
 /** The projectile models in flight by bullet id, and the spare ones by look. */
@@ -300,23 +322,30 @@ export function createProjectiles3d(
   object.add(tracers.object);
   const sink: TrailSink = { fire, smoke, rng: createRng(TRAIL_SEED) };
   const fleet = createFleet(object, kit);
+  const aims = createRoundAims();
   return {
     object,
-    sync(bullets, muzzles = NO_MUZZLES) {
+    sync(bullets, muzzles = NO_MUZZLES, aim = null) {
       fleet.begin();
       tracers.begin();
+      aims.begin();
       for (const bullet of bullets) {
         const look = lookOf(bullet);
+        if (look === null) continue;
         const muzzle = muzzles.get(bullet.ownerId);
-        if (look === "tracer") tracers.add(bullet, muzzle ?? null);
-        if (look !== "rocket" && look !== "shell") continue;
-        const flight = fleet.fly(bullet, look, muzzle);
         const flown = roundFlownM(bullet);
-        place(flight, bullet, flown);
-        layTrail(sink, flight, bullet, flown);
+        const aimed = aims.of(bullet, flown, aim);
+        if (look === "tracer") {
+          tracers.add(bullet, muzzle ?? null, aimed);
+          continue;
+        }
+        const flight = fleet.fly(bullet, look, muzzle);
+        place(flight, bullet, flown, aimed);
+        layTrail(sink, flight, bullet, flown, aimed);
       }
       tracers.commit();
       fleet.land();
+      aims.end();
     },
     dispose() {
       tracers.dispose();

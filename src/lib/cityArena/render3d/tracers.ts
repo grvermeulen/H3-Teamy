@@ -3,7 +3,8 @@
  * nothing behind it (spec §6.8). All tracers share one `LineSegments` draw call whose buffers are
  * sized once; the tail's colour is black, which additive blending turns into "no light", so the
  * fade needs no per-vertex alpha. A round whose shooter's muzzle is known is drawn out of that
- * muzzle, converging onto its flat line (`muzzleBlend.ts`).
+ * muzzle, converging onto its flat line — or, the local shooter's, onto the height of what their
+ * crosshair covered (`muzzleBlend.ts`).
  */
 import {
   AdditiveBlending,
@@ -15,7 +16,7 @@ import {
   Vector3,
 } from "three";
 import type { BulletState } from "../sim/types";
-import { blendedRoundPoint, roundFlownM } from "./muzzleBlend";
+import { blendedRoundPoint, roundFlownM, type RoundAim } from "./muzzleBlend";
 
 /** Length of a tracer behind its round, metres (spec §6.8). */
 export const TRACER_LENGTH_M = 3;
@@ -39,8 +40,13 @@ export type Tracers = {
    *
    * @param bullet - The round in flight.
    * @param muzzle - Its shooter's muzzle, three.js space; `null` draws it on its flat line.
+   * @param aim - What the local shooter aimed it at; `null` for everyone else's rounds.
    */
-  add(bullet: BulletState, muzzle?: Readonly<Vector3> | null): void;
+  add(
+    bullet: BulletState,
+    muzzle?: Readonly<Vector3> | null,
+    aim?: RoundAim | null,
+  ): void;
   /** Uploads the frame's tracers. */
   commit(): void;
   /** Frees the geometry and material; detach `object` yourself. */
@@ -99,11 +105,11 @@ export function createTracers(): Tracers {
     begin() {
       count = 0;
     },
-    add(bullet, muzzle = null) {
+    add(bullet, muzzle = null, aim = null) {
       if (count >= MAX_TRACERS) return;
       const flown = roundFlownM(bullet);
-      blendedRoundPoint(bullet, flown, muzzle, head);
-      blendedRoundPoint(bullet, flown, muzzle, tail, TRACER_LENGTH_M);
+      blendedRoundPoint(bullet, flown, muzzle, head, 0, aim);
+      blendedRoundPoint(bullet, flown, muzzle, tail, TRACER_LENGTH_M, aim);
       const at = count * ENDS;
       positions.setXYZ(at, head.x, head.y, head.z);
       positions.setXYZ(at + 1, tail.x, tail.y, tail.z);

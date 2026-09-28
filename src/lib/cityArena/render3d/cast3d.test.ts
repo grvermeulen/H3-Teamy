@@ -165,6 +165,7 @@ describe("createCast3d", () => {
       FOCUS,
       false,
       expect.any(Map),
+      null,
     );
     expect(effects!.update).toHaveBeenCalledWith(0.02);
     const [synced] = effects!.sync.mock.invocationCallOrder;
@@ -270,6 +271,20 @@ describe("createCast3d", () => {
     expect(pass.update).toHaveBeenLastCalledWith(camera, null, null);
   });
 
+  it("hands the effects your shot at what the crosshair covers", () => {
+    const cast = createCast3d(fakeFactories());
+    const shot = { ownerId: 1, x: 40, y: 2, height: 5 };
+    const frame = frameOf();
+    cast.update(frame, FOCUS, new PerspectiveCamera(), [], { shot });
+    expect(effectsMade[0]!.sync).toHaveBeenCalledWith(
+      frame.scene,
+      FOCUS,
+      false,
+      expect.any(Map),
+      shot,
+    );
+  });
+
   it("leaves your own muzzle flame to the hands in first person", () => {
     const cast = createCast3d(fakeFactories());
     const first = frameOf({ mode: "first" });
@@ -279,6 +294,7 @@ describe("createCast3d", () => {
       FOCUS,
       true,
       expect.any(Map),
+      null,
     );
   });
 
@@ -295,6 +311,7 @@ describe("createCast3d", () => {
       FOCUS,
       false,
       expect.any(Map),
+      null,
     );
   });
 
