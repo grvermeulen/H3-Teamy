@@ -77,7 +77,11 @@ export default function ArenaTouchControls({
         onRadio={game.nextStation}
       />
       {tip.shown ? (
-        <ArenaTouchTip twinStick={twinStick} onDismiss={tip.dismiss} />
+        <ArenaTouchTip
+          twinStick={twinStick}
+          look3d={look3d}
+          onDismiss={tip.dismiss}
+        />
       ) : null}
     </>
   );

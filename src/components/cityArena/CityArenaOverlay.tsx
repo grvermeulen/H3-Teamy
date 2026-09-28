@@ -19,7 +19,9 @@ import type { ArenaLayout, ArenaSettings } from "@/lib/cityArena/schemas";
 import {
   hasSeenArenaTouchTip,
   markArenaTouchTipSeen,
+  type TouchTipKind,
 } from "@/lib/cityArena/storage";
+import { ArenaLookSensitivity } from "./ArenaLookSensitivity";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { HostToast } from "./HostToast";
 import { useArenaRoom, type ArenaRoom } from "./useArenaRoom";
@@ -93,17 +95,23 @@ function useShowTouchControls(forceLayout: ArenaLayout | undefined): boolean {
   return forceLayout ? forceLayout === "mobile" : showTouch;
 }
 
-/** The first-run touch tip: shown once the touch controls are up, until it has been read. */
-function useTouchTip(active: boolean): { shown: boolean; dismiss: () => void } {
-  const [shown, setShown] = useState(false);
+/**
+ * The first-run touch tip: shown once the touch controls are up, until it has been read — once for
+ * the 2D layouts and once for 3D's look pad, which each have their own tip.
+ */
+function useTouchTip(
+  active: boolean,
+  kind: TouchTipKind,
+): { shown: boolean; dismiss: () => void } {
+  const [shownFor, setShownFor] = useState<TouchTipKind | null>(null);
   useEffect(() => {
-    if (active && !hasSeenArenaTouchTip()) setShown(true);
-  }, [active]);
+    if (active && !hasSeenArenaTouchTip(kind)) setShownFor(kind);
+  }, [active, kind]);
   const dismiss = useCallback(() => {
-    markArenaTouchTipSeen();
-    setShown(false);
-  }, []);
-  return { shown, dismiss };
+    markArenaTouchTipSeen(kind);
+    setShownFor(null);
+  }, [kind]);
+  return { shown: shownFor === kind, dismiss };
 }
 
 /**
@@ -529,7 +537,10 @@ export default function CityArenaOverlay({
         : undefined,
   });
   const showTouch = useShowTouchControls(game.settings.forceLayout);
-  const tip = useTouchTip(showTouch && game.phase === "playing");
+  const tip = useTouchTip(
+    showTouch && game.phase === "playing",
+    game.view3d.active ? "3d" : "2d",
+  );
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const closeMap = useCallback(() => setMapData(null), []);
   const openMap = (): void => setMapData(game.navigationMap());
@@ -616,6 +627,14 @@ export default function CityArenaOverlay({
           onClose={closeMenu}
           hideView={entry.role === "hybrid"}
         >
+          {showTouch ? (
+            <ArenaLookSensitivity
+              value={game.settings.touchLookSensitivity}
+              onChange={(touchLookSensitivity) =>
+                game.updateSettings({ touchLookSensitivity })
+              }
+            />
+          ) : null}
           <button
             type="button"
             className="my-2 min-h-11 rounded border border-white/25 px-3 text-sm"

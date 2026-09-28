@@ -151,6 +151,7 @@ vi.mock("./useArenaRoom", () => {
 
 import {
   ARENA_SETTINGS_KEY,
+  ARENA_TOUCH_3D_TIP_KEY,
   ARENA_TOUCH_TIP_KEY,
 } from "@/lib/cityArena/storage";
 import { WebGl2UnavailableError } from "@/lib/cityArena/webgl2";
@@ -548,6 +549,7 @@ describe("CityArenaOverlay", () => {
     expect(screen.getByLabelText("Geluid")).toBeChecked();
     fireEvent.click(screen.getByLabelText("Geluid"));
     expect(screen.getByLabelText("Geluid")).not.toBeChecked();
+    expect(screen.queryByLabelText("Kijkgevoeligheid")).toBeNull();
   });
 
   it("shows the touch buttons next to the stick on coarse pointers", async () => {
@@ -612,12 +614,26 @@ describe("CityArenaOverlay", () => {
       screen.getByRole("button", { name: "Schieten" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/sleep rechts om rond te kijken/)).toBeTruthy();
+    // The 2D tip was read, but the 3D layout has a first-run tip of its own.
+    await waitFor(() =>
+      expect(screen.getByRole("note")).toHaveTextContent(/Richten zoomt in/),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Begrepen" }));
+    expect(localStorage.getItem(ARENA_TOUCH_3D_TIP_KEY)).toBe("1");
     // The sights toggle goes up with the pistol, and down while the menu is open.
     const sights = screen.getByRole("button", { name: "Richten" });
     fireEvent.click(sights);
     expect(sights).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: "Menu", exact: true }));
     expect(sights).toHaveAttribute("aria-pressed", "false");
+    // Kijkgevoeligheid sits in the menu on touch, and is kept.
+    fireEvent.change(screen.getByLabelText("Kijkgevoeligheid"), {
+      target: { value: "1.5" },
+    });
+    expect(
+      JSON.parse(localStorage.getItem(ARENA_SETTINGS_KEY) ?? "{}")
+        .touchLookSensitivity,
+    ).toBe(1.5);
     fireEvent.click(screen.getByRole("button", { name: "Verder spelen" }));
     fireEvent.click(screen.getByRole("button", { name: "Wissel naar 2D" }));
     expect(screen.queryByTestId("touch-look-pad")).toBeNull();

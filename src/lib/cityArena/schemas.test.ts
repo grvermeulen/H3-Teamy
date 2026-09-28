@@ -175,6 +175,7 @@ describe("ArenaSettingsSchema", () => {
       quality: "auto",
       view: "2d",
       camera3d: "third",
+      touchLookSensitivity: 1,
     });
     expect(
       ArenaSettingsSchema.safeParse({ forceLayout: "tablet" }).success,
@@ -200,6 +201,19 @@ describe("ArenaSettingsSchema", () => {
     );
     expect(
       ArenaSettingsSchema.safeParse({ camera3d: "over-the-hood" }).success,
+    ).toBe(false);
+  });
+
+  it("keeps the Kijkgevoeligheid between 0.25 and 2.5", () => {
+    expect(
+      ArenaSettingsSchema.parse({ touchLookSensitivity: 1.75 })
+        .touchLookSensitivity,
+    ).toBe(1.75);
+    expect(
+      ArenaSettingsSchema.safeParse({ touchLookSensitivity: 0.2 }).success,
+    ).toBe(false);
+    expect(
+      ArenaSettingsSchema.safeParse({ touchLookSensitivity: 3 }).success,
     ).toBe(false);
   });
 });

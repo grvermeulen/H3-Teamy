@@ -60,7 +60,12 @@ function fakeRuntime(facing = 1.1): Runtime {
 }
 
 /** The props the tests change between renders. */
-type Props = { active: boolean; mode: "third" | "first"; epoch: number };
+type Props = {
+  active: boolean;
+  mode: "third" | "first";
+  epoch: number;
+  touchLookSensitivity?: number;
+};
 
 /** Renders the hook, switched off, with a layer and a HUD canvas in place. */
 function renderView3d(facing = 1.1) {
@@ -189,6 +194,26 @@ describe("useView3d", () => {
     pad.onDown({ pointerId: 2, clientX: 0, clientY: 0 });
     pad.onMove({ pointerId: 2, clientX: 10, clientY: 0 });
     expect(pad.take().yaw).toBeGreaterThan(0);
+  });
+
+  it("scales the look pad by the latest Kijkgevoeligheid, keeping the same pad", () => {
+    const { result, rerender } = renderView3d();
+    const pad = result.current.touchLook;
+    const dragTenPixels = (pointerId: number): number => {
+      pad.onDown({ pointerId, clientX: 0, clientY: 0 });
+      pad.onMove({ pointerId, clientX: 10, clientY: 0 });
+      pad.onUp({ pointerId, clientX: 10, clientY: 0 });
+      return pad.take().yaw;
+    };
+    const base = dragTenPixels(1);
+    rerender({
+      active: false,
+      mode: "third",
+      epoch: 0,
+      touchLookSensitivity: 2,
+    });
+    expect(result.current.touchLook).toBe(pad);
+    expect(dragTenPixels(2)).toBeCloseTo(base * 2, 6);
   });
 
   it("falls back to 2D with a toast but no Sentry error on a device without WebGL2", async () => {
