@@ -4,17 +4,22 @@
  * `render3d/` and `components/cityArena/view3d/` may import from here with `import type` only.
  */
 import type { Scene as ArenaScene } from "../render/renderScene";
-import type { VehicleKind, WeaponKind } from "../sim/types";
+import type { VehicleKind } from "../sim/types";
 import { lengthOf } from "../sim/vehicle";
-import { WEAPONS } from "../sim/weapons";
 import type { DecodedTile } from "../world/decode";
-import { probeAim, type AimPoint } from "./aimProbe";
-import { createAimWorld, type AimWorldSource } from "./aimWorld";
+import type { AimPoint } from "./aimProbe";
 import { applyCameraFeel, cameraFeelOf } from "./cameraFeel";
 import { applyRigPose, rigPose, type CameraMode } from "./cameraRig";
-import { createCast3d, type Cast3d, type CastAim } from "./cast3d";
+import { createCast3d, type Cast3d } from "./cast3d";
 import { createCity3d, type City3d } from "./city3d";
-import { AIM_PROJECT_DISTANCE_M } from "./coords";
+import {
+  createFrameAim,
+  localWeapon,
+  probeFrame,
+  raiseSights,
+  scopeOf,
+  type FrameAim,
+} from "./frameAim";
 import { createGuidance3d, type Guidance3d } from "./guidance3d";
 import { createKnockOvers, type KnockOvers } from "./knockOver3d";
 import { createMissionMarkers, type MissionMarkers } from "./missionMarkers";
@@ -24,7 +29,6 @@ import {
   type RenderQuality,
   type Renderer3d,
 } from "./renderer3d";
-import type { ShooterAim } from "./roundAims";
 import { createRuins3d, type Ruins3d } from "./ruins3d";
 import { disposeSharedAssets } from "./sharedAssets";
 import type { StructureView } from "./worldCells";
@@ -57,6 +61,11 @@ export type View3dFrame = {
   nowMs: number;
   /** Seconds since the local player died, or `null` while alive. */
   deadSeconds: number | null;
+  /**
+   * Aiming down the sights (the held right mouse button, or the touch sights toggle): the view
+   * zooms and the hands bring the gun up. Absent, at the hip.
+   */
+  ads?: boolean;
   quality: RenderQuality;
   /** The canvas's CSS size. */
   size: { width: number; height: number };
@@ -71,6 +80,11 @@ export type View3dHandle = {
    * at it. `null` before the first frame and while dead.
    */
   aimPoint(): Readonly<AimPoint> | null;
+  /**
+   * How much the sights narrowed the last frame's view (`RigPose.zoom`): mouse-look turns slower
+   * by it, so a zoomed view does not whip. 1 at the hip.
+   */
+  lookZoom(): number;
   /** Frees every GPU resource and the WebGL context. */
   dispose(): void;
 };
@@ -127,90 +141,30 @@ type View3dParts = {
   aim: FrameAim;
 };
 
-/** What the probe looks through each frame, what it found, and what the cast is handed. */
-type FrameAim = {
-  world: AimWorldSource;
-  point: AimPoint;
-  /** False before the first frame and while dead: there is no crosshair then. */
-  shown: boolean;
-  /** Your shot at the point, handed to the cast while the crosshair shows. */
-  shooter: ShooterAim;
-  cast: CastAim;
-};
-
-/** A frame aim before its first probe. */
-function createFrameAim(): FrameAim {
-  return {
-    world: createAimWorld(),
-    point: { x: 0, y: 0, height: 0, distance: 0, target: "sky" },
-    shown: false,
-    shooter: { ownerId: 0, x: 0, y: 0, height: 0 },
-    cast: { shot: null },
-  };
-}
-
-/** Hands the cast your shot at the probed point, or none while there is no crosshair. */
-function aimCast(aim: FrameAim, scene: ArenaScene): void {
-  aim.cast.shot = aim.shown ? aim.shooter : null;
-  if (!aim.shown) return;
-  aim.shooter.ownerId = scene.localPlayerId;
-  aim.shooter.x = aim.point.x;
-  aim.shooter.y = aim.point.y;
-  aim.shooter.height = aim.point.height;
-}
-
-/** The weapon the local player holds; bare fists when they are not in the scene. */
-function localWeapon(scene: ArenaScene): WeaponKind {
-  for (const player of scene.players)
-    if (player.id === scene.localPlayerId) return player.weapon;
-  return "fist";
-}
-
 /**
- * Probes what the crosshair covers, from the placed camera: within the held weapon's reach past
- * the focus, but never short of where the third-person view converges, so a punch aims where the
- * camera looks rather than at a point beside the shoulder.
- */
-function probeFrame(
-  parts: View3dParts,
-  frame: View3dFrame,
-  focus: Focus,
-): void {
-  const { aim } = parts;
-  aim.shown = frame.deadSeconds === null;
-  if (aim.shown) {
-    aim.world.sync(frame.scene, frame.tiles, frame.structures);
-    const reach = Math.max(
-      AIM_PROJECT_DISTANCE_M,
-      WEAPONS[localWeapon(frame.scene)].rangeM,
-    );
-    probeAim(parts.renderer.camera, aim.world, reach, aim.point, focus);
-  }
-  aimCast(aim, frame.scene);
-}
-
-/**
- * Puts the camera where the frame's mode, look and focus place it, then shakes and sways it as the
- * 2D view would (`cameraFeel.ts`).
+ * Puts the camera where the frame's mode, look, focus and sights place it — keeping the zoom for
+ * mouse-look — then shakes and sways it as the 2D view would (`cameraFeel.ts`).
  */
 function placeCamera(
   camera: Renderer3d["camera"],
   frame: View3dFrame,
   focus: Focus,
+  aim: FrameAim,
 ): void {
-  applyRigPose(
-    camera,
-    rigPose({
-      mode: frame.mode,
-      yaw: frame.yaw,
-      pitch: frame.pitch,
-      target: focus,
-      driving: focus.driving,
-      dead: frame.deadSeconds !== null,
-      deadSeconds: frame.deadSeconds ?? 0,
-      dt: frame.dt,
-    }),
-  );
+  const pose = rigPose({
+    mode: frame.mode,
+    yaw: frame.yaw,
+    pitch: frame.pitch,
+    target: focus,
+    driving: focus.driving,
+    dead: frame.deadSeconds !== null,
+    deadSeconds: frame.deadSeconds ?? 0,
+    dt: frame.dt,
+    sights: aim.cast.sights,
+    weapon: aim.weapon,
+  });
+  aim.zoom = pose.zoom;
+  applyRigPose(camera, pose);
   applyCameraFeel(camera, cameraFeelOf(frame.scene));
 }
 
@@ -228,13 +182,14 @@ function wreck(parts: View3dParts, frame: View3dFrame): void {
 }
 
 /**
- * Places the camera and probes what the crosshair covers; reads the mission markers; syncs the
- * cast (characters, mission contacts, vehicles, pickups, effects, destruction) and the guidance;
- * streams the city, which rebuilds the cells a building fell in and copies the knocked furniture's
- * poses; then starts the collapses (in the frame the real building is dropped) and knocks
- * furniture over. The knocks come after the city, so a blast that brings a building down knocks
- * the rebuilt cell's pieces, not the ones the rebuild just threw away. Then it renders, the
- * first-person hands in a pass of their own over the city, and draws the HUD.
+ * Raises or lowers the sights; places the camera and probes what the crosshair covers; reads the
+ * mission markers; syncs the cast (characters, mission contacts, vehicles, pickups, effects,
+ * destruction, the hands with their sights) and the guidance; streams the city, which rebuilds
+ * the cells a building fell in and copies the knocked furniture's poses; then starts the collapses
+ * (in the frame the real building is dropped) and knocks furniture over. The knocks come after
+ * the city, so a blast that brings a building down knocks the rebuilt cell's pieces, not the ones
+ * the rebuild just threw away. Then it renders, the first-person hands in a pass of their own over
+ * the city, and draws the HUD (the crosshair, or the rifle's scope).
  */
 function renderFrame(
   parts: View3dParts,
@@ -244,8 +199,9 @@ function renderFrame(
   const focus = focusOf(frame.scene);
   const { renderer, city, cast, markers } = parts;
   renderer.configure(frame.size, frame.quality);
-  placeCamera(renderer.camera, frame, focus);
-  probeFrame(parts, frame, focus);
+  raiseSights(parts.aim, frame, localWeapon(frame.scene));
+  placeCamera(renderer.camera, frame, focus, parts.aim);
+  probeFrame(parts.aim, renderer.camera, frame, focus);
   markers.update(frame.scene);
   const hands = cast.update(
     frame,
@@ -263,6 +219,7 @@ function renderFrame(
     size: frame.size,
     dead: frame.deadSeconds !== null,
     friends: frame.scene,
+    scope: scopeOf(parts.aim, frame, focus.driving === null),
   });
 }
 
@@ -308,6 +265,7 @@ function startView(parts: View3dParts): View3dHandle {
   return {
     render: (frame, overlay) => renderFrame(parts, frame, overlay),
     aimPoint: () => (parts.aim.shown ? parts.aim.point : null),
+    lookZoom: () => parts.aim.zoom,
     dispose() {
       parts.city.dispose();
       parts.cast.dispose();

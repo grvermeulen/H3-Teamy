@@ -764,6 +764,7 @@ describe("debug hooks", () => {
     const handle = {
       render: vi.fn(),
       aimPoint: vi.fn(() => null),
+      lookZoom: vi.fn(() => 1),
       dispose: vi.fn(),
     };
     mockCreateView3d.mockReturnValue(handle);
@@ -805,6 +806,7 @@ describe("debug hooks", () => {
     const handle = {
       render: vi.fn(),
       aimPoint: vi.fn(() => null),
+      lookZoom: vi.fn(() => 1),
       dispose: vi.fn(),
     };
     mockCreateView3d.mockReturnValue(handle);

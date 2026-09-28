@@ -34,6 +34,7 @@ function fakeLook(yaw = 0): MouseLook & { turn(delta: number): void } {
       current = value;
     },
     setPitchLimits: vi.fn(),
+    setZoom: vi.fn(),
     takeYawDelta: () => {
       const delta = pending;
       pending = 0;
@@ -87,6 +88,7 @@ function runtime3d(
   view3d: {
     render: ReturnType<typeof vi.fn>;
     aimPoint: ReturnType<typeof vi.fn<() => AimPoint | null>>;
+    lookZoom: ReturnType<typeof vi.fn<() => number>>;
   };
 } {
   return {
@@ -101,6 +103,7 @@ function runtime3d(
       render: vi.fn(),
       dispose: vi.fn(),
       aimPoint: vi.fn<() => AimPoint | null>(() => null),
+      lookZoom: vi.fn(() => 1),
     },
     look,
     camera3d: "third",
@@ -263,6 +266,38 @@ describe("paint3d", () => {
       deadSeconds: 2.5,
       size: { width: 800, height: 600 },
     });
+  });
+
+  it("raises the view's sights while the input aims down them, and not while a menu has it", () => {
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      createFakeContext() as unknown as CanvasRenderingContext2D,
+    );
+    const runtime = runtime3d();
+    const scene = { world: { tiles: [] } } as unknown as Scene;
+    const rect = { width: 800, height: 600 } as DOMRect;
+    const paint = (): View3dFrame => {
+      paint3d(document.createElement("canvas"), rect, runtime, scene, 0, 0);
+      return runtime.view3d.render.mock.calls.at(-1)![0] as View3dFrame;
+    };
+    input3d(runtime, createInput({ ads: true }), 1 / 60);
+    expect(paint().ads).toBe(true);
+    runtime.inputSuspended = true;
+    expect(paint().ads).toBe(false);
+    runtime.inputSuspended = false;
+    input3d(runtime, createInput({}), 1 / 60);
+    expect(paint().ads).toBe(false);
+  });
+
+  it("slows mouse-look by however much the sights zoomed the view", () => {
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      createFakeContext() as unknown as CanvasRenderingContext2D,
+    );
+    const runtime = runtime3d();
+    runtime.view3d.lookZoom.mockReturnValue(0.3);
+    const scene = { world: { tiles: [] } } as unknown as Scene;
+    const rect = { width: 800, height: 600 } as DOMRect;
+    paint3d(document.createElement("canvas"), rect, runtime, scene, 0, 0);
+    expect(runtime.look.setZoom).toHaveBeenCalledWith(0.3);
   });
 
   it("hands the 3D view the simulation's structures, and an intact city while it has none", () => {

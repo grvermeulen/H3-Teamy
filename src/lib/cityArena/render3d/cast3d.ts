@@ -63,10 +63,12 @@ export type CastFrame = {
 export type CastAim = {
   /** Where the crosshair points, for the local player's rounds; `null` while there is none. */
   shot: Readonly<ShooterAim> | null;
+  /** How far the sights are up, 0 (at the hip) … 1: the hands raise the gun by it. */
+  sights: number;
 };
 
-/** No aim: everyone's rounds converge onto their flat line. */
-const NO_AIM: CastAim = { shot: null };
+/** No aim: everyone's rounds converge onto their flat line, the hands stay at the hip. */
+const NO_AIM: CastAim = { shot: null, sights: 0 };
 
 /** The moving part of the 3D view. */
 export type Cast3d = {
@@ -153,13 +155,18 @@ function createCockpitPose(): CockpitPose {
   };
 }
 
-/** Fills the hands' reused input from the entity sync's local player; `null` hides them. */
+/**
+ * Fills the hands' reused input from the entity sync's local player and the sights; `null` hides
+ * them.
+ */
 function handsInput(
   hands: ViewModelInput,
   entities: EntitySync,
   frame: CastFrame,
+  sights: number,
 ): ViewModelInput | null {
   if (frame.mode !== "first" || !entities.local.onFoot) return null;
+  hands.sights = sights;
   hands.weapon = entities.local.weapon;
   hands.firedTick = entities.local.firedTick;
   hands.speed = entities.local.speed;
@@ -183,7 +190,14 @@ type FirstPersonView = {
 function createFirstPersonView(hands: ViewModelPass): FirstPersonView {
   return {
     hands,
-    input: { weapon: "fist", firedTick: null, tick: 0, speed: 0, dt: 0 },
+    input: {
+      weapon: "fist",
+      firedTick: null,
+      tick: 0,
+      speed: 0,
+      dt: 0,
+      sights: 0,
+    },
     cockpit: createCockpitPose(),
     muzzle: new Vector3(),
     handsShown: false,
@@ -199,8 +213,9 @@ function poseFirstPerson(
   entities: EntitySync,
   frame: CastFrame,
   camera: PerspectiveCamera,
+  sights: number,
 ): OverlayPass | null {
-  const drawn = handsInput(view.input, entities, frame);
+  const drawn = handsInput(view.input, entities, frame, sights);
   view.handsShown = drawn !== null;
   const cockpit = cockpitPose(view.cockpit, entities, frame);
   const pass = view.hands.update(camera, drawn, cockpit);
@@ -237,7 +252,13 @@ export function createCast3d(
         frame.quality === "low" ? GLTF_LOD_DISTANCE_M : undefined;
       entities.update(frame.scene, frame.dt, focus, view);
       street.update(contacts, frame.scene, focus, frame.dt);
-      const pass = poseFirstPerson(firstPerson, entities, frame, camera);
+      const pass = poseFirstPerson(
+        firstPerson,
+        entities,
+        frame,
+        camera,
+        aim.sights,
+      );
       fx = fxFor(object, fx, frame.quality);
       // Your own flame moves to the hands' barrel only while the hands are there to show it.
       fx.effects.sync(

@@ -430,6 +430,8 @@ type ArenaView3dOptions = {
   settings: ArenaSettings;
   updateSettings: (patch: Partial<ArenaSettings>) => void;
   runtimeRef: RefObject<Runtime | null>;
+  /** Where the right mouse button's sights go (aim spec §5). */
+  inputRef: RefObject<InputState>;
   canvasRef: RefObject<HTMLCanvasElement | null>;
   onPause?: () => void;
   /** The V key's action, bound once by the keyboard. */
@@ -459,6 +461,7 @@ function useArenaView3d(options: ArenaView3dOptions): View3dControls {
     epoch: options.epoch,
     mode: settings.camera3d,
     runtimeRef: options.runtimeRef,
+    inputRef: options.inputRef,
     hudCanvasRef: options.canvasRef,
     onFallback: fallbackTo2d,
     onPause: () => onPause?.(),
@@ -864,6 +867,7 @@ export function useArenaGame({
     settings,
     updateSettings,
     runtimeRef,
+    inputRef,
     canvasRef,
     onPause: keys?.onPause,
     toggleCameraRef,

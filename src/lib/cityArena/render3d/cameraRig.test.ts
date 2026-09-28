@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  ADS_BACK_M,
+  ADS_EASE_S,
+  ADS_FOV_DEG,
   CHASE_MAX_BACK_M,
   SHOULDER_M,
+  easeSights,
+  scopeShare,
+  sightsShare,
   THIRD_PERSON_BACK_M,
   THIRD_PERSON_UP_M,
   pitchLimitsFor,
@@ -178,5 +184,95 @@ describe("pitchLimitsFor", () => {
     expect((thirdMax * 180) / Math.PI).toBeCloseTo(40);
     expect((firstMin * 180) / Math.PI).toBeCloseTo(-30);
     expect((firstMax * 180) / Math.PI).toBeCloseTo(30);
+  });
+});
+
+describe("aiming down the sights", () => {
+  const FRAME_S = 1 / 60;
+
+  /** How far the sights are up after holding (or letting go) for `seconds`. */
+  function held(
+    seconds: number,
+    aiming: boolean,
+    weapon: Parameters<typeof easeSights>[2],
+    from = 0,
+  ): number {
+    let progress = from;
+    for (let elapsed = 0; elapsed < seconds - 1e-9; elapsed += FRAME_S)
+      progress = easeSights(progress, aiming, weapon, FRAME_S);
+    return progress;
+  }
+
+  it("zooms each gun to its own field of view; fists and the bat have no sights", () => {
+    expect(ADS_FOV_DEG).toEqual({
+      pistol: 50,
+      uzi: 50,
+      shotgun: 50,
+      rifle: 24,
+      rocket: 45,
+      cannon: 45,
+    });
+    expect(held(1, true, "fist")).toBe(0);
+    expect(held(1, true, "bat")).toBe(0);
+  });
+
+  it("brings the sights up over 0.15 s and takes them down as fast", () => {
+    expect(ADS_EASE_S).toBe(0.15);
+    expect(easeSights(0, true, "pistol", ADS_EASE_S / 2)).toBeCloseTo(0.5);
+    expect(held(ADS_EASE_S, true, "pistol")).toBeCloseTo(1);
+    expect(held(ADS_EASE_S, false, "pistol", 1)).toBeCloseTo(0);
+  });
+
+  it("eases the first-person view to the weapon's field of view, and fists not at all", () => {
+    const aimed = (weapon: Parameters<typeof easeSights>[2]): RigPose =>
+      rigPose(
+        input({
+          mode: "first",
+          weapon,
+          sights: sightsShare(held(ADS_EASE_S, true, weapon)),
+        }),
+      );
+    expect(aimed("pistol").fovDeg).toBeCloseTo(50);
+    expect(aimed("rifle").fovDeg).toBeCloseTo(24);
+    expect(aimed("rocket").fovDeg).toBeCloseTo(45);
+    expect(aimed("fist").fovDeg).toBeCloseTo(70);
+    const halfway = rigPose(
+      input({ mode: "first", weapon: "rifle", sights: 0.5 }),
+    );
+    expect(halfway.fovDeg).toBeCloseTo(47);
+  });
+
+  it("pulls the shoulder camera in to 1.9 m at 45°, and zooms the chase camera", () => {
+    const pose = rigPose(input({ weapon: "pistol", sights: 1 }));
+    expect(ADS_BACK_M).toBe(1.9);
+    expect(pose.position[0]).toBeCloseTo(-ADS_BACK_M);
+    expect(pose.position[2]).toBeCloseTo(SHOULDER_M);
+    expect(pose.fovDeg).toBeCloseTo(45);
+    const chase = rigPose(
+      input({ weapon: "pistol", sights: 1, driving: SEDAN_EAST }),
+    );
+    expect(chase.fovDeg).toBeCloseTo(45);
+    expect(chase.position[0]).toBeCloseTo(-(THIRD_PERSON_BACK_M + 4.2));
+  });
+
+  it("reports how much the sights narrow the view, for the mouse to slow by", () => {
+    const halfTan = (degrees: number): number =>
+      Math.tan((degrees * Math.PI) / 360);
+    expect(rigPose(input()).zoom).toBe(1);
+    expect(
+      rigPose(input({ mode: "first", weapon: "rifle", sights: 1 })).zoom,
+    ).toBeCloseTo(halfTan(24) / halfTan(70));
+    expect(rigPose(input({ weapon: "pistol", sights: 1 })).zoom).toBeCloseTo(
+      halfTan(45) / halfTan(60),
+    );
+  });
+
+  it("shapes the ease and fades the rifle's scope in over its last stretch", () => {
+    expect(sightsShare(0)).toBe(0);
+    expect(sightsShare(1)).toBe(1);
+    expect(sightsShare(0.25)).toBeLessThan(0.25);
+    expect(scopeShare(0.5)).toBe(0);
+    expect(scopeShare(1)).toBe(1);
+    expect(scopeShare(0.8)).toBeGreaterThan(0);
   });
 });

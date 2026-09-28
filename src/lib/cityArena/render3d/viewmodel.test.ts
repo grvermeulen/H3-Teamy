@@ -15,9 +15,11 @@ import { screenFootprint, type ScreenBox } from "./testing/screenFootprint";
 import {
   createViewModel,
   placeViewModel,
+  sightOf,
   type ViewModel,
   type ViewModelInput,
 } from "./viewmodel";
+import { HANDS_FOV_DEG } from "./viewModelPass";
 import { muzzleTipOf } from "./weapons3d";
 
 const FRAME_S = 1 / 60;
@@ -298,5 +300,95 @@ describe("createViewModel", () => {
     parent.add(model.object);
     model.dispose();
     expect(model.object.parent).toBeNull();
+  });
+});
+
+describe("createViewModel: aiming down the sights", () => {
+  /** A 1080p screen: device coordinates to pixels off the centre. */
+  const HALF_WIDTH_PX = 960;
+  const HALF_HEIGHT_PX = 540;
+  const SIGHTED = ["pistol", "uzi", "shotgun", "rocket"] as const;
+
+  /** A view model aimed down the sights with `weapon`, through the hands' own lens. */
+  function aimed(
+    weapon: WeaponKind,
+    speed = 0,
+  ): { model: ViewModel; camera: PerspectiveCamera } {
+    const camera = new PerspectiveCamera(HANDS_FOV_DEG, 16 / 9, 0.01, 5);
+    const model = createViewModel();
+    camera.add(model.object);
+    placeViewModel(model.object, camera, 1);
+    runFor(model, 0.5, { ...STILL, weapon, speed, sights: 1 });
+    camera.updateMatrixWorld(true);
+    return { model, camera };
+  }
+
+  /** How far from the screen's centre a world point lands, pixels. */
+  function offCentre(point: Vector3, camera: PerspectiveCamera): number[] {
+    const seen = point.clone().project(camera);
+    return [
+      Math.abs(seen.x) * HALF_WIDTH_PX,
+      Math.abs(seen.y) * HALF_HEIGHT_PX,
+    ];
+  }
+
+  /** The sight and a point 1 m on along the barrel from it, in the world. */
+  function sightLine(model: ViewModel, weapon: WeaponKind): Vector3[] {
+    const held = heldWeapon(model)!;
+    const sight = new Vector3(...sightOf(weapon)!);
+    return [
+      held.localToWorld(sight.clone()),
+      held.localToWorld(sight.clone().add(new Vector3(1, 0, 0))),
+    ];
+  }
+
+  it("lines each gun's sights up on the crosshair, the barrel running straight ahead", () => {
+    for (const weapon of SIGHTED) {
+      const { model, camera } = aimed(weapon);
+      for (const point of sightLine(model, weapon))
+        for (const pixels of offCentre(point, camera))
+          expect(pixels, weapon).toBeLessThan(2);
+    }
+  });
+
+  it("holds the pistol's muzzle just under the crosshair", () => {
+    const { model, camera } = aimed("pistol");
+    const muzzle = new Vector3();
+    model.muzzleWorld(muzzle);
+    const seen = muzzle.project(camera);
+    expect(Math.abs(seen.x) * HALF_WIDTH_PX).toBeLessThan(2);
+    expect(seen.y).toBeLessThan(0);
+    expect(-seen.y * HALF_HEIGHT_PX).toBeLessThan(40);
+  });
+
+  it("holds the sights still while walking: the bob is damped", () => {
+    const { model, camera } = aimed("pistol", 5);
+    for (let frame = 0; frame < 20; frame += 1) {
+      model.update({ ...STILL, speed: 5, sights: 1 });
+      camera.updateMatrixWorld(true);
+      for (const pixels of offCentre(sightLine(model, "pistol")[0]!, camera))
+        expect(pixels).toBeLessThan(2);
+    }
+  });
+
+  it("drops the rifle out of view once its scope is up", () => {
+    const { model } = aimed("rifle");
+    let shown = true;
+    for (let node = heldWeapon(model) ?? null; node; node = node.parent)
+      shown &&= node.visible;
+    expect(shown).toBe(false);
+  });
+
+  it("keeps fists and the bat at the hip: they have no sights", () => {
+    for (const weapon of ["fist", "bat"] as const) {
+      expect(sightOf(weapon)).toBeNull();
+      const hip = placed(weapon, 16 / 9).model;
+      const camera = new PerspectiveCamera(70, 16 / 9, 0.01, 5);
+      const raised = createViewModel();
+      camera.add(raised.object);
+      placeViewModel(raised.object, camera);
+      runFor(raised, 0.5, { ...STILL, weapon, sights: 1 });
+      expect(poseOf(raised)).toEqual(poseOf(hip));
+    }
   });
 });

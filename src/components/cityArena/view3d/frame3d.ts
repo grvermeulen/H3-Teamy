@@ -132,6 +132,7 @@ export function input3d(
   const yaw = stickTurnedYaw(next.yaw, live, car !== null, dt);
   look.setYaw(yaw);
   runtime.aim3d = aim;
+  runtime.ads3d = live.ads === true;
   return cameraRelativeInput(live, yaw, car !== null, aim);
 }
 
@@ -157,6 +158,7 @@ function view3dFrame(
       runtime.diedAtMs === null
         ? null
         : (nowMs - runtime.diedAtMs) / MS_PER_SECOND,
+    ads: runtime.ads3d === true && !runtime.inputSuspended,
     quality: runtime.quality,
     size,
   };
@@ -165,7 +167,8 @@ function view3dFrame(
 /**
  * Paints a 3D frame (spec §6.2): the 2D canvas is sized and cleared as in 2D and becomes the
  * transparent HUD layer, the 3D view renders the scene underneath and its crosshair on top, and
- * the feedback vignette is drawn last, exactly as the 2D paint does.
+ * the feedback vignette is drawn last, exactly as the 2D paint does. Mouse-look then turns slower
+ * by however much the sights zoomed the view (aim spec §5).
  *
  * @param canvas - The playfield's 2D canvas.
  * @param rect - Its layout box.
@@ -187,6 +190,7 @@ export function paint3d(
   if (!context) return NO_RASTER;
   const size = { width: rect.width, height: rect.height };
   runtime.view3d.render(view3dFrame(runtime, scene, size, nowMs, dt), context);
+  runtime.look.setZoom(runtime.view3d.lookZoom());
   drawFeedback(context, size, runtime.feedback);
   return NO_RASTER;
 }

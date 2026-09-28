@@ -123,6 +123,7 @@ const mockCreateView3d = vi.hoisted(() =>
   vi.fn(() => ({
     render: vi.fn(),
     aimPoint: vi.fn(() => null),
+    lookZoom: vi.fn(() => 1),
     dispose: vi.fn(),
   })),
 );

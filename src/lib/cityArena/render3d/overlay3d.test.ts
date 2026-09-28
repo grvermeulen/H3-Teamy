@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createFakeContext } from "../render/testing/fakeContext";
 import { createArenaPlayer } from "../sim/roster";
 import { applyRigPose, rigPose, type RigInput } from "./cameraRig";
-import { drawOverlay3d } from "./overlay3d";
+import { SCOPE_RADIUS_SHARE, SCOPE_SHADE, drawOverlay3d } from "./overlay3d";
 import { drawPlayerArrows } from "./playerArrows";
 import { markerCss } from "./playerMarkers3d";
 
@@ -85,6 +85,42 @@ describe("drawOverlay3d", () => {
     const dead = createFakeContext();
     drawOverlay3d(dead, camera, { ...input, dead: true });
     expect(dead.calls).toEqual([]);
+  });
+
+  it("looks through the rifle's scope: a dark surround round a clear circle, a reticle for the crosshair", () => {
+    const camera = placedCamera({ mode: "first" });
+    const input = { origin: { x: 10, y: 20 }, size: SIZE, dead: false };
+    const hip = createFakeContext();
+    drawOverlay3d(hip, camera, input);
+    const crosshair = hip.calls.find((call) => call.startsWith("arc("))!;
+    const scoped = createFakeContext();
+    drawOverlay3d(scoped, camera, { ...input, scope: 1 });
+    const radius = SIZE.height * SCOPE_RADIUS_SHARE;
+    expect(scoped.calls).toContain(`fill(${SCOPE_SHADE})`);
+    expect(
+      scoped.calls.some((call) => call.startsWith(`arc(640,360,${radius}`)),
+    ).toBe(true);
+    expect(scoped.calls).not.toContain(crosshair);
+    expect(
+      scoped.calls.filter((call) => call.startsWith("lineTo(")).length,
+    ).toBeGreaterThanOrEqual(8);
+  });
+
+  it("fades the scope in with the sights and leaves it off at the hip", () => {
+    const camera = placedCamera({ mode: "first" });
+    const input = { origin: { x: 10, y: 20 }, size: SIZE, dead: false };
+    const half = createFakeContext();
+    const alphas: number[] = [];
+    const fill = half.fill;
+    half.fill = (...args) => {
+      alphas.push(half.globalAlpha);
+      fill(...args);
+    };
+    drawOverlay3d(half, camera, { ...input, scope: 0.5 });
+    expect(alphas[0]).toBe(0.5);
+    const none = createFakeContext();
+    drawOverlay3d(none, camera, { ...input, scope: 0 });
+    expect(none.calls).not.toContain(`fill(${SCOPE_SHADE})`);
   });
 
   it("hands the arrows its own input, making no new object per frame", () => {
