@@ -360,6 +360,13 @@ the settings that switch each of them off, and the rest of the keyboard map.
   face. The aim stick is a second aim source in `InputState` (`setStickAim`) that wins over the
   mouse while held, so the per-frame mouse aim cannot clobber it. The first time the touch controls
   show, a one-line tip explains them; Begrepen stores `h3-arena-touch-tip-v1`.
+- **Touch in 3D (aim round, track B).** Because the aim stick both aims and fires, every look in 3D
+  pulled the trigger. In 3D on a touch device it now gives way to a look pad on the same right 55 %
+  (a drag turns the camera, never fires; "Kijkgevoeligheid" in the menu scales it), a big round
+  hold-to-fire Schieten button in the bottom-right corner whose drag also looks, a Richten toggle
+  for aiming down the sights, and light aim assist (the pad slows to 0.45 within 2° of a living
+  target). The 3D layout has its own first-run tip (`h3-arena-touch3d-tip-v1`). 2D, split screen
+  and the TV controller keep the sticks above. Details in `3D-MODE.md`, Input → Touch.
 - **Keyboard.** Tab held shows the tussenstand (the live scorebord, re-read twice a second) —
   bound in the capture phase on the window and stopped there, so the dialog's focus trap never
   moves focus off the game; 1/2/3 pick a weapon and the wheel cycles one notch per 40 px of travel.

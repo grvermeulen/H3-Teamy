@@ -46,12 +46,28 @@ export function saveArenaSettings(patch: Partial<ArenaSettings>): void {
 
 /** localStorage key of the touch-controls tip, set once it has been read (spec §9.3). */
 export const ARENA_TOUCH_TIP_KEY = "h3-arena-touch-tip-v1";
+/** localStorage key of the 3D touch layout's tip (look pad, Schieten, Richten; aim round §6). */
+export const ARENA_TOUCH_3D_TIP_KEY = "h3-arena-touch3d-tip-v1";
 
-/** Whether the touch tip has been read on this device; a storage failure reads as "yes". */
-export function hasSeenArenaTouchTip(): boolean {
+/** Which touch tip: the 2D sticks and buttons, or the 3D look pad layout. */
+export type TouchTipKind = "2d" | "3d";
+
+/** The storage key of each touch tip. */
+const TOUCH_TIP_KEYS: Record<TouchTipKind, string> = {
+  "2d": ARENA_TOUCH_TIP_KEY,
+  "3d": ARENA_TOUCH_3D_TIP_KEY,
+};
+
+/**
+ * Whether a touch tip has been read on this device; a storage failure reads as "yes".
+ *
+ * @param kind - Which tip; the 2D one by default.
+ * @returns True once read.
+ */
+export function hasSeenArenaTouchTip(kind: TouchTipKind = "2d"): boolean {
   if (typeof window === "undefined") return true;
   try {
-    return localStorage.getItem(ARENA_TOUCH_TIP_KEY) !== null;
+    return localStorage.getItem(TOUCH_TIP_KEYS[kind]) !== null;
   } catch (error: unknown) {
     Sentry.captureException(error, {
       tags: { area: "arena", kind: "touch-tip-load" },
@@ -60,11 +76,15 @@ export function hasSeenArenaTouchTip(): boolean {
   }
 }
 
-/** Records that the touch tip has been read; a storage failure is reported, never thrown. */
-export function markArenaTouchTipSeen(): void {
+/**
+ * Records that a touch tip has been read; a storage failure is reported, never thrown.
+ *
+ * @param kind - Which tip; the 2D one by default.
+ */
+export function markArenaTouchTipSeen(kind: TouchTipKind = "2d"): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(ARENA_TOUCH_TIP_KEY, "1");
+    localStorage.setItem(TOUCH_TIP_KEYS[kind], "1");
   } catch (error: unknown) {
     Sentry.captureException(error, {
       tags: { area: "arena", kind: "touch-tip-save" },

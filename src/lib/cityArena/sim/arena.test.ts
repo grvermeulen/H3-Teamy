@@ -263,6 +263,27 @@ function twoPlayers(state: ArenaState): ArenaState {
   };
 }
 
+describe("vehicle health", () => {
+  it("clamps out-of-range health at the end of every tick", () => {
+    const state = boot();
+    const broken: ArenaState = {
+      ...state,
+      vehicles: [
+        ...state.vehicles,
+        { ...createVehicle(201, "sedan", [40, 0], 0, 0), health: 230 },
+      ],
+    };
+    expect(checkInvariants(broken)).toContain(
+      "vehicle 201 health 230 out of range (max 180)",
+    );
+    const next = run(broken, EMPTY_INPUT, 1);
+    expect(next.vehicles.find((vehicle) => vehicle.id === 201)?.health).toBe(
+      180,
+    );
+    expect(checkInvariants(next)).toEqual([]);
+  });
+});
+
 describe("joining and leaving", () => {
   it("spawns a joiner on a spawn node and refuses the ninth", () => {
     let state = boot();
@@ -667,16 +688,20 @@ describe("stepArena firing and death", () => {
         createInput({ fire: true, aim, ads }),
         1,
       );
+      expect(blast.bullets).toHaveLength(WEAPONS.shotgun.pellets);
       return Math.max(
         ...blast.bullets.map((bullet) =>
           Math.abs(Math.atan2(bullet.directionY, bullet.directionX) - aim),
         ),
       );
     };
-    expect(widest(true)).toBeLessThanOrEqual(
+    const aimed = widest(true);
+    const loose = widest(false);
+    expect(aimed).toBeLessThanOrEqual(
       WEAPONS.shotgun.spreadRad * ADS_SPREAD_FACTOR + 1e-9,
     );
-    expect(widest(false)).toBeLessThanOrEqual(WEAPONS.shotgun.spreadRad + 1e-9);
+    expect(loose).toBeGreaterThan(0);
+    expect(aimed).toBeCloseTo(loose * ADS_SPREAD_FACTOR);
   });
 
   it("caps a shotgun pull at the live-bullet limit instead of overshooting it", () => {

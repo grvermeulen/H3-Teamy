@@ -51,6 +51,14 @@ export function useActiveRooms(enabled: boolean): RoomsState {
     const load = async (): Promise<void> => {
       try {
         const response = await fetch(ROOMS_URL, { cache: "no-store" });
+        // 503/429 are intentional degraded states from the route (DB down, rate limit);
+        // the server already logs unexpected failures — do not double-report to Sentry.
+        if (response.status === 503 || response.status === 429) {
+          const rooms = readRooms(await response.json());
+          if (!alive.current) return;
+          setState(rooms ? { status: "ready", rooms } : { status: "offline" });
+          return;
+        }
         if (!response.ok) throw new Error(`rooms responded ${response.status}`);
         const rooms = readRooms(await response.json());
         if (!alive.current) return;
