@@ -40,8 +40,9 @@ immersion pass (`2026-09-27-arena-immersion-design.md`, PRs #744–#749, 0.6.0).
 - `WorldInput.ads?: boolean` (absent = not aiming); `createInput` sets it only when true.
 - Wire: `FLAG_ADS = 16` in the input frame's flags (`net/wire.ts`); `ARENA_PROTOCOL_VERSION = 5`.
 - Sim: `stepPlayer` multiplies its speed factor by `ADS_WALK_FACTOR` while `input.ads`
-  (covers host, offline and client prediction); `applyFire` fires with `aimedSpec(spec, ads)`
-  (`sim/weapons.ts`).
+  (covers host, offline and client prediction) — except with fists or the bat, which have no
+  sights (`walkingInput`, applied by the host's walk and the client's prediction); `applyFire`
+  fires with `aimedSpec(spec, ads)` (`sim/weapons.ts`).
 - Input: `ButtonName` gains `"ads"`; `InputState.snapshot()` sets `ads: true` while any source
   holds it (pointer = right mouse, buttons = touch toggle).
 

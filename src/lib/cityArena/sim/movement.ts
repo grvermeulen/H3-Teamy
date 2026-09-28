@@ -34,6 +34,7 @@ import {
   type VehicleControls,
   massOf,
 } from "./vehicle";
+import { walkingInput } from "./weapons";
 import { occupiedVehicle } from "./boarding";
 import type { ArenaWorld } from "./arenaWorld";
 
@@ -144,7 +145,7 @@ function walkPlayer(
         ...walker,
         ...stepPlayer(
           walker,
-          input,
+          walkingInput(input, walker.weapon),
           dt,
           world.collision,
           landmarkSpeedFactor(walker, tick),

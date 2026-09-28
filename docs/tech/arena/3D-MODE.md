@@ -510,9 +510,10 @@ The right mouse button, held, aims down the sights. `mouseLook.ts` writes the bu
 is held reaches the page as a `pointermove`, and counts too (`pointerAim.ts` likewise fires on a
 left press made while the right is held). It works only while the mouse is in the game (the pointer
 locked, or the lock-free fallback), lets go when the lock is lost or released or the window loses
-focus, and the playfield keeps the browser's context menu away. The simulation slows walking and
-narrows a spraying gun's cone (the round's foundation, protocol 5); the view (`cameraRig.ts`,
-`viewmodel.ts`, `overlay3d.ts`):
+focus, and the playfield keeps the browser's context menu away. The simulation slows walking
+(not with fists or the bat, which have no sights: `walkingInput`) and narrows a spraying gun's
+cone (the round's foundation, protocol 5); the view (`cameraRig.ts`, `viewmodel.ts`,
+`overlay3d.ts`):
 
 | Held                                    | First person, `ADS_FOV_DEG` | Over the shoulder          | In a car (chase) |
 | --------------------------------------- | --------------------------- | -------------------------- | ---------------- |
