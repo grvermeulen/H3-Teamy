@@ -60,4 +60,9 @@ describe("damage", () => {
     const wreck = { ...car, wrecked: true, health: 0 };
     expect(damageVehicle(wreck, 10)).toBe(wreck);
   });
+
+  it("clamps a car's health to its kind's maximum after damage", () => {
+    const bus = createVehicle(1, "bus", [0, 0], 0, 0);
+    expect(damageVehicle({ ...bus, health: 400 }, 1).health).toBe(350);
+  });
 });

@@ -7,7 +7,7 @@
  * bandwidth ten times a second for state nobody renders.
  */
 
-import { VEHICLE_KINDS } from "../sim/vehicle";
+import { clampVehicleHealth, VEHICLE_KINDS } from "../sim/vehicle";
 import type { MissionProfile } from "../missions/types";
 import { BONUS_KINDS, type LandmarkBonus } from "../sim/landmarkBonuses";
 import type { MatchPhase, MatchState } from "./matchPhase";
@@ -441,18 +441,21 @@ function decodePlayers(rows: number[][]): SnapshotPlayer[] {
 
 /** Decodes the car rows of a snapshot. */
 function decodeVehicles(rows: number[][]): SnapshotVehicle[] {
-  return rows.map((row) => ({
-    id: row[0] ?? 0,
-    kind: entryAt(VEHICLE_KINDS, row[1] ?? 0),
-    x: (row[2] ?? 0) / POSITION_SCALE,
-    y: (row[3] ?? 0) / POSITION_SCALE,
-    heading: unpackAngle(row[4] ?? 0),
-    velocityX: (row[5] ?? 0) / POSITION_SCALE,
-    velocityY: (row[6] ?? 0) / POSITION_SCALE,
-    health: row[7] ?? 0,
-    wrecked: (row[8] ?? 0) === 1,
-    colour: row[9] ?? 0,
-  }));
+  return rows.map((row) => {
+    const kind = entryAt(VEHICLE_KINDS, row[1] ?? 0);
+    return {
+      id: row[0] ?? 0,
+      kind,
+      x: (row[2] ?? 0) / POSITION_SCALE,
+      y: (row[3] ?? 0) / POSITION_SCALE,
+      heading: unpackAngle(row[4] ?? 0),
+      velocityX: (row[5] ?? 0) / POSITION_SCALE,
+      velocityY: (row[6] ?? 0) / POSITION_SCALE,
+      health: clampVehicleHealth(kind, row[7] ?? 0),
+      wrecked: (row[8] ?? 0) === 1,
+      colour: row[9] ?? 0,
+    };
+  });
 }
 
 /**

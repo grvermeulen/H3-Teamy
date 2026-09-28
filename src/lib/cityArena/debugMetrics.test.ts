@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { createFrameMetrics } from "./debugMetrics";
+import { createFrameMetrics, formatFixed } from "./debugMetrics";
+
+describe("formatFixed", () => {
+  it("formats finite numbers and falls back for missing values", () => {
+    expect(formatFixed(19.24, 1)).toBe("19.2");
+    expect(formatFixed(undefined, 1)).toBe("—");
+    expect(formatFixed(Number.NaN, 1)).toBe("—");
+  });
+});
 
 describe("createFrameMetrics", () => {
   it("includes stalls in wall-clock fps and reports frame percentiles", () => {

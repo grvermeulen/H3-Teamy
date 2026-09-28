@@ -116,8 +116,13 @@ function checkVehicles(
     );
     check(
       violations,
+      Number.isFinite(vehicle.health),
+      `vehicle ${vehicle.id} health is not finite`,
+    );
+    check(
+      violations,
       vehicle.health >= 0 && vehicle.health <= healthMaxOf(vehicle.kind),
-      `vehicle ${vehicle.id} health out of range`,
+      `vehicle ${vehicle.id} health ${vehicle.health} out of range (max ${healthMaxOf(vehicle.kind)})`,
     );
     check(
       violations,
