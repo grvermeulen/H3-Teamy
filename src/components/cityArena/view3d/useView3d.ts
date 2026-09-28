@@ -187,6 +187,8 @@ function handOver(
   look: MouseLook,
 ): Attached {
   const { runtime } = input;
+  // A drag made while the module loaded had no camera to turn; it must not jump the first frame.
+  input.touchPad.take();
   const touch = createTouchCamera(
     input.touchPad,
     input.module.pitchLimitsFor(input.mode),

@@ -179,7 +179,16 @@ describe("useView3d", () => {
   it("hands the runtime the touch look pad in the mode's pitch range, and takes it back in 2D", async () => {
     mockCreateView3d.mockReturnValue(fakeHandle());
     const { result, rerender, runtimeRef, on } = renderView3d();
+    // A drag made while the 3D module loads has no camera yet, and must not jump the first frame.
+    result.current.touchLook.onDown({ pointerId: 9, clientX: 0, clientY: 0 });
+    result.current.touchLook.onMove({ pointerId: 9, clientX: 80, clientY: 0 });
+    result.current.touchLook.onUp({ pointerId: 9, clientX: 80, clientY: 0 });
     on();
+    await waitFor(() => expect(runtimeRef.current.touchCamera).toBeTruthy());
+    expect(runtimeRef.current.touchCamera!.pad.take()).toEqual({
+      yaw: 0,
+      pitch: 0,
+    });
     await waitFor(() => expect(runtimeRef.current.touchCamera).toBeTruthy());
     const touch = runtimeRef.current.touchCamera!;
     expect(touch.pad).toBe(result.current.touchLook);
