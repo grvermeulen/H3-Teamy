@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Dutch strings; no inline `style`; JSDoc + explicit return types; functions ≤ 50 lines; named constants; Sentry on every `catch`; commit subjects ≤ 72 chars ending with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- Dutch strings; no inline `style`; JSDoc + explicit return types; functions ≤ 50 lines; named constants; Sentry on every `catch`; commit subjects ≤ 72 chars; every message ends with a separate `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` trailer line in its body, never in the subject.
 - No sim/wire changes. Place the arm as its own object from the car's transform (do **not** edit `vehicleModels.ts`/`vehicleShapes*.ts`/`vehicles3d.ts` — track D replaces the car bodies). Stay out of track A's and B's files; shared (`entities.ts`, `cast3d.ts`, `effects3d.ts`): small local edits.
 - Branch `feat/arena-drive-by` from the foundation; PR against `image`; no version bump.
 

@@ -269,9 +269,7 @@ describe("snapshot wire format", () => {
   it("clamps over-max vehicle health when encoding a snapshot row", () => {
     const state = {
       ...boot(),
-      vehicles: [
-        { ...createVehicle(201, "sedan", [0, 0], 0, 0), health: 230 },
-      ],
+      vehicles: [{ ...createVehicle(201, "sedan", [0, 0], 0, 0), health: 230 }],
     };
     const snapshot = encodeSnapshot(state, 0, {});
     expect(snapshot.v[0]![7]).toBe(180);

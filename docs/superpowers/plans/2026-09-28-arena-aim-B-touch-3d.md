@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Dutch strings (labels, aria-labels, tip); no inline `style` (Tailwind); JSDoc + explicit return types; functions/components ≤ 50 lines; named constants; Sentry on every `catch`; commit subjects ≤ 72 chars ending with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- Dutch strings (labels, aria-labels, tip); no inline `style` (Tailwind); JSDoc + explicit return types; functions/components ≤ 50 lines; named constants; Sentry on every `catch`; commit subjects ≤ 72 chars; every message ends with a separate `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` trailer line in its body, never in the subject.
 - No sim/wire changes. Stay out of track A's files (`mouseLook.ts`, `keyboard.ts`, `overlay3d.ts`, `aimProbe.ts`, `cameraRig.ts`, `viewmodel.ts`), track C's and track D's. Shared (`useView3d.ts`, `cameraYaw.ts`, `CityArenaOverlay.tsx`, `arenaRuntime.ts`): small local edits.
 - Branch `feat/arena-touch-3d` from the foundation; PR against `image`; no version bump.
 

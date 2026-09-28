@@ -268,3 +268,55 @@ describe("createProjectiles3d", () => {
     expect(bodyGeometry).toHaveBeenCalledOnce();
   });
 });
+
+describe("createProjectiles3d: rounds aimed at the crosshair", () => {
+  /** The shooter of {@link ROUND} aims at a first-floor window 40 m from where they fired. */
+  const WINDOW = { ownerId: ROUND.ownerId, x: 120, y: 50, height: 6 };
+  const muzzles = new Map([[ROUND.ownerId, MUZZLE]]);
+
+  it("draws the local shooter's round climbing to the window's height at its distance", () => {
+    const { projectiles } = setup();
+
+    projectiles.sync([ROUND], muzzles, WINDOW);
+
+    const { head } = tracerEnds(projectiles.object);
+    expect(head.x).toBeCloseTo(100);
+    expect(head.y).toBeCloseTo(MUZZLE.y + ((6 - MUZZLE.y) * 20) / 40);
+  });
+
+  it("keeps the aim a round was fired at while the crosshair moves on", () => {
+    const { projectiles } = setup();
+    projectiles.sync([ROUND], muzzles, WINDOW);
+
+    const later = { ...ROUND, x: 120, rangeLeftM: ROUND.rangeLeftM - 20 };
+    projectiles.sync([later], muzzles, { ...WINDOW, height: 0 });
+
+    expect(tracerEnds(projectiles.object).head.y).toBeCloseTo(6);
+  });
+
+  it("leaves everyone else's rounds on their flat line", () => {
+    const { projectiles } = setup();
+
+    projectiles.sync([{ ...ROUND, ownerId: 9 }], muzzles, WINDOW);
+
+    const { head } = tracerEnds(projectiles.object);
+    const onLine = new Vector3(100, PERSON_CHEST_HEIGHT_M, 50);
+    expect(head.distanceTo(onLine)).toBeCloseTo(0, 5);
+  });
+
+  it("flies the local shooter's rocket up toward the window, nose raised", () => {
+    const { projectiles } = setup();
+    const rocket: BulletState = {
+      ...ROUND,
+      weapon: "rocket",
+      rangeLeftM: WEAPONS.rocket.rangeM - 20,
+    };
+
+    projectiles.sync([rocket], muzzles, WINDOW);
+
+    const [body] = visibleNamed(projectiles.object, "rocket");
+    const slope = (6 - MUZZLE.y) / 40;
+    expect(body!.position.y).toBeCloseTo(MUZZLE.y + slope * 20);
+    expect(body!.rotation.z).toBeCloseTo(Math.atan(slope));
+  });
+});

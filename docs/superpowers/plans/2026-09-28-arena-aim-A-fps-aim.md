@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Dutch strings; no inline `style`; JSDoc + explicit return types on exports; functions ≤ 50 lines; named constants; Sentry on every `catch`; commit subjects ≤ 72 chars, ending with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- Dutch strings; no inline `style`; JSDoc + explicit return types on exports; functions ≤ 50 lines; named constants; Sentry on every `catch`; commit subjects ≤ 72 chars; every message ends with a separate `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` trailer line in its body, never in the subject.
 - No sim/wire changes (the foundation already carries `ads`). `render3d/` imported by value only inside `render3d/` and `view3d/`.
 - Stay out of track B's files (touch: `touchStick.ts`, new touch look/aim-assist modules, `ArenaTouchButtons.tsx`, the touch parts of `CityArenaOverlay.tsx`), track C's (`driveBy*`, `cockpit3d.ts`, driver parts of `entities.ts`) and track D's (`vehicleModels.ts`, `vehicleShapes*.ts`, `vehicles3d.ts`, car assets). Shared files (`useView3d.ts`, `arenaRuntime.ts`, `CityArenaOverlay.tsx`, `muzzleBlend.ts`/`tracers.ts`): keep edits small and local.
 - Branch `feat/arena-fps-aim` from the foundation; PR against `image`; no version bump.

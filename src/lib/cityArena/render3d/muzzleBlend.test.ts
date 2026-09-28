@@ -87,6 +87,86 @@ describe("blendedRoundPoint", () => {
   });
 });
 
+describe("blendedRoundPoint: rounds aimed at the crosshair", () => {
+  /** A first-floor window 30 m out. */
+  const WINDOW = { height: 6, distance: 30 };
+
+  it("climbs from the muzzle's height to the aim point's at its distance, then on along that slope", () => {
+    const heightAt = (flown: number): number =>
+      blendedRoundPoint(round(flown), flown, MUZZLE, new Vector3(), 0, WINDOW)
+        .y;
+    const slope = (WINDOW.height - MUZZLE.y) / WINDOW.distance;
+    expect(heightAt(0)).toBeCloseTo(MUZZLE.y);
+    expect(heightAt(15)).toBeCloseTo(MUZZLE.y + slope * 15);
+    expect(heightAt(30)).toBeCloseTo(WINDOW.height);
+    expect(heightAt(40)).toBeCloseTo(WINDOW.height + slope * 10);
+  });
+
+  it("dips to a point on the ground and runs along it beyond, never below", () => {
+    const street = { height: 0, distance: 10 };
+    for (const [flown, height] of [
+      [10, 0],
+      [25, 0],
+    ] as const)
+      expect(
+        blendedRoundPoint(round(flown), flown, MUZZLE, new Vector3(), 0, street)
+          .y,
+      ).toBeCloseTo(height);
+  });
+
+  it("climbs from chest height when its shooter's muzzle is unknown", () => {
+    const out = blendedRoundPoint(
+      round(30),
+      30,
+      null,
+      new Vector3(),
+      0,
+      WINDOW,
+    );
+    expect(out.toArray()).toEqual([130, WINDOW.height, 50]);
+  });
+
+  it("still settles onto the flat line sideways, as an unaimed round does", () => {
+    for (const flown of [2, 8, 20]) {
+      const aimed = blendedRoundPoint(
+        round(flown),
+        flown,
+        MUZZLE,
+        new Vector3(),
+        0,
+        WINDOW,
+      );
+      const flat = blendedRoundPoint(
+        round(flown),
+        flown,
+        MUZZLE,
+        new Vector3(),
+      );
+      expect([aimed.x, aimed.z]).toEqual([flat.x, flat.z]);
+    }
+  });
+
+  it("draws the tail on the same climb", () => {
+    const tail = blendedRoundPoint(
+      round(33),
+      33,
+      MUZZLE,
+      new Vector3(),
+      3,
+      WINDOW,
+    );
+    const earlier = blendedRoundPoint(
+      round(30),
+      30,
+      MUZZLE,
+      new Vector3(),
+      0,
+      WINDOW,
+    );
+    expect(tail.distanceTo(earlier)).toBeCloseTo(0);
+  });
+});
+
 describe("roundFlownM", () => {
   it("reads how far a round has flown from the range it has left", () => {
     expect(

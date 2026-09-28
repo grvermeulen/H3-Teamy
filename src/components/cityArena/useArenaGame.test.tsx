@@ -761,7 +761,12 @@ describe("debug hooks", () => {
   });
 
   it("in 3D paints through the 3D view and aims where the mouse turned the camera", async () => {
-    const handle = { render: vi.fn(), dispose: vi.fn() };
+    const handle = {
+      render: vi.fn(),
+      aimPoint: vi.fn(() => null),
+      lookZoom: vi.fn(() => 1),
+      dispose: vi.fn(),
+    };
     mockCreateView3d.mockReturnValue(handle);
     const { result, canvas, fakeContext } = await bootArenaWithCanvas({
       debug: true,
@@ -798,7 +803,12 @@ describe("debug hooks", () => {
   });
 
   it("in 3D hands the view a building the player shot down, as destroyed", async () => {
-    const handle = { render: vi.fn(), dispose: vi.fn() };
+    const handle = {
+      render: vi.fn(),
+      aimPoint: vi.fn(() => null),
+      lookZoom: vi.fn(() => 1),
+      dispose: vi.fn(),
+    };
     mockCreateView3d.mockReturnValue(handle);
     const { session, resolveReady } = createControllableSession();
     mockCreateWorldSession.mockReturnValue(session);

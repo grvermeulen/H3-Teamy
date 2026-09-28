@@ -154,6 +154,16 @@ export function isMapRoads(value: unknown): value is MapRoads {
 /** The two control layouts (spec §7); the device picks unless one is forced. */
 const layouts = ["mobile", "desktop"] as const;
 
+/**
+ * "Muisgevoeligheid" (aim spec §5): mouse-look's turn per pixel as a multiple, its range, default
+ * and the slider's step.
+ */
+export const MOUSE_SENSITIVITY = {
+  min: 0.25,
+  max: 2.5,
+  default: 1,
+  step: 0.05,
+} as const;
 /** "Kijkgevoeligheid": the range and default of the touch look pad's speed factor (aim round §6). */
 export const TOUCH_LOOK_SENSITIVITY_MIN = 0.25;
 export const TOUCH_LOOK_SENSITIVITY_MAX = 2.5;
@@ -183,6 +193,16 @@ export const ArenaSettingsSchema = z.object({
   view: z.enum(["2d", "3d"]).default("2d"),
   /** "3D-camera": third person (over the shoulder) or first person; irrelevant in 2D. */
   camera3d: z.enum(["third", "first"]).default("third"),
+  /**
+   * "Muisgevoeligheid": how fast the mouse turns the 3D view, as a multiple. A stored value out of
+   * range falls back to the default on its own, keeping every other setting.
+   */
+  mouseSensitivity: z
+    .number()
+    .min(MOUSE_SENSITIVITY.min)
+    .max(MOUSE_SENSITIVITY.max)
+    .default(MOUSE_SENSITIVITY.default)
+    .catch(MOUSE_SENSITIVITY.default),
   /** "Kijkgevoeligheid": scales how far a drag on the 3D touch look pad turns the camera. */
   // Out of range resets this setting alone, not every other one with it.
   touchLookSensitivity: z
@@ -211,5 +231,6 @@ export const DEFAULT_ARENA_SETTINGS: ArenaSettings = {
   ambience: true,
   view: "2d",
   camera3d: "third",
+  mouseSensitivity: MOUSE_SENSITIVITY.default,
   touchLookSensitivity: TOUCH_LOOK_SENSITIVITY_DEFAULT,
 };

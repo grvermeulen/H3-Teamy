@@ -15,8 +15,36 @@ import {
   SPAWN_AMMO,
   WEAPON_ORDER,
   weaponLabel,
+  walkingInput,
   WEAPONS,
 } from "./weapons";
+import { createInput } from "./types";
+
+describe("aimedSpec", () => {
+  it("narrows a spraying weapon's cone while aiming down the sights, and nothing else", () => {
+    const shotgun = aimedSpec(WEAPONS.shotgun, true);
+    expect(shotgun.spreadRad).toBeCloseTo(
+      WEAPONS.shotgun.spreadRad * ADS_SPREAD_FACTOR,
+    );
+    expect({ ...shotgun, spreadRad: 0 }).toEqual({
+      ...WEAPONS.shotgun,
+      spreadRad: 0,
+    });
+    expect(aimedSpec(WEAPONS.uzi, false)).toBe(WEAPONS.uzi);
+    expect(aimedSpec(WEAPONS.pistol, true).spreadRad).toBe(0);
+  });
+});
+
+describe("walkingInput", () => {
+  it("drops the sights for fists and the bat, which have none, and keeps them for a gun", () => {
+    const aiming = createInput({ move: [1, 0], ads: true });
+    expect(walkingInput(aiming, "fist").ads).toBeFalsy();
+    expect(walkingInput(aiming, "bat")).toEqual({ ...aiming, ads: false });
+    expect(walkingInput(aiming, "pistol")).toBe(aiming);
+    const walking = createInput({ move: [1, 0] });
+    expect(walkingInput(walking, "fist")).toBe(walking);
+  });
+});
 
 describe("aimedSpec", () => {
   it("narrows a spraying weapon's cone while aiming down the sights, and nothing else", () => {

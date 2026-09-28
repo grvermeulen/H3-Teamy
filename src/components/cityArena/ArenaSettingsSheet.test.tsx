@@ -182,6 +182,37 @@ describe("ArenaSettingsSheet", () => {
     expect(handlers.onChange).toHaveBeenLastCalledWith({ camera3d: "first" });
   });
 
+  it("sets the mouse sensitivity with a slider in 3D, showing the multiple", () => {
+    const handlers = renderSheet({
+      settings: {
+        ...DEFAULT_ARENA_SETTINGS,
+        view: "3d",
+        mouseSensitivity: 1.5,
+      },
+    });
+    const slider = screen.getByRole("slider", { name: "Muisgevoeligheid" });
+    expect(slider).toHaveValue("1.5");
+    expect(slider).toHaveAttribute("min", "0.25");
+    expect(slider).toHaveAttribute("max", "2.5");
+    expect(screen.getByText("1,50×")).toBeInTheDocument();
+    fireEvent.change(slider, { target: { value: "0.75" } });
+    expect(handlers.onChange).toHaveBeenLastCalledWith({
+      mouseSensitivity: 0.75,
+    });
+  });
+
+  it("disables the mouse sensitivity outside 3D and leaves it out on a shared screen", () => {
+    renderSheet();
+    expect(
+      screen.getByRole("slider", { name: "Muisgevoeligheid" }),
+    ).toBeDisabled();
+    cleanup();
+    renderSheet({ hideView: true });
+    expect(
+      screen.queryByRole("slider", { name: "Muisgevoeligheid" }),
+    ).toBeNull();
+  });
+
   it("offers the way out and the way back, and closes on Escape", () => {
     const handlers = renderSheet();
     fireEvent.click(screen.getByRole("button", { name: "Potje verlaten" }));

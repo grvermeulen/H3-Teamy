@@ -47,6 +47,9 @@ const RADIO_KEY = "KeyR";
 /** The key that toggles between third and first person in the 3D view (spec §6.3). */
 const TOGGLE_CAMERA_KEY = "KeyV";
 
+/** The key that opens the map, and closes it again (aim spec §5). */
+const MAP_KEY = "KeyM";
+
 /** The keys beyond movement and the held buttons, and who owns the keyboard. */
 export type KeyboardHooks = {
   /** Tab held shows the scorebord; released, it hides it. */
@@ -57,6 +60,11 @@ export type KeyboardHooks = {
   onRadio?: () => void;
   /** V toggles third/first person, while the 3D view is active. */
   onToggleCamera?: () => void;
+  /**
+   * M opens the map, or closes it again: it reaches this hook even while the open map suspends
+   * the other game keys.
+   */
+  onMap?: () => void;
   /** True while a menu owns the keyboard: game keys are ignored until it is closed. */
   isSuspended?: () => boolean;
 };
@@ -174,9 +182,31 @@ function publishButtons(pressedButtons: Set<string>, state: InputState): void {
   }
 }
 
+/** The keys that do one thing per press, by key code, given the hooks. */
+function tapActions(
+  hooks: KeyboardHooks,
+): Partial<Record<string, (() => void) | undefined>> {
+  return {
+    [RADIO_KEY]: hooks.onRadio,
+    [TOGGLE_CAMERA_KEY]: hooks.onToggleCamera,
+  };
+}
+
+/** Runs a one-press key's action: never on a held key's repeats, and after the user gesture. */
+function tap(
+  event: KeyboardEvent,
+  action: (() => void) | undefined,
+  onUserGesture: (() => void) | undefined,
+): void {
+  event.preventDefault();
+  if (event.repeat) return;
+  onUserGesture?.();
+  action?.();
+}
+
 /**
- * Binds WASD/arrows, the Space/E/F/Enter/Q buttons, 1–6, R, V and Tab to the input state and the
- * hooks; returns the detach function.
+ * Binds WASD/arrows, the Space/E/F/Enter/Q buttons, 1–6, R, V, M and Tab to the input state and
+ * the hooks; returns the detach function.
  */
 export function attachKeyboard(
   target: KeyboardTarget,
@@ -186,30 +216,15 @@ export function attachKeyboard(
 ): () => void {
   const pressed = new Set<string>();
   const pressedButtons = new Set<string>();
+  const taps = tapActions(hooks);
   const onKeyDown = (event: KeyboardEvent): void => {
-    if (isTypingTarget(event.target) || hooks.isSuspended?.()) return;
+    if (isTypingTarget(event.target)) return;
+    if (event.code === MAP_KEY) return tap(event, hooks.onMap, onUserGesture);
+    if (hooks.isSuspended?.()) return;
     const slot = SLOT_KEYS[event.code];
-    if (slot) {
-      event.preventDefault();
-      if (event.repeat) return;
-      onUserGesture?.();
-      hooks.onWeaponSlot?.(slot);
-      return;
-    }
-    if (event.code === RADIO_KEY) {
-      event.preventDefault();
-      if (event.repeat) return;
-      onUserGesture?.();
-      hooks.onRadio?.();
-      return;
-    }
-    if (event.code === TOGGLE_CAMERA_KEY) {
-      event.preventDefault();
-      if (event.repeat) return;
-      onUserGesture?.();
-      hooks.onToggleCamera?.();
-      return;
-    }
+    if (slot)
+      return tap(event, () => hooks.onWeaponSlot?.(slot), onUserGesture);
+    if (event.code in taps) return tap(event, taps[event.code], onUserGesture);
     if (KEY_VECTORS[event.code]) {
       if (event.code.startsWith("Arrow")) event.preventDefault();
       onUserGesture?.();

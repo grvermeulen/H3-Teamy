@@ -280,8 +280,12 @@ export type Runtime = {
   camera3d?: ArenaSettings["camera3d"];
   /** What the 3D car camera remembers between frames: mouse idle time and last heading. */
   carLook?: CarLook;
-  /** The heading the 3D input last sent the simulation to shoot along; the crosshair follows it. */
+  /** The heading the 3D input last sent the simulation: at what the crosshair covers. */
   aim3d?: number;
+  /** Whether the 3D input last aimed down the sights: the view zooms while it does. */
+  ads3d?: boolean;
+  /** "Muisgevoeligheid": mouse-look's turn per pixel as a multiple; 1 when unset. */
+  mouseSensitivity?: number;
   /** The touch look pad, attached alongside {@link look} (spec §6); `view3d/touchLook3d.ts`. */
   touchCamera?: TouchCamera | null;
 };
