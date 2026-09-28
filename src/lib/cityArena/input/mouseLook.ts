@@ -167,8 +167,8 @@ function holdSights(
 
 /**
  * Binds the right button to the sights — held while its bit is set and the mouse is in the game —
- * and keeps the browser's context menu off the playfield. Leaving the target lets go. Returns the
- * unbind, which lets go too.
+ * and keeps the browser's context menu off the playfield. Leaving the target or the window losing
+ * focus (whose release never reaches us) lets go. Returns the unbind, which lets go too.
  */
 function bindSights(
   target: HTMLElement,
@@ -188,12 +188,14 @@ function bindSights(
   target.addEventListener("pointerleave", onLeave);
   target.addEventListener("pointercancel", onLeave);
   target.addEventListener("contextmenu", onMenu);
+  window.addEventListener("blur", onLeave);
   return () => {
     for (const type of BUTTON_EVENTS)
       target.removeEventListener(type, onButton);
     target.removeEventListener("pointerleave", onLeave);
     target.removeEventListener("pointercancel", onLeave);
     target.removeEventListener("contextmenu", onMenu);
+    window.removeEventListener("blur", onLeave);
     holdSights(state, hooks, false);
   };
 }

@@ -377,6 +377,15 @@ describe("attachMouseLook: aiming down the sights", () => {
     expect(input.snapshot().ads).toBeUndefined();
   });
 
+  it("lets go of the sights when the window loses focus with the button held", () => {
+    const input = createInputState();
+    const look = attachMouseLook(canvas, { input });
+    rightButton(canvas, "pointerdown", 2);
+    window.dispatchEvent(new Event("blur"));
+    expect(input.snapshot().ads).toBeUndefined();
+    look.detach();
+  });
+
   it("does not aim before the player has clicked into the game", () => {
     stubPointerLock(null);
     const input = createInputState();
