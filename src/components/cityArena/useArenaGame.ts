@@ -133,6 +133,8 @@ export type ArenaKeyOptions = {
   suspended?: boolean;
   /** The player let go of the 3D pointer lock (the browser's first Esc): open the menu. */
   onPause?: () => void;
+  /** M: open the map, or close it again (aim spec §5). */
+  onMap?: () => void;
 };
 /** Hook result consumed by the overlay. */
 export type ArenaGame = MatchSeam & {
@@ -234,6 +236,7 @@ async function bootSession(
   runtime.quality = settingsRef.current.quality;
   runtime.dynamicCamera = settingsRef.current.dynamicCamera;
   runtime.camera3d = settingsRef.current.camera3d;
+  runtime.mouseSensitivity = settingsRef.current.mouseSensitivity;
   runtimeRef.current = runtime;
   return {
     index,
@@ -366,11 +369,15 @@ function useKeyboardBindings(
   const suspended = keys?.suspended ?? false;
   const onScoreboard = keys?.onScoreboard;
   const suspendedRef = useRef(suspended);
+  const onMapRef = useRef(keys?.onMap);
   useEffect(() => {
     suspendedRef.current = suspended;
     // A key held as the menu opened must not stay held behind it.
     if (suspended) inputRef.current.clearKeyboard();
   }, [suspended, inputRef]);
+  useEffect(() => {
+    onMapRef.current = keys?.onMap;
+  }, [keys?.onMap]);
   useEffect(
     () =>
       attachKeyboard(
@@ -383,6 +390,7 @@ function useKeyboardBindings(
             runtimeRef.current?.weapons.request(SLOT_WEAPONS[slot]),
           onRadio,
           onToggleCamera,
+          onMap: () => onMapRef.current?.(),
           isSuspended: () => suspendedRef.current,
         },
       ),
@@ -726,6 +734,7 @@ function applySettings(runtime: Runtime | null, settings: ArenaSettings): void {
   runtime.quality = settings.quality;
   runtime.dynamicCamera = settings.dynamicCamera;
   runtime.camera3d = settings.camera3d;
+  runtime.mouseSensitivity = settings.mouseSensitivity;
   runtime.sound.radio?.setEnabled(settings.radio);
   runtime.sound.radio?.tune(settings.radioStation ?? "");
   runtime.sound.setAmbienceEnabled(settings.ambience);

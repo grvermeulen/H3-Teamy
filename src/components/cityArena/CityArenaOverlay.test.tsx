@@ -298,7 +298,7 @@ describe("CityArenaOverlay", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("mentions the V camera key in the controls hint only while 3D runs", async () => {
+  it("mentions M for the map always, and the sights and V camera only while 3D runs", async () => {
     renderOverlay(vi.fn());
     await waitFor(() =>
       expect(screen.getByTestId("arena-hud")).toHaveTextContent(
@@ -306,10 +306,16 @@ describe("CityArenaOverlay", () => {
       ),
     );
     const hint = screen.getByText(/WASD of pijltjes/);
+    expect(hint).toHaveTextContent("1-6 wapens · M kaart · R radio");
     expect(hint).not.toHaveTextContent("V camera");
+    expect(hint).not.toHaveTextContent("rechtermuisknop");
     fireEvent.click(screen.getByRole("button", { name: "Wissel naar 3D" }));
-    expect(screen.getByText(/WASD of pijltjes/)).toHaveTextContent(
-      "Q, wiel of 1-6 wapens · V camera · R radio",
+    const hint3d = screen.getByText(/WASD of pijltjes/);
+    expect(hint3d).toHaveTextContent(
+      "muis richt en schiet · rechtermuisknop vizier · E instappen",
+    );
+    expect(hint3d).toHaveTextContent(
+      "Q, wiel of 1-6 wapens · M kaart · V camera · R radio",
     );
   });
 
@@ -622,6 +628,34 @@ describe("CityArenaOverlay", () => {
     fireEvent.click(opener);
     fireEvent.click(screen.getByRole("button", { name: "Navigatie stoppen" }));
     expect(screen.getByRole("status")).toHaveTextContent("Kies je bestemming");
+  });
+
+  it("opens the map with M and closes it with a second M, but not over the menu", async () => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    renderOverlay(vi.fn());
+    const opener = screen.getByRole("button", {
+      name: "Kaart openen",
+      exact: true,
+    });
+    await waitFor(() => expect(opener).toBeEnabled());
+    const pressM = (): void => {
+      fireEvent.keyDown(window, { code: "KeyM", key: "m" });
+    };
+    pressM();
+    expect(
+      screen.getByRole("dialog", { name: "Route plannen" }),
+    ).toBeInTheDocument();
+    pressM();
+    expect(screen.queryByRole("dialog", { name: "Route plannen" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Menu", exact: true }));
+    pressM();
+    expect(screen.queryByRole("dialog", { name: "Route plannen" })).toBeNull();
   });
 
   it("shows a fire button instead of the aim stick with Enkele stick, and no tip once read", async () => {

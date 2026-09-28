@@ -33,6 +33,7 @@ describe("arena settings storage", () => {
       quality: "auto",
       view: "2d",
       camera3d: "third",
+      mouseSensitivity: 1,
     });
   });
 
@@ -51,6 +52,7 @@ describe("arena settings storage", () => {
       quality: "auto",
       view: "2d",
       camera3d: "third",
+      mouseSensitivity: 1,
     });
     expect(loadArenaSettings().lastZone).toBe("rhenen");
   });
@@ -68,6 +70,7 @@ describe("arena settings storage", () => {
       quality: "auto",
       view: "2d",
       camera3d: "third",
+      mouseSensitivity: 1,
     });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(Error),
@@ -93,6 +96,7 @@ describe("arena settings storage", () => {
       quality: "auto",
       view: "2d",
       camera3d: "third",
+      mouseSensitivity: 1,
     });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(Error),
@@ -138,6 +142,7 @@ describe("arena settings storage", () => {
       quality: "auto",
       view: "2d",
       camera3d: "third",
+      mouseSensitivity: 1,
     });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
   });

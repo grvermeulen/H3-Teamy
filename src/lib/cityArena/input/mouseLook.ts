@@ -61,6 +61,8 @@ export type MouseLook = {
    * unzoomed), so a zoomed view does not whip; 1 at the hip.
    */
   setZoom(zoom: number): void;
+  /** Scales the turn per pixel by the player's "Muisgevoeligheid", a multiple; 1 by default. */
+  setSensitivity(sensitivity: number): void;
   /** Radians of yaw added since the last call — the chase camera eases only when this is 0 for a while. */
   takeYawDelta(): number;
   /**
@@ -87,8 +89,10 @@ type LookState = LockState & {
   pitchMax: number;
   /** {@link MouseLook.release} let go of the lock: the unlock it causes is not the player's. */
   releasing: boolean;
-  /** The turn per pixel's share of {@link MOUSE_SENSITIVITY_RAD_PER_PX}: the sights' zoom. */
+  /** The turn per pixel's shares of {@link MOUSE_SENSITIVITY_RAD_PER_PX}: the sights' zoom … */
   zoom: number;
+  /** … and the player's sensitivity. */
+  sensitivity: number;
   /** Whether the right button holds the sights up. */
   ads: boolean;
 };
@@ -138,7 +142,8 @@ function requestLock(
 
 /** Turns the view by one pointer move: the raw deltas, scaled but never smoothed. */
 function turn(state: LookState, event: PointerEvent): void {
-  const perPixel = MOUSE_SENSITIVITY_RAD_PER_PX * state.zoom;
+  const perPixel =
+    MOUSE_SENSITIVITY_RAD_PER_PX * state.sensitivity * state.zoom;
   const dYaw = event.movementX * perPixel;
   state.yaw += dYaw;
   state.yawDelta += dYaw;
@@ -198,7 +203,13 @@ function angleReader(
   state: LookState,
 ): Pick<
   MouseLook,
-  "yaw" | "pitch" | "setYaw" | "setPitchLimits" | "setZoom" | "takeYawDelta"
+  | "yaw"
+  | "pitch"
+  | "setYaw"
+  | "setPitchLimits"
+  | "setZoom"
+  | "setSensitivity"
+  | "takeYawDelta"
 > {
   return {
     yaw: () => state.yaw,
@@ -213,6 +224,9 @@ function angleReader(
     },
     setZoom(zoom) {
       state.zoom = zoom;
+    },
+    setSensitivity(sensitivity) {
+      state.sensitivity = sensitivity;
     },
     takeYawDelta() {
       const delta = state.yawDelta;
@@ -256,6 +270,7 @@ function initialLookState(target: HTMLElement): LookState {
     lockFree: typeof target.requestPointerLock !== "function",
     releasing: false,
     zoom: 1,
+    sensitivity: 1,
     ads: false,
   };
 }

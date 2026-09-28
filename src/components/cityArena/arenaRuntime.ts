@@ -282,6 +282,8 @@ export type Runtime = {
   aim3d?: number;
   /** Whether the 3D input last aimed down the sights: the view zooms while it does. */
   ads3d?: boolean;
+  /** "Muisgevoeligheid": mouse-look's turn per pixel as a multiple; 1 when unset. */
+  mouseSensitivity?: number;
 };
 
 /**

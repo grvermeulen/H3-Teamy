@@ -35,6 +35,7 @@ function fakeLook(yaw = 0): MouseLook & { turn(delta: number): void } {
     },
     setPitchLimits: vi.fn(),
     setZoom: vi.fn(),
+    setSensitivity: vi.fn(),
     takeYawDelta: () => {
       const delta = pending;
       pending = 0;
@@ -288,7 +289,7 @@ describe("paint3d", () => {
     expect(paint().ads).toBe(false);
   });
 
-  it("slows mouse-look by however much the sights zoomed the view", () => {
+  it("turns mouse-look by the player's sensitivity, slowed by however much the sights zoomed", () => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
       createFakeContext() as unknown as CanvasRenderingContext2D,
     );
@@ -298,6 +299,10 @@ describe("paint3d", () => {
     const rect = { width: 800, height: 600 } as DOMRect;
     paint3d(document.createElement("canvas"), rect, runtime, scene, 0, 0);
     expect(runtime.look.setZoom).toHaveBeenCalledWith(0.3);
+    expect(runtime.look.setSensitivity).toHaveBeenLastCalledWith(1);
+    runtime.mouseSensitivity = 1.8;
+    paint3d(document.createElement("canvas"), rect, runtime, scene, 0, 0);
+    expect(runtime.look.setSensitivity).toHaveBeenLastCalledWith(1.8);
   });
 
   it("hands the 3D view the simulation's structures, and an intact city while it has none", () => {

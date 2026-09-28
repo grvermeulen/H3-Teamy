@@ -398,6 +398,19 @@ describe("attachMouseLook: aiming down the sights", () => {
     look.detach();
   });
 
+  it("turns by the player's mouse sensitivity, times the zoom, with no smoothing", () => {
+    const look = attachMouseLook(canvas);
+    look.setSensitivity(2);
+    canvas.dispatchEvent(new MouseEvent("pointermove", { movementX: 10 }));
+    expect(look.yaw()).toBeCloseTo(20 * MOUSE_SENSITIVITY_RAD_PER_PX);
+    look.setZoom(0.5);
+    canvas.dispatchEvent(new MouseEvent("pointermove", { movementX: 10 }));
+    expect(look.yaw()).toBeCloseTo(30 * MOUSE_SENSITIVITY_RAD_PER_PX);
+    canvas.dispatchEvent(new MouseEvent("pointermove", { movementY: -10 }));
+    expect(look.pitch()).toBeCloseTo(10 * MOUSE_SENSITIVITY_RAD_PER_PX);
+    look.detach();
+  });
+
   it("turns slower by the zoom the sights give the view", () => {
     const look = attachMouseLook(canvas);
     look.setZoom(0.5);

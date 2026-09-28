@@ -19,6 +19,7 @@ import type { MouseLook } from "@/lib/cityArena/input/mouseLook";
 import type { Rect } from "@/lib/cityArena/mapBuild/geometry";
 import type { DrawStats } from "@/lib/cityArena/render/drawWorld";
 import { drawFeedback } from "@/lib/cityArena/render/feedback";
+import { MOUSE_SENSITIVITY } from "@/lib/cityArena/schemas";
 import type { Scene } from "@/lib/cityArena/render/renderScene";
 import type {
   StructureView,
@@ -167,8 +168,8 @@ function view3dFrame(
 /**
  * Paints a 3D frame (spec §6.2): the 2D canvas is sized and cleared as in 2D and becomes the
  * transparent HUD layer, the 3D view renders the scene underneath and its crosshair on top, and
- * the feedback vignette is drawn last, exactly as the 2D paint does. Mouse-look then turns slower
- * by however much the sights zoomed the view (aim spec §5).
+ * the feedback vignette is drawn last, exactly as the 2D paint does. Mouse-look then turns by the
+ * player's sensitivity, slowed by however much the sights zoomed the view (aim spec §5).
  *
  * @param canvas - The playfield's 2D canvas.
  * @param rect - Its layout box.
@@ -191,6 +192,9 @@ export function paint3d(
   const size = { width: rect.width, height: rect.height };
   runtime.view3d.render(view3dFrame(runtime, scene, size, nowMs, dt), context);
   runtime.look.setZoom(runtime.view3d.lookZoom());
+  runtime.look.setSensitivity(
+    runtime.mouseSensitivity ?? MOUSE_SENSITIVITY.default,
+  );
   drawFeedback(context, size, runtime.feedback);
   return NO_RASTER;
 }
