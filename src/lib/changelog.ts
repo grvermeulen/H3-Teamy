@@ -24,6 +24,31 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.6.0": {
+    title: "GTA H3 komt tot leven",
+    steps: [
+      {
+        title: "Echt achter het stuur",
+        body: "Rij je in eerste persoon (V), dan zit je nu écht in de auto: handen aan het stuur, een dashboard met snelheidsmeter en de motorkap voor je. Bus, tractor en tank hebben elk hun eigen cabine.",
+      },
+      {
+        title: "Schoten uit de loop",
+        body: "Kogels, mondingsvuur en raketten komen nu uit je wapen in plaats van uit het midden van je lijf. Ook bij agenten en andere spelers.",
+      },
+      {
+        title: "Een stad die je hoort",
+        body: "Verkeer dat langsrijdt, mensen die praten, vogels, wind, water, fietsbellen en de klok van de Cunerakerk. Elk geluid komt van waar het gebeurt: dichtbij harder, links of rechts. Uitzetten kan in het menu met Omgevingsgeluid.",
+      },
+      {
+        title: "Nieuwe mensen op straat",
+        body: "Voetgangers, agenten en jijzelf zijn nu geanimeerde figuren in 3D, en elke voorbijganger ziet er anders uit.",
+      },
+      {
+        title: "Een Nederlandse stad in 3D",
+        body: 'Trapgevels, winkels en balkons, stoepranden, rode fietspaden en zebrapaden, geparkeerde fietsen, drie soorten bomen, auto\'s met koplampen en gele kentekens, en sterren boven de stad. Op "laag" blijft alles zo licht als voorheen.',
+      },
+    ],
+  },
   "0.5.0": {
     title: "GTA H3 in 3D",
     steps: [
