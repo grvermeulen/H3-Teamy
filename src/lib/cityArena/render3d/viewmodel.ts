@@ -47,6 +47,14 @@ export type ViewModel = {
   /** Attach to the camera. */
   object: Object3D;
   update(input: ViewModelInput): void;
+  /**
+   * Where the held gun's barrel ends in the world, as posed by the last `update` and seen through
+   * the camera the view model hangs on — where your shots are seen to leave from in first person.
+   *
+   * @param target - Receives the world position; untouched without a gun.
+   * @returns `false` for fists and the bat.
+   */
+  muzzleWorld(target: Vector3): boolean;
   /** Detaches the view model and frees its hand geometry. */
   dispose(): void;
 };
@@ -173,8 +181,15 @@ const LAYOUTS: Record<WeaponKind, ViewLayout> = {
   },
 };
 
-/** Fist, knuckles, thumb and forearm, fist at the origin, forearm running back along +Z. */
-function armGeometry(side: "L" | "R"): BufferGeometry {
+/**
+ * The player's forearm and fist in their skin tone — the right one with the bead bracelet —
+ * shared by the first-person hands and the cockpit's hands on the wheel.
+ *
+ * @param side - `L` or `R`; the thumb sits on the inner side.
+ * @returns A new merged geometry: fist at the origin, knuckles up (+Y), forearm running back
+ *   along +Z.
+ */
+export function armGeometry(side: "L" | "R"): BufferGeometry {
   const skin = LOOKS.player.skin;
   const inward = side === "R" ? -1 : 1;
   const parts = [
@@ -424,6 +439,21 @@ function advance(state: ViewState, input: ViewModelInput): void {
   state.seconds += input.dt;
 }
 
+/** A view model's state before its first frame: nothing held, at rest. */
+function createViewState(): ViewState {
+  return {
+    weapon: null,
+    model: null,
+    lastFiredTick: null,
+    kick: 0,
+    swap: 0,
+    stridePhase: 0,
+    seconds: 0,
+    tip: null,
+    flash: 0,
+  };
+}
+
 /**
  * The player's hands and weapon for the first-person view.
  *
@@ -447,17 +477,7 @@ export function createViewModel(): ViewModel {
     left: leftArm.group,
     flash,
   };
-  const state: ViewState = {
-    weapon: null,
-    model: null,
-    lastFiredTick: null,
-    kick: 0,
-    swap: 0,
-    stridePhase: 0,
-    seconds: 0,
-    tip: null,
-    flash: 0,
-  };
+  const state = createViewState();
   return {
     object,
     update(input) {
@@ -467,6 +487,12 @@ export function createViewModel(): ViewModel {
       placeRig(rig, state, LAYOUTS[input.weapon], input.speed);
       placeFlash(flash, state);
       advance(state, input);
+    },
+    muzzleWorld(target) {
+      if (!state.tip) return false;
+      holder.updateWorldMatrix(true, false);
+      holder.localToWorld(target.set(...state.tip));
+      return true;
     },
     dispose() {
       object.removeFromParent();

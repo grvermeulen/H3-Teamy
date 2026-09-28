@@ -24,6 +24,13 @@ Captured in the dev build (Wageningen, dusk):
 
 The same ruins in the 2D view: ![2D rubble and damage shading](img/3d/2d-ruins-row.jpg)
 
+First person at the wheel and on foot with the Uzi (see [Cockpit](#cockpit) and
+[Shots leave the weapon](#shots-leave-the-weapon)):
+
+|                                                                                                         |                                                                                              |
+| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| ![The sedan's cockpit: wheel in both hands, speedometer, pillars, yellow bonnet](img/3d/3d-cockpit.jpg) | ![An Uzi round streaking from the barrel toward the crosshair](img/3d/3d-muzzle-tracers.jpg) |
+
 The glTF cast (see [Characters: the glTF cast](#characters-the-gltf-cast)):
 
 |                                                                                       |                                                                                              |
@@ -86,7 +93,7 @@ Grouped by responsibility; every exported symbol carries its own JSDoc.
 | ----------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `index.ts`        | `createView3d(canvas)`: wires every layer together, places the camera, drives one frame                            |
 | `renderer3d.ts`   | WebGL renderer, three.js scene, camera, evening lights, fog; `RenderQuality`, view distance and pixel-ratio tables |
-| `cameraRig.ts`    | Third-person and first-person rigs, pitch limits per mode, car chase and death-orbit poses                         |
+| `cameraRig.ts`    | Third-person and first-person rigs (the driver's eye per vehicle kind), pitch limits, car chase and death orbit    |
 | `cameraFeel.ts`   | The 2D feedback's screen shake (`SHAKE_METRES_PER_PX`) and drunk sway, as a camera nudge and roll                  |
 | `sharedAssets.ts` | `disposeSharedAssets`: frees the module-level character (procedural and glTF), vehicle, pickup and weapon caches   |
 | `coords.ts`       | The one world ↔ three.js mapping (`(x, y)` metres → `(x, height, y)`) and angle helpers                            |
@@ -139,14 +146,19 @@ Grouped by responsibility; every exported symbol carries its own JSDoc.
 
 **Weapons, view model and projectiles**
 
-| File                  | Responsibility                                                                                             |
-| --------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `weapons3d.ts`        | Small procedural weapon models, shared between a character's hand and first person                         |
-| `viewmodel.ts`        | First-person forearms/fists: stride bob, shot kick, punch/swing, weapon-change dip                         |
-| `viewModelPass.ts`    | Draws the view model in a pass of its own (its own near-clipped camera) so it never pokes through geometry |
-| `projectiles3d.ts`    | Pooled rockets and cannon shells (by bullet id), trails laid by distance flown                             |
-| `projectileModels.ts` | Shared rocket and shell geometry/materials                                                                 |
-| `tracers.ts`          | One shared `LineSegments` draw call for every gun round in flight                                          |
+| File                  | Responsibility                                                                                                  |
+| --------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `weapons3d.ts`        | Small procedural weapon models, shared between a character's hand and first person                              |
+| `viewmodel.ts`        | First-person forearms/fists: stride bob, shot kick, punch/swing, weapon-change dip; the barrel tip in the world |
+| `viewModelPass.ts`    | Draws the hands — or, at the wheel, the cockpit — in a pass of its own (near-clipped camera) over the city      |
+| `cockpitSpecs.ts`     | `COCKPITS`: every vehicle kind's driver's eye, wheel, dashboard, windscreen, bonnet and frame, in car space     |
+| `cockpitParts.ts`     | Pure builders of a kind's cockpit geometry: interior shell, bonnet paint, wheel, dial, glass, siren strips      |
+| `cockpit3d.ts`        | A live cockpit: per-kind cached geometry, the wheel turning in both hands, speedometer needle, siren glow       |
+| `muzzleMap.ts`        | The frame's muzzle point per shooter id (players, officers, a tank's barrel), pooled                            |
+| `muzzleBlend.ts`      | `CONVERGE_M` and the maths that draws a round out of its muzzle onto the flat line                              |
+| `projectiles3d.ts`    | Pooled rockets and cannon shells (by bullet id), trails laid by distance flown, launched from the muzzle        |
+| `projectileModels.ts` | Shared rocket and shell geometry/materials                                                                      |
+| `tracers.ts`          | One shared `LineSegments` draw call for every gun round in flight, drawn out of its shooter's muzzle            |
 
 **Pickups, effects and destruction**
 
@@ -167,22 +179,22 @@ Grouped by responsibility; every exported symbol carries its own JSDoc.
 
 **Guidance, cast and HUD**
 
-| File                 | Responsibility                                                                          |
-| -------------------- | --------------------------------------------------------------------------------------- |
-| `cast3d.ts`          | One frame step: entity sync, mission contacts, effects, destruction, first-person hands |
-| `entities.ts`        | Per-frame pooled sync of players/peds/cops/cars/pickups from the blended `Scene`        |
-| `entityPool.ts`      | Recycles scene objects per entity id through free lists keyed by look/vehicle variant   |
-| `entityMotion.ts`    | Infers walk speed, gait phase and wheel turn between frames (pure, allocation-free)     |
-| `entityShots.ts`     | Who fired this frame, for character recoil and the view model                           |
-| `guidance3d.ts`      | Owns the route, beacons, zone wall and player markers layers                            |
-| `route3d.ts`         | The glowing navigation band along the route, rebuilt only when the route changes        |
-| `beacons3d.ts`       | Pulsing light columns over mission contacts/objectives, readable from far away          |
-| `contacts3d.ts`      | Mission contacts as idle characters, dressed by a hash of their id                      |
-| `zoneWall3d.ts`      | The match zone's edge as a wall of light, built only near the player                    |
-| `playerMarkers3d.ts` | A camera-facing diamond over every other living player                                  |
-| `playerArrows.ts`    | Edge-of-screen arrows toward friends who are out of view                                |
-| `missionMarkers.ts`  | Pure read of the scene's mission contacts/objectives for `guidance3d`/`contacts3d`      |
-| `overlay3d.ts`       | The 2D HUD canvas overlay: crosshair and off-screen arrows                              |
+| File                 | Responsibility                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------- |
+| `cast3d.ts`          | One frame step: entity sync, mission contacts, hands or cockpit, effects, destruction |
+| `entities.ts`        | Per-frame pooled sync of players/peds/cops/cars/pickups; your car and every muzzle    |
+| `entityPool.ts`      | Recycles scene objects per entity id through free lists keyed by look/vehicle variant |
+| `entityMotion.ts`    | Infers walk speed, gait phase and wheel turn between frames (pure, allocation-free)   |
+| `entityShots.ts`     | Who fired this frame, for character recoil and the view model                         |
+| `guidance3d.ts`      | Owns the route, beacons, zone wall and player markers layers                          |
+| `route3d.ts`         | The glowing navigation band along the route, rebuilt only when the route changes      |
+| `beacons3d.ts`       | Pulsing light columns over mission contacts/objectives, readable from far away        |
+| `contacts3d.ts`      | Mission contacts as idle characters, dressed by a hash of their id                    |
+| `zoneWall3d.ts`      | The match zone's edge as a wall of light, built only near the player                  |
+| `playerMarkers3d.ts` | A camera-facing diamond over every other living player                                |
+| `playerArrows.ts`    | Edge-of-screen arrows toward friends who are out of view                              |
+| `missionMarkers.ts`  | Pure read of the scene's mission contacts/objectives for `guidance3d`/`contacts3d`    |
+| `overlay3d.ts`       | The 2D HUD canvas overlay: crosshair and off-screen arrows                            |
 
 ## Characters: the glTF cast
 
@@ -323,6 +335,74 @@ does (`stickTurnedYaw` in `cameraYaw.ts`); without an aim stick held, the moveme
 camera as described above. No new touch controls were added for 3D — the existing twin-stick and
 single-stick layouts (`docs/tech/arena/README.md`, Plan 6) drive it unchanged.
 
+## Cockpit
+
+In first person at the wheel you look out of the car from the driver's seat (immersion spec
+`docs/superpowers/specs/2026-09-27-arena-immersion-design.md` §4):
+
+- **Seat.** `cockpitSpecs.ts` holds one `CockpitSpec` per vehicle kind (`COCKPITS`), in car space
+  (+X forward, +Y up, +Z right, origin at the footprint centre on the ground): the driver's eye
+  (height, along the car, left of the centre line — Dutch cars put the wheel on the left), the
+  wheel (radius, reach, drop, tilt), the dashboard, the windscreen (foot, header, pillars, rake),
+  the bonnet (length, width, height, fall to the nose) and where the cab ends behind the eye. The
+  numbers are read off the exterior models (`vehicleShapes*.ts`). `cameraRig.ts` seats the
+  first-person camera at the kind's eye (`seatOffset`) instead of one fixed seat: a bus or tractor
+  driver sits high, a sports car driver low. Mouse-look and the ±30° pitch limit are unchanged.
+- **Your car hides for you.** `entities.ts` hides the local player's own car body in first person
+  while it is whole (a wreck shows again, and the death camera takes over when you die); everyone
+  else keeps seeing it. It also hands the cast the car's kind, paint, steering (the same `trackSteer`
+  the front wheels use), speed, pose and siren as `local.vehicle`.
+- **Drawn in the view-model pass.** `viewModelPass.ts` draws the cockpit instead of the hands, in the
+  same small lit scene seen through a camera that copies the city camera but clips at 1 cm, after
+  the city with the depth buffer cleared — so the dashboard never clips into a wall and the car
+  never pokes through. The cockpit stands where the car stands (`headingToRotationY(heading)`),
+  which lines up with the world because the pass camera sits exactly where the city camera does;
+  the pass's far plane is 8 m, past a car's nose.
+- **The model** (`cockpitParts.ts`, `cockpit3d.ts`): a dashboard sloping down to the windscreen, a
+  lit speedometer whose needle sweeps 240° up to `SPEEDO_MAX_MPS` (40 m/s) by `|forwardSpeed|`, the
+  steering wheel (a faceted rim, three spokes, hub and column) turning up to `WHEEL_TURN_RAD`
+  (2.1 rad, about 120°) either way — eased after the steering so a keyboard's instant full lock
+  does not snap it — with both hands (the view model's arm geometry, skin tone and bead bracelet)
+  on its rim at ten to two; the forearms hold back most of the wheel's turn so they keep pointing
+  to the elbows. Around it: A-pillars, roof header and lining, door tops and cards, B- and C-pillars,
+  the rear-view mirror, a faint additive sheen on the windscreen, and the bonnet running to the nose
+  in the car's own paint (`bodyColour(kind, colour)`, glossy like the exterior). The bus has an
+  upright screen and no bonnet; the tractor an open frame with its fenders and exhaust stack; the
+  tank a hatch with a coaming ring, two vision blocks on the deck ahead, its glacis and two grips
+  instead of a wheel. The police car's light bar glows blue then red on the windscreen's top while
+  its siren runs.
+- **Cost.** Geometry is merged and cached per kind (the paint per kind and colour) and freed with
+  the other shared assets (`disposeCockpitAssets` in `disposeSharedAssets`); the cockpit is about
+  ten draw calls and allocates nothing per frame.
+
+## Shots leave the weapon
+
+The flat simulation fires every round from its shooter's body along an in-plane line at chest
+height (`PERSON_CHEST_HEIGHT_M`). The 3D view now draws each round, rocket and shell out of its
+shooter's muzzle instead (immersion spec §5):
+
+- **Muzzles** (`muzzleMap.ts`). After posing the cast, `entities.ts` records every armed player's
+  and officer's gun tip (`Character3d.muzzleWorld`) and a tank's barrel end for its driver, keyed by
+  the id bullets carry in `ownerId` (players and officers share the simulation's one id counter).
+  In first person on foot, `cast3d.ts` overwrites your own with the view model's barrel tip in
+  world space: the view-model pass camera stands where the city camera does, so that point lines
+  up with the drawn gun. The map is pooled: an owner keeps its vector while seen.
+- **Convergence** (`muzzleBlend.ts`). A round is drawn at its point on the flat line plus the
+  muzzle's offset from the line's start, and that offset fades out (a smoothstep) over the first
+  `CONVERGE_M` = 15 m flown. The round keeps its true speed and direction the whole way — it leaves
+  the barrel, then settles onto the line — so it lands exactly where the flat hit-scan hits and the
+  crosshair (still drawn on the true line) points. A tracer's tail is the same point 3 m back and
+  never reaches behind the muzzle.
+- **Rockets and shells** (`projectiles3d.ts`) start at the launcher tube or tank barrel and keep the
+  muzzle they left from, so a strafing shooter does not swing a rocket already in flight; their
+  smoke trails are laid through the same blend.
+- **Flashes** (`effects3d.ts`, `bursts.ts`). A muzzle flash carries no owner, so its flame and light
+  go to the nearest shooter's muzzle within `MUZZLE_OWNER_REACH_M` (1.5 m) — your own when the flash
+  is yours. In first person your own flame stays with the view model, and the street light now
+  comes from the drawn gun.
+- A shooter whose muzzle is unknown — out of draw distance, or seated in a car (a drive-by) — is
+  drawn exactly as before, from the body.
+
 ## Destructible buildings
 
 Sim-side logic lives entirely in `src/lib/cityArena/sim/structures.ts` and is identical for 2D and
@@ -442,15 +522,26 @@ damage sources table above.
   vehicle, and characters/pickups/weapons each merge to one or two draw calls via shared,
   vertex-coloured, per-look/per-kind geometry. A glTF character is one draw call plus one per
   accessory (see [Characters: the glTF cast](#characters-the-gltf-cast) for its CPU cost and
-  level of detail).
+  level of detail). The first-person cockpit adds about ten (interior,
+  bonnet, glass, wheel, two hands, dial, needle, and the police car's two siren strips) while your
+  own car's eight to ten are hidden.
 
 ## Known limitations
 
 - **Bullets stay in the simulation's flat plane.** The 2D simulation has no concept of height, so a
-  bullet's vertical position in 3D is presentation only (interpolated for the crosshair and
-  tracers); aiming up or down changes where the 3D camera looks, not what the flat hit-scan can
-  actually hit. The crosshair is deliberately drawn on the true in-plane shot line so it never lies
-  about this.
+  bullet's vertical position in 3D is presentation only: rounds are drawn from their shooter's
+  muzzle and converge onto the in-plane line at chest height within 15 m (`CONVERGE_M`); aiming up
+  or down changes where the 3D camera looks, not what the flat hit-scan can actually hit. The
+  crosshair is deliberately drawn on the true in-plane shot line so it never lies about this.
+- **Drive-by shots start at the car's centre.** A player seated in a car has no drawn body, so
+  shots fired from the driver's seat (and a wrecked tank's) are drawn from the chest-height line as
+  before; only a tank's cannon starts at its barrel end.
+- **The cockpit's siren glow shows only for a police-driven car.** The simulation turns a police
+  car's lights on only while the police AI drives it (`policeCarIds`), so a player at the wheel of a
+  stolen police car sees no glow on the windscreen — as the car's own light bar stays dark for
+  everyone else. The glow is wired to the same flag and lights up if that ever changes.
+- **The tank cockpit has no barrel or turret.** Your whole tank hides in first person; the hatch view
+  shows the deck, glacis and vision blocks ahead, not the turret or the barrel turning with the aim.
 - **A remote tank's turret always faces forward.** Turret aim is not on the wire — only the
   driver's own client knows where their mouse points — so `vehicles3d.ts`'s `aimTurret` points a
   tank's turret straight ahead for everyone except the player actually driving it.

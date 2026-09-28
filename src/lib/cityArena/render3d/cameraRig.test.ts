@@ -9,7 +9,11 @@ import {
   type RigInput,
   type RigPose,
 } from "./cameraRig";
+import { COCKPITS } from "./cockpitSpecs";
 import { EYE_HEIGHT_M, PERSON_CHEST_HEIGHT_M } from "./coords";
+
+/** A sedan heading east. */
+const SEDAN_EAST = { length: 4.2, heading: 0, kind: "sedan" } as const;
 
 /** A rig input standing at the origin, looking east, alive and on foot. */
 function input(overrides: Partial<RigInput> = {}): RigInput {
@@ -82,23 +86,57 @@ describe("rigPose", () => {
 
   it("pulls the chase camera back by the vehicle's length, within its range", () => {
     const sedan = rigPose(
-      input({ driving: { length: 4.2, heading: 0 }, target: { x: 0, y: 0 } }),
+      input({ driving: SEDAN_EAST, target: { x: 0, y: 0 } }),
     );
     expect(sedan.position[0]).toBeCloseTo(-(THIRD_PERSON_BACK_M + 4.2));
     expect(sedan.position[2]).toBeCloseTo(0);
-    const bus = rigPose(input({ driving: { length: 12, heading: 0 } }));
+    const bus = rigPose(
+      input({ driving: { length: 12, heading: 0, kind: "bus" } }),
+    );
     expect(horizontalDistance(bus, 0, 0)).toBeCloseTo(CHASE_MAX_BACK_M);
     expect(bus.fovDeg).toBeGreaterThan(rigPose(input()).fovDeg);
   });
 
   it("puts the first-person camera in the driver's seat, left of the car's centre line", () => {
-    const pose = rigPose(
-      input({ mode: "first", driving: { length: 4.2, heading: 0 } }),
-    );
+    const pose = rigPose(input({ mode: "first", driving: SEDAN_EAST }));
     // Heading east, the driver's (left) side is north, which is −z.
     expect(pose.position[2]).toBeLessThan(0);
     expect(pose.position[1]).toBeLessThan(EYE_HEIGHT_M);
     expect(viewDirection(pose)[0]).toBeCloseTo(1);
+  });
+
+  it("seats the first-person driver where the kind's cockpit puts the eye", () => {
+    const seat = COCKPITS.sedan;
+    const pose = rigPose(
+      input({ mode: "first", driving: SEDAN_EAST, target: { x: 10, y: 20 } }),
+    );
+    expect(pose.position[0]).toBeCloseTo(10 + seat.eyeForwardM);
+    expect(pose.position[1]).toBeCloseTo(seat.eyeHeightM);
+    expect(pose.position[2]).toBeCloseTo(20 - seat.eyeLeftM);
+    const south = rigPose(
+      input({
+        mode: "first",
+        driving: { ...SEDAN_EAST, heading: Math.PI / 2 },
+        target: { x: 10, y: 20 },
+      }),
+    );
+    // Heading south (+z), forward is +z and the driver's left is east, +x.
+    expect(south.position[0]).toBeCloseTo(10 + seat.eyeLeftM);
+    expect(south.position[2]).toBeCloseTo(20 + seat.eyeForwardM);
+  });
+
+  it("sits a bus driver higher than a sedan's, and leaves the eye on foot alone", () => {
+    const sedan = rigPose(input({ mode: "first", driving: SEDAN_EAST }));
+    const bus = rigPose(
+      input({
+        mode: "first",
+        driving: { length: 12, heading: 0, kind: "bus" },
+      }),
+    );
+    expect(bus.position[1]).toBeCloseTo(COCKPITS.bus.eyeHeightM);
+    expect(bus.position[1]).toBeGreaterThan(sedan.position[1]);
+    const onFoot = rigPose(input({ mode: "first", target: { x: 3, y: 4 } }));
+    expect(onFoot.position).toEqual([3, EYE_HEIGHT_M, 4]);
   });
 
   it("raises the death camera over time and slowly orbits the body", () => {
@@ -121,7 +159,11 @@ describe("rigPose", () => {
 
   it("never produces NaN", () => {
     const pose = rigPose(
-      input({ yaw: 123.4, pitch: -0.6, driving: { length: 7, heading: -2 } }),
+      input({
+        yaw: 123.4,
+        pitch: -0.6,
+        driving: { length: 7, heading: -2, kind: "tank" },
+      }),
     );
     for (const value of [...pose.position, ...pose.lookAt, pose.fovDeg])
       expect(Number.isFinite(value)).toBe(true);

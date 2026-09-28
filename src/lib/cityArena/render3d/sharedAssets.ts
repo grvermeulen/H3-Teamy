@@ -8,6 +8,7 @@
 import { disposeAccessoryGeometries } from "./characterAccessories";
 import { disposeGltfCharacterAssets } from "./characterAssets";
 import { disposeCharacterAssets } from "./characterRig";
+import { disposeCockpitAssets } from "./cockpit3d";
 import { disposePickupAssets } from "./pickups3d";
 import { disposeVehicleMaterials } from "./vehicleParts";
 import { disposeWeaponGeometries } from "./weapons3d";
@@ -15,8 +16,8 @@ import { disposeWeaponGeometries } from "./weapons3d";
 /**
  * Frees and forgets every module-level shared geometry and material: the characters' materials and
  * merged looks, the loaded glTF cast and its accessories, the vehicles' paint, detail, lamp and
- * matte materials, the pickups' glow and health box, and the weapons' merged models. Call once the
- * view using them is torn down.
+ * matte materials, the pickups' glow and health box, the weapons' merged models, and the
+ * first-person cockpits' geometry and glass. Call once the view using them is torn down.
  */
 export function disposeSharedAssets(): void {
   disposeCharacterAssets();
@@ -25,4 +26,5 @@ export function disposeSharedAssets(): void {
   disposeVehicleMaterials();
   disposePickupAssets();
   disposeWeaponGeometries();
+  disposeCockpitAssets();
 }

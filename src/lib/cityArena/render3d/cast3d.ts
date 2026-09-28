@@ -4,7 +4,7 @@
  * falling furniture) and the first-person hands — one frame step for `index.ts` to call between
  * placing the camera and rendering.
  */
-import { Group, type Object3D, type PerspectiveCamera } from "three";
+import { Group, Vector3, type Object3D, type PerspectiveCamera } from "three";
 import type { Scene } from "../render/renderScene";
 import type { CameraMode } from "./cameraRig";
 import { GLTF_LOD_DISTANCE_M, createCharacterFactory } from "./characters";
@@ -22,7 +22,11 @@ import { createPickup3d } from "./pickups3d";
 import type { OverlayPass, RenderQuality } from "./renderer3d";
 import { createVehicle3d } from "./vehicles3d";
 import type { ViewModelInput } from "./viewmodel";
-import { createViewModelPass, type ViewModelPass } from "./viewModelPass";
+import {
+  createViewModelPass,
+  type CockpitPose,
+  type ViewModelPass,
+} from "./viewModelPass";
 
 /** The real models: the glTF cast with its procedural fallback, vehicles and pickups. */
 export const REAL_ENTITY_FACTORIES: EntityFactories = {
@@ -60,13 +64,13 @@ export type Cast3d = {
   object: Object3D;
   /**
    * Syncs the cast and the effects to a frame, advances the destruction and poses the
-   * first-person hands.
+   * first-person hands, or the cockpit of the car driven in first person.
    *
    * @param frame - The frame's scene, time step, camera mode, aim and quality.
    * @param focus - The camera focus, world metres: what the draw distances are measured from.
    * @param camera - The city camera, already placed for this frame.
    * @param contacts - The mission contacts to stand in the street (the mission markers').
-   * @returns The hands' pass to draw over the city, or `null` when they are hidden.
+   * @returns The hands' or cockpit's pass to draw over the city, or `null` when neither shows.
    */
   update(
     frame: CastFrame,
@@ -96,6 +100,47 @@ function fxFor(parent: Group, current: Fx | null, quality: RenderQuality): Fx {
   return { effects, destruction };
 }
 
+/**
+ * Fills the cockpit's reused pose from the car the local player drives in first person; `null`
+ * while on foot, dead, in third person or in a wreck (the death camera or the car's own body
+ * takes over).
+ */
+function cockpitPose(
+  pose: CockpitPose,
+  entities: EntitySync,
+  frame: CastFrame,
+): CockpitPose | null {
+  const car = entities.local.vehicle;
+  if (frame.mode !== "first" || !car || car.wrecked) return null;
+  pose.kind = car.kind;
+  pose.colour = car.colour;
+  pose.steer = car.steer;
+  pose.speedMps = car.speedMps;
+  pose.siren = car.siren;
+  pose.x = car.x;
+  pose.y = car.y;
+  pose.heading = car.heading;
+  pose.tick = frame.scene.tick;
+  pose.dt = frame.dt;
+  return pose;
+}
+
+/** A cockpit pose to reuse every frame. */
+function createCockpitPose(): CockpitPose {
+  return {
+    kind: "sedan",
+    colour: 0,
+    steer: 0,
+    speedMps: 0,
+    siren: false,
+    tick: 0,
+    dt: 0,
+    x: 0,
+    y: 0,
+    heading: 0,
+  };
+}
+
 /** Fills the hands' reused input from the entity sync's local player; `null` hides them. */
 function handsInput(
   hands: ViewModelInput,
@@ -109,6 +154,47 @@ function handsInput(
   hands.tick = frame.scene.tick;
   hands.dt = frame.dt;
   return hands;
+}
+
+/** The first-person pass and the inputs it is handed, all reused every frame. */
+type FirstPersonView = {
+  hands: ViewModelPass;
+  input: ViewModelInput;
+  cockpit: CockpitPose;
+  /** Receives your muzzle from the drawn gun. */
+  muzzle: Vector3;
+  /** Whether this frame drew the hands. */
+  handsShown: boolean;
+};
+
+/** A first-person view around a pass, nothing shown yet. */
+function createFirstPersonView(hands: ViewModelPass): FirstPersonView {
+  return {
+    hands,
+    input: { weapon: "fist", firedTick: null, tick: 0, speed: 0, dt: 0 },
+    cockpit: createCockpitPose(),
+    muzzle: new Vector3(),
+    handsShown: false,
+  };
+}
+
+/**
+ * Poses the hands on foot or the cockpit at the wheel, in first person; with the hands out, your
+ * muzzle becomes the drawn gun's, so your shots leave it rather than the hidden body's.
+ */
+function poseFirstPerson(
+  view: FirstPersonView,
+  entities: EntitySync,
+  frame: CastFrame,
+  camera: PerspectiveCamera,
+): OverlayPass | null {
+  const drawn = handsInput(view.input, entities, frame);
+  view.handsShown = drawn !== null;
+  const cockpit = cockpitPose(view.cockpit, entities, frame);
+  const pass = view.hands.update(camera, drawn, cockpit);
+  if (view.hands.muzzleWorld(view.muzzle))
+    entities.muzzles.set(frame.scene.localPlayerId, view.muzzle);
+  return pass;
 }
 
 /**
@@ -128,13 +214,7 @@ export function createCast3d(
   const street = createContacts3d(factories);
   object.add(entities.group, street.object);
   const view: EntityView = { firstPerson: false, aim: 0 };
-  const handsScratch: ViewModelInput = {
-    weapon: "fist",
-    firedTick: null,
-    tick: 0,
-    speed: 0,
-    dt: 0,
-  };
+  const firstPerson = createFirstPersonView(hands);
   let fx: Fx | null = null;
   return {
     object,
@@ -145,13 +225,18 @@ export function createCast3d(
         frame.quality === "low" ? GLTF_LOD_DISTANCE_M : undefined;
       entities.update(frame.scene, frame.dt, focus, view);
       street.update(contacts, frame.scene, focus, frame.dt);
-      const drawn = handsInput(handsScratch, entities, frame);
+      const pass = poseFirstPerson(firstPerson, entities, frame, camera);
       fx = fxFor(object, fx, frame.quality);
       // Your own flame moves to the hands' barrel only while the hands are there to show it.
-      fx.effects.sync(frame.scene, focus, drawn !== null);
+      fx.effects.sync(
+        frame.scene,
+        focus,
+        firstPerson.handsShown,
+        entities.muzzles.points,
+      );
       fx.effects.update(frame.dt);
       fx.destruction.update(frame.dt);
-      return hands.update(camera, drawn);
+      return pass;
     },
     destruction: () => fx?.destruction ?? null,
     dispose() {

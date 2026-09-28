@@ -106,6 +106,33 @@ function weaponBounds(model: ViewModel): Box3 {
   return new Box3().setFromObject(model.object);
 }
 
+describe("createViewModel: the muzzle in the world", () => {
+  it("finds the pistol's barrel end ahead of the eye, right of and below the crosshair", () => {
+    const { model, camera } = placed("pistol", 16 / 9);
+    camera.position.set(40, 1.65, -12);
+    camera.lookAt(80, 1.65, -12);
+    const muzzle = new Vector3();
+    expect(model.muzzleWorld(muzzle)).toBe(true);
+    const seen = camera.worldToLocal(muzzle.clone());
+    expect(seen.z).toBeLessThan(-0.2);
+    expect(seen.x).toBeGreaterThan(0.02);
+    expect(seen.y).toBeLessThan(-0.02);
+    expect(muzzle.x).toBeGreaterThan(40.2);
+    const onScreen = muzzle.clone().project(camera);
+    expect(onScreen.x).toBeGreaterThan(0);
+    expect(onScreen.x).toBeLessThan(1);
+    expect(onScreen.y).toBeLessThan(0);
+    expect(onScreen.y).toBeGreaterThan(-1);
+  });
+
+  it("has no muzzle for fists or the bat, and leaves the target alone", () => {
+    const target = new Vector3(7, 7, 7);
+    for (const weapon of ["fist", "bat"] as const)
+      expect(placed(weapon, 16 / 9).model.muzzleWorld(target)).toBe(false);
+    expect(target.toArray()).toEqual([7, 7, 7]);
+  });
+});
+
 describe("createViewModel", () => {
   it("recovers from a shot's kick within 0.3 s", () => {
     const shooting = createViewModel();

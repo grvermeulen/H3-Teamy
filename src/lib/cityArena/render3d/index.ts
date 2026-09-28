@@ -4,6 +4,7 @@
  * `render3d/` and `components/cityArena/view3d/` may import from here with `import type` only.
  */
 import type { Scene as ArenaScene } from "../render/renderScene";
+import type { VehicleKind } from "../sim/types";
 import { lengthOf } from "../sim/vehicle";
 import type { DecodedTile } from "../world/decode";
 import { applyCameraFeel, cameraFeelOf } from "./cameraFeel";
@@ -67,14 +68,15 @@ export type View3dHandle = {
 export type Focus = {
   x: number;
   y: number;
-  driving: { length: number; heading: number } | null;
+  driving: { length: number; heading: number; kind: VehicleKind } | null;
 };
 
 /**
  * The camera's subject in a scene: the local player's blended pose, or their car's when driving.
  *
  * @param scene - The frame's scene.
- * @returns Its position and, in a car, the car's length and heading.
+ * @returns Its position and, in a car, the car's length, heading and kind (which seats the
+ *   first-person driver).
  */
 export function focusOf(scene: ArenaScene): Focus {
   const player = scene.players.find(
@@ -89,7 +91,11 @@ export function focusOf(scene: ArenaScene): Focus {
   return {
     x: car.x,
     y: car.y,
-    driving: { length: lengthOf(car.kind), heading: car.heading },
+    driving: {
+      length: lengthOf(car.kind),
+      heading: car.heading,
+      kind: car.kind,
+    },
   };
 }
 

@@ -45,6 +45,20 @@ function tracers(root: Object3D): LineSegments {
   return lines as LineSegments;
 }
 
+/** A pistol held by the shooter of {@link ROUND}, fired from (80, 50): ahead, right and up. */
+const MUZZLE = new Vector3(80.7, 1.47, 50.12);
+
+/** The first tracer's head (at the round) and tail. */
+function tracerEnds(root: Object3D): { head: Vector3; tail: Vector3 } {
+  const position = tracers(root).geometry.getAttribute(
+    "position",
+  ) as BufferAttribute;
+  return {
+    head: new Vector3().fromBufferAttribute(position, 0),
+    tail: new Vector3().fromBufferAttribute(position, 1),
+  };
+}
+
 function segmentCount(root: Object3D): number {
   return tracers(root).geometry.drawRange.count / 2;
 }
@@ -158,6 +172,86 @@ describe("createProjectiles3d", () => {
     expect(segmentCount(projectiles.object)).toBe(0);
     expect(visibleNamed(projectiles.object, "shell")).toHaveLength(1);
     expect(fire.alive()).toBeGreaterThan(0);
+  });
+
+  it("draws a round just out of a known muzzle on from that muzzle, its tail at the barrel", () => {
+    const { projectiles } = setup();
+    const muzzles = new Map([[ROUND.ownerId, MUZZLE]]);
+
+    projectiles.sync(
+      [{ ...ROUND, x: 81, rangeLeftM: WEAPONS.pistol.rangeM - 1 }],
+      muzzles,
+    );
+
+    const ends = tracerEnds(projectiles.object);
+    const oneMetreOn = MUZZLE.clone().add(new Vector3(1, 0, 0));
+    expect(ends.head.distanceTo(oneMetreOn)).toBeLessThan(0.2);
+    expect(ends.tail.distanceTo(MUZZLE)).toBeCloseTo(0);
+  });
+
+  it("puts a round from a muzzle back on its flat line by 20 m flown", () => {
+    const { projectiles } = setup();
+
+    projectiles.sync([ROUND], new Map([[ROUND.ownerId, MUZZLE]]));
+
+    const { head } = tracerEnds(projectiles.object);
+    const onLine = new Vector3(100, PERSON_CHEST_HEIGHT_M, 50);
+    expect(head.distanceTo(onLine)).toBeCloseTo(0, 5);
+  });
+
+  it("draws a round whose shooter has no muzzle exactly as on its flat line", () => {
+    const { projectiles } = setup();
+    const round = { ...ROUND, rangeLeftM: WEAPONS.pistol.rangeM - 2 };
+
+    projectiles.sync([round], new Map([[99, MUZZLE]]));
+
+    const { head, tail } = tracerEnds(projectiles.object);
+    const onLine = new Vector3(100, PERSON_CHEST_HEIGHT_M, 50);
+    expect(head.distanceTo(onLine)).toBeCloseTo(0, 5);
+    expect(tail.x).toBeCloseTo(98);
+    expect(tail.y).toBeCloseTo(PERSON_CHEST_HEIGHT_M);
+  });
+
+  it("never draws a tail back behind the muzzle", () => {
+    const { projectiles } = setup();
+    const muzzles = new Map([[ROUND.ownerId, MUZZLE]]);
+    for (const flown of [0.2, 1, 2.5, 3, 6, 12]) {
+      projectiles.sync(
+        [
+          {
+            ...ROUND,
+            x: 80 + flown,
+            rangeLeftM: WEAPONS.pistol.rangeM - flown,
+          },
+        ],
+        muzzles,
+      );
+      const { tail } = tracerEnds(projectiles.object);
+      expect(tail.x, `${flown} m`).toBeGreaterThanOrEqual(MUZZLE.x - 1e-4);
+    }
+  });
+
+  it("launches a rocket from the tube, keeping the muzzle it left even as the shooter moves", () => {
+    const { projectiles } = setup();
+    const rocket: BulletState = {
+      ...ROUND,
+      weapon: "rocket",
+      x: 80.8,
+      rangeLeftM: WEAPONS.rocket.rangeM,
+    };
+    const muzzle = MUZZLE.clone();
+
+    projectiles.sync([rocket], new Map([[ROUND.ownerId, muzzle]]));
+    const [body] = visibleNamed(projectiles.object, "rocket");
+    expect(body!.position.distanceTo(MUZZLE)).toBeCloseTo(0);
+
+    muzzle.set(0, 0, 0);
+    projectiles.sync(
+      [{ ...rocket, x: 81.8, rangeLeftM: WEAPONS.rocket.rangeM - 1 }],
+      new Map([[ROUND.ownerId, muzzle]]),
+    );
+    const oneMetreOn = MUZZLE.clone().add(new Vector3(1, 0, 0));
+    expect(body!.position.distanceTo(oneMetreOn)).toBeLessThan(0.2);
   });
 
   it("frees its geometry and materials", () => {
