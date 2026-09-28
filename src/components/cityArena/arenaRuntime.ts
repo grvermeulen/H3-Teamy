@@ -282,7 +282,7 @@ export type Runtime = {
   carLook?: CarLook;
   /** The heading the 3D input last sent the simulation: at what the crosshair covers. */
   aim3d?: number;
-  /** Whether the 3D input last aimed down the sights: the view zooms while it does. */
+  /** Whether the 3D input last aimed down the sights: the view zooms, and at the wheel your gun comes out of the window. */
   ads3d?: boolean;
   /** "Muisgevoeligheid": mouse-look's turn per pixel as a multiple; 1 when unset. */
   mouseSensitivity?: number;

@@ -341,6 +341,24 @@ describe("createEffects3d", () => {
     expect(light!.position.y).toBeCloseTo(PERSON_CHEST_HEIGHT_M);
   });
 
+  it("puts a drive-by's flash at the gun held out of the car window", () => {
+    const driveBy: EffectState = { ...EXPLOSION, kind: "muzzle", x: 10, y: 10 };
+    const driver = { id: 5, x: 10, y: 10 } as ArenaPlayerState;
+    const outOfWindow = new Vector3(10.3, 1.05, 8.85);
+    const effects = createEffects3d({ maxParticles: 600 });
+
+    effects.sync(
+      scene({ effects: [driveBy], players: [driver] }),
+      undefined,
+      false,
+      new Map([[5, outOfWindow]]),
+    );
+    effects.update(0.001);
+
+    const [light] = litLights(effects.object);
+    expect(light!.position.toArray()).toEqual(outOfWindow.toArray());
+  });
+
   it("starts the rounds of a known shooter at their muzzle", () => {
     const effects = createEffects3d({ maxParticles: 600 });
     const round: BulletState = {

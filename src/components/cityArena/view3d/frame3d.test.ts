@@ -164,6 +164,15 @@ describe("input3d", () => {
     expect(input.move[1]).toBeCloseTo(1);
   });
 
+  it("remembers whether you aim down the sights, for the view", () => {
+    const runtime = runtime3d(fakeLook(), true);
+    const aiming = input3d(runtime, createInput({ ads: true }), 1 / 60);
+    expect(aiming.ads).toBe(true);
+    expect(runtime.ads3d).toBe(true);
+    input3d(runtime, createInput({}), 1 / 60);
+    expect(runtime.ads3d).toBe(false);
+  });
+
   it("eases the chase camera behind the car once the mouse has rested for 1.2 s", () => {
     const look = fakeLook(1);
     const runtime = runtime3d(look, true);
@@ -338,6 +347,7 @@ describe("paint3d", () => {
     const runtime = runtime3d(fakeLook(0.4));
     runtime.diedAtMs = 1000;
     runtime.aim3d = 1.9;
+    runtime.ads3d = true;
     const scene = { world: { tiles: [] } } as unknown as Scene;
     const rect = { width: 800, height: 600 } as DOMRect;
     const stats = paint3d(
@@ -360,6 +370,7 @@ describe("paint3d", () => {
       yaw: 0.4,
       pitch: 0.2,
       aim: 1.9,
+      ads: true,
       mode: "third",
       quality: "high",
       deadSeconds: 2.5,

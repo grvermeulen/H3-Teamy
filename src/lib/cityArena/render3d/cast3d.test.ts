@@ -240,6 +240,7 @@ describe("createCast3d", () => {
       x: 3,
       y: 4,
       heading: 0.3,
+      driveBy: null,
     });
     cast.update(frameOf({ mode: "first" }), FOCUS, camera);
     expect(pass.update).toHaveBeenLastCalledWith(
@@ -430,5 +431,45 @@ describe("createCast3d", () => {
 
   it("disposes cleanly before the first frame", () => {
     expect(() => createCast3d(fakeFactories()).dispose()).not.toThrow();
+  });
+
+  it("holds your gun out of the car window while you aim down the sights", () => {
+    const cast = createCast3d(fakeFactories(), fakePass());
+    const frame = (ads: boolean): CastFrame => {
+      const at = frameOf({ ads });
+      at.scene.players = [you({ vehicleId: 9 })];
+      at.scene.vehicles = [createVehicle(9, "sedan", [3, 4], 0, 1)];
+      return at;
+    };
+    cast.update(frame(false), FOCUS, new PerspectiveCamera());
+    expect(cast.object.getObjectByName("drive-by")?.visible).toBe(false);
+    cast.update(frame(true), FOCUS, new PerspectiveCamera());
+    expect(cast.object.getObjectByName("drive-by")?.visible).toBe(true);
+  });
+
+  it("hands the cockpit your gun out of the window when you shoot at the wheel, flame and all", () => {
+    const pass = fakePass();
+    const cast = createCast3d(fakeFactories(), pass);
+    const camera = new PerspectiveCamera();
+    const driving = (nextShotTick: number): CastFrame => {
+      const at = frameOf({ mode: "first", aim: -1.2 });
+      at.scene.players = [you({ vehicleId: 9, nextShotTick })];
+      at.scene.vehicles = [createVehicle(9, "sedan", [3, 4], 0.3, 1)];
+      return at;
+    };
+    cast.update(driving(80), FOCUS, camera);
+    expect(pass.update.mock.lastCall?.[2]).toMatchObject({ driveBy: null });
+    cast.update(driving(95), FOCUS, camera);
+    expect(pass.update.mock.lastCall?.[2]).toMatchObject({
+      heading: 0.3,
+      driveBy: {
+        side: "left",
+        heading: 0.3,
+        aim: -1.2,
+        weapon: "pistol",
+        firedTick: 90,
+      },
+    });
+    expect(effectsMade[0]!.sync.mock.lastCall?.[2]).toBe(true);
   });
 });

@@ -8,6 +8,7 @@ import { Group, Vector3, type Object3D, type PerspectiveCamera } from "three";
 import type { Scene } from "../render/renderScene";
 import type { CameraMode } from "./cameraRig";
 import { GLTF_LOD_DISTANCE_M, createCharacterFactory } from "./characters";
+import type { CockpitDriveBy } from "./cockpitGun";
 import { createContacts3d } from "./contacts3d";
 import { createDestruction3d, type Destruction3d } from "./destruction3d";
 import { createEffects3d, type Effects3d } from "./effects3d";
@@ -58,6 +59,8 @@ export type CastFrame = {
   mode: CameraMode;
   aim: number;
   quality: RenderQuality;
+  /** You aim down the sights: at the wheel, your gun comes out of the window. */
+  ads?: boolean;
 };
 
 /** The local player's aim this frame (aim spec §5), from the view's probe. */
@@ -117,32 +120,52 @@ function fxFor(parent: Group, current: Fx | null, quality: RenderQuality): Fx {
 
 /**
  * Brings the effects (made by the first frame) to the frame and steps them and the destruction.
- * Your own flame moves to the hands' barrel only while the hands are there to show it.
+ * Your own flame moves to the drawn gun's barrel only while the pass is there to show it.
  */
 function stepFx(
   parent: Group,
   current: Fx | null,
   frame: CastFrame,
   focus: { x: number; y: number },
-  own: { handsShown: boolean; muzzles: MuzzlePoints; aim: CastAim },
+  own: { flashInPass: boolean; muzzles: MuzzlePoints; aim: CastAim },
 ): Fx {
   const fx = fxFor(parent, current, frame.quality);
-  const { handsShown, muzzles, aim } = own;
-  fx.effects.sync(frame.scene, focus, handsShown, muzzles, aim.shot);
+  const { flashInPass, muzzles, aim } = own;
+  fx.effects.sync(frame.scene, focus, flashInPass, muzzles, aim.shot);
   fx.effects.update(frame.dt);
   fx.destruction.update(frame.dt);
   return fx;
 }
 
 /**
- * Fills the cockpit's reused pose from the car the local player drives in first person; `null`
- * while on foot, dead, in third person or in a wreck (the death camera or the car's own body
- * takes over).
+ * Fills the gun hand's reused input from your drive-by while the gun is out; `null` while both
+ * hands are on the wheel.
+ */
+function cockpitDriveBy(
+  gun: CockpitDriveBy,
+  entities: EntitySync,
+  frame: CastFrame,
+): CockpitDriveBy | null {
+  const { driveBy, vehicle, weapon } = entities.local;
+  if (!driveBy || !vehicle) return null;
+  gun.side = driveBy.side;
+  gun.heading = vehicle.heading;
+  gun.aim = frame.aim;
+  gun.weapon = weapon;
+  gun.firedTick = driveBy.firedTick;
+  return gun;
+}
+
+/**
+ * Fills the cockpit's reused pose from the car the local player drives in first person, with the
+ * gun out of the window during a drive-by; `null` while on foot, dead, in third person or in a
+ * wreck (the death camera or the car's own body takes over).
  */
 function cockpitPose(
   pose: CockpitPose,
   entities: EntitySync,
   frame: CastFrame,
+  gun: CockpitDriveBy,
 ): CockpitPose | null {
   const car = entities.local.vehicle;
   if (frame.mode !== "first" || !car || car.wrecked) return null;
@@ -156,6 +179,7 @@ function cockpitPose(
   pose.heading = car.heading;
   pose.tick = frame.scene.tick;
   pose.dt = frame.dt;
+  pose.driveBy = cockpitDriveBy(gun, entities, frame);
   return pose;
 }
 
@@ -172,6 +196,7 @@ function createCockpitPose(): CockpitPose {
     x: 0,
     y: 0,
     heading: 0,
+    driveBy: null,
   };
 }
 
@@ -200,10 +225,12 @@ type FirstPersonView = {
   hands: ViewModelPass;
   input: ViewModelInput;
   cockpit: CockpitPose;
+  /** The gun hand's input during a drive-by at the wheel. */
+  gun: CockpitDriveBy;
   /** Receives your muzzle from the drawn gun. */
   muzzle: Vector3;
-  /** Whether this frame drew the hands. */
-  handsShown: boolean;
+  /** Whether this frame drew your gun in the pass: the hands, or the cockpit's gun hand. */
+  ownFlashInPass: boolean;
 };
 
 /** A first-person view around a pass, nothing shown yet. */
@@ -219,14 +246,22 @@ function createFirstPersonView(hands: ViewModelPass): FirstPersonView {
       sights: 0,
     },
     cockpit: createCockpitPose(),
+    gun: {
+      side: "front",
+      heading: 0,
+      aim: 0,
+      weapon: "pistol",
+      firedTick: null,
+    },
     muzzle: new Vector3(),
-    handsShown: false,
+    ownFlashInPass: false,
   };
 }
 
 /**
- * Poses the hands on foot or the cockpit at the wheel, in first person; with the hands out, your
- * muzzle becomes the drawn gun's, so your shots leave it rather than the hidden body's.
+ * Poses the hands on foot or the cockpit at the wheel, in first person; with the hands out (or the
+ * cockpit's gun hand in a drive-by), your muzzle becomes the drawn gun's, so your shots leave it
+ * rather than the hidden body or car.
  */
 function poseFirstPerson(
   view: FirstPersonView,
@@ -236,8 +271,8 @@ function poseFirstPerson(
   sights: number,
 ): OverlayPass | null {
   const drawn = handsInput(view.input, entities, frame, sights);
-  view.handsShown = drawn !== null;
-  const cockpit = cockpitPose(view.cockpit, entities, frame);
+  const cockpit = cockpitPose(view.cockpit, entities, frame, view.gun);
+  view.ownFlashInPass = drawn !== null || Boolean(cockpit?.driveBy);
   const pass = view.hands.update(camera, drawn, cockpit);
   if (view.hands.muzzleWorld(view.muzzle))
     entities.muzzles.set(frame.scene.localPlayerId, view.muzzle);
@@ -268,6 +303,7 @@ export function createCast3d(
     update(frame, focus, camera, contacts = NO_CONTACTS, aim = NO_AIM) {
       view.firstPerson = frame.mode === "first";
       view.aim = frame.aim;
+      view.ads = frame.ads === true;
       view.characterDetailM =
         frame.quality === "low" ? GLTF_LOD_DISTANCE_M : undefined;
       entities.update(frame.scene, frame.dt, focus, view);
@@ -280,7 +316,7 @@ export function createCast3d(
         aim.sights,
       );
       fx = stepFx(object, fx, frame, focus, {
-        handsShown: firstPerson.handsShown,
+        flashInPass: firstPerson.ownFlashInPass,
         muzzles: entities.muzzles.points,
         aim,
       });
