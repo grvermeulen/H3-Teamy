@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CHASE_IDLE_S } from "@/lib/cityArena/input/cameraYaw";
+import { ASSIST_FRICTION } from "@/lib/cityArena/input/aimAssist";
 import type { MouseLook } from "@/lib/cityArena/input/mouseLook";
 import {
   TOUCH_LOOK_RAD_PER_PX,
@@ -22,12 +23,15 @@ import {
 } from "./frame3d";
 
 /** A mouse-look stand-in whose next mouse turn the test sets. */
-function fakeLook(yaw = 0): MouseLook & { turn(delta: number): void } {
+function fakeLook(
+  yaw = 0,
+  pitch = 0.2,
+): MouseLook & { turn(delta: number): void } {
   let current = yaw;
   let pending = 0;
   return {
     yaw: () => current,
-    pitch: () => 0.2,
+    pitch: () => pitch,
     locked: () => true,
     setYaw: (value) => {
       current = value;
@@ -58,6 +62,8 @@ function runtime3d(
         { id: 0, x: 0, y: 0, facing: 0, vehicleId: driving ? 7 : null },
       ],
       vehicles: [{ id: 7, x: 0, y: 0, heading: 0 }],
+      cops: [],
+      peds: [],
     },
     view3d: { render: vi.fn(), dispose: vi.fn() },
     look,
@@ -172,6 +178,25 @@ describe("input3d", () => {
     const before = look.yaw();
     input3d(runtime, createInput({}), 0.1);
     expect(look.yaw()).toBeCloseTo(before);
+  });
+
+  it("slows the look pad over a pedestrian ahead, but never the mouse", () => {
+    const look = fakeLook(0, 0);
+    const runtime = runtime3d(look);
+    runtime.state = {
+      ...runtime.state,
+      peds: [{ id: 3, x: 20, y: 0, health: 30, mode: "walk" }],
+    } as unknown as Runtime3d["state"];
+    const pad = createTouchLook(() => 1);
+    runtime.touchCamera = createTouchCamera(pad, [-0.6, 0.7]);
+    pad.onDown({ pointerId: 1, clientX: 0, clientY: 0 });
+    pad.onMove({ pointerId: 1, clientX: 1, clientY: 0 });
+    input3d(runtime, createInput({}), 1 / 60);
+    expect(look.yaw()).toBeCloseTo(ASSIST_FRICTION * TOUCH_LOOK_RAD_PER_PX, 6);
+    look.setYaw(0);
+    look.turn(0.01);
+    input3d(runtime, createInput({}), 1 / 60);
+    expect(look.yaw()).toBeCloseTo(0.01, 6);
   });
 
   it("stops swinging the camera toward the walk once the look pad has turned it", () => {

@@ -102,7 +102,7 @@ export function input3d(
   const { look } = runtime;
   const player = playerById(runtime.state, runtime.netplay.playerId);
   const car = player ? occupiedVehicle(runtime.state, player) : null;
-  const touchYaw = applyTouchLook(runtime);
+  const touchYaw = applyTouchLook(runtime, car ?? player ?? null);
   const next = nextCarYaw({
     yaw: look.yaw(),
     yawDelta: look.takeYawDelta() + touchYaw,
