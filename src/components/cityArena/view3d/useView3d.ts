@@ -120,6 +120,7 @@ export function guardView3d(
         onFailure(error);
       }
     },
+    aimPoint: () => handle.aimPoint(),
     dispose: () => handle.dispose(),
   };
 }

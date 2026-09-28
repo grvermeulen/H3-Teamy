@@ -117,7 +117,18 @@ function sceneOf(
 ): ArenaScene {
   return {
     localPlayerId: 2,
-    players: [{ id: 2, x: 25, y: 60, vehicleId: null }],
+    players: [
+      {
+        id: 2,
+        x: 25,
+        y: 60,
+        vehicleId: null,
+        diedAtTick: null,
+        weapon: "pistol",
+      },
+    ],
+    peds: [],
+    cops: [],
     vehicles,
     effects,
     tick: TICK,
@@ -327,6 +338,18 @@ describe("createView3d frame path", () => {
       renderer.camera,
       expect.objectContaining({ friends: scene }),
     );
+  });
+
+  it("probes what the crosshair covers: the house ahead, and nothing while dead", () => {
+    const view = createView3d(document.createElement("canvas"));
+    expect(view.aimPoint()).toBeNull();
+
+    view.render(frameOf("third", { yaw: Math.PI / 2 }), OVERLAY);
+
+    expect(view.aimPoint()).toMatchObject({ target: "building" });
+    expect(view.aimPoint()!.y).toBeCloseTo(72, 6);
+    view.render(frameOf("third", { deadSeconds: 1 }), OVERLAY);
+    expect(view.aimPoint()).toBeNull();
   });
 
   it("draws the first-person hands in a pass of their own over the city", () => {
