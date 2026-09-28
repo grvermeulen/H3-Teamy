@@ -25,6 +25,7 @@ import type { InputState } from "@/lib/cityArena/input/inputState";
 import type { Rect } from "@/lib/cityArena/mapBuild/geometry";
 import type { MouseLook } from "@/lib/cityArena/input/mouseLook";
 import type { PointerAim } from "@/lib/cityArena/input/pointerAim";
+import type { TouchCamera } from "@/lib/cityArena/input/touchLook";
 import {
   createCamera,
   screenToWorld,
@@ -280,6 +281,8 @@ export type Runtime = {
   carLook?: CarLook;
   /** The heading the 3D input last sent the simulation to shoot along; the crosshair follows it. */
   aim3d?: number;
+  /** The touch look pad, attached alongside {@link look} (spec §6); `view3d/touchLook3d.ts`. */
+  touchCamera?: TouchCamera | null;
 };
 
 /**

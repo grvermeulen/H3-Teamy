@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   STICK_RADIUS_PX,
@@ -39,8 +39,12 @@ function localPoint(
   return [event.clientX - rect.left, event.clientY - rect.top];
 }
 
-/** Captures the pointer on the surface so a drag past its edge keeps tracking. */
-function capturePointer(event: ReactPointerEvent<HTMLDivElement>): void {
+/**
+ * Captures the pointer on the element it went down on, so a drag past its edge keeps tracking.
+ *
+ * @param event - The pointer-down event.
+ */
+export function capturePointer(event: ReactPointerEvent<Element>): void {
   if (typeof event.currentTarget.setPointerCapture === "function") {
     event.currentTarget.setPointerCapture(event.pointerId);
   }
@@ -94,7 +98,32 @@ function useStickHandlers(
     [onVector, stick],
   );
 
+  useReleaseOnUnmount(stick, onVector);
   return { state, onPointerDown, onPointerMove, onPointerEnd };
+}
+
+/**
+ * Lets go of a stick still held when its surface goes away (the aim stick gives way to the 3D look
+ * pad mid-drag): otherwise its aim and fire would stay on and the stale finger would keep the next
+ * one from taking it.
+ */
+function useReleaseOnUnmount(
+  stick: StickController,
+  onVector: (vector: [number, number] | null) => void,
+): void {
+  const onVectorRef = useRef(onVector);
+  useEffect(() => {
+    onVectorRef.current = onVector;
+  }, [onVector]);
+  useEffect(
+    () => () => {
+      const owner = stick.state().pointerId;
+      if (owner === null) return;
+      stick.end(owner);
+      onVectorRef.current(null);
+    },
+    [stick],
+  );
 }
 
 /** Props for {@link StickGraphic}. */

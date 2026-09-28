@@ -585,6 +585,38 @@ describe("CityArenaOverlay", () => {
     expect(localStorage.getItem(ARENA_TOUCH_TIP_KEY)).toBe("1");
   });
 
+  it("swaps the aim stick for the look pad and a Schieten button in 3D on touch", async () => {
+    vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+      matches: query.includes("pointer: coarse"),
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    localStorage.setItem(ARENA_TOUCH_TIP_KEY, "1");
+    renderOverlay(vi.fn());
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Wissel naar 3D" }));
+    await waitFor(() => expect(mockCreateView3d).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId("touch-look-pad")).toBeInTheDocument();
+    expect(screen.queryByTestId("touch-aim-surface")).toBeNull();
+    expect(screen.getByTestId("touch-stick-surface")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Schieten" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/sleep rechts om rond te kijken/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Wissel naar 2D" }));
+    expect(screen.queryByTestId("touch-look-pad")).toBeNull();
+    expect(screen.getByTestId("touch-aim-surface")).toBeInTheDocument();
+  });
+
   it("opens the radar as a map, retains the selected route when closing, and restores focus", async () => {
     vi.stubGlobal(
       "ResizeObserver",

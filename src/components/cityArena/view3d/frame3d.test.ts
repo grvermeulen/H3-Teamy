@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CHASE_IDLE_S } from "@/lib/cityArena/input/cameraYaw";
 import type { MouseLook } from "@/lib/cityArena/input/mouseLook";
+import {
+  TOUCH_LOOK_RAD_PER_PX,
+  createTouchCamera,
+  createTouchLook,
+} from "@/lib/cityArena/input/touchLook";
 import { INITIAL_FEEDBACK } from "@/lib/cityArena/render/feedback";
 import type { Scene } from "@/lib/cityArena/render/renderScene";
 import { createFakeContext } from "@/lib/cityArena/render/testing/fakeContext";
@@ -139,6 +144,48 @@ describe("input3d", () => {
     // The shot still goes along the camera, not along the walk.
     expect(runtime.aim3d).toBe(0);
   });
+
+  it("turns the camera and the aim by a drag on the look pad, without firing", () => {
+    const look = fakeLook(0);
+    const runtime = runtime3d(look);
+    const pad = createTouchLook(() => 1);
+    runtime.touchCamera = createTouchCamera(pad, [-0.6, 0.7]);
+    pad.onDown({ pointerId: 1, clientX: 0, clientY: 0 });
+    pad.onMove({ pointerId: 1, clientX: 100, clientY: 0 });
+    const input = input3d(runtime, createInput({}), 1 / 60);
+    expect(look.yaw()).toBeCloseTo(100 * TOUCH_LOOK_RAD_PER_PX);
+    expect(input.aim).toBeCloseTo(100 * TOUCH_LOOK_RAD_PER_PX);
+    expect(input.fire).toBe(false);
+  });
+
+  it("counts a look-pad turn as a look, so the chase camera waits before easing behind the car", () => {
+    const look = fakeLook(1);
+    const runtime = runtime3d(look, true);
+    const pad = createTouchLook(() => 1);
+    runtime.touchCamera = createTouchCamera(pad, [-0.6, 0.7]);
+    for (let second = 0; second < CHASE_IDLE_S; second += 0.1) {
+      pad.onDown({ pointerId: 1, clientX: 0, clientY: 0 });
+      pad.onMove({ pointerId: 1, clientX: 1, clientY: 0 });
+      pad.onUp({ pointerId: 1, clientX: 1, clientY: 0 });
+      input3d(runtime, createInput({}), 0.1);
+    }
+    const before = look.yaw();
+    input3d(runtime, createInput({}), 0.1);
+    expect(look.yaw()).toBeCloseTo(before);
+  });
+
+  it("stops swinging the camera toward the walk once the look pad has turned it", () => {
+    const look = fakeLook(0);
+    const runtime = runtime3d(look);
+    const pad = createTouchLook(() => 1);
+    runtime.touchCamera = createTouchCamera(pad, [-0.6, 0.7]);
+    pad.onDown({ pointerId: 1, clientX: 0, clientY: 0 });
+    pad.onMove({ pointerId: 1, clientX: 10, clientY: 0 });
+    input3d(runtime, createInput({}), 0.1);
+    const turned = look.yaw();
+    input3d(runtime, createInput({ move: [1, 0], moveIsAnalog: true }), 0.1);
+    expect(look.yaw()).toBeCloseTo(turned);
+  });
 });
 
 describe("paint3d", () => {
@@ -212,5 +259,22 @@ describe("paint3d", () => {
     ];
     runtime.state = { ...runtime.state, structures };
     expect(paint().structures).toBe(structures);
+  });
+
+  it("tilts the frame's pitch by the look pad, within the camera mode's range", () => {
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+      createFakeContext() as unknown as CanvasRenderingContext2D,
+    );
+    const runtime = runtime3d();
+    const pad = createTouchLook(() => 1);
+    runtime.touchCamera = createTouchCamera(pad, [-0.6, 0.7]);
+    pad.onDown({ pointerId: 1, clientX: 0, clientY: 0 });
+    pad.onMove({ pointerId: 1, clientX: 0, clientY: -10 });
+    input3d(runtime, createInput({}), 1 / 60);
+    const scene = { world: { tiles: [] } } as unknown as Scene;
+    const rect = { width: 800, height: 600 } as DOMRect;
+    paint3d(document.createElement("canvas"), rect, runtime, scene, 0, 0);
+    const frame = runtime.view3d.render.mock.calls[0]![0] as View3dFrame;
+    expect(frame.pitch).toBeCloseTo(0.2 + 10 * TOUCH_LOOK_RAD_PER_PX);
   });
 });
