@@ -33,6 +33,9 @@ export type Haptics = {
 export const HAPTIC_MIN_GAP_MS = 80;
 /** How close an explosion has to be to be felt. */
 export const EXPLOSION_FEEL_RADIUS_M = 30;
+/** How close a building collapse has to be to be felt (spec §5): farther than a plain explosion,
+ *  since a falling building is felt across more of the block. */
+export const COLLAPSE_FEEL_RADIUS_M = 60;
 /** The car impact speed that earns the longest pulse. */
 const IMPACT_FULL_STRENGTH_MPS = 20;
 /** Car impact pulse length at the gentlest and the hardest knock (spec §7: 40–90 ms). */
@@ -79,14 +82,27 @@ export function tookDamage(
   return previousHealth !== null && health < previousHealth;
 }
 
-/** True when the point is within feeling range of this player. */
-function nearMe(me: ArenaPlayerState, x: number, y: number): boolean {
-  return Math.hypot(x - me.x, y - me.y) <= EXPLOSION_FEEL_RADIUS_M;
+/** True when the point is within `radius` of this player. */
+function nearMe(
+  me: ArenaPlayerState,
+  x: number,
+  y: number,
+  radius: number,
+): boolean {
+  return Math.hypot(x - me.x, y - me.y) <= radius;
 }
 
 /** The pulse one event earns this player, or null when it is not theirs to feel. */
 function pulseFor(event: ArenaEvent, me: ArenaPlayerState): HapticPulse | null {
-  if (event.kind === "explosion" && nearMe(me, event.x, event.y))
+  if (
+    event.kind === "explosion" &&
+    nearMe(me, event.x, event.y, EXPLOSION_FEEL_RADIUS_M)
+  )
+    return { kind: "explosion", strength: 1 };
+  if (
+    event.kind === "collapse" &&
+    nearMe(me, event.x, event.y, COLLAPSE_FEEL_RADIUS_M)
+  )
     return { kind: "explosion", strength: 1 };
   if (event.kind === "impact" && me.vehicleId !== null) {
     const mine =

@@ -10,6 +10,7 @@ import {
   ArenaRequestError,
   sendArenaRoomCommand,
   sendArenaDisplayCommand,
+  shouldReportArenaRequestError,
   type ArenaRoomClient,
 } from "@/lib/cityArena/net/roomClient";
 import {
@@ -54,7 +55,7 @@ export type UseArenaRoomOptions = {
 };
 
 function reportFailure(error: unknown): void {
-  if (error instanceof ArenaRequestError && error.status < 500) return;
+  if (!shouldReportArenaRequestError(error)) return;
   Sentry.captureException(error, {
     tags: { area: "arena", kind: "room-session" },
   });

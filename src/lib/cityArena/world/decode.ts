@@ -9,6 +9,7 @@ import {
   type TreeSize,
 } from "./mapTypes";
 import { fromUnits, type Point } from "./projection";
+import { structureIdOf } from "./structureId";
 
 /** Road centre line in metres with its bounding rectangle. */
 export type DecodedRoad = {
@@ -18,8 +19,9 @@ export type DecodedRoad = {
   bounds: Rect;
 };
 
-/** Building footprint in metres. */
+/** Building footprint in metres, with the structure id the simulation damages it by. */
 export type DecodedBuilding = {
+  structureId: number;
   ring: Point[];
   bounds: Rect;
   levels: number;
@@ -110,15 +112,18 @@ export function decodeTile(tile: MapTile, index: MapIndex): DecodedTile {
       bounds: boundsOf(points),
     };
   });
-  const buildings: DecodedBuilding[] = tile.buildings.map((building) => {
-    const ring = flatUnitsToPoints(building.points);
-    return {
-      ring,
-      bounds: boundsOf(ring),
-      levels: building.levels,
-      landmark: building.landmark,
-    };
-  });
+  const buildings: DecodedBuilding[] = tile.buildings.map(
+    (building, position) => {
+      const ring = flatUnitsToPoints(building.points);
+      return {
+        structureId: structureIdOf(tile.x, tile.y, position),
+        ring,
+        bounds: boundsOf(ring),
+        levels: building.levels,
+        landmark: building.landmark,
+      };
+    },
+  );
   const ground: DecodedGround[] = tile.ground.map((area) => {
     const ring = flatUnitsToPoints(area.points);
     return { ring, bounds: boundsOf(ring), kind: area.kind };

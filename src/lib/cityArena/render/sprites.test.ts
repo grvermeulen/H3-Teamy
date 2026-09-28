@@ -200,6 +200,8 @@ describe("itemKeyForWeapon and itemSpriteFor", () => {
     expect(itemKeyForWeapon("fist")).toBeNull();
     expect(itemKeyForWeapon("uzi")).toBe("uzi");
     expect(itemKeyForWeapon("bat")).toBe("bat");
+    expect(itemKeyForWeapon("rocket")).toBe("rocket");
+    expect(itemKeyForWeapon("cannon")).toBeNull();
     const uzi = {
       image: document.createElement("canvas"),
       lengthMetres: 0.5,
@@ -212,5 +214,19 @@ describe("itemKeyForWeapon and itemSpriteFor", () => {
     const manifest = parseSpriteManifest(generatedManifest());
     expect(manifest.items.pistol?.lengthMetres).toBe(0.2);
     expect(manifest.surfaces.roofTiles.tileMetres).toBe(8);
+    const withRocket = parseSpriteManifest({
+      ...(generatedManifest() as object),
+      items: {
+        ...manifest.items,
+        rocket: {
+          file: "item-rocket.png",
+          lengthMetres: 1.1,
+          widthMetres: 0.2,
+          pixelWidth: 88,
+          pixelHeight: 16,
+        },
+      },
+    });
+    expect(withRocket.items.rocket?.lengthMetres).toBe(1.1);
   });
 });

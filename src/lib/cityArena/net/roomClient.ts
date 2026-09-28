@@ -17,6 +17,12 @@ export class ArenaRequestError extends Error {
   }
 }
 
+/** Expected refusals and infrastructure outages should not become Sentry issues. */
+export function shouldReportArenaRequestError(error: unknown): boolean {
+  if (!(error instanceof ArenaRequestError)) return true;
+  return error.status >= 500 && error.status !== 503;
+}
+
 /** The injectable room API boundary used by the UI and transport integration tests. */
 export type ArenaRoomClient = (
   command: ArenaRoomCommand,

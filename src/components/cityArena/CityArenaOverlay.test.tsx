@@ -12,7 +12,16 @@ import type { MapIndex, MapTile } from "@/lib/cityArena/world/mapTypes";
 import {
   createFakeContext,
   createFakeTarget,
+  fakeGetContext,
 } from "@/lib/cityArena/render/testing/fakeContext";
+
+/** Stubs `document.pointerLockElement`, which jsdom does not implement. */
+function stubPointerLock(target: Element | null): void {
+  Object.defineProperty(document, "pointerLockElement", {
+    configurable: true,
+    get: () => target,
+  });
+}
 
 /** Opens the overlay and steps past the lobby into the match, which is what these tests cover. */
 function renderOverlay(onClose: () => void): void {
@@ -104,7 +113,19 @@ vi.mock("@/lib/cityArena/render/canvasTypes", async (importOriginal) => {
       createFakeTarget(width, height),
   };
 });
-vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+vi.mock("@sentry/nextjs", () => ({
+  captureException: vi.fn(),
+  addBreadcrumb: vi.fn(),
+}));
+
+/** jsdom has no WebGL: the 3D view is a stand-in whose creation each test can make fail. */
+const mockCreateView3d = vi.hoisted(() =>
+  vi.fn(() => ({ render: vi.fn(), dispose: vi.fn() })),
+);
+vi.mock("@/lib/cityArena/render3d", () => ({
+  createView3d: mockCreateView3d,
+  pitchLimitsFor: () => [-0.6, 0.7],
+}));
 
 /** These tests are about the playfield, not the netcode, so the room is a connected stub. */
 /** One object for the life of the file, so the memos keyed on `room.crew` keep their identity. */
@@ -132,6 +153,7 @@ import {
   ARENA_SETTINGS_KEY,
   ARENA_TOUCH_TIP_KEY,
 } from "@/lib/cityArena/storage";
+import { WebGl2UnavailableError } from "@/lib/cityArena/webgl2";
 import { HEALTH_LABEL } from "./ArenaVitals";
 import CityArenaOverlay from "./CityArenaOverlay";
 
@@ -139,6 +161,12 @@ describe("CityArenaOverlay", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    stubPointerLock(null);
+    document.exitPointerLock = vi.fn();
+    // jsdom has no pointer lock; a desktop browser does, so the click-to-aim hint applies.
+    HTMLCanvasElement.prototype.requestPointerLock = vi.fn(() =>
+      Promise.resolve(),
+    );
     vi.stubGlobal("fetch", fetchImpl);
     // jsdom does not implement matchMedia; the overlay's touch-control detection needs a stub
     // (same pattern as src/components/spaceInvaders/SpaceInvadersGame.test.tsx).
@@ -146,7 +174,8 @@ describe("CityArenaOverlay", () => {
       writable: true,
       configurable: true,
       value: vi.fn().mockImplementation((query: string) => ({
-        matches: false,
+        // A desktop: a fine pointer, no touch controls.
+        matches: query === "(pointer: fine)",
         media: query,
         onchange: null,
         addListener: vi.fn(),
@@ -156,10 +185,10 @@ describe("CityArenaOverlay", () => {
         dispatchEvent: vi.fn(),
       })),
     });
+    // jsdom's canvas getContext returns null; the fake only implements the RasterContext subset
+    // the renderer needs, and a WebGL2 probe finds a context, as on a desktop browser.
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
-      // jsdom's canvas getContext returns null; the fake only implements the RasterContext
-      // subset the renderer needs, so a cast is unavoidable here (test file only).
-      () => createFakeContext() as unknown as CanvasRenderingContext2D,
+      fakeGetContext(),
     );
     // Yield between frames so React can commit the asynchronously loaded room and world.
     let rafCount = 0;
@@ -183,7 +212,9 @@ describe("CityArenaOverlay", () => {
   });
 
   afterEach(() => {
+    stubPointerLock(null);
     cleanup();
+    Reflect.deleteProperty(HTMLCanvasElement.prototype, "requestPointerLock");
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -232,6 +263,181 @@ describe("CityArenaOverlay", () => {
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Potje verlaten" }));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("toggles between 2D and 3D from the HUD strip, and V flips the camera only in 3D", async () => {
+    renderOverlay(vi.fn());
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    const toggle = screen.getByRole("button", { name: "Wissel naar 3D" });
+    expect(toggle).toHaveTextContent("3D");
+    // V does nothing in 2D: the settings sheet still shows the third-person default.
+    fireEvent.keyDown(window, { code: "KeyV" });
+    fireEvent.click(screen.getByRole("button", { name: "Menu", exact: true }));
+    expect(
+      screen.getByRole("button", { name: "Derde persoon" }),
+    ).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Verder spelen" }));
+
+    fireEvent.click(toggle);
+    expect(
+      screen.getByRole("button", { name: "Wissel naar 2D" }),
+    ).toHaveTextContent("2D");
+    fireEvent.keyDown(window, { code: "KeyV" });
+    fireEvent.click(screen.getByRole("button", { name: "Menu", exact: true }));
+    expect(
+      screen.getByRole("button", { name: "Eerste persoon" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("mentions the V camera key in the controls hint only while 3D runs", async () => {
+    renderOverlay(vi.fn());
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    const hint = screen.getByText(/WASD of pijltjes/);
+    expect(hint).not.toHaveTextContent("V camera");
+    fireEvent.click(screen.getByRole("button", { name: "Wissel naar 3D" }));
+    expect(screen.getByText(/WASD of pijltjes/)).toHaveTextContent(
+      "Q, wiel of 1-6 wapens · V camera · R radio",
+    );
+  });
+
+  it("offers no 2D/3D choice on a shared screen, in the HUD strip or the menu", async () => {
+    render(
+      <CityArenaOverlay
+        entry={{ kind: "new", zone: "wageningen", role: "hybrid" }}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /oefenen|start potje/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Menu", exact: true }));
+    expect(screen.getByRole("dialog", { name: "Menu" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Weergave" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "3D-camera" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Wissel naar 3D" })).toBeNull();
+  });
+
+  it("stacks the WebGL layer under the playfield in 3D with the click-to-aim hint", async () => {
+    renderOverlay(vi.fn());
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    const layer = screen.getByTestId("arena-3d-layer");
+    const playfield = screen.getByLabelText("GTA H3 speelveld");
+    // Under the 2D canvas, which keeps every pointer event; empty in 2D.
+    expect(
+      layer.compareDocumentPosition(playfield) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(layer).toHaveClass("pointer-events-none");
+    expect(layer.children).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Wissel naar 3D" }));
+    await waitFor(() => expect(mockCreateView3d).toHaveBeenCalledTimes(1));
+    const glCanvas = mockCreateView3d.mock.calls[0]![0] as HTMLCanvasElement;
+    expect(glCanvas.parentElement).toBe(layer);
+    const hint = screen.getByText("Klik om te richten · V wisselt camera");
+    // Low on the playfield, just above the footer: clear of the character in the middle.
+    expect(hint).toHaveClass("bottom-6", "left-1/2");
+    expect(hint.className).not.toMatch(/top-/);
+    fireEvent.click(screen.getByRole("button", { name: "Wissel naar 2D" }));
+    expect(layer.children).toHaveLength(0);
+    expect(
+      screen.queryByText("Klik om te richten · V wisselt camera"),
+    ).toBeNull();
+  });
+
+  it("opens the menu when the player lets go of the pointer lock in 3D", async () => {
+    renderOverlay(vi.fn());
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Wissel naar 3D" }));
+    await waitFor(() => expect(mockCreateView3d).toHaveBeenCalledTimes(1));
+    const playfield = screen.getByLabelText("GTA H3 speelveld");
+    stubPointerLock(playfield);
+    act(() => {
+      document.dispatchEvent(new Event("pointerlockchange"));
+    });
+    expect(
+      screen.queryByText("Klik om te richten · V wisselt camera"),
+    ).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Menu" })).toBeNull();
+    stubPointerLock(null);
+    act(() => {
+      document.dispatchEvent(new Event("pointerlockchange"));
+    });
+    expect(screen.getByRole("dialog", { name: "Menu" })).toBeInTheDocument();
+  });
+
+  it("hands the mouse back, without the pause menu, when the map opens over 3D", async () => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    renderOverlay(vi.fn());
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Wissel naar 3D" }));
+    await waitFor(() => expect(mockCreateView3d).toHaveBeenCalledTimes(1));
+    const playfield = screen.getByLabelText("GTA H3 speelveld");
+    stubPointerLock(playfield);
+    act(() => {
+      document.dispatchEvent(new Event("pointerlockchange"));
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Kaart openen", exact: true }),
+    );
+    expect(document.exitPointerLock).toHaveBeenCalledTimes(1);
+    stubPointerLock(null);
+    act(() => {
+      document.dispatchEvent(new Event("pointerlockchange"));
+    });
+    expect(
+      screen.getByRole("dialog", { name: "Route plannen" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Menu" })).toBeNull();
+  });
+
+  it("returns to 2D with a toast, and no Sentry error, when the device has no WebGL2", async () => {
+    mockCreateView3d.mockImplementationOnce(() => {
+      throw new WebGl2UnavailableError();
+    });
+    renderOverlay(vi.fn());
+    await waitFor(() =>
+      expect(screen.getByTestId("arena-hud")).toHaveTextContent(
+        "Wageningen centrum",
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Wissel naar 3D" }));
+    expect(
+      await screen.findByText("3D werkt niet op dit apparaat"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Wissel naar 3D" }),
+    ).toBeInTheDocument();
+    // The world's own boot may report (sprites 404 in jsdom); the 3D fallback must not.
+    expect(Sentry.captureException).not.toHaveBeenCalledWith(
+      expect.anything(),
+      { tags: { area: "arena", kind: "render3d" } },
+    );
   });
 
   it("preloads the death-screen artwork once the overlay mounts", async () => {

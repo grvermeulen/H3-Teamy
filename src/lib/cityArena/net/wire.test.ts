@@ -150,6 +150,7 @@ describe("snapshot wire format", () => {
       "bat",
       "rifle",
       "cannon",
+      "rocket",
     ] as const;
     const state: ArenaState = {
       ...base,
@@ -162,14 +163,26 @@ describe("snapshot wire format", () => {
       vehicles: VEHICLE_KINDS.map((kind, id) =>
         createVehicle(100 + id, kind, [id * 10, 0], 0, 0),
       ),
-      pickups: (["uzi", "shotgun", "health", "rifle", "bat"] as const).map(
-        (kind, id) => ({ id: 900 + id, kind, x: id, y: 0, takenAtTick: null }),
-      ),
+      pickups: (
+        ["uzi", "shotgun", "health", "rifle", "bat", "rocket"] as const
+      ).map((kind, id) => ({
+        id: 900 + id,
+        kind,
+        x: id,
+        y: 0,
+        takenAtTick: null,
+      })),
     };
     const snapshot = encodeSnapshot(state, 1000, {});
     expect(isSnapshot(snapshot)).toBe(true);
+    const back = decodeSnapshot(snapshot);
+    expect(back.players.map((player) => player.weapon)).toEqual(weapons);
+    expect(back.pickups.at(-1)?.kind).toBe("rocket");
+    const unknownPickup = structuredClone(snapshot);
+    unknownPickup.k[0]![1] = 6;
+    expect(isSnapshot(unknownPickup)).toBe(false);
     for (const [column, value] of [
-      [6, 7],
+      [6, 8],
       [16, -1],
       [17, 10001],
       [18, 101],
@@ -189,7 +202,7 @@ describe("snapshot wire format", () => {
         {
           ...player,
           weapon: "rifle",
-          ammo: { uzi: 1, shotgun: 2, rifle: 7, bat: 13 },
+          ammo: { uzi: 1, shotgun: 2, rifle: 7, bat: 13, rocket: 0 },
         },
       ],
       pickups: [
@@ -204,6 +217,8 @@ describe("snapshot wire format", () => {
       shotgun: 2,
       rifle: 7,
       bat: 13,
+      // No rocket column until Task 5 appends one at index 22.
+      rocket: 0,
     });
     expect(back.pickups.map((pickup) => pickup.kind)).toEqual(["rifle", "bat"]);
   });
@@ -237,6 +252,12 @@ describe("snapshot wire format", () => {
       "tractor",
     ]);
     expect(back.vehicles[0]!.health).toBe(350);
+  });
+
+  it("clamps over-max vehicle health when decoding a snapshot row", () => {
+    const snapshot = encodeSnapshot(boot(), 0, {});
+    snapshot.v = [[199, 1, 0, 0, 0, 0, 0, 200, 0, 0]];
+    expect(decodeSnapshot(snapshot).vehicles[0]!.health).toBe(180);
   });
 
   it("round-trips cars, pedestrians, cops, bullets and pickups", () => {

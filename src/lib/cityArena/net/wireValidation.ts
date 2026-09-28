@@ -7,9 +7,15 @@ import {
   MAX_PICKUPS,
   MAX_VEHICLES,
 } from "../sim/limits";
-import type { Snapshot } from "./snapshotWire";
-import { VEHICLE_KINDS } from "../sim/vehicle";
+import { MAX_STRUCTURES } from "../sim/structures";
+import {
+  MAX_WIRE_PICKUP_INDEX,
+  MAX_WIRE_WEAPON_INDEX,
+  type Snapshot,
+} from "./snapshotWire";
+import { healthMaxOf, VEHICLE_KINDS } from "../sim/vehicle";
 import type { InputFrame } from "./wire";
+import { entryAt } from "./wire";
 import { MISSION_COMMANDS } from "./wire";
 import { MissionProfileSchema } from "../missions/validation";
 import { VehicleBoardingSchema } from "./boardingValidation";
@@ -38,6 +44,7 @@ const SNAPSHOT_KEYS = new Set([
   "u",
   "h",
   "l",
+  "z",
 ]);
 const rejected = { input: 0, snapshot: 0 };
 
@@ -119,15 +126,17 @@ export function isSnapshot(value: unknown): value is Snapshot {
   if (snapshot.r === undefined && snapshot.x !== undefined) return false;
   if (
     !(
+      rows(snapshot.p, 23, MAX_ARENA_PLAYERS) ||
       rows(snapshot.p, 22, MAX_ARENA_PLAYERS) ||
       rows(snapshot.p, 19, MAX_ARENA_PLAYERS)
     ) ||
     !rows(snapshot.v, 10, MAX_VEHICLES) ||
     !rows(snapshot.d, 6, MAX_PEDS) ||
     !rows(snapshot.c, 5, MAX_COPS) ||
-    !rows(snapshot.b, 7, MAX_BULLETS) ||
+    !(rows(snapshot.b, 8, MAX_BULLETS) || rows(snapshot.b, 7, MAX_BULLETS)) ||
     !rows(snapshot.k, 5, MAX_PICKUPS) ||
-    !rows(snapshot.q, 2, MAX_ARENA_PLAYERS)
+    !rows(snapshot.q, 2, MAX_ARENA_PLAYERS) ||
+    (snapshot.z !== undefined && !rows(snapshot.z, 4, MAX_STRUCTURES))
   )
     return false;
   if (snapshot.q.some((row) => row[1]! < 0)) return false;
@@ -136,7 +145,7 @@ export function isSnapshot(value: unknown): value is Snapshot {
       (row) =>
         !integer(row[3], 0, 255) ||
         !integer(row[5], 0, 100) ||
-        !integer(row[6], 0, 6) ||
+        !integer(row[6], 0, MAX_WIRE_WEAPON_INDEX) ||
         !integer(row[7], 0, 10_000) ||
         !integer(row[8], 0, 10_000) ||
         !integer(row[9], -1, MAX_TICK) ||
@@ -149,23 +158,26 @@ export function isSnapshot(value: unknown): value is Snapshot {
         !integer(row[16], 0, 10_000) ||
         !integer(row[17], 0, 10_000) ||
         !integer(row[18], 0, 100) ||
-        (row.length === 22 &&
+        (row.length >= 22 &&
           (!integer(row[19], 0, BONUS_KINDS.length) ||
             !integer(row[20], 0, MAX_TICK) ||
             !integer(row[21], row[20]!, MAX_TICK) ||
-            (row[19] === 0 && (row[20] !== 0 || row[21] !== 0)))),
+            (row[19] === 0 && (row[20] !== 0 || row[21] !== 0)))) ||
+        (row.length === 23 && !integer(row[22], 0, 10_000)),
     )
   )
     return false;
   if (
-    snapshot.v.some(
-      (row) =>
+    snapshot.v.some((row) => {
+      const kind = entryAt(VEHICLE_KINDS, row[1] ?? 0);
+      return (
         !integer(row[1], 0, VEHICLE_KINDS.length - 1) ||
         !integer(row[4], 0, 255) ||
-        !integer(row[7], 0, 10_000) ||
+        !integer(row[7], 0, healthMaxOf(kind)) ||
         !integer(row[8], 0, 1) ||
-        !integer(row[9], 0, 255),
-    )
+        !integer(row[9], 0, 255)
+      );
+    })
   )
     return false;
   if (
@@ -185,7 +197,24 @@ export function isSnapshot(value: unknown): value is Snapshot {
     return false;
   if (
     snapshot.k.some(
-      (row) => !integer(row[1], 0, 4) || !integer(row[4], -1, MAX_TICK),
+      (row) =>
+        !integer(row[1], 0, MAX_WIRE_PICKUP_INDEX) ||
+        !integer(row[4], -1, MAX_TICK),
+    )
+  )
+    return false;
+  if (
+    snapshot.b.some(
+      (row) => row.length === 8 && !integer(row[7], 0, MAX_WIRE_WEAPON_INDEX),
+    )
+  )
+    return false;
+  if (
+    snapshot.z?.some(
+      (row) =>
+        !integer(row[1], 0, MAX_TICK) ||
+        !integer(row[2], -1, MAX_TICK) ||
+        !integer(row[3], 0, MAX_TICK),
     )
   )
     return false;

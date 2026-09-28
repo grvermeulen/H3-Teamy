@@ -8,6 +8,8 @@ import {
 import { roomTicket } from "@/lib/cityArena/net/roomProtocol.testFixtures";
 import { ArenaRequestError } from "@/lib/cityArena/net/roomClient";
 import { useArenaRoom } from "./useArenaRoom";
+import * as Sentry from "@sentry/nextjs";
+
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 
 describe("server-approved arena room hook", () => {
@@ -172,5 +174,29 @@ describe("server-approved arena room hook", () => {
     expect(result.current.status).toBe("failed");
     expect(result.current.failure).toBe("Log in om te spelen");
     expect(createTransport).not.toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+  it("does not report database outages to Sentry", async () => {
+    const createTransport = vi.fn();
+    const { result } = renderHook(() =>
+      useArenaRoom({
+        entry: { kind: "new", zone: "campus" },
+        fallbackZone: "campus",
+        createTransport,
+        roomClient: async () => {
+          throw new ArenaRequestError(
+            "Database tijdelijk niet beschikbaar. Probeer het later opnieuw.",
+            503,
+          );
+        },
+      }),
+    );
+    await settle();
+    expect(result.current.status).toBe("failed");
+    expect(result.current.failure).toBe(
+      "Database tijdelijk niet beschikbaar. Probeer het later opnieuw.",
+    );
+    expect(createTransport).not.toHaveBeenCalled();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 });

@@ -27,6 +27,7 @@ function house(
     [x, y + short],
   ];
   return {
+    structureId: 1,
     ring,
     bounds: { minX: x, minY: y, maxX: x + long, maxY: y + short },
     levels,

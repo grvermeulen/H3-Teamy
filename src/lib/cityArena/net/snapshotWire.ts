@@ -7,7 +7,10 @@
  * bandwidth ten times a second for state nobody renders.
  */
 
-import { VEHICLE_KINDS } from "../sim/vehicle";
+import {
+  clampVehicleHealth,
+  VEHICLE_KINDS,
+} from "../sim/vehicle";
 import type { MissionProfile } from "../missions/types";
 import { BONUS_KINDS, type LandmarkBonus } from "../sim/landmarkBonuses";
 import type { MatchPhase, MatchState } from "./matchPhase";
@@ -22,6 +25,7 @@ import type {
   PedState,
   PickupKind,
   PickupState,
+  StructureState,
   VehicleKind,
   VehicleState,
   VehicleBoarding,
@@ -42,13 +46,21 @@ import {
 } from "./wire";
 
 /**
- * Ceiling for one encoded snapshot, well inside Ably's 64 KB message limit (spec §6.4).
- * The test asserting it is a tripwire: adding a field to the hot path should have to justify
- * itself here rather than quietly cost every client bandwidth.
+ * Ceiling for one encoded snapshot, well inside Ably's 64 KB message limit (spec §6.4) — the real,
+ * hard ceiling for the wire is {@link MAX_WIRE_SNAPSHOT_BYTES} in `wireValidation.ts`; this is a
+ * tighter, self-imposed bandwidth-discipline budget. The test asserting it is a tripwire: adding a
+ * field to the hot path should have to justify itself here rather than quietly cost every client
+ * bandwidth.
+ *
+ * Raised from 8192 to 9216 for Task 5 (Controller Ruling 28): the structure list (`z`) costs up to
+ * ~1.25 KB at `MAX_STRUCTURES`, and the existing every-cap-at-once fixture (8 players,
+ * `MAX_VEHICLES`, `MAX_PEDS`) plus 48 structures measures 8861 bytes — over the old budget but
+ * comfortably under this one. A typical snapshot is unaffected: `z` is omitted whenever no
+ * structure is damaged, which is the common case.
  */
-export const MAX_SNAPSHOT_BYTES = 8192;
+export const MAX_SNAPSHOT_BYTES = 9216;
 
-/** Weapons in wire order; the index travels, not the name. */
+/** Weapons in wire order; the index travels, not the name, so new kinds are only appended. */
 const WEAPONS: readonly WeaponKind[] = [
   "fist",
   "pistol",
@@ -57,15 +69,21 @@ const WEAPONS: readonly WeaponKind[] = [
   "bat",
   "rifle",
   "cannon",
+  "rocket",
 ];
-/** Pickup kinds in wire order. */
+/** Pickup kinds in wire order; appended only, like {@link WEAPONS}. */
 const PICKUP_KINDS: readonly PickupKind[] = [
   "uzi",
   "shotgun",
   "health",
   "rifle",
   "bat",
+  "rocket",
 ];
+/** Highest weapon index a player row may carry; validation bounds the column by it. */
+export const MAX_WIRE_WEAPON_INDEX = WEAPONS.length - 1;
+/** Highest kind index a pickup row may carry; validation bounds the column by it. */
+export const MAX_WIRE_PICKUP_INDEX = PICKUP_KINDS.length - 1;
 /** Pedestrian modes in wire order. */
 const PED_MODES: readonly PedMode[] = ["walk", "flee", "dead"];
 /** Match phases in wire order. */
@@ -96,6 +114,11 @@ export type Snapshot = {
   b: number[][];
   k: number[][];
   q: number[][];
+  /**
+   * Damaged or destroyed structures (spec §3.6): rows `[id, damage, destroyedAtTick | NONE,
+   * lastHitTick]`. Omitted when no structure is damaged, which is the common case.
+   */
+  z?: number[][];
   /**
    * Who drives which player: `[clientId, playerId]`. Player ids are entity ids handed out by the
    * host as people join, not seat numbers, so a client can only learn its own id — and everyone
@@ -162,13 +185,23 @@ export type SnapshotCop = Pick<
 /** A bullet as the snapshot carries them. */
 export type SnapshotBullet = Pick<
   BulletState,
-  "id" | "ownerId" | "x" | "y" | "damage"
+  "id" | "ownerId" | "x" | "y" | "damage" | "weapon"
 > & { directionX: number; directionY: number };
 
 /** A pickup as the snapshot carries them. */
 export type SnapshotPickup = Pick<PickupState, "id" | "kind" | "x" | "y"> & {
   takenAtTick: number | null;
 };
+
+/**
+ * A structure as the snapshot carries it: identity and damage only. Footprint centre and radius
+ * are not on the wire (spec §3.6) — a client fills them from what it already knows about the id,
+ * or 0 when it has never seen it (`snapshotApply.ts`).
+ */
+export type SnapshotStructure = Pick<
+  StructureState,
+  "id" | "damage" | "destroyedAtTick" | "lastHitTick"
+>;
 
 /** A snapshot decoded back into named fields, ready for the client loop to reconcile against. */
 export type SnapshotView = {
@@ -181,6 +214,8 @@ export type SnapshotView = {
   cops: SnapshotCop[];
   bullets: SnapshotBullet[];
   pickups: SnapshotPickup[];
+  /** Damaged or destroyed structures; `[]` when none are (spec §3.4). */
+  structures: SnapshotStructure[];
   lastInputSeqs: Record<number, number>;
   /** Client id to player id, as the host seated them. */
   seats: ReadonlyMap<string, number>;
@@ -226,6 +261,8 @@ function encodePlayers(state: ArenaState): number[][] {
     player.bonus ? BONUS_KINDS.indexOf(player.bonus.kind) + 1 : 0,
     player.bonus?.untilTick ?? 0,
     player.bonus?.readyAtTick ?? 0,
+    // Appended for the rocket launcher (spec §4): index 22, so a pre-Task-5 client still decodes.
+    player.ammo.rocket,
   ]);
 }
 
@@ -242,6 +279,16 @@ function encodeVehicles(state: ArenaState): number[][] {
     Math.round(vehicle.health),
     vehicle.wrecked ? 1 : 0,
     vehicle.colour,
+  ]);
+}
+
+/** The structure rows of a snapshot: `[id, damage, destroyedAtTick | NONE, lastHitTick]` (spec §3.6). */
+function encodeStructures(state: ArenaState): number[][] {
+  return (state.structures ?? []).map((entry) => [
+    entry.id,
+    Math.round(entry.damage),
+    packOptional(entry.destroyedAtTick),
+    entry.lastHitTick,
   ]);
 }
 
@@ -345,6 +392,8 @@ export function encodeSnapshot(
       quantise(bullet.directionX, MOVE_SCALE, MOVE_SCALE),
       quantise(bullet.directionY, MOVE_SCALE, MOVE_SCALE),
       Math.round(bullet.damage),
+      // Appended for the rocket launcher (spec §4): index 7, so an older client still decodes.
+      indexIn(WEAPONS, bullet.weapon),
     ]),
     k: state.pickups.map((pickup) => [
       pickup.id,
@@ -354,6 +403,7 @@ export function encodeSnapshot(
       packOptional(pickup.takenAtTick),
     ]),
     q: Object.entries(lastInputSeqs).map(([id, seq]) => [Number(id), seq]),
+    ...(state.structures?.length ? { z: encodeStructures(state) } : {}),
   };
 }
 
@@ -372,6 +422,7 @@ function decodePlayers(rows: number[][]): SnapshotPlayer[] {
       shotgun: row[8] ?? 0,
       rifle: row[16] ?? 0,
       bat: row[17] ?? 0,
+      rocket: row[22] ?? 0,
     },
     vehicleId: unpackOptional(row[9] ?? NONE),
     boardingTicksLeft: row[10] ?? 0,
@@ -393,17 +444,39 @@ function decodePlayers(rows: number[][]): SnapshotPlayer[] {
 
 /** Decodes the car rows of a snapshot. */
 function decodeVehicles(rows: number[][]): SnapshotVehicle[] {
-  return rows.map((row) => ({
+  return rows.map((row) => {
+    const kind = entryAt(VEHICLE_KINDS, row[1] ?? 0);
+    return {
+      id: row[0] ?? 0,
+      kind,
+      x: (row[2] ?? 0) / POSITION_SCALE,
+      y: (row[3] ?? 0) / POSITION_SCALE,
+      heading: unpackAngle(row[4] ?? 0),
+      velocityX: (row[5] ?? 0) / POSITION_SCALE,
+      velocityY: (row[6] ?? 0) / POSITION_SCALE,
+      health: clampVehicleHealth(kind, row[7] ?? 0),
+      wrecked: (row[8] ?? 0) === 1,
+      colour: row[9] ?? 0,
+    };
+  });
+}
+
+/**
+ * A bullet's weapon from its wire column, defaulting to `"pistol"` — never `WEAPONS[0]`
+ * (`"fist"`) — for a row from before Task 5: a bullet in flight is never unarmed (`combat.ts`
+ * falls back to `"pistol"` the same way when a shooter has run out of ammo for their own weapon).
+ */
+function decodeBulletWeapon(index: number | undefined): WeaponKind {
+  return index === undefined ? "pistol" : entryAt(WEAPONS, index);
+}
+
+/** Decodes the structure rows of a snapshot; `[]` when the field is absent (no damage to report). */
+function decodeStructures(rows: number[][] | undefined): SnapshotStructure[] {
+  return (rows ?? []).map((row) => ({
     id: row[0] ?? 0,
-    kind: entryAt(VEHICLE_KINDS, row[1] ?? 0),
-    x: (row[2] ?? 0) / POSITION_SCALE,
-    y: (row[3] ?? 0) / POSITION_SCALE,
-    heading: unpackAngle(row[4] ?? 0),
-    velocityX: (row[5] ?? 0) / POSITION_SCALE,
-    velocityY: (row[6] ?? 0) / POSITION_SCALE,
-    health: row[7] ?? 0,
-    wrecked: (row[8] ?? 0) === 1,
-    colour: row[9] ?? 0,
+    damage: row[1] ?? 0,
+    destroyedAtTick: unpackOptional(row[2] ?? NONE),
+    lastHitTick: row[3] ?? 0,
   }));
 }
 
@@ -477,6 +550,7 @@ export function decodeSnapshot(snapshot: Snapshot): SnapshotView {
       directionX: (row[4] ?? 0) / MOVE_SCALE,
       directionY: (row[5] ?? 0) / MOVE_SCALE,
       damage: row[6] ?? 0,
+      weapon: decodeBulletWeapon(row[7]),
     })),
     pickups: snapshot.k.map((row) => ({
       id: row[0] ?? 0,
@@ -485,6 +559,7 @@ export function decodeSnapshot(snapshot: Snapshot): SnapshotView {
       y: (row[3] ?? 0) / POSITION_SCALE,
       takenAtTick: unpackOptional(row[4] ?? NONE),
     })),
+    structures: decodeStructures(snapshot.z),
     lastInputSeqs,
   };
 }

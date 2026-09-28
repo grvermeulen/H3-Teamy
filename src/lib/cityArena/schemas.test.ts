@@ -172,6 +172,8 @@ describe("ArenaSettingsSchema", () => {
       radio: true,
       dynamicCamera: true,
       quality: "auto",
+      view: "2d",
+      camera3d: "third",
     });
     expect(
       ArenaSettingsSchema.safeParse({ forceLayout: "tablet" }).success,
@@ -186,5 +188,17 @@ describe("ArenaSettingsSchema", () => {
       ArenaSettingsSchema.parse({ radio: false, radioStation: "rijn" }),
     ).toMatchObject({ radio: false, radioStation: "rijn" });
     expect(ArenaSettingsSchema.parse({}).radioStation).toBeUndefined();
+  });
+
+  it("accepts the view and 3D-camera choices, and rejects anything else", () => {
+    expect(
+      ArenaSettingsSchema.parse({ view: "3d", camera3d: "first" }),
+    ).toMatchObject({ view: "3d", camera3d: "first" });
+    expect(ArenaSettingsSchema.safeParse({ view: "isometric" }).success).toBe(
+      false,
+    );
+    expect(
+      ArenaSettingsSchema.safeParse({ camera3d: "over-the-hood" }).success,
+    ).toBe(false);
   });
 });

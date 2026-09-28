@@ -108,35 +108,44 @@ function rampParam(param: AudioParamLike, value: number, time: number): void {
   else setParam(param, value, time);
 }
 
-/** The synthesised fallback voice for a weapon, used when its clip has not landed. */
-function shotTone(weapon: WeaponKind): {
+/** A synthesised shot: a pitch, optionally sliding to `endFrequency`, for `duration` seconds. */
+type ShotTone = {
   frequency: number;
   duration: number;
   type: string;
-} {
-  if (weapon === "shotgun")
-    return { frequency: 120, duration: 0.16, type: "sawtooth" };
-  if (weapon === "uzi")
-    return { frequency: 210, duration: 0.06, type: "square" };
-  if (weapon === "fist")
-    return { frequency: 90, duration: 0.04, type: "triangle" };
-  if (weapon === "bat")
-    return { frequency: 70, duration: 0.05, type: "triangle" };
-  if (weapon === "rifle")
-    return { frequency: 140, duration: 0.12, type: "sawtooth" };
-  if (weapon === "cannon")
-    return { frequency: 55, duration: 0.3, type: "sawtooth" };
-  return { frequency: 180, duration: 0.08, type: "square" };
-}
+  endFrequency?: number;
+};
+
+/**
+ * The synthesised fallback voice per weapon, used when its clip has not landed. A table rather
+ * than a chain so a new weapon cannot fall through to someone else's voice.
+ */
+const SHOT_TONES: Record<WeaponKind, ShotTone> = {
+  fist: { frequency: 90, duration: 0.04, type: "triangle" },
+  pistol: { frequency: 180, duration: 0.08, type: "square" },
+  uzi: { frequency: 210, duration: 0.06, type: "square" },
+  shotgun: { frequency: 120, duration: 0.16, type: "sawtooth" },
+  bat: { frequency: 70, duration: 0.05, type: "triangle" },
+  rifle: { frequency: 140, duration: 0.12, type: "sawtooth" },
+  cannon: { frequency: 55, duration: 0.3, type: "sawtooth" },
+  // The rocket's only voice, clips or not: a falling whoosh as it leaves the tube. The bang is
+  // its detonation's explosion event, so the launch must not borrow the explosion clip.
+  rocket: { frequency: 320, endFrequency: 70, duration: 0.4, type: "sawtooth" },
+};
+
+/** Gain boost on the explosion clip when it voices the tank's cannon. */
+const CANNON_CLIP_GAIN = 1.25;
 
 /** The recorded clip for an event, or null for one that only the synthesiser voices. */
 function clipFor(event: ArenaEvent): ClipName | null {
   if (event.kind === "shot") {
-    if (event.weapon === "fist") return null;
+    if (event.weapon === "fist" || event.weapon === "rocket") return null;
     // The cannon has no recording of its own; the explosion clip is the bang it deserves.
     return event.weapon === "cannon" ? "explosion" : event.weapon;
   }
-  if (event.kind === "explosion") return "explosion";
+  // A building collapse gets the same bang as any other explosion (spec §5).
+  if (event.kind === "explosion" || event.kind === "collapse")
+    return "explosion";
   if (event.kind === "pickup" || event.kind === "beer") return "pickup";
   if (event.kind === "impact") return "impact";
   return null;
@@ -265,7 +274,11 @@ export function createArenaSound(
   }
 
   function handleEvent(event: ArenaEvent): void {
-    if (event.kind === "shot" || event.kind === "explosion")
+    if (
+      event.kind === "shot" ||
+      event.kind === "explosion" ||
+      event.kind === "collapse"
+    )
       radioPlayer?.duck();
     // A clip that played is the whole sound; the oscillator branches below are the fallback for
     // a clip that has not landed, and stay for as long as that can be true.
@@ -273,16 +286,22 @@ export function createArenaSound(
     if (clip !== null) {
       const played =
         event.kind === "shot" && event.weapon === "cannon"
-          ? player?.play(clip, 1, 1.25)
+          ? player?.play(clip, 1, CANNON_CLIP_GAIN)
           : player?.play(clip);
       if (played) return;
     }
     if (event.kind === "shot") {
-      const tone = shotTone(event.weapon);
+      const tone = SHOT_TONES[event.weapon];
       const gain =
         event.weapon === "fist" || event.weapon === "bat" ? 0.22 : 0.275;
-      playTone(tone.frequency, tone.duration, tone.type, gain);
-    } else if (event.kind === "explosion") {
+      playTone(
+        tone.frequency,
+        tone.duration,
+        tone.type,
+        gain,
+        tone.endFrequency,
+      );
+    } else if (event.kind === "explosion" || event.kind === "collapse") {
       playTone(95, 0.35, "sawtooth", 0.35, 35);
     } else if (event.kind === "pickup" || event.kind === "beer") {
       playTone(520, 0.08, "sine", 0.16);

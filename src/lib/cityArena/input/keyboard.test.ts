@@ -155,7 +155,7 @@ describe("attachKeyboard panels and slots", () => {
     document.removeEventListener("keydown", trap, true);
   });
 
-  it("picks a weapon with 1, 2 and 3, once per press", () => {
+  it("picks a weapon with the number keys, 6 for the rocket launcher, once per press", () => {
     const onWeaponSlot = vi.fn();
     const detach = attachKeyboard(window, createInputState(), undefined, {
       onWeaponSlot,
@@ -165,7 +165,8 @@ describe("attachKeyboard panels and slots", () => {
       new KeyboardEvent("keydown", { code: "Digit2", repeat: true }),
     );
     press("Digit3");
-    expect(onWeaponSlot.mock.calls.map(([slot]) => slot)).toEqual([2, 3]);
+    press("Digit6");
+    expect(onWeaponSlot.mock.calls.map(([slot]) => slot)).toEqual([2, 3, 6]);
     detach();
   });
 
@@ -186,6 +187,25 @@ describe("attachKeyboard panels and slots", () => {
     detach();
     press("KeyR");
     expect(onRadio).toHaveBeenCalledTimes(2);
+  });
+
+  it("toggles the 3D camera with V, once per press and not on repeat", () => {
+    const onToggleCamera = vi.fn();
+    const onUserGesture = vi.fn();
+    const detach = attachKeyboard(window, createInputState(), onUserGesture, {
+      onToggleCamera,
+    });
+    press("KeyV");
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { code: "KeyV", repeat: true }),
+    );
+    release("KeyV");
+    press("KeyV");
+    expect(onToggleCamera).toHaveBeenCalledTimes(2);
+    expect(onUserGesture).toHaveBeenCalledTimes(2);
+    detach();
+    press("KeyV");
+    expect(onToggleCamera).toHaveBeenCalledTimes(2);
   });
 
   it("ignores every game key while a menu owns the keyboard", () => {

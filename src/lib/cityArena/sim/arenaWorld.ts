@@ -4,7 +4,7 @@
  * the bottom of the dependency order without risking a cycle.
  */
 import type { Rect } from "../mapBuild/geometry";
-import type { CollisionGrid } from "../world/collisionGrid";
+import type { CollisionView } from "../world/collisionView";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import type { RoadGraph } from "../world/roadGraph";
 import { CAR_BODY_RADIUS_M } from "./collisions";
@@ -32,7 +32,7 @@ export const EXIT_OFFSET_M =
 
 /** What the arena step reads from the world. */
 export type ArenaWorld = {
-  collision: Pick<CollisionGrid, "resolveCircle" | "query">;
+  collision: CollisionView;
   index: MapIndex;
   graph: RoadGraph;
   viewRect?: Rect;

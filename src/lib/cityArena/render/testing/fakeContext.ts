@@ -98,3 +98,22 @@ export function createFakeTarget(
   canvas.height = height;
   return { canvas, ctx: createFakeContext(), width, height };
 }
+
+/**
+ * A `getContext` stand-in for jsdom, which has no canvas contexts: a WebGL2 request gets just
+ * enough of a context for `hasWebGl2`'s probe (an extension lookup that finds nothing), anything
+ * else gets what `context2d` makes. Install with
+ * `vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(...)`.
+ *
+ * @param context2d - Makes what a 2D request returns; a fresh {@link createFakeContext} each time
+ *   by default.
+ * @returns The stand-in `getContext`.
+ */
+export function fakeGetContext(
+  context2d: () => FakeContext = createFakeContext,
+): HTMLCanvasElement["getContext"] {
+  const webgl2 = { getExtension: () => null };
+  const getContext = (type: string): unknown =>
+    type === "webgl2" ? webgl2 : context2d();
+  return getContext as HTMLCanvasElement["getContext"];
+}

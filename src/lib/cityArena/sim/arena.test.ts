@@ -7,7 +7,10 @@ import {
   replacePlayer,
 } from "./players";
 import { describe, expect, it } from "vitest";
+import { boundsOf } from "../mapBuild/geometry";
 import { createCollisionGrid } from "../world/collisionGrid";
+import type { Point } from "../world/projection";
+import { structureIdOf } from "../world/structureId";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
 import {
@@ -20,6 +23,7 @@ import {
   type ArenaWorld,
 } from "./arena";
 import { MAX_BULLETS } from "./bullets";
+import { ROCKET_MUZZLE_M } from "./combat";
 import { MAX_ARENA_PLAYERS } from "./limits";
 import { RESPAWN_DELAY_TICKS } from "./damage";
 import { checkInvariants } from "./invariants";
@@ -88,7 +92,7 @@ const chaseWorld: ArenaWorld = {
 };
 const step = 1 / 30;
 const SPAWN_XS = [0, 100, 200, 300];
-const FULL_AMMO = { uzi: 60, shotgun: 8, rifle: 0, bat: 0 };
+const FULL_AMMO = { uzi: 60, shotgun: 8, rifle: 0, bat: 0, rocket: 0 };
 
 function boot(seed = 1): ArenaState {
   return createArenaState({ index, graph, seed, zone }, createRng(seed));
@@ -204,7 +208,7 @@ describe("createArenaState", () => {
       id: 0,
       health: 100,
       weapon: "pistol",
-      ammo: { uzi: 0, shotgun: 0, rifle: 0, bat: 0 },
+      ammo: { uzi: 0, shotgun: 0, rifle: 0, bat: 0, rocket: 0 },
       vehicleId: null,
       diedAtTick: null,
     });
@@ -547,7 +551,7 @@ describe("the tank", () => {
     expect(checkInvariants(state)).toEqual([]);
   });
 
-  it("fires from the barrel without ammo and leaves a tougher compact barely alive after one shell", () => {
+  it("fires from the barrel without ammo and wrecks a compact with one shell's hit-plus-blast", () => {
     const state = boot();
     const me = localPlayer(state);
     const tank = createVehicle(500, "tank", [me.x, me.y], 0, 0);
@@ -578,13 +582,39 @@ describe("the tank", () => {
     });
     const hit = run(seated, createInput({ fire: true }), 12);
     expect(hit.bullets).toHaveLength(0);
+    // 150 direct + the shell's own blast (90 within 4 m, falloff-scaled) finishes off a 160-health
+    // compact; the tank that fired it is 20 m away, well outside the blast's reach.
     expect(hit.vehicles.find((vehicle) => vehicle.id === 501)).toMatchObject({
-      health: 10,
-      wrecked: false,
+      health: 0,
+      wrecked: true,
     });
     expect(hit.vehicles.find((vehicle) => vehicle.id === 500)?.health).toBe(
       750,
     );
+  });
+
+  it("fires the cannon for a driver holding the rocket launcher and spends no rockets", () => {
+    const state = boot();
+    const me = localPlayer(state);
+    const tank = createVehicle(500, "tank", [me.x, me.y], 0, 0);
+    const seated: ArenaState = {
+      ...state,
+      vehicles: [tank],
+      players: [
+        {
+          ...me,
+          vehicleId: 500,
+          boardingTicksLeft: 0,
+          weapon: "rocket",
+          ammo: { ...FULL_AMMO, rocket: 4 },
+        },
+      ],
+    };
+    const fired = run(seated, createInput({ fire: true, aim: 0 }), 1);
+    expect(fired.bullets).toHaveLength(1);
+    expect(fired.bullets[0]).toMatchObject({ weapon: "cannon" });
+    expect(localPlayer(fired).weapon).toBe("rocket");
+    expect(localPlayer(fired).ammo.rocket).toBe(4);
   });
 });
 
@@ -643,12 +673,127 @@ describe("stepArena firing and death", () => {
     expect(checkInvariants(fired)).toEqual([]);
   });
 
+  it("fires a rocket from a muzzle 0.8 m ahead that travels 1.5 m per tick and costs one of the four", () => {
+    const state = boot();
+    const me: ArenaPlayerState = {
+      ...localPlayer(state),
+      weapon: "rocket",
+      ammo: { ...FULL_AMMO, rocket: 4 },
+    };
+    const armed: ArenaState = { ...state, players: [me], vehicles: [] };
+    const trigger = createInput({ fire: true, aim: 0 });
+    const fired = run(armed, trigger, 1);
+    expect(ROCKET_MUZZLE_M).toBe(0.8);
+    expect(fired.effects[0]).toMatchObject({ kind: "muzzle" });
+    expect(fired.effects[0].x).toBeCloseTo(me.x + ROCKET_MUZZLE_M);
+    expect(fired.bullets).toHaveLength(1);
+    expect(fired.bullets[0]).toMatchObject({ weapon: "rocket", damage: 60 });
+    expect(fired.bullets[0].x).toBeCloseTo(me.x + ROCKET_MUZZLE_M + 1.5);
+    expect(run(armed, trigger, 2).bullets[0].x).toBeCloseTo(
+      me.x + ROCKET_MUZZLE_M + 3,
+    );
+    expect(localPlayer(fired)).toMatchObject({
+      weapon: "rocket",
+      nextShotTick: 51,
+    });
+    expect(localPlayer(fired).ammo.rocket).toBe(3);
+    expect(fired.events).toContainEqual(
+      expect.objectContaining({ kind: "shot", weapon: "rocket" }),
+    );
+  });
+
+  it("fires from the shooter into a wall nearer than the muzzle, and the point-blank blast hurts them", () => {
+    const state = boot();
+    const me: ArenaPlayerState = {
+      ...localPlayer(state),
+      weapon: "rocket",
+      ammo: { ...FULL_AMMO, rocket: 4 },
+      invulnerableUntilTick: 0,
+    };
+    // A wall 0.5 m ahead: nearer than the muzzle, clear of the 0.4 m circle.
+    const ring: Point[] = [
+      [me.x + 0.5, me.y - 3],
+      [me.x + 6, me.y - 3],
+      [me.x + 6, me.y + 3],
+      [me.x + 0.5, me.y + 3],
+    ];
+    const grid = createCollisionGrid();
+    grid.insertTile({
+      x: 0,
+      y: 0,
+      rect: boundsOf([
+        [me.x - 50, me.y - 50],
+        [me.x + 50, me.y + 50],
+      ]),
+      trees: [],
+      furniture: [],
+      roads: [],
+      ground: [],
+      water: [],
+      buildings: [
+        {
+          structureId: structureIdOf(0, 0, 0),
+          ring,
+          bounds: boundsOf(ring),
+          levels: 1,
+        },
+      ],
+    });
+    const fired = stepArena(
+      { ...state, players: [me], vehicles: [] },
+      new Map([[me.id, createInput({ fire: true, aim: 0 })]]),
+      step,
+      { ...world, collision: grid },
+      createRng(99),
+    );
+    expect(fired.events).toContainEqual(
+      expect.objectContaining({ kind: "shot", weapon: "rocket", x: me.x }),
+    );
+    // Born on this side of the wall, it bursts there on its first tick instead of flying on
+    // inside the building.
+    expect(fired.bullets).toHaveLength(0);
+    expect(fired.effects.map((effect) => effect.kind)).toContain("explosion");
+    expect(localPlayer(fired).health).toBeLessThan(100);
+  });
+
+  it("fires a drive-by rocket through the shooter's own car and spends a rocket", () => {
+    const state = boot();
+    const me = localPlayer(state);
+    const sedan = createVehicle(500, "sedan", [me.x, me.y], 0, 0);
+    const seated: ArenaState = {
+      ...state,
+      vehicles: [sedan],
+      peds: [],
+      players: [
+        {
+          ...me,
+          vehicleId: 500,
+          boardingTicksLeft: 0,
+          weapon: "rocket",
+          ammo: { ...FULL_AMMO, rocket: 4 },
+        },
+      ],
+    };
+    const trigger = createInput({ fire: true, aim: 0 });
+    const fired = run(seated, trigger, 1);
+    expect(fired.bullets[0]).toMatchObject({
+      weapon: "rocket",
+      ignoreVehicleId: 500,
+    });
+    expect(localPlayer(fired).ammo.rocket).toBe(3);
+    const flown = run(seated, trigger, 10);
+    expect(flown.bullets).toHaveLength(1);
+    expect(flown.vehicles.find((vehicle) => vehicle.id === 500)?.health).toBe(
+      sedan.health,
+    );
+  });
+
   it("falls back to the pistol when a magazine runs dry", () => {
     const state = boot();
     const lastShell: ArenaPlayerState = {
       ...localPlayer(state),
       weapon: "shotgun",
-      ammo: { uzi: 0, shotgun: 1, rifle: 0, bat: 0 },
+      ammo: { uzi: 0, shotgun: 1, rifle: 0, bat: 0, rocket: 0 },
     };
     const fired = run(
       { ...state, players: [lastShell] },
@@ -725,7 +870,7 @@ describe("stepArena firing and death", () => {
       diedAtTick: null,
       weapon: "pistol",
       invulnerableUntilTick: alive.tick + 60,
-      ammo: { uzi: 0, shotgun: 0, rifle: 0, bat: 0 },
+      ammo: { uzi: 0, shotgun: 0, rifle: 0, bat: 0, rocket: 0 },
     });
     expect(SPAWN_XS).toContain(localPlayer(alive).x);
   });

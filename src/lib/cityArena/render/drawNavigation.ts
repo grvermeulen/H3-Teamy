@@ -1,6 +1,7 @@
 import type { Point } from "../world/projection";
 import type { RasterContext } from "./canvasTypes";
 import { worldToScreen, type Camera, type Viewport } from "./camera";
+import { ROUTE_ARROW, ROUTE_RIBBON } from "./palette";
 
 /** Paints a translucent road ribbon and evenly spaced chevrons in the direction of travel. */
 export function drawNavigation(
@@ -13,7 +14,7 @@ export function drawNavigation(
   context.save();
   context.lineCap = "round";
   context.lineJoin = "round";
-  context.strokeStyle = "rgba(34,211,238,0.28)";
+  context.strokeStyle = ROUTE_RIBBON;
   context.lineWidth = camera.zoom * 2.4;
   context.beginPath();
   points.forEach((point, index) => {
@@ -22,7 +23,7 @@ export function drawNavigation(
     else context.lineTo(x, y);
   });
   context.stroke();
-  context.strokeStyle = "#a5f3fc";
+  context.strokeStyle = ROUTE_ARROW;
   context.lineWidth = Math.max(2, camera.zoom * 0.22);
   let nextArrow = 4;
   for (let i = 1; i < points.length; i++) {

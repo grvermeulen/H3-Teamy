@@ -1,3 +1,4 @@
+import type { Blast } from "./blast";
 import type { AmmoState, MagazineWeapon, WeaponKind } from "./types";
 
 /** Ticks per second of the fixed step (mirrors `SIM_STEP_S`). */
@@ -93,9 +94,56 @@ export const WEAPONS: Record<WeaponKind, WeaponSpec> = {
     pellets: 1,
     magazine: null,
   },
+  // What a player on foot brings to a building (spec §4): a slow rocket you can see coming and
+  // dodge, four to a pickup; its blast (EXPLOSIVES) is what does the damage.
+  rocket: {
+    label: "Raketwerper",
+    damage: 60,
+    shotsPerSecond: 0.6,
+    rangeM: 90,
+    speedMps: 45,
+    spreadRad: 0,
+    pellets: 1,
+    magazine: 4,
+  },
 };
 
-/** Cycling order of the Wapen button: the melee pair, then the guns by reach. */
+/**
+ * Blast for the weapons that detonate on impact (spec §3.3, §4) rather than just dealing direct
+ * damage: the tank's shell and the rocket, which hits buildings harder.
+ */
+export const EXPLOSIVES: Partial<
+  Record<WeaponKind, Omit<Blast, "x" | "y" | "ownerId">>
+> = {
+  cannon: {
+    entityRadius: 4,
+    entityDamage: 70,
+    vehicleDamage: 90,
+    structureRadius: 5,
+    structureDamage: 320,
+    entityFalloff: true,
+  },
+  rocket: {
+    entityRadius: 4,
+    entityDamage: 70,
+    vehicleDamage: 90,
+    structureRadius: 5,
+    structureDamage: 420,
+    entityFalloff: true,
+  },
+};
+
+/**
+ * True for a weapon that detonates on impact rather than just dealing direct damage.
+ *
+ * @param kind - The weapon.
+ * @returns Whether `kind` has a blast in {@link EXPLOSIVES}.
+ */
+export function isExplosive(kind: WeaponKind): boolean {
+  return kind in EXPLOSIVES;
+}
+
+/** Cycling order of the Wapen button: the melee pair, the guns by reach, then the rocket launcher. */
 export const WEAPON_ORDER: WeaponKind[] = [
   "fist",
   "bat",
@@ -103,6 +151,7 @@ export const WEAPON_ORDER: WeaponKind[] = [
   "uzi",
   "shotgun",
   "rifle",
+  "rocket",
 ];
 
 /** The weapons that hit what they touch rather than fire a round; they get no muzzle flash. */
@@ -124,6 +173,7 @@ export const MAGAZINE_WEAPONS: readonly MagazineWeapon[] = [
   "shotgun",
   "rifle",
   "bat",
+  "rocket",
 ];
 
 /**
@@ -137,7 +187,13 @@ export function isMagazineWeapon(kind: WeaponKind): kind is MagazineWeapon {
 }
 
 /** Ammo the player spawns with: pistol and fist only. */
-export const SPAWN_AMMO: AmmoState = { uzi: 0, shotgun: 0, rifle: 0, bat: 0 };
+export const SPAWN_AMMO: AmmoState = {
+  uzi: 0,
+  shotgun: 0,
+  rifle: 0,
+  bat: 0,
+  rocket: 0,
+};
 
 /** Maximum carried rounds for each magazine weapon. */
 export const MAX_AMMO: AmmoState = {
@@ -145,6 +201,7 @@ export const MAX_AMMO: AmmoState = {
   shotgun: 16,
   rifle: 30,
   bat: 40,
+  rocket: 12,
 };
 
 /** Adds magazine ammunition without exceeding the carried-round cap. */
@@ -157,7 +214,7 @@ export function addAmmo(
   return { ...ammo, [kind]: Math.min(MAX_AMMO[kind], ammo[kind] + rounds) };
 }
 
-/** Ticks between two shots: fist 15, pistol 12, Uzi 3, shotgun 25, bat 20, rifle 38, cannon 60. */
+/** Ticks between two shots: fist 15, pistol 12, Uzi 3, shotgun 25, bat 20, rifle 38, cannon 60, rocket 50. */
 export function cooldownTicks(kind: WeaponKind): number {
   return Math.round(TICKS_PER_SECOND / WEAPONS[kind].shotsPerSecond);
 }

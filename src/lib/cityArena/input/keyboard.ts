@@ -28,26 +28,35 @@ const KEY_BUTTONS: Partial<Record<string, ButtonName>> = {
   KeyQ: "weaponNext",
 };
 
-/** The number keys that pick a weapon directly (spec §7; 4 and 5 for Plan 9's rifle and bat). */
+/**
+ * The number keys that pick a weapon directly (spec §7; 4 and 5 for Plan 9's rifle and bat, 6 for
+ * the rocket launcher).
+ */
 const SLOT_KEYS: Partial<Record<string, WeaponSlot>> = {
   Digit1: 1,
   Digit2: 2,
   Digit3: 3,
   Digit4: 4,
   Digit5: 5,
+  Digit6: 6,
 };
 
 /** The key that switches the car radio to the next station (Plan 7). */
 const RADIO_KEY = "KeyR";
 
+/** The key that toggles between third and first person in the 3D view (spec §6.3). */
+const TOGGLE_CAMERA_KEY = "KeyV";
+
 /** The keys beyond movement and the held buttons, and who owns the keyboard. */
 export type KeyboardHooks = {
   /** Tab held shows the scorebord; released, it hides it. */
   onScoreboard?: (held: boolean) => void;
-  /** 1, 2 and 3 pick a weapon directly. */
+  /** The number keys 1–6 pick a weapon directly. */
   onWeaponSlot?: (slot: WeaponSlot) => void;
   /** R switches the radio to the next station. */
   onRadio?: () => void;
+  /** V toggles third/first person, while the 3D view is active. */
+  onToggleCamera?: () => void;
   /** True while a menu owns the keyboard: game keys are ignored until it is closed. */
   isSuspended?: () => boolean;
 };
@@ -166,7 +175,7 @@ function publishButtons(pressedButtons: Set<string>, state: InputState): void {
 }
 
 /**
- * Binds WASD/arrows, the Space/E/F/Enter/Q buttons, 1/2/3, R and Tab to the input state and the
+ * Binds WASD/arrows, the Space/E/F/Enter/Q buttons, 1–6, R, V and Tab to the input state and the
  * hooks; returns the detach function.
  */
 export function attachKeyboard(
@@ -192,6 +201,13 @@ export function attachKeyboard(
       if (event.repeat) return;
       onUserGesture?.();
       hooks.onRadio?.();
+      return;
+    }
+    if (event.code === TOGGLE_CAMERA_KEY) {
+      event.preventDefault();
+      if (event.repeat) return;
+      onUserGesture?.();
+      hooks.onToggleCamera?.();
       return;
     }
     if (KEY_VECTORS[event.code]) {

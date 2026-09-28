@@ -19,6 +19,8 @@ import { MAX_AMMO, addAmmo } from "./weapons";
 export const WEAPON_PICKUPS_PER_ZONE = 6;
 /** Number of bat pickup spots per zone. */
 export const BAT_PICKUPS_PER_ZONE = 2;
+/** Number of rocket launcher pickup spots per zone (spec §4): one, placed after the bats. */
+export const ROCKET_PICKUPS_PER_ZONE = 1;
 /** Maximum weapon pickup spots sourced from landmarks. */
 export const LANDMARK_WEAPON_PICKUPS = 4;
 /** Number of health pickup spots per zone. */
@@ -35,11 +37,13 @@ export const PICKUP_ROUNDS: Record<MagazineWeapon, number> = {
   shotgun: 8,
   rifle: 10,
   bat: 20,
+  rocket: 4,
 };
 /** Minimum pickup distance from a fresh player spawn. */
 export const MIN_PICKUP_TO_PLAYER_M = 8;
 const LANDMARK_SNAP_M = 80;
 const MIN_PICKUP_SPACING_M = 15;
+/** The guns the zone's weapon spots rotate through; the bat and the rocket get spots of their own. */
 const WEAPON_KINDS: PickupKind[] = ["uzi", "shotgun", "rifle"];
 
 /** Graph subset required for pickup placement. */
@@ -107,7 +111,72 @@ function takeSpaced(
   return chosen;
 }
 
-/** Places alternating weapon spots and health spots for one zone. */
+/** The spots of one zone, by what goes on them. */
+type PickupSpots = {
+  weapons: Point[];
+  health: Point[];
+  bats: Point[];
+  rockets: Point[];
+};
+
+/**
+ * Chooses the spots in priority order: landmark and node weapon spots, health, then the bats and
+ * the rocket launcher last — in a zone short of spots, health matters more than a second melee
+ * weapon or the zone's heavy weapon.
+ */
+function choosePickupSpots(
+  index: MapIndex,
+  zone: MapZone,
+  graph: PickupGraph,
+  nodes: Point[],
+  avoid: Point[],
+): PickupSpots {
+  const landmarks = takeSpaced(
+    landmarkSpots(index, zone, graph),
+    [],
+    avoid,
+    LANDMARK_WEAPON_PICKUPS,
+  );
+  const weapons = [
+    ...landmarks,
+    ...takeSpaced(
+      nodes,
+      landmarks,
+      avoid,
+      WEAPON_PICKUPS_PER_ZONE - landmarks.length,
+    ),
+  ];
+  const health = takeSpaced(nodes, weapons, avoid, HEALTH_PICKUPS_PER_ZONE);
+  const placed = [...weapons, ...health];
+  const bats = takeSpaced(nodes, placed, avoid, BAT_PICKUPS_PER_ZONE);
+  const rockets = takeSpaced(
+    nodes,
+    [...placed, ...bats],
+    avoid,
+    ROCKET_PICKUPS_PER_ZONE,
+  );
+  return { weapons, health, bats, rockets };
+}
+
+/** Untaken pickups on `spots`, numbered from `firstId`, of the kind `kindAt` names per spot. */
+function pickupsOn(
+  spots: Point[],
+  kindAt: (offset: number) => PickupKind,
+  firstId: number,
+): PickupState[] {
+  return spots.map((point, offset) => ({
+    id: firstId + offset,
+    kind: kindAt(offset),
+    x: point[0],
+    y: point[1],
+    takenAtTick: null,
+  }));
+}
+
+/**
+ * Places one zone's pickups: weapon spots rotating through the guns, health, the bats, then one
+ * rocket launcher, numbered consecutively from `firstId` in that order.
+ */
 export function placePickups(
   index: MapIndex,
   zone: MapZone,
@@ -120,56 +189,17 @@ export function placePickups(
     zone.spawnNodes.map(([x, y]): Point => [fromUnits(x), fromUnits(y)]),
     random,
   );
-  const landmarks = takeSpaced(
-    landmarkSpots(index, zone, graph),
-    [],
-    avoid,
-    LANDMARK_WEAPON_PICKUPS,
-  );
-  const weaponSpots = [
-    ...landmarks,
-    ...takeSpaced(
-      nodes,
-      landmarks,
-      avoid,
-      WEAPON_PICKUPS_PER_ZONE - landmarks.length,
-    ),
+  const spots = choosePickupSpots(index, zone, graph, nodes, avoid);
+  const groups: Array<[Point[], (offset: number) => PickupKind]> = [
+    [spots.weapons, (offset) => WEAPON_KINDS[offset % WEAPON_KINDS.length]],
+    [spots.health, () => "health"],
+    [spots.bats, () => "bat"],
+    [spots.rockets, () => "rocket"],
   ];
-  const healthSpots = takeSpaced(
-    nodes,
-    weaponSpots,
-    avoid,
-    HEALTH_PICKUPS_PER_ZONE,
-  );
-  // Bats come last: in a zone short of spots, health matters more than a second melee weapon.
-  const batSpots = takeSpaced(
-    nodes,
-    [...weaponSpots, ...healthSpots],
-    avoid,
-    BAT_PICKUPS_PER_ZONE,
-  );
-  const weapons: PickupState[] = weaponSpots.map((point, offset) => ({
-    id: firstId + offset,
-    kind: WEAPON_KINDS[offset % WEAPON_KINDS.length],
-    x: point[0],
-    y: point[1],
-    takenAtTick: null,
-  }));
-  const health: PickupState[] = healthSpots.map((point, offset) => ({
-    id: firstId + weapons.length + offset,
-    kind: "health",
-    x: point[0],
-    y: point[1],
-    takenAtTick: null,
-  }));
-  const bats: PickupState[] = batSpots.map((point, offset) => ({
-    id: firstId + weapons.length + health.length + offset,
-    kind: "bat",
-    x: point[0],
-    y: point[1],
-    takenAtTick: null,
-  }));
-  return [...weapons, ...health, ...bats];
+  const pickups: PickupState[] = [];
+  for (const [points, kindAt] of groups)
+    pickups.push(...pickupsOn(points, kindAt, firstId + pickups.length));
+  return pickups;
 }
 
 function respawnPickup(pickup: PickupState, tick: number): PickupState {

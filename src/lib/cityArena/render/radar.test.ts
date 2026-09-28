@@ -6,7 +6,13 @@ import {
   radarRoads,
   RADAR_RANGE_M,
 } from "./radar";
-import { RADAR_BACKGROUND, RADAR_PLAYER } from "./palette";
+import {
+  PICKUP_BAT,
+  PICKUP_RIFLE,
+  PICKUP_ROCKET,
+  RADAR_BACKGROUND,
+  RADAR_PLAYER,
+} from "./palette";
 import { createFakeContext } from "./testing/fakeContext";
 
 describe("radar", () => {
@@ -44,6 +50,29 @@ describe("radar", () => {
         [100, 0],
       ],
     ]);
+  });
+
+  it("marks the rocket, rifle and bat pickups in their own colours", () => {
+    const context = createFakeContext();
+    drawRadar(
+      context,
+      {
+        player: [0, 0],
+        roads: [],
+        pickups: [
+          { point: [5, 0], kind: "rocket" },
+          { point: [0, 5], kind: "rifle" },
+          { point: [-5, 0], kind: "bat" },
+        ],
+        police: [],
+        tanks: [],
+        zoneCentre: null,
+        zoneRadiusM: null,
+      },
+      90,
+    );
+    for (const colour of [PICKUP_ROCKET, PICKUP_RIFLE, PICKUP_BAT])
+      expect(context.calls).toContain(`fill(${colour})`);
   });
 
   it("draws dark background, roads, zone, pickups, police and player in order", () => {

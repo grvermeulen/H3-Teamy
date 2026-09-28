@@ -62,6 +62,7 @@ import { loadArenaSettings, saveArenaSettings } from "@/lib/cityArena/storage";
 import { computeHud, type ArenaHud } from "./arenaHud";
 import { useMatchSeam, type MatchPeek, type MatchSeam } from "./matchSeam";
 import { useNetplay, type ArenaNetplayOptions } from "./useNetplay";
+import { useView3d, type View3dControls } from "./view3d/useView3d";
 import {
   aimAngle,
   applyTeleport,
@@ -90,6 +91,8 @@ const DEFAULT_VIEWPORT_WIDTH_PX = 390;
 
 /** Overlay lifecycle phase. */
 export type ArenaPhase = "loading" | "playing" | "error";
+/** Load progress before the first tile arrives. */
+const NO_PROGRESS: LoadProgress = { loaded: 0, total: 0 };
 /** HUD state before the first refresh runs. */
 const INITIAL_HUD: ArenaHud = {
   zoneName: null,
@@ -128,6 +131,8 @@ export type ArenaKeyOptions = {
   onScoreboard?: (held: boolean) => void;
   /** True while the menu is open: game keys are ignored and anything held is released. */
   suspended?: boolean;
+  /** The player let go of the 3D pointer lock (the browser's first Esc): open the menu. */
+  onPause?: () => void;
 };
 /** Hook result consumed by the overlay. */
 export type ArenaGame = MatchSeam & {
@@ -162,6 +167,8 @@ export type ArenaGame = MatchSeam & {
   nextRadioTrack(): void;
   teleportToZone(key: ZoneKey): void;
   debugSnapshot: DebugSnapshot | null;
+  /** The 3D view's WebGL canvas ref, failure toast and pointer-lock state. */
+  view3d: View3dControls;
 };
 
 /**
@@ -225,6 +232,7 @@ async function bootSession(
   runtime.hapticsEnabled = settingsRef.current.vibrate;
   runtime.quality = settingsRef.current.quality;
   runtime.dynamicCamera = settingsRef.current.dynamicCamera;
+  runtime.camera3d = settingsRef.current.camera3d;
   runtimeRef.current = runtime;
   return {
     index,
@@ -247,6 +255,8 @@ type ArenaBootOptions = {
  */
 type ArenaBootResult = {
   phase: ArenaPhase;
+  /** Counts finished boots; a new runtime (another zone) bumps it. */
+  epoch: number;
   progress: LoadProgress;
   failed: boolean;
   zones: MapZone[];
@@ -260,6 +270,8 @@ type BootSetters = {
   setProgress: (progress: LoadProgress) => void;
   setFailed: (failed: boolean) => void;
   setPhase: (phase: ArenaPhase) => void;
+  /** Called once the booted runtime is playing. */
+  onBooted: () => void;
 };
 
 /**
@@ -283,6 +295,7 @@ async function finishBoot(
   setters.setProgress(tileProgress);
   setters.setFailed(session.hasFailures());
   setters.setPhase("playing");
+  setters.onBooted();
 }
 
 /** Boots the world session for `zoneKey`: loads the map, spawns the player, disposes on unmount. */
@@ -290,12 +303,10 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
   const { zoneKey, canvasRef, runtimeRef, reducedMotionRef, settingsRef } =
     options;
   const [phase, setPhase] = useState<ArenaPhase>("loading");
-  const [progress, setProgress] = useState<LoadProgress>({
-    loaded: 0,
-    total: 0,
-  });
+  const [progress, setProgress] = useState<LoadProgress>(NO_PROGRESS);
   const [failed, setFailed] = useState(false);
   const [zones, setZones] = useState<MapZone[]>([]);
+  const [epoch, setEpoch] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -319,6 +330,7 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
           setProgress,
           setFailed,
           setPhase,
+          onBooted: () => setEpoch((count) => count + 1),
         }),
       )
       .catch((error: unknown) => {
@@ -338,7 +350,7 @@ function useArenaBoot(options: ArenaBootOptions): ArenaBootResult {
     // renders, so a media-query-driven reducedMotion change never re-runs this effect.
   }, [canvasRef, runtimeRef, zoneKey, reducedMotionRef, settingsRef]);
 
-  return { phase, progress, failed, zones, setProgress, setFailed };
+  return { phase, epoch, progress, failed, zones, setProgress, setFailed };
 }
 
 /** Binds the keyboard and the wheel, with the menu able to take the keyboard away. */
@@ -348,6 +360,7 @@ function useKeyboardBindings(
   runtimeRef: RefObject<Runtime | null>,
   keys: ArenaKeyOptions | undefined,
   onRadio: () => void,
+  onToggleCamera: () => void,
 ): void {
   const suspended = keys?.suspended ?? false;
   const onScoreboard = keys?.onScoreboard;
@@ -368,16 +381,87 @@ function useKeyboardBindings(
           onWeaponSlot: (slot) =>
             runtimeRef.current?.weapons.request(SLOT_WEAPONS[slot]),
           onRadio,
+          onToggleCamera,
           isSuspended: () => suspendedRef.current,
         },
       ),
-    [inputRef, runtimeRef, onScoreboard, onRadio],
+    [inputRef, runtimeRef, onScoreboard, onRadio, onToggleCamera],
   );
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return undefined;
     return attachWheel(canvas, () => runtimeRef.current?.weapons.cycle());
   }, [canvasRef, runtimeRef]);
+}
+
+/**
+ * Binds mouse aim and the left button on the canvas. In 3D the click that takes the pointer lock
+ * belongs to mouse-look (`MouseLook.claimsClick`), so it aims but does not shoot.
+ */
+function usePointerAim(
+  inputRef: RefObject<InputState>,
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  pointerRef: RefObject<PointerAim | null>,
+  runtimeRef: RefObject<Runtime | null>,
+): void {
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    const aim = attachPointerAim(
+      canvas,
+      inputRef.current,
+      () => runtimeRef.current?.sound.unlock(),
+      () => runtimeRef.current?.look?.claimsClick() ?? false,
+    );
+    pointerRef.current = aim;
+    return () => {
+      aim.detach();
+      pointerRef.current = null;
+    };
+  }, [canvasRef, inputRef, pointerRef, runtimeRef]);
+}
+
+/** What {@link useArenaView3d} needs from the game hook. */
+type ArenaView3dOptions = {
+  /** Playing on a screen of its own: split screen and the TV stay 2D. */
+  live: boolean;
+  epoch: number;
+  settings: ArenaSettings;
+  updateSettings: (patch: Partial<ArenaSettings>) => void;
+  runtimeRef: RefObject<Runtime | null>;
+  canvasRef: RefObject<HTMLCanvasElement | null>;
+  onPause?: () => void;
+  /** The V key's action, bound once by the keyboard. */
+  toggleCameraRef: RefObject<() => void>;
+};
+
+/**
+ * The game's 3D view (spec §6): runs while playing in 3D on an unshared screen, falls back to 2D
+ * when it fails, pauses into the menu when the pointer lock is let go, and makes V flip the 3D
+ * camera — a no-op in 2D, where there is no third/first person to switch between (spec §6.3).
+ */
+function useArenaView3d(options: ArenaView3dOptions): View3dControls {
+  const { settings, updateSettings, toggleCameraRef, onPause } = options;
+  const fallbackTo2d = useCallback(
+    () => updateSettings({ view: "2d" }),
+    [updateSettings],
+  );
+  useEffect(() => {
+    toggleCameraRef.current = () => {
+      if (settings.view !== "3d") return;
+      const camera3d = settings.camera3d === "third" ? "first" : "third";
+      updateSettings({ camera3d });
+    };
+  }, [settings, toggleCameraRef, updateSettings]);
+  return useView3d({
+    active: options.live && settings.view === "3d",
+    epoch: options.epoch,
+    mode: settings.camera3d,
+    runtimeRef: options.runtimeRef,
+    hudCanvasRef: options.canvasRef,
+    onFallback: fallbackTo2d,
+    onPause: () => onPause?.(),
+  });
 }
 
 /** Attaches keyboard and mouse aim on mount; returns the setters the touch controls drive. */
@@ -388,24 +472,21 @@ function useArenaInput(
   runtimeRef: RefObject<Runtime | null>,
   keys: ArenaKeyOptions | undefined,
   onRadio: () => void,
+  onToggleCamera: () => void,
 ): {
   setInputVector(vector: [number, number] | null): void;
   setAimVector(vector: [number, number] | null): void;
   setButton(name: ButtonName, pressed: boolean): void;
 } {
-  useKeyboardBindings(inputRef, canvasRef, runtimeRef, keys, onRadio);
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return undefined;
-    const aim = attachPointerAim(canvas, inputRef.current, () =>
-      runtimeRef.current?.sound.unlock(),
-    );
-    pointerRef.current = aim;
-    return () => {
-      aim.detach();
-      pointerRef.current = null;
-    };
-  }, [canvasRef, inputRef, pointerRef, runtimeRef]);
+  useKeyboardBindings(
+    inputRef,
+    canvasRef,
+    runtimeRef,
+    keys,
+    onRadio,
+    onToggleCamera,
+  );
+  usePointerAim(inputRef, canvasRef, pointerRef, runtimeRef);
   const setInputVector = useCallback(
     (vector: [number, number] | null) => {
       if (vector) runtimeRef.current?.sound.unlock();
@@ -484,9 +565,11 @@ function useFrameLoop(phase: ArenaPhase, options: FrameLoopOptions): void {
 /** Builds the `window.__arena` seam over the runtime ref. */
 function createTestHooks(
   runtimeRef: RefObject<Runtime | null>,
+  metricsRef: RefObject<FrameMetrics>,
 ): ArenaTestHooks {
   return {
     getState: () => runtimeRef.current?.state ?? null,
+    getMetrics: () => metricsRef.current.snapshot(),
     dispatch(input, ticks = 1) {
       const runtime = runtimeRef.current;
       if (runtime)
@@ -525,11 +608,12 @@ function createTestHooks(
 function useArenaTestHooks(
   debug: boolean,
   runtimeRef: RefObject<Runtime | null>,
+  metricsRef: RefObject<FrameMetrics>,
 ): void {
   useEffect(() => {
     if (!debug) return undefined;
-    return installArenaHooks(window, createTestHooks(runtimeRef));
-  }, [debug, runtimeRef]);
+    return installArenaHooks(window, createTestHooks(runtimeRef, metricsRef));
+  }, [debug, metricsRef, runtimeRef]);
 }
 
 /** Keeps the reduced-motion preference on the boot ref and on the live runtime. */
@@ -633,6 +717,7 @@ function applySettings(runtime: Runtime | null, settings: ArenaSettings): void {
   runtime.hapticsEnabled = settings.vibrate;
   runtime.quality = settings.quality;
   runtime.dynamicCamera = settings.dynamicCamera;
+  runtime.camera3d = settings.camera3d;
   runtime.sound.radio?.setEnabled(settings.radio);
   runtime.sound.radio?.tune(settings.radioStation ?? "");
 }
@@ -664,7 +749,7 @@ export function useArenaGame({
     setRadar,
   } = useArenaGameState(settings.sound);
   useReducedMotionSync(reducedMotion, reducedMotionRef, runtimeRef);
-  const { phase, progress, failed, zones, setProgress, setFailed } =
+  const { phase, epoch, progress, failed, zones, setProgress, setFailed } =
     useArenaBoot({
       zoneKey,
       canvasRef,
@@ -672,9 +757,12 @@ export function useArenaGame({
       reducedMotionRef,
       settingsRef,
     });
-  // The R key is bound once; what it does is decided below, once the settings can be updated.
+  // The R and V keys are bound once; what they do is decided below, once the settings can be
+  // updated.
   const nextStationRef = useRef<() => void>(() => undefined);
   const onRadioKey = useCallback(() => nextStationRef.current(), []);
+  const toggleCameraRef = useRef<() => void>(() => undefined);
+  const onToggleCameraKey = useCallback(() => toggleCameraRef.current(), []);
   const { setInputVector, setAimVector, setButton } = useArenaInput(
     inputRef,
     canvasRef,
@@ -682,6 +770,7 @@ export function useArenaGame({
     runtimeRef,
     keys,
     onRadioKey,
+    onToggleCameraKey,
   );
   const selectWeapon = useCallback(
     (slot: WeaponSlot) =>
@@ -692,7 +781,7 @@ export function useArenaGame({
     () => runtimeRef.current?.weapons.cycle(),
     [runtimeRef],
   );
-  useArenaTestHooks(debug, runtimeRef);
+  useArenaTestHooks(debug, runtimeRef, metricsRef);
   useFrameLoop(phase, {
     canvasRef,
     runtimeRef,
@@ -763,6 +852,16 @@ export function useArenaGame({
     (enabled: boolean) => updateSettings({ sound: enabled }),
     [updateSettings],
   );
+  const view3d = useArenaView3d({
+    live: phase === "playing" && !sharedScreen,
+    epoch,
+    settings,
+    updateSettings,
+    runtimeRef,
+    canvasRef,
+    onPause: keys?.onPause,
+    toggleCameraRef,
+  });
   const nextStation = useCallback(() => {
     const station = runtimeRef.current?.sound.radio?.nextStation();
     if (station) updateSettings({ radioStation: station.id });
@@ -817,5 +916,6 @@ export function useArenaGame({
     navigationMap,
     setDestination,
     debugSnapshot,
+    view3d,
   };
 }

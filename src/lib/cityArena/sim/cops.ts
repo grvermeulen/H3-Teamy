@@ -5,7 +5,6 @@ import type { Point } from "../world/projection";
 import type { RoadGraph } from "../world/roadGraph";
 import { MAX_BULLETS, createShots } from "./bullets";
 import { resolveVehicleAgainstCircle } from "./collisions";
-import { EXPLOSION_DAMAGE, inBlastRadius } from "./damage";
 import { addEffect } from "./effects";
 import { pushEvent } from "./events";
 import { MAX_COPS } from "./limits";
@@ -17,7 +16,6 @@ import type {
   ArenaState,
   CopState,
   CopWeapon,
-  VehicleState,
 } from "./types";
 import { currentWantedLevel, wantedTarget } from "./wanted";
 import { WEAPONS } from "./weapons";
@@ -302,23 +300,6 @@ export function stepCops(
     } else cops.push(moved);
   }
   return runOverCops({ ...next, cops }, tick);
-}
-
-/** Blast damage to cops, returning those killed by the blast. */
-export function blastCops(
-  cops: CopState[],
-  vehicle: Pick<VehicleState, "x" | "y">,
-  tick: number,
-): { cops: CopState[]; killed: CopState[] } {
-  const killed: CopState[] = [];
-  const blasted = cops.map((cop) => {
-    if (cop.diedAtTick !== null || !inBlastRadius(vehicle, [cop.x, cop.y]))
-      return cop;
-    const hurt = damageCop(cop, EXPLOSION_DAMAGE, tick);
-    if (hurt.diedAtTick !== null) killed.push(hurt);
-    return hurt;
-  });
-  return { cops: blasted, killed };
 }
 
 function retireCops(
