@@ -6,6 +6,7 @@
 import type { PerspectiveCamera } from "three";
 import type { Scene } from "../render/renderScene";
 import type { WeaponKind } from "../sim/types";
+import { firesCannon } from "../sim/vehicle";
 import { WEAPONS } from "../sim/weapons";
 import type { DecodedTile } from "../world/decode";
 import { probeAim, type AimPoint } from "./aimProbe";
@@ -68,17 +69,33 @@ export function createFrameAim(): FrameAim {
   };
 }
 
+/** True when `vehicleId` names an unwrecked car that fires a cannon (the tank) in `vehicles`. */
+function atCannon(
+  vehicles: Scene["vehicles"],
+  vehicleId: number | null,
+): boolean {
+  if (vehicleId === null) return false;
+  for (const vehicle of vehicles)
+    if (vehicle.id === vehicleId)
+      return !vehicle.wrecked && firesCannon(vehicle.kind);
+  return false;
+}
+
 /**
- * The weapon the local player holds.
+ * The weapon the local player's trigger fires, as the simulation picks it: at the wheel of a tank
+ * its cannon, whatever they carry; otherwise what they carry.
  *
  * @param scene - The frame's scene.
  * @returns Their weapon; bare fists when they are not in the scene.
  */
 export function localWeapon(
-  scene: Pick<Scene, "players" | "localPlayerId">,
+  scene: Pick<Scene, "players" | "localPlayerId" | "vehicles">,
 ): WeaponKind {
   for (const player of scene.players)
-    if (player.id === scene.localPlayerId) return player.weapon;
+    if (player.id === scene.localPlayerId)
+      return atCannon(scene.vehicles, player.vehicleId)
+        ? "cannon"
+        : player.weapon;
   return "fist";
 }
 
@@ -104,7 +121,7 @@ export function raiseSights(
   aim.cast.sights = sightsShare(aim.progress);
 }
 
-/** Hands the cast your shot at the probed point, or none while there is no crosshair. */
+/** Hands the cast your shot at the last probed point, or none while there was no crosshair. */
 function aimCast(aim: FrameAim, scene: Scene): void {
   aim.cast.shot = aim.shown ? aim.shooter : null;
   if (!aim.shown) return;
@@ -119,6 +136,9 @@ function aimCast(aim: FrameAim, scene: Scene): void {
  * the focus, but never short of where the third-person view converges, so a punch aims where the
  * camera looks rather than at a point beside the shoulder. Nothing while dead.
  *
+ * The cast is handed the point from before this probe: the frame's input read it (`aimPoint()`)
+ * before the simulation stepped, so that is what the rounds first seen now were fired at.
+ *
  * @param aim - The view's aim.
  * @param camera - The placed city camera.
  * @param frame - The frame.
@@ -130,13 +150,12 @@ export function probeFrame(
   frame: AimFrame,
   focus: { x: number; y: number },
 ): void {
-  aim.shown = frame.deadSeconds === null;
-  if (aim.shown) {
-    aim.world.sync(frame.scene, frame.tiles, frame.structures);
-    const reach = Math.max(AIM_PROJECT_DISTANCE_M, WEAPONS[aim.weapon].rangeM);
-    probeAim(camera, aim.world, reach, aim.point, focus);
-  }
   aimCast(aim, frame.scene);
+  aim.shown = frame.deadSeconds === null;
+  if (!aim.shown) return;
+  aim.world.sync(frame.scene, frame.tiles, frame.structures);
+  const reach = Math.max(AIM_PROJECT_DISTANCE_M, WEAPONS[aim.weapon].rangeM);
+  probeAim(camera, aim.world, reach, aim.point, focus);
 }
 
 /**

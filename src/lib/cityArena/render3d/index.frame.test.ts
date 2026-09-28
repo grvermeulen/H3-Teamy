@@ -222,8 +222,16 @@ describe("createView3d frame path", () => {
       aim: 0.7,
     });
     const effects = vi.mocked(createEffects3d).mock.results[0]!.value;
-    // Your rounds head for what the crosshair covers.
-    expect(effects.sync).toHaveBeenCalledWith(
+    // Your rounds head for what the crosshair covered when the input fired them: the frame before.
+    expect(effects.sync).toHaveBeenLastCalledWith(
+      SCENE,
+      focus,
+      false,
+      expect.any(Map),
+      null,
+    );
+    view.render(frameOf("third"), OVERLAY);
+    expect(effects.sync).toHaveBeenLastCalledWith(
       SCENE,
       focus,
       false,

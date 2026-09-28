@@ -535,9 +535,12 @@ Over the shoulder with the sights up, an Uzi burst heading for the crosshair:
 - **Rounds head for the aim point** (`aimedHeight` in `muzzleBlend.ts`, `roundAims.ts`). The local
   shooter's tracers, rockets and their trails are drawn from the muzzle's height straight to the
   aim point's height at its distance, and on along that slope beyond it, never below the ground; a
-  rocket noses up or down to match. Each round keeps the aim it was fired at (captured the first
-  frame it is seen), so it does not bend as the crosshair moves on. Sideways the rounds still settle
-  onto their flat line over `CONVERGE_M`. Everyone else's rounds are drawn as before.
+  rocket noses up or down to match. Each round keeps the aim it was fired at, so it does not bend
+  as the crosshair moves on: captured the first frame it is seen, from the point the frame's input
+  read (the last frame's probe, `probeFrame` hands the cast that one before probing anew), so a
+  flick does not tilt the streak away from the shot. Sideways the rounds still settle onto their
+  flat line over `CONVERGE_M`. Everyone else's rounds are drawn as before. At the wheel of a tank
+  the sights and the probe's reach follow its cannon (`localWeapon`), which is what it fires.
 
 ### Aiming down the sights
 

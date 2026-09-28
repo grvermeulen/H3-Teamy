@@ -62,17 +62,46 @@ describe("raiseSights", () => {
   });
 });
 
+describe("localWeapon", () => {
+  /** `SCENE` with the local player at the wheel of a `kind`, wrecked or not. */
+  function driving(kind: string, wrecked = false): Scene {
+    return {
+      ...SCENE,
+      players: [{ ...SCENE.players[0]!, vehicleId: 9 }],
+      vehicles: [{ id: 9, kind, wrecked }],
+    } as unknown as Scene;
+  }
+
+  it("is what the player carries, but a tank's cannon at its wheel, as the simulation fires", () => {
+    expect(localWeapon(SCENE)).toBe("rifle");
+    expect(localWeapon(driving("sedan"))).toBe("rifle");
+    expect(localWeapon(driving("tank"))).toBe("cannon");
+    expect(localWeapon(driving("tank", true))).toBe("rifle");
+    expect(localWeapon({ ...SCENE, localPlayerId: 5 })).toBe("fist");
+  });
+});
+
 describe("probeFrame", () => {
-  it("hands the cast your shot at what the crosshair covers, and none while dead", () => {
+  it("hands the cast the point the frame's shots were fired at: the last frame's, none before or once dead", () => {
     const aim = createFrameAim();
     raiseSights(aim, frameOf(), localWeapon(SCENE));
     probeFrame(aim, eye(), frameOf(), { x: 0, y: 0 });
     expect(aim.shown).toBe(true);
+    expect(aim.point.x).toBeCloseTo(70);
+    expect(aim.cast.shot).toBeNull();
+    // A flick up: this frame's rounds left for the level point the input read before it.
+    const flicked = eye();
+    flicked.lookAt(10, 4, 0);
+    probeFrame(aim, flicked, frameOf(), { x: 0, y: 0 });
+    expect(aim.point.height).toBeGreaterThan(5);
     expect(aim.cast.shot).toMatchObject({ ownerId: 4 });
-    expect(aim.cast.shot!.y).toBeCloseTo(0);
     expect(aim.cast.shot!.x).toBeCloseTo(70);
+    expect(aim.cast.shot!.y).toBeCloseTo(0);
+    expect(aim.cast.shot!.height).toBeCloseTo(1.65);
     probeFrame(aim, eye(), frameOf({ deadSeconds: 1 }), { x: 0, y: 0 });
     expect(aim.shown).toBe(false);
+    expect(aim.cast.shot).not.toBeNull();
+    probeFrame(aim, eye(), frameOf({ deadSeconds: 1 }), { x: 0, y: 0 });
     expect(aim.cast.shot).toBeNull();
   });
 });
