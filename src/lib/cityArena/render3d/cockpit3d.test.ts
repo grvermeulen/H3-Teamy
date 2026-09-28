@@ -6,7 +6,8 @@ import {
   type Object3D,
 } from "three";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { VEHICLE_KINDS } from "../sim/vehicle";
+import type { VehicleKind } from "../sim/types";
+import { VEHICLE_KINDS, widthOf } from "../sim/vehicle";
 import {
   SPEEDO_MAX_MPS,
   WHEEL_TURN_RAD,
@@ -15,7 +16,10 @@ import {
   needleAngle,
   type CockpitInput,
 } from "./cockpit3d";
+import type { CockpitDriveBy } from "./cockpitGun";
 import { COCKPITS } from "./cockpitSpecs";
+import { headingToRotationY } from "./coords";
+import type { WindowSide } from "./driveByPose";
 import { bodyColour } from "./vehicleModels";
 
 const FRAME_S = 1 / 60;
@@ -220,6 +224,123 @@ describe("createCockpit3d", () => {
     cockpit.update(input());
     cockpit.dispose();
     expect(cockpit.object.parent).toBeNull();
+    expect(cockpit.object.children).toHaveLength(0);
+  });
+});
+
+describe("createCockpit3d: the gun hand", () => {
+  const TICK = 120;
+
+  function shooting(
+    side: WindowSide,
+    aim: number,
+    overrides: Partial<CockpitDriveBy> = {},
+  ): CockpitDriveBy {
+    return {
+      side,
+      heading: 0,
+      aim,
+      weapon: "pistol",
+      firedTick: TICK,
+      ...overrides,
+    };
+  }
+
+  /** How far ahead of the car's centre the windscreen is at `height`, car space. */
+  function windscreenAt(kind: VehicleKind, height: number): number {
+    const { eyeForwardM, glass } = COCKPITS[kind];
+    const rise = (height - glass.baseM) / (glass.headerM - glass.baseM);
+    return eyeForwardM + glass.aheadM - glass.rakeM * rise;
+  }
+
+  it("takes the right hand off the wheel to shoot, and puts it back after", () => {
+    const cockpit = createCockpit3d();
+    cockpit.update(input({ tick: TICK }));
+    const right = named(cockpit.object, "cockpit-hand-right");
+    const left = named(cockpit.object, "cockpit-hand-left");
+    expect(
+      cockpit.object.getObjectByName("cockpit-gun")?.visible ?? false,
+    ).toBe(false);
+    cockpit.update(input({ tick: TICK, driveBy: shooting("left", -1.4) }));
+    expect(right.visible).toBe(false);
+    expect(left.visible).toBe(true);
+    expect(named(cockpit.object, "cockpit-gun").visible).toBe(true);
+    cockpit.update(input({ tick: TICK + 40, steer: 1, dt: 1 }));
+    expect(right.visible).toBe(true);
+    expect(named(cockpit.object, "cockpit-gun").visible).toBe(false);
+    expect(named(cockpit.object, "cockpit-wheel").rotation.x).toBeCloseTo(
+      WHEEL_TURN_RAD,
+    );
+  });
+
+  it("points the gun hand's barrel along the aim", () => {
+    const cockpit = createCockpit3d();
+    cockpit.object.rotation.y = headingToRotationY(0.6);
+    cockpit.update(
+      input({ tick: TICK, driveBy: shooting("right", 2.1, { heading: 0.6 }) }),
+    );
+    cockpit.object.updateMatrixWorld(true);
+    const barrel = new Vector3(1, 0, 0).transformDirection(
+      named(cockpit.object, "weapon:pistol").matrixWorld,
+    );
+    expect(barrel.x).toBeCloseTo(Math.cos(2.1), 1);
+    expect(barrel.z).toBeCloseTo(Math.sin(2.1), 1);
+  });
+
+  it("holds the muzzle outside the cockpit's glass: past the side or the windscreen", () => {
+    for (const kind of ["sedan", "van", "oldtimer", "pickup"] as const) {
+      const muzzle = new Vector3();
+      const left = createCockpit3d();
+      left.update(input({ kind, tick: TICK, driveBy: shooting("left", -1.6) }));
+      expect(left.muzzleWorld(muzzle), kind).toBe(true);
+      expect(muzzle.z, kind).toBeLessThan(-widthOf(kind) / 2);
+      const front = createCockpit3d();
+      front.update(
+        input({ kind, tick: TICK, driveBy: shooting("front", 0.1) }),
+      );
+      front.muzzleWorld(muzzle);
+      expect(muzzle.x, kind).toBeGreaterThan(windscreenAt(kind, muzzle.y));
+    }
+  });
+
+  it("has no muzzle while the hands are on the wheel", () => {
+    const cockpit = createCockpit3d();
+    cockpit.update(input());
+    expect(cockpit.muzzleWorld(new Vector3())).toBe(false);
+  });
+
+  it("kicks and flashes at the barrel on a fresh shot, not on one seen late", () => {
+    const cockpit = createCockpit3d();
+    const muzzle = new Vector3();
+    cockpit.update(
+      input({
+        tick: TICK,
+        driveBy: shooting("left", -1.6, { firedTick: null }),
+      }),
+    );
+    cockpit.muzzleWorld(muzzle);
+    const rest = muzzle.y;
+    const flash = (): Object3D => named(cockpit.object, "muzzleFlash");
+    expect(flash().visible).toBe(false);
+    cockpit.update(input({ tick: TICK, driveBy: shooting("left", -1.6) }));
+    expect(flash().visible).toBe(true);
+    cockpit.muzzleWorld(muzzle);
+    expect(muzzle.y).toBeGreaterThan(rest);
+    for (const later of [1, 2])
+      cockpit.update(
+        input({ tick: TICK + later, dt: 0.5, driveBy: shooting("left", -1.6) }),
+      );
+    expect(flash().visible).toBe(false);
+    const late = shooting("left", -1.6, { firedTick: TICK - 30 });
+    const other = createCockpit3d();
+    other.update(input({ tick: TICK, driveBy: late }));
+    expect(named(other.object, "muzzleFlash").visible).toBe(false);
+  });
+
+  it("detaches the gun hand with the cockpit", () => {
+    const cockpit = createCockpit3d();
+    cockpit.update(input({ tick: TICK, driveBy: shooting("front", 0) }));
+    cockpit.dispose();
     expect(cockpit.object.children).toHaveLength(0);
   });
 });
