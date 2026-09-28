@@ -10,8 +10,9 @@
  * to the right. Pure; {@link driveByPose} allocates nothing once a kind's joints are known.
  */
 import { wrapAngle } from "../sim/driver";
-import type { VehicleKind } from "../sim/types";
+import type { VehicleKind, WeaponKind } from "../sim/types";
 import { widthOf } from "../sim/vehicle";
+import { isMelee } from "../sim/weapons";
 import { COCKPITS } from "./cockpitSpecs";
 import type { Vec3 } from "./lowPoly";
 
@@ -24,8 +25,8 @@ export const FRONT_CONE_RAD = (35 * Math.PI) / 180;
 export const SIDE_HYSTERESIS_RAD = (5 * Math.PI) / 180;
 /** The gun stays out this long after a shot, seconds. */
 export const SHOWN_AFTER_SHOT_S = 1.2;
-/** The forearm swings at most this far from square out of its window, radians (50°). */
-export const ARM_SWING_RAD = (50 * Math.PI) / 180;
+/** The forearm swings at most this far from square out of its window, radians (40°). */
+export const ARM_SWING_RAD = (40 * Math.PI) / 180;
 /** The wrist turns the gun at most this far off the forearm, radians: never back into the car. */
 export const WRIST_TURN_MAX_RAD = Math.PI / 2;
 
@@ -134,6 +135,27 @@ export function driveBySideFor(
   return windowSideFor(heading, aim, previous);
 }
 
+/**
+ * Whether a weapon is a gun a driver can hold out of the window: not fists, the bat or the tank's
+ * cannon.
+ *
+ * @param weapon - The weapon.
+ * @returns `true` for the pistol, uzi, shotgun, rifle and rocket launcher.
+ */
+export function holdsGun(weapon: WeaponKind): boolean {
+  return !isMelee(weapon) && weapon !== "cannon";
+}
+
+/**
+ * Whether a kind's driver ever leans out to shoot: all but the tank, which fires its cannon.
+ *
+ * @param kind - The vehicle kind.
+ * @returns `false` for the tank.
+ */
+export function hasDriveBy(kind: VehicleKind): boolean {
+  return !NO_DRIVE_BY.has(kind);
+}
+
 /** What decides whether a driver's gun is out of the window. */
 export type DriveByShow = {
   /** A gun: not fists, the bat or the tank's cannon. */
@@ -153,7 +175,7 @@ export type DriveByShow = {
  * @returns `true` while the drive-by shows.
  */
 export function showsDriveBy(show: DriveByShow): boolean {
-  if (!show.holdsGun || NO_DRIVE_BY.has(show.kind)) return false;
+  if (!show.holdsGun || !hasDriveBy(show.kind)) return false;
   if (show.ads) return true;
   const since = show.secondsSinceShot;
   return since !== null && since >= 0 && since <= SHOWN_AFTER_SHOT_S;

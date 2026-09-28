@@ -6,6 +6,7 @@ import {
   collectFreshMuzzles,
   createShotMemory,
   muzzleTickNear,
+  newestMuzzleNear,
   registerShot,
 } from "./entityShots";
 
@@ -53,6 +54,16 @@ describe("muzzleTickNear", () => {
     const muzzles = [effect({ x: MUZZLE_MATCH_M + 0.01 })];
     expect(muzzleTickNear(muzzles, 0, 0)).toBeNull();
     expect(muzzleTickNear([effect({ x: MUZZLE_MATCH_M })], 0, 0)).toBe(TICK);
+  });
+});
+
+describe("newestMuzzleNear", () => {
+  it("hands over the newest flash within reach, whose angle is the shot's aim", () => {
+    const older = effect({ id: 1, bornTick: TICK - 1, angle: 0.3 });
+    const newest = effect({ id: 2, x: 0.4, angle: -1.2 });
+    const far = effect({ id: 3, x: MUZZLE_MATCH_M + 1, bornTick: TICK + 1 });
+    expect(newestMuzzleNear([older, newest, far], 0, 0)).toBe(newest);
+    expect(newestMuzzleNear([far], 0, 0)).toBeNull();
   });
 });
 

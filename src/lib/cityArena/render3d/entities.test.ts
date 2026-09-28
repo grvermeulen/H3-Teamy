@@ -1,4 +1,4 @@
-import { Group, type Vector3 } from "three";
+import { Group, type Object3D, type Vector3 } from "three";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Scene } from "../render/renderScene";
 import { createArenaPlayer } from "../sim/roster";
@@ -584,6 +584,165 @@ describe("createEntitySync: muzzles", () => {
     });
     sync.update(wreck, FRAME_S, ORIGIN, THIRD);
     expect(sync.muzzles.points.has(7)).toBe(false);
+  });
+});
+
+describe("createEntitySync: drive-bys", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const HEADING = 0.4;
+  const AIM_LEFT: EntityView = {
+    firstPerson: false,
+    aim: HEADING - Math.PI / 2,
+  };
+
+  /** The drive-by arms under the cast's group, shown or not. */
+  function arms(sync: EntitySync): Object3D[] {
+    return sync.group.children.filter((child) => child.name === "drive-by");
+  }
+
+  /** You at the wheel of a sedan at (10, 5), turned to {@link HEADING}. */
+  function driving(
+    extra: Partial<ArenaPlayerState> = {},
+    tick = TICK,
+    kind: VehicleKind = "sedan",
+  ): Scene {
+    return sceneOf({
+      tick,
+      players: [
+        player(1, 10, 5, { vehicleId: 50, nextShotTick: 280, ...extra }),
+      ],
+      vehicles: [car(50, 10, 5, { heading: HEADING, kind })],
+    });
+  }
+
+  /** How far right of the car's centre line a world point lies, metres. */
+  function rightOfCar(
+    point: Vector3,
+    heading: number,
+    x: number,
+    y: number,
+  ): number {
+    return (
+      -Math.sin(heading) * (point.x - x) + Math.cos(heading) * (point.z - y)
+    );
+  }
+
+  it("holds your pistol out of the driver's window when you fire aiming left", () => {
+    const { sync } = syncOf();
+    sync.update(driving(), FRAME_S, ORIGIN, AIM_LEFT);
+    expect(arms(sync).some((arm) => arm.visible)).toBe(false);
+    expect(sync.local.driveBy).toBeNull();
+    const fired = driving({ nextShotTick: TICK + 10 });
+    sync.update(fired, FRAME_S, ORIGIN, AIM_LEFT);
+    const [arm] = arms(sync);
+    expect(arm!.visible).toBe(true);
+    expect(sync.local.driveBy).toMatchObject({ side: "left", firedTick: TICK });
+    expect(sync.local.weapon).toBe("pistol");
+    const muzzle = sync.muzzles.points.get(1)!;
+    expect(rightOfCar(muzzle, HEADING, 10, 5)).toBeLessThan(
+      -VEHICLE_SPECS.sedan.widthM / 2,
+    );
+  });
+
+  it("shows nothing for fists or a bat, and leaves a tank to its cannon", () => {
+    for (const weapon of ["fist", "bat"] as const) {
+      const { sync } = syncOf();
+      sync.update(driving({ weapon }), FRAME_S, ORIGIN, AIM_LEFT);
+      sync.update(
+        driving({ weapon, nextShotTick: TICK + 10 }),
+        FRAME_S,
+        ORIGIN,
+        AIM_LEFT,
+      );
+      expect(arms(sync), weapon).toHaveLength(0);
+      expect(sync.muzzles.points.has(1), weapon).toBe(false);
+    }
+    const { sync } = syncOf();
+    sync.update(driving({}, TICK, "tank"), FRAME_S, ORIGIN, AIM_LEFT);
+    sync.update(
+      driving({ nextShotTick: TICK + 10 }, TICK, "tank"),
+      FRAME_S,
+      ORIGIN,
+      AIM_LEFT,
+    );
+    expect(arms(sync)).toHaveLength(0);
+    expect(sync.muzzles.points.get(1)!.y).toBe(TANK_BARREL_HEIGHT_M);
+  });
+
+  it("puts the gun away 1.2 s after the last shot, and frees the arm when you get out", () => {
+    const { sync } = syncOf();
+    sync.update(driving(), FRAME_S, ORIGIN, AIM_LEFT);
+    const shot = { nextShotTick: TICK + 10 };
+    sync.update(driving(shot), FRAME_S, ORIGIN, AIM_LEFT);
+    sync.update(driving(shot, TICK + 30), FRAME_S, ORIGIN, AIM_LEFT);
+    expect(arms(sync)[0]!.visible).toBe(true);
+    sync.update(driving(shot, TICK + 40), FRAME_S, ORIGIN, AIM_LEFT);
+    expect(arms(sync)[0]!.visible).toBe(false);
+    expect(sync.local.driveBy).toBeNull();
+    expect(sync.muzzles.points.has(1)).toBe(false);
+    const onFoot = sceneOf({
+      tick: TICK + 41,
+      players: [player(1, 10, 5, shot)],
+      vehicles: [car(50, 10, 5)],
+    });
+    sync.update(onFoot, FRAME_S, ORIGIN, AIM_LEFT);
+    expect(arms(sync)).toHaveLength(0);
+  });
+
+  it("holds your gun out while you aim down the sights, without a shot", () => {
+    const { sync } = syncOf();
+    const aiming: EntityView = { ...AIM_LEFT, aim: HEADING, ads: true };
+    sync.update(driving(), FRAME_S, ORIGIN, aiming);
+    expect(arms(sync)[0]!.visible).toBe(true);
+    expect(sync.local.driveBy).toMatchObject({
+      side: "front",
+      firedTick: null,
+    });
+  });
+
+  it("hides your own arm in first person, where the cockpit holds the gun", () => {
+    const { sync } = syncOf();
+    const first: EntityView = { ...AIM_LEFT, firstPerson: true };
+    sync.update(driving(), FRAME_S, ORIGIN, first);
+    sync.update(driving({ nextShotTick: TICK + 10 }), FRAME_S, ORIGIN, first);
+    expect(arms(sync)[0]!.visible).toBe(false);
+    expect(sync.local.driveBy).toMatchObject({ side: "left" });
+  });
+
+  it("points another driver's gun along their latest shot, out of the passenger window", () => {
+    const { sync } = syncOf();
+    const scene = (nextShotTick: number, effects: EffectState[]): Scene =>
+      sceneOf({
+        players: [player(7, 30, 0, { vehicleId: 51, nextShotTick })],
+        vehicles: [car(51, 30, 0, { heading: 0 })],
+        effects,
+      });
+    sync.update(scene(280, []), FRAME_S, ORIGIN, THIRD);
+    const flash = { ...muzzle(30, 0), angle: Math.PI / 2 };
+    sync.update(scene(TICK + 10, [flash]), FRAME_S, ORIGIN, THIRD);
+    const [arm] = arms(sync);
+    expect(arm!.visible).toBe(true);
+    const gun = sync.muzzles.points.get(7)!;
+    expect(rightOfCar(gun, 0, 30, 0)).toBeGreaterThan(
+      VEHICLE_SPECS.sedan.widthM / 2,
+    );
+    expect(sync.local.driveBy).toBeNull();
+  });
+
+  it("disposes the arms with the cast", () => {
+    const { sync } = syncOf();
+    sync.update(driving(), FRAME_S, ORIGIN, AIM_LEFT);
+    sync.update(
+      driving({ nextShotTick: TICK + 10 }),
+      FRAME_S,
+      ORIGIN,
+      AIM_LEFT,
+    );
+    sync.dispose();
+    expect(arms(sync)).toHaveLength(0);
   });
 });
 

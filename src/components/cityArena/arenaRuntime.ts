@@ -280,6 +280,8 @@ export type Runtime = {
   carLook?: CarLook;
   /** The heading the 3D input last sent the simulation to shoot along; the crosshair follows it. */
   aim3d?: number;
+  /** The 3D input last sent aiming down the sights: at the wheel, your gun comes out of the window. */
+  ads3d?: boolean;
 };
 
 /**

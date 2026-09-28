@@ -113,6 +113,7 @@ export function input3d(
   const yaw = stickTurnedYaw(next.yaw, live, car !== null, dt);
   look.setYaw(yaw);
   runtime.aim3d = aim;
+  runtime.ads3d = live.ads === true;
   return cameraRelativeInput(live, yaw, car !== null, aim);
 }
 
@@ -131,6 +132,7 @@ function view3dFrame(
     yaw: runtime.look.yaw(),
     pitch: runtime.look.pitch(),
     aim: runtime.aim3d ?? runtime.look.yaw(),
+    ads: runtime.ads3d === true,
     mode: runtime.camera3d ?? "third",
     dt,
     nowMs,

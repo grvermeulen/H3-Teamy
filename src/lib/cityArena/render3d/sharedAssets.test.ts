@@ -8,6 +8,7 @@ import {
 import { buildCharacterMesh, characterMaterials } from "./characterRig";
 import { LOOKS } from "./characterLooks";
 import { createCockpit3d } from "./cockpit3d";
+import { createDriveBy3d } from "./driveBy3d";
 import { createPickup3d } from "./pickups3d";
 import { disposeSharedAssets } from "./sharedAssets";
 import {
@@ -58,6 +59,14 @@ function cockpitParts(): (BufferGeometry | Material)[] {
   return parts;
 }
 
+/** A drive-by arm's shared forearm and sleeve. */
+function driveByParts(): BufferGeometry[] {
+  const arm = createDriveBy3d(0x3a7bd5).object;
+  return ["drive-by-forearm", "drive-by-sleeve"].map(
+    (name) => (arm.getObjectByName(name) as Mesh).geometry as BufferGeometry,
+  );
+}
+
 /** One of every shared asset, as the first view to use it builds it. */
 function sharedAssets(): (BufferGeometry | Material)[] {
   const materials = characterMaterials();
@@ -71,6 +80,7 @@ function sharedAssets(): (BufferGeometry | Material)[] {
     matteMaterial(0x222222),
     ...pickupParts(),
     ...cockpitParts(),
+    ...driveByParts(),
     pistolGeometry(),
   ];
 }

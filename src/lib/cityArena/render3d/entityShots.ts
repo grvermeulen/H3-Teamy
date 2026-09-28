@@ -40,6 +40,31 @@ export function collectFreshMuzzles(
 }
 
 /**
+ * The newest muzzle flash of a gun at `(x, y)`: the flashes within {@link MUZZLE_MATCH_M}.
+ *
+ * @param muzzles - The frame's fresh muzzle flashes.
+ * @param x - The shooter, metres east (the simulation fires from the body's position, or from
+ *   a driver's seat).
+ * @param y - Metres south.
+ * @returns The newest matching flash — its `angle` is the shot's aim — or `null` when none is near.
+ */
+export function newestMuzzleNear(
+  muzzles: readonly EffectState[],
+  x: number,
+  y: number,
+): EffectState | null {
+  let newest: EffectState | null = null;
+  const reach = MUZZLE_MATCH_M * MUZZLE_MATCH_M;
+  for (const muzzle of muzzles) {
+    const dx = muzzle.x - x;
+    const dy = muzzle.y - y;
+    if (dx * dx + dy * dy > reach) continue;
+    if (newest === null || muzzle.bornTick > newest.bornTick) newest = muzzle;
+  }
+  return newest;
+}
+
+/**
  * The tick of the newest shot fired from a gun at `(x, y)`, judged by the muzzle flashes within
  * {@link MUZZLE_MATCH_M}.
  *
@@ -53,15 +78,7 @@ export function muzzleTickNear(
   x: number,
   y: number,
 ): number | null {
-  let newest: number | null = null;
-  const reach = MUZZLE_MATCH_M * MUZZLE_MATCH_M;
-  for (const muzzle of muzzles) {
-    const dx = muzzle.x - x;
-    const dy = muzzle.y - y;
-    if (dx * dx + dy * dy > reach) continue;
-    if (newest === null || muzzle.bornTick > newest) newest = muzzle.bornTick;
-  }
-  return newest;
+  return newestMuzzleNear(muzzles, x, y)?.bornTick ?? null;
 }
 
 /** A character's shooting memory. */

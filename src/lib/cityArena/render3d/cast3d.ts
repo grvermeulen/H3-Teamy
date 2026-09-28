@@ -55,6 +55,8 @@ export type CastFrame = {
   dt: number;
   mode: CameraMode;
   aim: number;
+  /** You aim down the sights: at the wheel, your gun comes out of the window. */
+  ads?: boolean;
   quality: RenderQuality;
 };
 
@@ -221,6 +223,7 @@ export function createCast3d(
     update(frame, focus, camera, contacts = NO_CONTACTS) {
       view.firstPerson = frame.mode === "first";
       view.aim = frame.aim;
+      view.ads = frame.ads === true;
       view.characterDetailM =
         frame.quality === "low" ? GLTF_LOD_DISTANCE_M : undefined;
       entities.update(frame.scene, frame.dt, focus, view);

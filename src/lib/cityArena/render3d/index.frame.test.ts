@@ -209,6 +209,7 @@ describe("createView3d frame path", () => {
     expect(sync.update).toHaveBeenCalledWith(SCENE, DT, focus, {
       firstPerson: false,
       aim: 0.7,
+      ads: false,
     });
     const effects = vi.mocked(createEffects3d).mock.results[0]!.value;
     expect(effects.sync).toHaveBeenCalledWith(
@@ -336,6 +337,7 @@ describe("createView3d frame path", () => {
     expect(sync.update.mock.lastCall?.[3]).toEqual({
       firstPerson: true,
       aim: 0.7,
+      ads: false,
     });
     const [pass] = renderer.render.mock.lastCall!;
     expect(pass.scene).toBeInstanceOf(Scene);

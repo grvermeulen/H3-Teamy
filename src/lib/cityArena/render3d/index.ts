@@ -44,6 +44,8 @@ export type View3dFrame = {
    * gamepad aim stick — the crosshair follows it.
    */
   aim: number;
+  /** The local player aims down the sights; absent = not aiming. */
+  ads?: boolean;
   mode: CameraMode;
   /** Seconds since the previous frame. */
   dt: number;

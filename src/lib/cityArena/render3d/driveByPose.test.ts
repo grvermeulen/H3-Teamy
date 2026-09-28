@@ -8,6 +8,8 @@ import {
   createDriveByPose,
   driveByPose,
   driveBySideFor,
+  hasDriveBy,
+  holdsGun,
   showsDriveBy,
   windowSideFor,
 } from "./driveByPose";
@@ -74,6 +76,15 @@ describe("showsDriveBy", () => {
   it("never shows fists or a bat, nor anything from a tank", () => {
     expect(showsDriveBy({ ...armed, holdsGun: false, ads: true })).toBe(false);
     expect(showsDriveBy({ ...armed, kind: "tank", ads: true })).toBe(false);
+  });
+
+  it("counts every carried gun, not fists, the bat or the cannon", () => {
+    const guns = ["pistol", "uzi", "shotgun", "rifle", "rocket"] as const;
+    for (const weapon of guns) expect(holdsGun(weapon), weapon).toBe(true);
+    for (const weapon of ["fist", "bat", "cannon"] as const)
+      expect(holdsGun(weapon), weapon).toBe(false);
+    expect(hasDriveBy("tank")).toBe(false);
+    expect(hasDriveBy("bus")).toBe(true);
   });
 });
 

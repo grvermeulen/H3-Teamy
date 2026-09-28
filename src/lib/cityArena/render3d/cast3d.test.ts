@@ -270,6 +270,20 @@ describe("createCast3d", () => {
     expect(pass.update).toHaveBeenLastCalledWith(camera, null, null);
   });
 
+  it("holds your gun out of the car window while you aim down the sights", () => {
+    const cast = createCast3d(fakeFactories(), fakePass());
+    const frame = (ads: boolean): CastFrame => {
+      const at = frameOf({ ads });
+      at.scene.players = [you({ vehicleId: 9 })];
+      at.scene.vehicles = [createVehicle(9, "sedan", [3, 4], 0, 1)];
+      return at;
+    };
+    cast.update(frame(false), FOCUS, new PerspectiveCamera());
+    expect(cast.object.getObjectByName("drive-by")?.visible).toBe(false);
+    cast.update(frame(true), FOCUS, new PerspectiveCamera());
+    expect(cast.object.getObjectByName("drive-by")?.visible).toBe(true);
+  });
+
   it("leaves your own muzzle flame to the hands in first person", () => {
     const cast = createCast3d(fakeFactories());
     const first = frameOf({ mode: "first" });
