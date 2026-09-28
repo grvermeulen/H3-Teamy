@@ -40,6 +40,7 @@ import {
   type WorldInput,
 } from "./types";
 import { createVehicle, distanceToVehicle } from "./vehicle";
+import { ADS_SPREAD_FACTOR, WEAPONS } from "./weapons";
 import { PARKED_ENTRY_TICKS } from "./hijacking";
 
 /** One zone with spawn nodes at 0, 100, 200 and 300 m along y = 0. */
@@ -671,6 +672,36 @@ describe("stepArena firing and death", () => {
     );
     expect(blast.bullets).toHaveLength(5);
     expect(localPlayer(blast).ammo.shotgun).toBe(7);
+  });
+
+  it("keeps a shotgun's pellets in half the cone while aiming down the sights", () => {
+    const state = boot();
+    const armed: ArenaPlayerState = {
+      ...localPlayer(state),
+      weapon: "shotgun",
+      ammo: FULL_AMMO,
+    };
+    const aim = 0;
+    const widest = (ads: boolean): number => {
+      const blast = run(
+        { ...state, players: [armed] },
+        createInput({ fire: true, aim, ads }),
+        1,
+      );
+      expect(blast.bullets).toHaveLength(WEAPONS.shotgun.pellets);
+      return Math.max(
+        ...blast.bullets.map((bullet) =>
+          Math.abs(Math.atan2(bullet.directionY, bullet.directionX) - aim),
+        ),
+      );
+    };
+    const aimed = widest(true);
+    const loose = widest(false);
+    expect(aimed).toBeLessThanOrEqual(
+      WEAPONS.shotgun.spreadRad * ADS_SPREAD_FACTOR + 1e-9,
+    );
+    expect(loose).toBeGreaterThan(0);
+    expect(aimed).toBeCloseTo(loose * ADS_SPREAD_FACTOR);
   });
 
   it("caps a shotgun pull at the live-bullet limit instead of overshooting it", () => {

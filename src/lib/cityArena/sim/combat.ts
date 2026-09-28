@@ -38,6 +38,7 @@ import type {
   WorldInput,
 } from "./types";
 import {
+  aimedSpec,
   EXPLOSIVES,
   WEAPONS,
   consumeAmmo,
@@ -158,16 +159,17 @@ function fireShots(
   state: ArenaState,
   player: ArenaPlayerState,
   trigger: Trigger,
-  angle: number,
+  aim: { angle: number; ads: boolean },
   tick: number,
   random: () => number,
 ): FireResult {
+  const { angle } = aim;
   // canFire only checks that firing is allowed at all; a multi-pellet weapon
   // (shotgun) can still overflow MAX_BULLETS close to the cap, so trim the
   // surplus pellets here rather than let applyFire exceed the invariant.
   const remainingCapacity = Math.max(0, MAX_BULLETS - state.bullets.length);
   const shots = createShots(
-    WEAPONS[trigger.weapon],
+    aimedSpec(WEAPONS[trigger.weapon], aim.ads),
     trigger.weapon,
     trigger.origin,
     angle,
@@ -224,7 +226,7 @@ export function applyFire(
     state,
     player,
     trigger,
-    angle,
+    { angle, ads: input.ads === true },
     tick,
     random,
   );

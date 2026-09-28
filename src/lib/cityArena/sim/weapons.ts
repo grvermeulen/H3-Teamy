@@ -157,6 +157,22 @@ export const WEAPON_ORDER: WeaponKind[] = [
 /** The weapons that hit what they touch rather than fire a round; they get no muzzle flash. */
 const MELEE_WEAPONS: ReadonlySet<WeaponKind> = new Set(["fist", "bat"]);
 
+/** Share of a spraying gun's cone left while aiming down the sights. */
+export const ADS_SPREAD_FACTOR = 0.5;
+
+/**
+ * A weapon's spec as it fires: aiming down the sights narrows its cone by
+ * {@link ADS_SPREAD_FACTOR}; otherwise the spec itself.
+ *
+ * @param spec - The weapon's spec.
+ * @param ads - Whether the shooter aims down the sights.
+ * @returns The spec to fire with.
+ */
+export function aimedSpec(spec: WeaponSpec, ads: boolean): WeaponSpec {
+  if (!ads || spec.spreadRad === 0) return spec;
+  return { ...spec, spreadRad: spec.spreadRad * ADS_SPREAD_FACTOR };
+}
+
 /**
  * True for a weapon swung rather than fired.
  *
