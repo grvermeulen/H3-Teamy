@@ -30,9 +30,9 @@ import { vestHueOf } from "./entityMotion";
 import { createEntityPool, type EntityPool, type PoolSlot } from "./entityPool";
 import {
   createShotMemory,
-  muzzleTickNear,
-  newestMuzzleNear,
+  newestOwnMuzzle,
   registerShot,
+  type ShooterBody,
   type ShotMemory,
 } from "./entityShots";
 import type { MuzzleMap } from "./muzzleMap";
@@ -44,6 +44,8 @@ export type DriveByContext = {
   readonly dt: number;
   /** The frame's fresh muzzle flashes. */
   readonly muzzles: readonly EffectState[];
+  /** Everyone who can fire this frame: a flash counts only for the body nearest to it. */
+  readonly shooters: readonly ShooterBody[];
   /** Receives each shown gun's muzzle by driver id. */
   readonly muzzleMap: MuzzleMap;
   /** Scratch for one muzzle before it is recorded. */
@@ -159,7 +161,9 @@ function trackShot(
   let fired: number | null = null;
   if (previous !== null && driver.nextShotTick > previous) fired = context.tick;
   else if (!memory.local)
-    fired = muzzleTickNear(context.muzzles, driver.x, driver.y);
+    fired =
+      newestOwnMuzzle(context.muzzles, driver, context.shooters)?.bornTick ??
+      null;
   registerShot(memory.shots, fired, context.dt);
 }
 
@@ -172,7 +176,7 @@ function aimOf(
 ): number {
   if (memory.local) memory.aim = context.view.aim;
   else {
-    const flash = newestMuzzleNear(context.muzzles, driver.x, driver.y);
+    const flash = newestOwnMuzzle(context.muzzles, driver, context.shooters);
     if (flash) memory.aim = flash.angle;
   }
   return memory.aim ?? car.heading;

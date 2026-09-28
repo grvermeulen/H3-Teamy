@@ -732,6 +732,26 @@ describe("createEntitySync: drive-bys", () => {
     expect(sync.local.driveBy).toBeNull();
   });
 
+  it("keeps another driver's gun on their own shot when an officer beside the car fires", () => {
+    const { sync } = syncOf();
+    const scene = (nextShotTick: number, effects: EffectState[]): Scene =>
+      sceneOf({
+        players: [player(7, 30, 0, { vehicleId: 51, nextShotTick })],
+        vehicles: [car(51, 30, 0, { heading: 0 })],
+        cops: [cop(40, 30.9, 0)],
+        effects,
+      });
+    sync.update(scene(280, []), FRAME_S, ORIGIN, THIRD);
+    const own = { ...muzzle(30, 0), angle: Math.PI / 2 };
+    sync.update(scene(TICK + 10, [own]), FRAME_S, ORIGIN, THIRD);
+    const before = sync.muzzles.points.get(7)!.clone();
+    const officers = { ...muzzle(30.9, 0), id: 901, angle: -Math.PI / 2 };
+    sync.update(scene(TICK + 10, [officers]), FRAME_S, ORIGIN, THIRD);
+    const after = sync.muzzles.points.get(7)!;
+    expect(rightOfCar(after, 0, 30, 0)).toBeGreaterThan(0);
+    expect(after.distanceTo(before)).toBeLessThan(0.05);
+  });
+
   it("disposes the arms with the cast", () => {
     const { sync } = syncOf();
     sync.update(driving(), FRAME_S, ORIGIN, AIM_LEFT);

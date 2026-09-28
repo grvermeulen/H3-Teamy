@@ -81,6 +81,48 @@ export function muzzleTickNear(
   return newestMuzzleNear(muzzles, x, y)?.bornTick ?? null;
 }
 
+/** A body that may have fired a muzzle flash: a player's or an officer's. */
+export type ShooterBody = { readonly x: number; readonly y: number };
+
+/** True when no body but `shooter` stands nearer the flash: the simulation lights it at its shooter. */
+function litBy(
+  muzzle: EffectState,
+  shooter: ShooterBody,
+  bodies: readonly ShooterBody[],
+): boolean {
+  const own = (muzzle.x - shooter.x) ** 2 + (muzzle.y - shooter.y) ** 2;
+  for (const body of bodies) {
+    if (body === shooter) continue;
+    if ((muzzle.x - body.x) ** 2 + (muzzle.y - body.y) ** 2 < own) return false;
+  }
+  return true;
+}
+
+/**
+ * The newest muzzle flash `shooter` fired: within {@link MUZZLE_MATCH_M} of them and nearer to them
+ * than to any other body — an officer firing beside a car never counts as its driver's shot.
+ *
+ * @param muzzles - The frame's fresh muzzle flashes.
+ * @param shooter - The shooter, one of `bodies` (compared by reference).
+ * @param bodies - Everyone who can fire this frame.
+ * @returns The newest such flash, or `null`.
+ */
+export function newestOwnMuzzle(
+  muzzles: readonly EffectState[],
+  shooter: ShooterBody,
+  bodies: readonly ShooterBody[],
+): EffectState | null {
+  let newest: EffectState | null = null;
+  const reach = MUZZLE_MATCH_M * MUZZLE_MATCH_M;
+  for (const muzzle of muzzles) {
+    const dx = muzzle.x - shooter.x;
+    const dy = muzzle.y - shooter.y;
+    if (dx * dx + dy * dy > reach || !litBy(muzzle, shooter, bodies)) continue;
+    if (newest === null || muzzle.bornTick > newest.bornTick) newest = muzzle;
+  }
+  return newest;
+}
+
 /** A character's shooting memory. */
 export type ShotMemory = {
   /** Tick of the latest shot or swing, or `null` before the first. */

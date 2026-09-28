@@ -44,6 +44,7 @@ import {
   muzzleTickNear,
   registerShot,
   type ShotMemory,
+  type ShooterBody,
 } from "./entityShots";
 import { createMuzzleMap, type MuzzleMap } from "./muzzleMap";
 import type { Pickup3d } from "./pickups3d";
@@ -216,6 +217,8 @@ type Frame = {
   /** Reused for `local.vehicle` while the local player drives. */
   readonly localVehicle: LocalVehicle;
   readonly muzzles: EffectState[];
+  /** The scene's players and living officers: who a muzzle flash may belong to. */
+  readonly shooters: ShooterBody[];
   /** Where each shooter's gun points from, this frame. */
   readonly muzzleMap: MuzzleMap;
   /** Armed drivers' guns out of their windows. */
@@ -712,6 +715,7 @@ function createFrame(factories: EntityFactories, group: Group): Frame {
     pools: createPools(group),
     ...createLocal(),
     muzzles: [],
+    shooters: [],
     muzzleMap: createMuzzleMap(),
     driveBys: createDriveBys(group),
     muzzlePoint: new Vector3(),
@@ -751,8 +755,16 @@ function createFrame(factories: EntityFactories, group: Group): Frame {
 }
 
 /** Runs one frame's sync over every kind of entity. */
+/** Refills `out` with the scene's players and living officers, no new objects. */
+function collectShooters(scene: Scene, out: ShooterBody[]): void {
+  out.length = 0;
+  for (const player of scene.players) out.push(player);
+  for (const cop of scene.cops) if (cop.diedAtTick === null) out.push(cop);
+}
+
 function syncScene(frame: Frame, scene: Scene): void {
   collectFreshMuzzles(scene.effects, scene.tick, frame.muzzles);
+  collectShooters(scene, frame.shooters);
   frame.local.onFoot = false;
   frame.local.vehicle = null;
   frame.local.driveBy = null;
