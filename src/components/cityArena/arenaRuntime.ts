@@ -130,6 +130,7 @@ import {
   view3dRuntime,
   type Runtime3d,
 } from "./view3d/frame3d";
+import { dropTouchLook } from "./view3d/touchLook3d";
 import {
   createArenaSound,
   type ArenaSound,
@@ -1112,7 +1113,10 @@ function liveInput(
   input: InputState,
   dt: number,
 ): WorldInput {
-  if (runtime.inputSuspended) return EMPTY_INPUT;
+  if (runtime.inputSuspended) {
+    if (runtime3d) dropTouchLook(runtime3d);
+    return EMPTY_INPUT;
+  }
   const live = readArenaGamepad(input.snapshot());
   const turned = runtime3d ? input3d(runtime3d, live, dt) : live;
   return holdFireDuringOffer(turned, myPlayer(runtime));

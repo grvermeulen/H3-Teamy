@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
@@ -176,21 +176,20 @@ function useReleaseOnUnmount(
 }
 
 /**
- * The pointer the fire button is turning the look with, and a release of that finger from the
- * look pad when the button unmounts mid-drag, so the pad does not stay owned by a gone finger.
+ * The fingers on the fire button, and their release from the look pad when the button unmounts
+ * mid-drag, so the pad does not stay owned by a finger that is gone.
  */
-function useLookReleaseOnUnmount(look: TouchLook): {
-  current: number | null;
-} {
-  const pointer = useRef<number | null>(null);
+function useFireFingers(look: TouchLook): Set<number> {
+  const [fingers] = useState(() => new Set<number>());
   useEffect(
     () => () => {
-      if (pointer.current !== null)
-        look.onUp({ pointerId: pointer.current, clientX: 0, clientY: 0 });
+      for (const pointerId of fingers)
+        look.onUp({ pointerId, clientX: 0, clientY: 0 });
+      fingers.clear();
     },
-    [look],
+    [fingers, look],
   );
-  return pointer;
+  return fingers;
 }
 
 /** Props for {@link FireButton}. */
@@ -202,25 +201,26 @@ type FireButtonProps = {
 /**
  * The 3D fire button (aim round §6): held, it fires; a drag that starts on it also turns the
  * camera through the look pad, so one thumb can keep firing while it tracks a target. The pointer
- * is captured, so the thumb may wander off the button without letting go of the trigger.
+ * is captured, so the thumb may wander off the button without letting go of the trigger, and it
+ * fires for as long as any finger is on it.
  */
 function FireButton({ onButton, look }: FireButtonProps): React.JSX.Element {
   const hold = holdHandlers("fire", onButton);
-  const pointer = useLookReleaseOnUnmount(look);
+  const fingers = useFireFingers(look);
   useReleaseOnUnmount("fire", onButton);
   const letGo = (event: ReactPointerEvent<HTMLButtonElement>): void => {
-    hold.release();
+    if (!fingers.delete(event.pointerId)) return;
     look.onUp(event);
-    pointer.current = null;
+    if (fingers.size === 0) hold.release();
   };
   return (
     <button
       type="button"
       className={FIRE_BUTTON_CLASS}
       onPointerDown={(event) => {
+        fingers.add(event.pointerId);
         hold.press(event);
         look.onDown(event, true);
-        pointer.current = event.pointerId;
         capturePointer(event);
       }}
       onPointerMove={(event) => look.onMove(event)}

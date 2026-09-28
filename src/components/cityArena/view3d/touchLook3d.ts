@@ -38,6 +38,16 @@ function assistFactor(
 }
 
 /**
+ * Throws away what the look pad added up, for the frames a menu, the map or a mission offer holds
+ * the input: a drag kept going over the overlay must not snap the camera once it closes.
+ *
+ * @param runtime - The 3D runtime; nothing happens without a look pad.
+ */
+export function dropTouchLook(runtime: Runtime3d): void {
+  runtime.touchCamera?.pad.take();
+}
+
+/**
  * Turns the 3D camera by what the look pad added up since the last frame, slowed to aim
  * assist's friction while the crosshair is on a living target. The mouse is never slowed: only
  * the pad's turn goes through here.

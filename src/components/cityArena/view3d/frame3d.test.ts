@@ -21,6 +21,7 @@ import {
   view3dRuntime,
   type Runtime3d,
 } from "./frame3d";
+import { dropTouchLook } from "./touchLook3d";
 
 /** A mouse-look stand-in whose next mouse turn the test sets. */
 function fakeLook(
@@ -162,6 +163,19 @@ describe("input3d", () => {
     expect(look.yaw()).toBeCloseTo(100 * TOUCH_LOOK_RAD_PER_PX);
     expect(input.aim).toBeCloseTo(100 * TOUCH_LOOK_RAD_PER_PX);
     expect(input.fire).toBe(false);
+  });
+
+  it("drops a look-pad drag made while a menu or the map held the input", () => {
+    const look = fakeLook(0);
+    const runtime = runtime3d(look);
+    const pad = createTouchLook(() => 1);
+    runtime.touchCamera = createTouchCamera(pad, [-0.6, 0.7]);
+    pad.onDown({ pointerId: 1, clientX: 0, clientY: 0 });
+    pad.onMove({ pointerId: 1, clientX: 300, clientY: 0 });
+    dropTouchLook(runtime);
+    pad.onMove({ pointerId: 1, clientX: 310, clientY: 0 });
+    input3d(runtime, createInput({}), 1 / 60);
+    expect(look.yaw()).toBeCloseTo(10 * TOUCH_LOOK_RAD_PER_PX);
   });
 
   it("counts a look-pad turn as a look, so the chase camera waits before easing behind the car", () => {

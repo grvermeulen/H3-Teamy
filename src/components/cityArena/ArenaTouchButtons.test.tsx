@@ -207,6 +207,24 @@ describe("ArenaTouchButtons in 3D", () => {
     expect(look.take().yaw).toBeCloseTo(25 * TOUCH_LOOK_RAD_PER_PX);
   });
 
+  it("keeps firing while any finger is still on Schieten", () => {
+    const onButton = vi.fn();
+    render(
+      <ArenaTouchButtons
+        inVehicle={false}
+        onButton={onButton}
+        look={createTouchLook(() => 1)}
+      />,
+    );
+    const fire = screen.getByRole("button", { name: "Schieten" });
+    fireEvent.pointerDown(fire, { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerDown(fire, { pointerId: 2, clientX: 20, clientY: 10 });
+    fireEvent.pointerUp(fire, { pointerId: 2, clientX: 20, clientY: 10 });
+    expect(onButton).not.toHaveBeenCalledWith("fire", false);
+    fireEvent.pointerUp(fire, { pointerId: 1, clientX: 10, clientY: 10 });
+    expect(onButton).toHaveBeenLastCalledWith("fire", false);
+  });
+
   it("takes the look over from a finger already on the pad", () => {
     const look = createTouchLook(() => 1);
     render(
