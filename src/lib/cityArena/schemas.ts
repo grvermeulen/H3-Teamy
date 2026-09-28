@@ -164,6 +164,10 @@ export const MOUSE_SENSITIVITY = {
   default: 1,
   step: 0.05,
 } as const;
+/** "Kijkgevoeligheid": the range and default of the touch look pad's speed factor (aim round §6). */
+export const TOUCH_LOOK_SENSITIVITY_MIN = 0.25;
+export const TOUCH_LOOK_SENSITIVITY_MAX = 2.5;
+export const TOUCH_LOOK_SENSITIVITY_DEFAULT = 1;
 
 /** Persisted player preferences (spec §9.3). */
 export const ArenaSettingsSchema = z.object({
@@ -199,6 +203,14 @@ export const ArenaSettingsSchema = z.object({
     .max(MOUSE_SENSITIVITY.max)
     .default(MOUSE_SENSITIVITY.default)
     .catch(MOUSE_SENSITIVITY.default),
+  /** "Kijkgevoeligheid": scales how far a drag on the 3D touch look pad turns the camera. */
+  // Out of range resets this setting alone, not every other one with it.
+  touchLookSensitivity: z
+    .number()
+    .min(TOUCH_LOOK_SENSITIVITY_MIN)
+    .max(TOUCH_LOOK_SENSITIVITY_MAX)
+    .default(TOUCH_LOOK_SENSITIVITY_DEFAULT)
+    .catch(TOUCH_LOOK_SENSITIVITY_DEFAULT),
 });
 
 /** Parsed settings type, inferred from {@link ArenaSettingsSchema} so the two cannot drift. */
@@ -220,4 +232,5 @@ export const DEFAULT_ARENA_SETTINGS: ArenaSettings = {
   view: "2d",
   camera3d: "third",
   mouseSensitivity: MOUSE_SENSITIVITY.default,
+  touchLookSensitivity: TOUCH_LOOK_SENSITIVITY_DEFAULT,
 };

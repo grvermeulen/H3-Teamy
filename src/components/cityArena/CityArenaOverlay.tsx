@@ -15,12 +15,13 @@ import { ZONE_OPTIONS } from "@/lib/cityArena/constants";
 import { ArenaRoomLocation } from "./ArenaRoomLocation";
 import { ArenaPhaseScreens } from "./ArenaPhaseScreens";
 import { ArenaSettingsSheet, MENU_LABEL } from "./ArenaSettingsSheet";
-import { ArenaTouchTip } from "./ArenaTouchTip";
 import type { ArenaLayout, ArenaSettings } from "@/lib/cityArena/schemas";
 import {
   hasSeenArenaTouchTip,
   markArenaTouchTipSeen,
+  type TouchTipKind,
 } from "@/lib/cityArena/storage";
+import { ArenaLookSensitivity } from "./ArenaLookSensitivity";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { HostToast } from "./HostToast";
 import { useArenaRoom, type ArenaRoom } from "./useArenaRoom";
@@ -41,14 +42,13 @@ import ArenaLoadingScreen, {
   ATTRIBUTION_TEXT,
   MAP_LOAD_FAILURE_TEXT,
 } from "./ArenaLoadingScreen";
-import ArenaTouchButtons from "./ArenaTouchButtons";
+import ArenaTouchControls from "./ArenaTouchControls";
 import ArenaVitals from "./ArenaVitals";
 import ArenaWanted from "./ArenaWanted";
 import ArenaZoneWarning from "./ArenaZoneWarning";
 import ArenaBeerPrompt from "./ArenaBeerPrompt";
 import ArenaLandmarkPrompt from "./ArenaLandmarkPrompt";
 import DeathOverlay, { WASTED_WEBP } from "./DeathOverlay";
-import TouchStick from "./TouchStick";
 import {
   useArenaGame,
   type ArenaGame,
@@ -95,17 +95,23 @@ function useShowTouchControls(forceLayout: ArenaLayout | undefined): boolean {
   return forceLayout ? forceLayout === "mobile" : showTouch;
 }
 
-/** The first-run touch tip: shown once the touch controls are up, until it has been read. */
-function useTouchTip(active: boolean): { shown: boolean; dismiss: () => void } {
-  const [shown, setShown] = useState(false);
+/**
+ * The first-run touch tip: shown once the touch controls are up, until it has been read — once for
+ * the 2D layouts and once for 3D's look pad, which each have their own tip.
+ */
+function useTouchTip(
+  active: boolean,
+  kind: TouchTipKind,
+): { shown: boolean; dismiss: () => void } {
+  const [shownFor, setShownFor] = useState<TouchTipKind | null>(null);
   useEffect(() => {
-    if (active && !hasSeenArenaTouchTip()) setShown(true);
-  }, [active]);
+    if (active && !hasSeenArenaTouchTip(kind)) setShownFor(kind);
+  }, [active, kind]);
   const dismiss = useCallback(() => {
-    markArenaTouchTipSeen();
-    setShown(false);
-  }, []);
-  return { shown, dismiss };
+    markArenaTouchTipSeen(kind);
+    setShownFor(null);
+  }, [kind]);
+  return { shown: shownFor === kind, dismiss };
 }
 
 /**
@@ -328,9 +334,11 @@ type ArenaPlayfieldProps = {
   tip: { shown: boolean; dismiss: () => void };
   sharedScreen?: boolean;
   onOpenMap: () => void;
+  /** A menu, the map or an offer is open over the playfield. */
+  paused: boolean;
 };
 
-/** Canvas plus the loading, error, stick, buttons, death and debug layers drawn on top of it. */
+/** Canvas plus the loading, error, touch-control, death and debug layers drawn on top of it. */
 function ArenaPlayfield({
   canvasRef,
   game,
@@ -342,9 +350,9 @@ function ArenaPlayfield({
   tip,
   sharedScreen = false,
   onOpenMap,
+  paused,
 }: ArenaPlayfieldProps): React.JSX.Element {
   const playing = game.phase === "playing";
-  const twinStick = game.settings.twinStick;
   return (
     <div className="relative min-h-0 flex-1">
       <View3dLayer {...game.view3d} />
@@ -383,34 +391,13 @@ function ArenaPlayfield({
         />
       ) : null}
       {playing && showTouch ? (
-        <TouchStick stick={stick} onVector={game.setInputVector} />
-      ) : null}
-      {playing && showTouch && twinStick ? (
-        <TouchStick
-          side="right"
-          stick={aimStick}
-          onVector={game.setAimVector}
+        <ArenaTouchControls
+          game={game}
+          stick={stick}
+          aimStick={aimStick}
+          tip={tip}
+          paused={paused}
         />
-      ) : null}
-      {playing && showTouch ? (
-        <ArenaTouchButtons
-          inVehicle={game.hud.inVehicle}
-          canOrderBeer={game.hud.canOrderBeer}
-          interactionLabel={
-            game.hud.mission?.action ??
-            (game.hud.landmark
-              ? game.hud.landmark.cooldown > 0
-                ? "Even uitrusten"
-                : game.hud.landmark.action
-              : undefined)
-          }
-          onButton={game.setButton}
-          showFire={!twinStick}
-          onRadio={game.nextStation}
-        />
-      ) : null}
-      {playing && showTouch && tip.shown ? (
-        <ArenaTouchTip twinStick={twinStick} onDismiss={tip.dismiss} />
       ) : null}
       {game.phase === "loading" ? (
         <ArenaLoadingScreen
@@ -443,7 +430,7 @@ type ArenaFooterProps = {
 
 /**
  * The hint for each control scheme (spec §7); "V camera" only in 3D, the one view where V does
- * anything.
+ * anything, and on touch in 3D the look pad and the Schieten button (aim round §6).
  */
 function controlsHint(
   showTouch: boolean,
@@ -452,6 +439,8 @@ function controlsHint(
 ): string {
   if (!showTouch)
     return `WASD of pijltjes lopen of sturen · muis richt en schiet · ${view3d ? "rechtermuisknop vizier · " : ""}E instappen of biertje bestellen · Q, wiel of 1-6 wapens · M kaart · ${view3d ? "V camera · " : ""}R radio · Tab scorebord · Esc menu.`;
+  if (view3d)
+    return "Sleep links om te lopen of te sturen; sleep rechts om rond te kijken; houd Schieten vast om te schieten.";
   return twinStick
     ? "Sleep links op het scherm om te lopen of te sturen; sleep rechts om te richten en te schieten."
     : "Sleep links op het scherm om te lopen of te sturen; rechts: Schieten, Instappen, Wapen.";
@@ -549,7 +538,10 @@ export default function CityArenaOverlay({
         : undefined,
   });
   const showTouch = useShowTouchControls(game.settings.forceLayout);
-  const tip = useTouchTip(showTouch && game.phase === "playing");
+  const tip = useTouchTip(
+    showTouch && game.phase === "playing",
+    game.view3d.active ? "3d" : "2d",
+  );
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const closeMap = useCallback(() => setMapData(null), []);
   const openMap = (): void => setMapData(game.navigationMap());
@@ -611,6 +603,7 @@ export default function CityArenaOverlay({
         tip={tip}
         sharedScreen={entry.role === "hybrid"}
         onOpenMap={openMap}
+        paused={modalOpen}
       />
       <ArenaFooter
         showTouch={showTouch}
@@ -641,6 +634,14 @@ export default function CityArenaOverlay({
           onClose={closeMenu}
           hideView={entry.role === "hybrid"}
         >
+          {showTouch ? (
+            <ArenaLookSensitivity
+              value={game.settings.touchLookSensitivity}
+              onChange={(touchLookSensitivity) =>
+                game.updateSettings({ touchLookSensitivity })
+              }
+            />
+          ) : null}
           <button
             type="button"
             className="my-2 min-h-11 rounded border border-white/25 px-3 text-sm"

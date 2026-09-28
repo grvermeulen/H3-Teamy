@@ -21,6 +21,12 @@ import {
   type LockState,
   type MouseLook,
 } from "@/lib/cityArena/input/mouseLook";
+import {
+  createTouchCamera,
+  createTouchLook,
+  type TouchCamera,
+  type TouchLook,
+} from "@/lib/cityArena/input/touchLook";
 import type { CameraMode, View3dHandle } from "@/lib/cityArena/render3d";
 import { occupiedVehicle } from "@/lib/cityArena/sim/boarding";
 import { playerById } from "@/lib/cityArena/sim/players";
@@ -45,6 +51,8 @@ type Render3dModule = typeof import("@/lib/cityArena/render3d");
 /** A 3D view attached to a runtime. */
 type Attached = {
   look: MouseLook;
+  /** The touch look pad as the frame keeps it; its pitch range follows the mode like `look`'s. */
+  touch: TouchCamera;
   module: Render3dModule;
   /** Takes the view off the runtime and frees it. */
   detach(): void;
@@ -118,6 +126,7 @@ export function guardView3d(
         failed = true;
         runtime.view3d = null;
         runtime.look = null;
+        runtime.touchCamera = null;
         onFailure(error);
       }
     },
@@ -138,6 +147,8 @@ type AttachInput = {
   input: InputState;
   callbacks: View3dCallbacks;
   onFailure: (error: unknown) => void;
+  /** The touch look pad; the frame reads it through `runtime.touchCamera` while the view runs. */
+  touchPad: TouchLook;
 };
 
 /**
@@ -185,8 +196,15 @@ function handOver(
   look: MouseLook,
 ): Attached {
   const { runtime } = input;
+  // A drag made while the module loaded had no camera to turn; it must not jump the first frame.
+  input.touchPad.take();
+  const touch = createTouchCamera(
+    input.touchPad,
+    input.module.pitchLimitsFor(input.mode),
+  );
   runtime.view3d = handle;
   runtime.look = look;
+  runtime.touchCamera = touch;
   runtime.carLook = undefined;
   runtime.aim3d = undefined;
   input.callbacks.onLockChange({
@@ -195,12 +213,15 @@ function handOver(
   });
   return {
     look,
+    touch,
     module: input.module,
     detach() {
       if (runtime.view3d === handle) {
         runtime.view3d = null;
         runtime.look = null;
+        runtime.touchCamera = null;
       }
+      input.touchPad.reset();
       look.detach();
       handle.dispose();
       input.callbacks.onLockChange({ locked: false, lockFree: false });
@@ -230,6 +251,8 @@ export type MountOptions = {
   attachedRef: RefObject<Attached | null>;
   callbacks: View3dCallbacks;
   onFailure: (error: unknown) => void;
+  /** The touch look pad handed to the runtime with the view. */
+  touchPad: TouchLook;
   /** Loads the 3D module; the dynamic import unless a test hands in another. */
   load?: () => Promise<Render3dModule>;
 };
@@ -260,6 +283,7 @@ export function mountView3d(options: MountOptions): () => void {
         input: options.inputRef.current,
         callbacks: options.callbacks,
         onFailure: options.onFailure,
+        touchPad: options.touchPad,
       });
     })
     .catch((error: unknown) =>
@@ -309,12 +333,16 @@ export type UseView3dOptions = {
   onFallback: () => void;
   /** Opens the game menu: the player let go of the pointer lock (the browser's first Esc). */
   onPause: () => void;
+  /** "Kijkgevoeligheid": scales the touch look pad's turn per pixel; 1 when absent. */
+  touchLookSensitivity?: number;
 };
 
 /** What the overlay renders for the 3D view. */
 export type View3dControls = LockState & {
   /** Attach to the layer under the 2D canvas; the view puts its own WebGL canvas in it. */
   layerRef: RefObject<HTMLDivElement | null>;
+  /** The touch look pad (spec §6): the look surface and the fire button feed it. Stable. */
+  touchLook: TouchLook;
   /** True while the 3D view is meant to run. */
   active: boolean;
   /** The failure toast, or `null`. */
@@ -340,6 +368,18 @@ export function useReleaseLockWhile(open: boolean, release: () => void): void {
   }, [open, release]);
 }
 
+/** The touch look pad, made once; its turn per pixel follows the latest "Kijkgevoeligheid". */
+function useTouchPad(sensitivity: number | undefined): TouchLook {
+  const [pad] = useState(() => {
+    const setting = { scale: 1 };
+    return { setting, look: createTouchLook(() => setting.scale) };
+  });
+  useEffect(() => {
+    pad.setting.scale = sensitivity ?? 1;
+  }, [pad, sensitivity]);
+  return pad.look;
+}
+
 /** Re-applies the camera mode's pitch range to a running view whenever the mode changes. */
 function usePitchLimits(
   attachedRef: RefObject<Attached | null>,
@@ -347,7 +387,10 @@ function usePitchLimits(
 ): void {
   useEffect(() => {
     const attached = attachedRef.current;
-    attached?.look.setPitchLimits(...attached.module.pitchLimitsFor(mode));
+    if (!attached) return;
+    const limits = attached.module.pitchLimitsFor(mode);
+    attached.look.setPitchLimits(...limits);
+    attached.touch.limits = limits;
   }, [attachedRef, mode]);
 }
 
@@ -366,6 +409,7 @@ export function useView3d(options: UseView3dOptions): View3dControls {
   const onFallbackRef = useLatest(options.onFallback);
   const onPauseRef = useLatest(options.onPause);
   const [notice, showNotice] = useNotice();
+  const touchPad = useTouchPad(options.touchLookSensitivity);
   const [lock, setLock] = useState<LockState>({
     locked: false,
     lockFree: false,
@@ -392,6 +436,7 @@ export function useView3d(options: UseView3dOptions): View3dControls {
         showNotice(VIEW3D_FAILED_TEXT);
         onFallbackRef.current();
       },
+      touchPad,
     });
   }, [
     active,
@@ -403,7 +448,8 @@ export function useView3d(options: UseView3dOptions): View3dControls {
     onFallbackRef,
     onPauseRef,
     showNotice,
+    touchPad,
   ]);
   const release = useCallback(() => attachedRef.current?.look.release(), []);
-  return { layerRef, active, notice, release, ...lock };
+  return { layerRef, active, notice, release, touchLook: touchPad, ...lock };
 }

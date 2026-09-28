@@ -31,6 +31,7 @@ import { playerById } from "@/lib/cityArena/sim/players";
 import type { WorldInput } from "@/lib/cityArena/sim/types";
 import type { Runtime } from "../arenaRuntime";
 import { prepareCanvas } from "../hudCanvas";
+import { applyTouchLook, lookPadEngaged, lookPitch } from "./touchLook3d";
 
 /** A runtime whose frame is drawn by the 3D view. */
 export type Runtime3d = Runtime & { view3d: View3dHandle; look: MouseLook };
@@ -102,7 +103,8 @@ function crosshairAim(
  * (`crosshairAim`); in a car the yaw eases behind the heading once the mouse rests (and rides
  * along with the car in first person, `nextCarYaw`); a touch or gamepad aim stick is read
  * relative to the camera, which turns toward it, and a lone movement stick turns it toward the
- * walk (`stickTurnedYaw`). Movement is then rotated into the camera's frame.
+ * walk (`stickTurnedYaw`) until the touch look pad has turned it (`touchLook3d.ts`), whose drag
+ * counts as a look like the mouse's. Movement is then rotated into the camera's frame.
  *
  * @param runtime - The 3D runtime; its yaw, car-camera memory and sent aim are updated.
  * @param live - This frame's merged keyboard, pointer, stick and gamepad input.
@@ -117,9 +119,10 @@ export function input3d(
   const { look } = runtime;
   const player = playerById(runtime.state, runtime.netplay.playerId);
   const car = player ? occupiedVehicle(runtime.state, player) : null;
+  const touchYaw = applyTouchLook(runtime, car ?? player ?? null);
   const next = nextCarYaw({
     yaw: look.yaw(),
-    yawDelta: look.takeYawDelta(),
+    yawDelta: look.takeYawDelta() + touchYaw,
     heading: car?.heading ?? null,
     mode: runtime.camera3d ?? "third",
     dt,
@@ -130,7 +133,12 @@ export function input3d(
     live.aim === null
       ? crosshairAim(runtime, car ?? player, next.yaw)
       : stickWorldYaw(next.yaw, live.aim);
-  const yaw = stickTurnedYaw(next.yaw, live, car !== null, dt);
+  const yaw = stickTurnedYaw(
+    next.yaw,
+    live,
+    car !== null || lookPadEngaged(runtime),
+    dt,
+  );
   look.setYaw(yaw);
   runtime.aim3d = aim;
   runtime.ads3d = live.ads === true;
@@ -150,7 +158,7 @@ function view3dFrame(
     tiles: scene.world.tiles,
     structures: runtime.state.structures ?? NO_STRUCTURES,
     yaw: runtime.look.yaw(),
-    pitch: runtime.look.pitch(),
+    pitch: lookPitch(runtime),
     aim: runtime.aim3d ?? runtime.look.yaw(),
     mode: runtime.camera3d ?? "third",
     dt,

@@ -101,8 +101,7 @@ immersion pass (`2026-09-27-arena-immersion-design.md`, PRs #744–#749, 0.6.0).
 - In the first-person cockpit the right hand leaves the wheel (the wheel keeps turning under the
   left hand) and holds the gun out of the window or over the dash, pointing along the aim; its
   muzzle is the local muzzle in first person.
-- Tank and bus: no arm (the tank fires its cannon; a bus driver fires through the door as today,
-  arm from the driver window).
+- Tank: no arm (it fires its cannon). Bus: the arm comes out of the driver window only.
 
 ## 8. Kenney cars (track D — `feat/arena-kenney-cars`)
 

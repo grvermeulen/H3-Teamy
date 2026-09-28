@@ -473,6 +473,7 @@ function useArenaView3d(options: ArenaView3dOptions): View3dControls {
     hudCanvasRef: options.canvasRef,
     onFallback: fallbackTo2d,
     onPause: () => onPause?.(),
+    touchLookSensitivity: settings.touchLookSensitivity,
   });
 }
 

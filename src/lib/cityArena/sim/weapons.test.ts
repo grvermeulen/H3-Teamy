@@ -46,6 +46,21 @@ describe("walkingInput", () => {
   });
 });
 
+describe("aimedSpec", () => {
+  it("narrows a spraying weapon's cone while aiming down the sights, and nothing else", () => {
+    const shotgun = aimedSpec(WEAPONS.shotgun, true);
+    expect(shotgun.spreadRad).toBeCloseTo(
+      WEAPONS.shotgun.spreadRad * ADS_SPREAD_FACTOR,
+    );
+    expect({ ...shotgun, spreadRad: 0 }).toEqual({
+      ...WEAPONS.shotgun,
+      spreadRad: 0,
+    });
+    expect(aimedSpec(WEAPONS.uzi, false)).toBe(WEAPONS.uzi);
+    expect(aimedSpec(WEAPONS.pistol, true).spreadRad).toBe(0);
+  });
+});
+
 describe("weapons", () => {
   it("carries the spec values and Dutch labels", () => {
     expect(WEAPONS.pistol).toMatchObject({

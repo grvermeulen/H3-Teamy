@@ -68,7 +68,12 @@ function fakeRuntime(facing = 1.1): Runtime {
 }
 
 /** The props the tests change between renders. */
-type Props = { active: boolean; mode: "third" | "first"; epoch: number };
+type Props = {
+  active: boolean;
+  mode: "third" | "first";
+  epoch: number;
+  touchLookSensitivity?: number;
+};
 
 /** Renders the hook, switched off, with a layer and a HUD canvas in place. */
 function renderView3d(facing = 1.1) {
@@ -188,6 +193,55 @@ describe("useView3d", () => {
     expect(runtimeRef.current.look!.pitch()).toBeCloseTo(0.7);
     on({ mode: "first" });
     expect(runtimeRef.current.look!.pitch()).toBeCloseTo(0.5);
+  });
+
+  it("hands the runtime the touch look pad in the mode's pitch range, and takes it back in 2D", async () => {
+    mockCreateView3d.mockReturnValue(fakeHandle());
+    const { result, rerender, runtimeRef, on } = renderView3d();
+    // A drag made while the 3D module loads has no camera yet, and must not jump the first frame.
+    result.current.touchLook.onDown({ pointerId: 9, clientX: 0, clientY: 0 });
+    result.current.touchLook.onMove({ pointerId: 9, clientX: 80, clientY: 0 });
+    result.current.touchLook.onUp({ pointerId: 9, clientX: 80, clientY: 0 });
+    on();
+    await waitFor(() => expect(runtimeRef.current.touchCamera).toBeTruthy());
+    expect(runtimeRef.current.touchCamera!.pad.take()).toEqual({
+      yaw: 0,
+      pitch: 0,
+    });
+    await waitFor(() => expect(runtimeRef.current.touchCamera).toBeTruthy());
+    const touch = runtimeRef.current.touchCamera!;
+    expect(touch.pad).toBe(result.current.touchLook);
+    expect(touch.limits).toEqual([-0.6, 0.7]);
+    on({ mode: "first" });
+    expect(touch.limits).toEqual([-0.5, 0.5]);
+    const pad = result.current.touchLook;
+    pad.onDown({ pointerId: 1, clientX: 0, clientY: 0 });
+    rerender({ active: false, mode: "first", epoch: 0 });
+    expect(runtimeRef.current.touchCamera).toBeNull();
+    // The finger held when 3D switched off no longer owns the pad.
+    pad.onDown({ pointerId: 2, clientX: 0, clientY: 0 });
+    pad.onMove({ pointerId: 2, clientX: 10, clientY: 0 });
+    expect(pad.take().yaw).toBeGreaterThan(0);
+  });
+
+  it("scales the look pad by the latest Kijkgevoeligheid, keeping the same pad", () => {
+    const { result, rerender } = renderView3d();
+    const pad = result.current.touchLook;
+    const dragTenPixels = (pointerId: number): number => {
+      pad.onDown({ pointerId, clientX: 0, clientY: 0 });
+      pad.onMove({ pointerId, clientX: 10, clientY: 0 });
+      pad.onUp({ pointerId, clientX: 10, clientY: 0 });
+      return pad.take().yaw;
+    };
+    const base = dragTenPixels(1);
+    rerender({
+      active: false,
+      mode: "third",
+      epoch: 0,
+      touchLookSensitivity: 2,
+    });
+    expect(result.current.touchLook).toBe(pad);
+    expect(dragTenPixels(2)).toBeCloseTo(base * 2, 6);
   });
 
   it("falls back to 2D with a toast but no Sentry error on a device without WebGL2", async () => {
