@@ -225,7 +225,7 @@ function poseFirstPerson(
 ): OverlayPass | null {
   const drawn = handsInput(view.input, entities, frame);
   const cockpit = cockpitPose(view.cockpit, entities, frame, view.gun);
-  view.ownFlashInPass = drawn !== null || (cockpit?.driveBy ?? null) !== null;
+  view.ownFlashInPass = drawn !== null || Boolean(cockpit?.driveBy);
   const pass = view.hands.update(camera, drawn, cockpit);
   if (view.hands.muzzleWorld(view.muzzle))
     entities.muzzles.set(frame.scene.localPlayerId, view.muzzle);
