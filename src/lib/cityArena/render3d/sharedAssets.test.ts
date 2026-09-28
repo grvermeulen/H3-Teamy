@@ -1,6 +1,11 @@
 import { Mesh, type BufferGeometry, type Material } from "three";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  carAssetsReady,
+  loadCarAssets,
+  resetCarAssetsForTests,
+} from "./carAssets";
+import {
   characterAssetsReady,
   loadCharacterAssets,
   resetCharacterAssetsForTests,
@@ -22,6 +27,8 @@ import {
   fixtureRigGltf,
 } from "./testing/gltfFixture";
 import { createWeaponModel } from "./weapons3d";
+import { fixtureCarManifest, fixtureCarScene } from "./testing/carFixture";
+import { createVehicle3d } from "./vehicles3d";
 
 /** Every mesh's geometry and material under a pickup's object. */
 function pickupParts(): (BufferGeometry | Material)[] {
@@ -123,5 +130,22 @@ describe("disposeSharedAssets", () => {
     disposeSharedAssets();
     expect(characterAssetsReady()).toBeNull();
     resetCharacterAssetsForTests();
+  });
+
+  it("frees the loaded Kenney cars and the geometry built from them", async () => {
+    resetCarAssetsForTests();
+    const manifest = JSON.stringify(fixtureCarManifest());
+    const cars = await loadCarAssets({
+      fetch: async (url) =>
+        new Response(url.endsWith("manifest.json") ? manifest : url),
+      parse: async () => ({ scene: fixtureCarScene() }),
+    });
+    const vehicle = createVehicle3d("sedan", 0, cars);
+    const body = vehicle.object.getObjectByName("body") as Mesh;
+    const free = vi.spyOn(body.geometry, "dispose");
+    disposeSharedAssets();
+    expect(carAssetsReady()).toBeNull();
+    expect(free).toHaveBeenCalledTimes(1);
+    resetCarAssetsForTests();
   });
 });

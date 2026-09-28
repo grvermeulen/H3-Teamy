@@ -20,7 +20,7 @@ import {
 import type { ContactSpot } from "./missionMarkers";
 import { createPickup3d } from "./pickups3d";
 import type { OverlayPass, RenderQuality } from "./renderer3d";
-import { createVehicle3d } from "./vehicles3d";
+import { createVehicleFactory } from "./vehicles3d";
 import type { ViewModelInput } from "./viewmodel";
 import {
   createViewModelPass,
@@ -28,10 +28,10 @@ import {
   type ViewModelPass,
 } from "./viewModelPass";
 
-/** The real models: the glTF cast with its procedural fallback, vehicles and pickups. */
+/** The real models: the glTF cast and the Kit's vehicles with their procedural fallbacks, pickups. */
 export const REAL_ENTITY_FACTORIES: EntityFactories = {
   ...createCharacterFactory(),
-  vehicle: createVehicle3d,
+  ...createVehicleFactory(),
   pickup: createPickup3d,
 };
 

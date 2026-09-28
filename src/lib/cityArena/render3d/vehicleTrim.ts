@@ -23,7 +23,7 @@ const EU_STRIP_M = 0.055;
 const EU_BLUE = 0x23469e;
 
 /** A plate's colours, and whether it carries the EU strip. */
-type PlateLook = { plate: number; letters: number; euStrip: boolean };
+export type PlateLook = { plate: number; letters: number; euStrip: boolean };
 
 /** Today's yellow plate with black letters, and the dark blue one with white letters of old cars. */
 export const PLATE_LOOKS = {
@@ -97,10 +97,21 @@ export function addDoorLines(
 }
 
 /** Where one plate sits: the front (+1) or back (−1), its face along the body and its middle's height. */
-type PlateSpot = { end: 1 | -1; face: number; height: number };
+export type PlateSpot = { end: 1 | -1; face: number; height: number };
 
-/** One plate with its lettering and, when its look has one, the EU strip on the left. */
-function addPlate(kit: Kit, spot: PlateSpot, look: PlateLook): void {
+/**
+ * One plate with its lettering and, when its look has one, the EU strip on the left, its face just
+ * proud of `spot.face`.
+ *
+ * @param kit - Where its parts go.
+ * @param spot - Which end, the face it stands on and its middle's height.
+ * @param look - Its colours.
+ */
+export function addPlateAt(
+  kit: Pick<Kit, "tint">,
+  spot: PlateSpot,
+  look: PlateLook,
+): void {
   const { end, height } = spot;
   const outer = spot.face + end * PLATE.proud;
   const x: [number, number] =
@@ -152,7 +163,7 @@ export function addPlates(
 ): void {
   const face = kit.length / 2;
   if (heights.front !== null)
-    addPlate(kit, { end: 1, face, height: heights.front }, look);
+    addPlateAt(kit, { end: 1, face, height: heights.front }, look);
   if (heights.rear !== null)
-    addPlate(kit, { end: -1, face: -face, height: heights.rear }, look);
+    addPlateAt(kit, { end: -1, face: -face, height: heights.rear }, look);
 }

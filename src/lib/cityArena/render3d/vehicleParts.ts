@@ -114,6 +114,24 @@ export const paintMaterial: (hex: number) => MeshPhongMaterial = memoise(
     }),
 );
 
+/**
+ * The paint of a Kit model in one body colour, shared by every such vehicle painted in it: the
+ * vertices carry the Kit's shading as a grey the colour is multiplied by.
+ *
+ * @param hex - The colour, `0xrrggbb`.
+ * @returns The shared material.
+ */
+export const shadedPaintMaterial: (hex: number) => MeshPhongMaterial = memoise(
+  (hex: number) =>
+    new MeshPhongMaterial({
+      color: hex,
+      vertexColors: true,
+      shininess: GLOSS_SHININESS,
+      specular: GLOSS_SPECULAR,
+      flatShading: true,
+    }),
+);
+
 /** The one vertex-coloured material, created on first use. */
 let sharedDetail: MeshPhongMaterial | null = null;
 /** The additive material of every vehicle's light flares, created on first use. */
@@ -277,8 +295,13 @@ export function cylinder(spec: CylinderSpec): BufferGeometry {
   return geometry;
 }
 
-/** Writes one colour into every vertex, in three's working colour space. */
-function tintVertices(geometry: BufferGeometry, hex: number): void {
+/**
+ * Writes one colour into every vertex, in three's working colour space.
+ *
+ * @param geometry - The geometry; its `color` attribute is replaced.
+ * @param hex - The colour, `0xrrggbb`.
+ */
+export function tintVertices(geometry: BufferGeometry, hex: number): void {
   const colour = new Color(hex);
   const count = geometry.getAttribute("position").count;
   const data = new Float32Array(count * 3);
