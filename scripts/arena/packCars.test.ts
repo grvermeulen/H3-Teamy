@@ -119,7 +119,7 @@ const POLICE: CarSource = {
   kind: "police",
   model: "fixture",
   title: "Fixture",
-  paint: SWATCH.redPaint,
+  paint: [SWATCH.redPaint],
   lightBar: true,
   livery: true,
 };

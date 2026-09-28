@@ -293,8 +293,8 @@ export function swatchOfTriangle(
 
 /** How a car's body is split and coloured. */
 export type BodyRules = {
-  /** The swatch of the body paint, tinted per car in the view. */
-  paint: SwatchKey;
+  /** The swatches of the body paint, tinted per car in the view. */
+  paint: readonly SwatchKey[];
   /** Swatches drawn in another colour, sRGB hex, their gradient kept. */
   recolour: Partial<Record<SwatchKey, number>>;
   /** The red and blue lamps on the roof are the light bar's two lenses. */
@@ -388,7 +388,8 @@ export function roleOf(
   if (special) return { role: special, plate: null };
   const plate = plateEndOf(facts, bounds);
   if (plate) return { role: "detail", plate };
-  return { role: facts.swatch === rules.paint ? "paint" : "detail", plate };
+  const painted = rules.paint.includes(facts.swatch);
+  return { role: painted ? "paint" : "detail", plate };
 }
 
 /** The colour a number plate's own face is drawn in: the view mounts a Dutch plate over it. */

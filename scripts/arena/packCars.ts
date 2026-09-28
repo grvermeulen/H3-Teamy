@@ -192,8 +192,11 @@ export type CarSource = {
   model: string;
   /** Its title, for the credits. */
   title: string;
-  /** The swatch its body is painted from, tinted per car in the view. */
-  paint: SwatchKey;
+  /**
+   * The swatches its body is painted from, tinted per car in the view; the first is the Kit's own
+   * body colour.
+   */
+  paint: readonly SwatchKey[];
   /** Its red and blue roof lamps are the light bar's lenses. */
   lightBar?: boolean;
   /** Measure the flank between the arches for the police livery. */
@@ -218,30 +221,36 @@ export const CAR_SOURCES: readonly CarSource[] = [
     kind: "compact",
     model: "hatchback-sports",
     title: "Hatchback Sports",
-    paint: SWATCH.greenPaint,
+    paint: [SWATCH.greenPaint],
   },
-  { kind: "sedan", model: "sedan", title: "Sedan", paint: SWATCH.redPaint },
+  { kind: "sedan", model: "sedan", title: "Sedan", paint: [SWATCH.redPaint] },
   {
     kind: "sport",
     model: "sedan-sports",
     title: "Sedan Sports",
-    paint: SWATCH.redPaint,
+    paint: [SWATCH.redPaint],
   },
   {
     kind: "police",
     model: "police",
     title: "Police",
-    paint: SWATCH.light,
+    // White all over, as Dutch police cars are: the Kit's blue-grey upper body too.
+    paint: [SWATCH.light, SWATCH.blueGrey],
     lightBar: true,
     livery: true,
   },
-  { kind: "van", model: "van", title: "Van", paint: SWATCH.bluePaint },
-  { kind: "pickup", model: "truck", title: "Truck", paint: SWATCH.greenPaint },
+  { kind: "van", model: "van", title: "Van", paint: [SWATCH.bluePaint] },
+  {
+    kind: "pickup",
+    model: "truck",
+    title: "Truck",
+    paint: [SWATCH.greenPaint],
+  },
   {
     kind: "tractor",
     model: "tractor",
     title: "Tractor",
-    paint: SWATCH.blueGrey,
+    paint: [SWATCH.blueGrey],
     wheelRecolour: { [SWATCH.rim]: TRACTOR_RIM },
     addedLamps: TRACTOR_LAMPS,
   },
@@ -317,7 +326,7 @@ function entryOf(
   return roundedDeep({
     source: source.model,
     size,
-    paint: swatchMiddle(atlas, source.paint),
+    paint: swatchMiddle(atlas, source.paint[0]),
     wheels,
     lamps: [
       ...lampsOf(split.roles.head, false),

@@ -21,7 +21,7 @@ import {
 } from "./carGeometry";
 
 const RULES: BodyRules = {
-  paint: SWATCH.redPaint,
+  paint: [SWATCH.redPaint],
   recolour: { [SWATCH.glass]: 0x2a3a4c },
   lightBar: true,
 };
