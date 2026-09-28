@@ -113,7 +113,12 @@ export function createCockpitGun(): CockpitGun {
     object: arm.object,
     update(driveBy, kind, tick, dt) {
       arm.object.visible = driveBy !== null;
-      if (!driveBy) return false;
+      if (!driveBy) {
+        // A hidden gun comes back steady: no kick or flame left over from before it hid.
+        state.kick = 0;
+        state.flash = 0;
+        return false;
+      }
       registerShot(state, driveBy.firedTick, tick);
       input.kind = kind;
       input.side = driveBy.side;

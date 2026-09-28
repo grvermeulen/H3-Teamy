@@ -337,6 +337,22 @@ describe("createCockpit3d: the gun hand", () => {
     expect(named(other.object, "muzzleFlash").visible).toBe(false);
   });
 
+  it("brings the gun back steady, without the kick and flash of a shot before it hid", () => {
+    const aiming = shooting("left", -1.6, { firedTick: null });
+    const muzzle = new Vector3();
+    const steady = createCockpit3d();
+    steady.update(input({ tick: TICK, driveBy: aiming }));
+    steady.muzzleWorld(muzzle);
+    const rest = muzzle.y;
+    const cockpit = createCockpit3d();
+    cockpit.update(input({ tick: TICK, driveBy: shooting("left", -1.6) }));
+    cockpit.update(input({ tick: TICK + 1 }));
+    cockpit.update(input({ tick: TICK + 2, driveBy: aiming }));
+    expect(named(cockpit.object, "muzzleFlash").visible).toBe(false);
+    cockpit.muzzleWorld(muzzle);
+    expect(muzzle.y).toBeCloseTo(rest);
+  });
+
   it("detaches the gun hand with the cockpit", () => {
     const cockpit = createCockpit3d();
     cockpit.update(input({ tick: TICK, driveBy: shooting("front", 0) }));
