@@ -18,6 +18,7 @@ import {
   type Shape,
 } from "./vehicleShapes";
 import type { WheelLook } from "./vehicleParts";
+import { addPlates, addWheelArches } from "./vehicleTrim";
 
 /** The blue skirt of the city bus, from its sprite. */
 const BUS_BLUE = 0x3060a0;
@@ -174,6 +175,11 @@ const BUS_WHEEL: WheelLook = {
   hub: DARK_HUB,
 };
 
+/** Half the width of the bus's skirt, metres: where its arches stand. */
+const BUS_SIDE_M = 1.22;
+/** The bus's plates: the front one under the windscreen, the rear one over the bumper, metres. */
+const BUS_PLATES = { front: 0.46, rear: 0.62 };
+
 /** A white-and-blue city bus with a window band and an "H3" destination board. */
 const busShape: Shape = (kit) => {
   addParts(kit, BUS_SHELL);
@@ -182,12 +188,13 @@ const busShape: Shape = (kit) => {
   addParts(kit, BUS_ENDS);
   addParts(kit, H3_BARS.map(signBar));
   addBumpers(kit, BUS_BUMPER_Y_M);
-  return {
-    axles: [
-      axle(kit, BUS_FRONT_AXLE_X_M, BUS_WHEEL, true),
-      axle(kit, BUS_REAR_AXLE_X_M, BUS_WHEEL, false),
-    ],
-  };
+  const axles = [
+    axle(kit, BUS_FRONT_AXLE_X_M, BUS_WHEEL, true),
+    axle(kit, BUS_REAR_AXLE_X_M, BUS_WHEEL, false),
+  ];
+  addWheelArches(kit, axles, BUS_SIDE_M);
+  addPlates(kit, BUS_PLATES);
+  return { axles };
 };
 
 /** Yellow rims, as on the tractor's sprite. */

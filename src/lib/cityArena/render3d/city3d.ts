@@ -8,6 +8,7 @@ import * as Sentry from "@sentry/nextjs";
 import { Group, TextureLoader, type Texture } from "three";
 import type { DecodedTile } from "../world/decode";
 import type { LandmarkStyles } from "./buildCell";
+import { cityDetailFor } from "./cityDetail";
 import type { FurnitureInstance } from "./furnitureMesh";
 import { viewDistanceFor, type RenderQuality } from "./renderer3d";
 import { surfaceFallbackColour, surfaceOfUrl, surfaceShade } from "./textures";
@@ -16,6 +17,7 @@ import {
   type StructureView,
   type WorldCells,
 } from "./worldCells";
+import { disposeSharedCrowns } from "./treeMesh";
 import {
   createWorldMaterials,
   disposeWorldMaterials,
@@ -39,8 +41,9 @@ export type City3d = {
   /** Add to the scene once; it holds the cells. */
   object: Group;
   /**
-   * Streams the city around `focus` out to the view distance of the frame's quality and width,
-   * and drops the buildings that fell (the same frame the structure list says so).
+   * Streams the city around `focus` out to the view distance of the frame's quality and width, at
+   * the detail its quality builds, and drops the buildings that fell (the same frame the structure
+   * list says so).
    */
   update(focus: { x: number; y: number }, frame: CityFrame): void;
   /** The built cells' furniture near a point; see {@link WorldCells.furnitureNear}. */
@@ -152,6 +155,7 @@ export function createCity3d(
         frame.structures,
         viewDistanceFor(frame.quality, frame.size.width),
         WORLD_BUILD_BUDGET_MS,
+        cityDetailFor(frame.quality),
       );
     },
     keepDown(piece, pose) {
@@ -167,6 +171,7 @@ export function createCity3d(
     dispose() {
       streamed?.cells.dispose();
       streamed = null;
+      disposeSharedCrowns(materials);
       disposeWorldMaterials(materials);
     },
   };

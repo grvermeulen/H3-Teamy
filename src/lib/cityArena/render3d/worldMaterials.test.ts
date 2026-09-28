@@ -15,9 +15,8 @@ import {
   createColourRecordingContext,
   litWindowFills,
 } from "./testing/recordingCanvas";
-import { FACADE_STYLES, SURFACE_KEYS } from "./textures";
+import { SURFACE_KEYS } from "./textures";
 import {
-  FACADE_VARIANTS,
   GROUND_RENDER_ORDER,
   createWorldMaterials,
   disposeWorldMaterials,
@@ -61,18 +60,16 @@ describe("createWorldMaterials", () => {
     expect(load).toHaveBeenCalledTimes(SURFACE_KEYS.length);
   });
 
-  it("gives every façade style a few distinct seeded variants", () => {
+  it("draws every wall through one atlas material that glows at its lit windows", () => {
     stubCanvas();
 
-    const { facades } = createWorldMaterials(() => new Texture());
+    const { facade, detail } = createWorldMaterials(() => new Texture());
 
-    for (const style of FACADE_STYLES) {
-      expect(facades[style]).toHaveLength(FACADE_VARIANTS);
-      expect(new Set(facades[style]).size).toBe(FACADE_VARIANTS);
-      for (const material of facades[style]) {
-        expect(material.emissiveMap).not.toBeNull();
-      }
-    }
+    expect(facade.map).not.toBeNull();
+    expect(facade.emissiveMap).not.toBeNull();
+    expect(facade.vertexColors).toBe(true);
+    expect(detail.vertexColors).toBe(true);
+    expect(detail).not.toBe(facade);
   });
 
   it("makes the lamp head glow in the lamp colour", () => {
@@ -86,18 +83,17 @@ describe("createWorldMaterials", () => {
     expect(materials.lampGlow.map).not.toBeNull();
   });
 
-  it("lights at least two windows on every façade variant it seeds", () => {
+  it("paints the atlas and its glow map, lighting windows on both", () => {
     const contexts = stubCanvas();
 
     createWorldMaterials(() => new Texture());
 
-    // Each façade material paints its colour map, then its glow map.
-    const variants = FACADE_STYLES.length * FACADE_VARIANTS;
-    expect(contexts).toHaveLength(variants * 2);
-    const colourMaps = contexts.filter((_, index) => index % 2 === 0);
-    for (const context of colourMaps) {
-      expect(litWindowFills(context).length).toBeGreaterThanOrEqual(2);
-    }
+    expect(contexts).toHaveLength(2);
+    const [colourMap, glowMap] = contexts;
+    const painted = new Set(litWindowFills(colourMap));
+    const glowing = litWindowFills(glowMap);
+    expect(glowing.length).toBeGreaterThan(20);
+    for (const pane of glowing) expect(painted.has(pane)).toBe(true);
   });
 
   it("gives trees a lighter yellow-green and a deeper blue-green canopy", () => {
@@ -183,8 +179,8 @@ describe("disposeWorldMaterials", () => {
     const materials = createWorldMaterials(() => new Texture());
     const grass = vi.spyOn(materials.surfaces.grass, "dispose");
     const grassMap = vi.spyOn(materials.surfaces.grass.map!, "dispose");
-    const brick = materials.facades.brick[0];
-    const brickGlow = vi.spyOn(brick.emissiveMap!, "dispose");
+    const atlasGlow = vi.spyOn(materials.facade.emissiveMap!, "dispose");
+    const atlas = vi.spyOn(materials.facade.map!, "dispose");
     const glowMap = vi.spyOn(materials.lampGlow.map!, "dispose");
     const bench = vi.spyOn(materials.bench, "dispose");
 
@@ -192,7 +188,8 @@ describe("disposeWorldMaterials", () => {
 
     expect(grass).toHaveBeenCalledTimes(1);
     expect(grassMap).toHaveBeenCalledTimes(1);
-    expect(brickGlow).toHaveBeenCalledTimes(1);
+    expect(atlasGlow).toHaveBeenCalledTimes(1);
+    expect(atlas).toHaveBeenCalledTimes(1);
     expect(glowMap).toHaveBeenCalledTimes(1);
     expect(bench).toHaveBeenCalledTimes(1);
   });

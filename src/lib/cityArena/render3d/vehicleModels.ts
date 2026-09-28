@@ -4,7 +4,7 @@
  * police car in Dutch blue-and-orange livery, the white-and-blue city bus.
  *
  * A model is one merged body mesh (a draw group per material), four wheel meshes that spin and
- * steer, and — for the police car and the tank — a light bar or a turret. Its frame: local forward
+ * steer, the lamps' flares, and — for the police car and the tank — a light bar or a turret. Its frame: local forward
  * +X, origin at the footprint centre on the ground, exactly `lengthOf × widthOf` of the simulation.
  */
 import { Group, Mesh, Object3D, type MeshLambertMaterial } from "three";
@@ -15,6 +15,13 @@ import {
   POLICE_LIGHT_BLUE,
   POLICE_LIGHT_RED,
 } from "../render/palette";
+import {
+  lampMaterial,
+  lampOf,
+  rigLamps,
+  type Lamp,
+  type LampRig,
+} from "./vehicleLamps";
 import {
   createPartSet,
   detailMaterial,
@@ -129,6 +136,7 @@ export type VehicleModel = {
   wheels: WheelRig[];
   lightBar: LightBarRig | null;
   turret: Object3D | null;
+  lamps: LampRig;
 };
 
 /** Every kind's shape. */
@@ -144,8 +152,13 @@ const LENS_WIDTH_M = 0.55;
 /** Distance of each lens's centre from the centre line. */
 const LENS_OFFSET_M = 0.29;
 
-/** A kit adding to `parts`, painted in the vehicle's body colour. */
-function createKit(kind: VehicleKind, colour: number, parts: PartSet): Kit {
+/** A kit adding to `parts`, painted in the vehicle's body colour; head and tail lamps go in `lamps`. */
+function createKit(
+  kind: VehicleKind,
+  colour: number,
+  parts: PartSet,
+  lamps: Lamp[],
+): Kit {
   const paint = paintMaterial(bodyColour(kind, colour));
   const detail = detailMaterial();
   return {
@@ -154,10 +167,14 @@ function createKit(kind: VehicleKind, colour: number, parts: PartSet): Kit {
     height: vehicleHeight(kind),
     paint: (geometry) => parts.add(paint, geometry),
     tint: (geometry, hex) => parts.add(detail, geometry, hex),
-    glow: (geometry, hex) => parts.add(glowMaterial(hex), geometry),
+    glow: (geometry, hex) => {
+      const lamp = lampOf(geometry, hex);
+      if (lamp) lamps.push(lamp);
+      parts.add(lampMaterial(hex), geometry);
+    },
     assemble: (name, list) => {
       const own = createPartSet();
-      addParts(createKit(kind, colour, own), list);
+      addParts(createKit(kind, colour, own, []), list);
       return own.toMesh(name);
     },
   };
@@ -214,19 +231,23 @@ function mountLightBar(
  *
  * @param kind - The vehicle kind.
  * @param colour - `VehicleState.colour`; ignored by kinds with a fixed livery.
- * @returns The model with its wheels and, where the kind has them, light bar and turret.
+ * @returns The model with its wheels, its lamps and, where the kind has them, light bar and turret.
  */
 export function buildVehicleModel(
   kind: VehicleKind,
   colour: number,
 ): VehicleModel {
   const parts = createPartSet();
-  const rig = SHAPES[kind](createKit(kind, colour, parts));
+  const glowing: Lamp[] = [];
+  const rig = SHAPES[kind](createKit(kind, colour, parts, glowing));
   const root = new Group();
   root.name = `vehicle-${kind}`;
-  root.add(parts.toMesh("body"));
+  const body = parts.toMesh("body");
+  root.add(body);
+  const lamps = rigLamps(body, glowing);
+  if (lamps.flares) root.add(lamps.flares);
   const wheels = rig.axles.flatMap((axle) => mountAxle(root, axle));
   const lightBar = rig.lightBar ? mountLightBar(root, rig.lightBar) : null;
   if (rig.turret) root.add(rig.turret);
-  return { root, wheels, lightBar, turret: rig.turret ?? null };
+  return { root, wheels, lightBar, turret: rig.turret ?? null, lamps };
 }

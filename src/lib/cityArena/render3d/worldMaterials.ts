@@ -8,25 +8,17 @@ import {
   DataTexture,
   DoubleSide,
   LinearFilter,
+  MeshBasicMaterial,
   MeshLambertMaterial,
   PointsMaterial,
   type Texture,
 } from "three";
 import { FURNITURE_FILL, ROAD_CENTRE_LINE } from "../render/palette";
-import { seedFromString } from "../sim/rng";
+import { createFacadeAtlasMaterial } from "./facadeAtlas";
+import { createLampPoolMaterial } from "./lampPools";
 import { LAMP_GLOW } from "./palette3d";
-import {
-  FACADE_STYLES,
-  createFacadeMaterial,
-  createSurfaceMaterials,
-  type FacadeStyle,
-  type SurfaceKey,
-} from "./textures";
+import { createSurfaceMaterials, type SurfaceKey } from "./textures";
 
-/** Seeded façade variants per style, so neighbouring buildings of one style differ. */
-export const FACADE_VARIANTS = 3;
-/** Lit window share of each variant, around a third, as in an evening town. */
-const FACADE_LIT_SHARES: readonly number[] = [0.28, 0.35, 0.42];
 /** Bark brown of a tree trunk. */
 const TRUNK_COLOUR = 0x4a3728;
 /** The lighter canopy: a yellowish olive green that catches the last light. */
@@ -62,7 +54,8 @@ export type GroundLayer =
   | "water"
   | "pavement"
   | "road"
-  | "marking";
+  | "marking"
+  | "paint";
 
 /**
  * The `renderOrder` of each ground layer's meshes. Coplanar layers cannot be told apart by depth
@@ -76,7 +69,7 @@ export type GroundLayer =
  * The contract this relies on:
  * - the renderer sorts objects (`renderer.sortObjects === true`, three.js's default), or the
  *   orders are ignored and the ground paints over whatever happened to be drawn before it;
- * - no other opaque object has a `renderOrder` at or below the highest ground order (−93);
+ * - no other opaque object has a `renderOrder` at or below the highest ground order (−92);
  * - no ancestor `Group` of the city or of any opaque object has a negative `renderOrder` (three.js
  *   sorts by the nearest group's order before an object's own).
  */
@@ -89,6 +82,7 @@ export const GROUND_RENDER_ORDER: Readonly<Record<GroundLayer, number>> = {
   pavement: -95,
   road: -94,
   marking: -93,
+  paint: -92,
 };
 
 /** Every material the city builder draws with; all are shared across cells. */
@@ -96,39 +90,39 @@ export type WorldMaterials = {
   /** Ground, road, pavement, water and roofs; UVs are world metres / `TEXTURE_REPEAT_M`. */
   surfaces: Record<SurfaceKey, MeshLambertMaterial>;
   /**
-   * {@link FACADE_VARIANTS} wall materials per style (pick one by structure id). UVs run along the
-   * perimeter in metres / `FACADE_MODULE_M` and up in storeys; the walls geometry must carry a
-   * `color` attribute (vertex colours are on for damage shading), and lit windows are emissive.
+   * Every wall, through the façade atlas: the walls geometry carries each vertex's atlas block in
+   * `facadeBlock` and UVs in block units, and a `color` attribute (vertex colours are on for
+   * damage shading); lit windows and shopfronts are emissive.
    */
-  facades: Record<FacadeStyle, readonly MeshLambertMaterial[]>;
+  facade: MeshLambertMaterial;
+  /** The cells' small detail — sills, balconies, awnings, boards, kerbs, clutter: vertex-coloured. */
+  detail: MeshLambertMaterial;
   /** The centre line on the bigger roads, the 2D map's amber. */
   roadMarking: MeshLambertMaterial;
+  /** Cycle paths and zebra crossings: flat, vertex-coloured, painted over the road in layer order. */
+  streetPaint: MeshLambertMaterial;
   /** Tree trunks. */
   treeTrunk: MeshLambertMaterial;
   /** The two canopy greens, alternated by tree id: a lighter yellow-green, then a deeper blue-green. */
   canopies: readonly [MeshLambertMaterial, MeshLambertMaterial];
+  /**
+   * A detailed cell's crowns: white, shaded by the crown's vertex colours and tinted per tree by
+   * its instance colour.
+   */
+  canopy: MeshLambertMaterial;
   /** Galvanised street metal: lamp poles, and the bus shelter's frame. */
   lampPole: MeshLambertMaterial;
   /** A lamp head, emissive in the lamp colour so it shines without a light. */
   lampHead: MeshLambertMaterial;
   /** The additive halo around a lamp head, drawn as one point sprite per lamp; no depth writes. */
   lampGlow: PointsMaterial;
+  /** The additive pools of light on the street under the lamps. */
+  lampPool: MeshBasicMaterial;
   /** Weathered wooden benches. */
   bench: MeshLambertMaterial;
   /** The bus shelter's see-through glass back panel, visible from both sides. */
   shelterGlass: MeshLambertMaterial;
 };
-
-/** {@link FACADE_VARIANTS} seeded wall materials for one style. */
-function createFacadeVariants(style: FacadeStyle): MeshLambertMaterial[] {
-  return Array.from({ length: FACADE_VARIANTS }, (_, variant) =>
-    createFacadeMaterial(
-      style,
-      seedFromString(`${style}:${variant}`),
-      FACADE_LIT_SHARES[variant % FACADE_LIT_SHARES.length],
-    ),
-  );
-}
 
 /** A white disc whose alpha falls from the centre to nothing at the rim. */
 function createGlowTexture(): DataTexture {
@@ -187,7 +181,7 @@ function matte(colour: number | string): MeshLambertMaterial {
 /** The street's lamps: pole, glowing head and its halo. */
 function createLampMaterials(): Pick<
   WorldMaterials,
-  "lampPole" | "lampHead" | "lampGlow"
+  "lampPole" | "lampHead" | "lampGlow" | "lampPool"
 > {
   return {
     lampPole: matte(FURNITURE_FILL.lamp),
@@ -204,12 +198,14 @@ function createLampMaterials(): Pick<
       transparent: true,
       depthWrite: false,
     }),
+    lampPool: createLampPoolMaterial(LAMP_GLOW),
   };
 }
 
 /**
- * Creates the city's shared materials: the 2D surface art as repeating textures, seeded façades
- * (brick, plaster, concrete, glass; windows lit warm and cold at random), trees and furniture.
+ * Creates the city's shared materials: the 2D surface art as repeating textures, the façade
+ * atlas (every colourway of brick, plaster, panels, concrete and glass; windows lit warm and cold
+ * at random; shopfronts), the vertex-coloured detail, trees and furniture.
  *
  * @param load - Loads a texture by URL, e.g. `TextureLoader.load`; called once per surface.
  * @returns The materials; free them with {@link disposeWorldMaterials}.
@@ -219,15 +215,15 @@ export function createWorldMaterials(
 ): WorldMaterials {
   return {
     surfaces: createGroundAwareSurfaces(load),
-    facades: {
-      brick: createFacadeVariants("brick"),
-      plaster: createFacadeVariants("plaster"),
-      concrete: createFacadeVariants("concrete"),
-      glass: createFacadeVariants("glass"),
-    },
+    facade: createFacadeAtlasMaterial(),
+    detail: new MeshLambertMaterial({ vertexColors: true }),
     roadMarking: paintInLayerOrder(matte(ROAD_CENTRE_LINE)),
+    streetPaint: paintInLayerOrder(
+      new MeshLambertMaterial({ vertexColors: true }),
+    ),
     treeTrunk: matte(TRUNK_COLOUR),
     canopies: [matte(CANOPY_LIGHT), matte(CANOPY_DEEP)],
+    canopy: new MeshLambertMaterial({ vertexColors: true }),
     ...createLampMaterials(),
     bench: matte(FURNITURE_FILL.bench),
     shelterGlass: new MeshLambertMaterial({
@@ -243,16 +239,20 @@ export function createWorldMaterials(
 /** Every material in a set, each once. */
 function listWorldMaterials(
   materials: WorldMaterials,
-): (MeshLambertMaterial | PointsMaterial)[] {
+): (MeshLambertMaterial | MeshBasicMaterial | PointsMaterial)[] {
   return [
     ...Object.values(materials.surfaces),
-    ...FACADE_STYLES.flatMap((style) => materials.facades[style]),
+    materials.facade,
+    materials.detail,
     materials.roadMarking,
+    materials.streetPaint,
     materials.treeTrunk,
     ...materials.canopies,
+    materials.canopy,
     materials.lampPole,
     materials.lampHead,
     materials.lampGlow,
+    materials.lampPool,
     materials.bench,
     materials.shelterGlass,
   ];

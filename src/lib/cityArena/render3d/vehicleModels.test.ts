@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   Box3,
+  Color,
   Mesh,
+  Points,
   MeshLambertMaterial,
   MeshPhongMaterial,
   Vector3,
@@ -11,6 +13,10 @@ import {
 import { lengthOf, VEHICLE_KINDS, widthOf } from "../sim/vehicle";
 import { CAR_BODY_COLOURS } from "../render/palette";
 import { buildVehicleModel, vehicleHeight } from "./vehicleModels";
+import { TAIL_RUNNING } from "./vehicleLamps";
+import { HEADLIGHT } from "./vehicleShapes";
+import { PLATE_LOOKS } from "./vehicleTrim";
+import type { VehicleKind } from "../sim/types";
 
 /** Allowed relative difference between the model and the simulation's footprint. */
 const FOOTPRINT_TOLERANCE = 0.05;
@@ -18,6 +24,66 @@ const FOOTPRINT_TOLERANCE = 0.05;
 const MAX_TRIANGLES = 2000;
 /** Mesh budget of one vehicle: a body, four wheels and a few moving parts. */
 const MAX_MESHES = 8;
+/** Each kind's draw calls before the lamps' flares and the trim. */
+const DRAW_CALLS_BEFORE: Record<VehicleKind, number> = {
+  compact: 8,
+  sedan: 8,
+  sport: 8,
+  police: 10,
+  van: 8,
+  pickup: 8,
+  bus: 9,
+  oldtimer: 8,
+  tractor: 8,
+  tank: 10,
+};
+/** How many more draw calls a vehicle may take now. */
+const EXTRA_DRAW_CALLS = 2;
+/** The kinds that carry plates at both ends. */
+const PASSENGER_KINDS: readonly VehicleKind[] = [
+  "compact",
+  "sedan",
+  "sport",
+  "police",
+  "van",
+  "pickup",
+  "oldtimer",
+  "bus",
+];
+
+/** One draw per material group of a multi-material mesh, one per other mesh or point cloud. */
+function drawCallsOf(root: Object3D): number {
+  let calls = 0;
+  root.traverse((node) => {
+    if (node instanceof Mesh)
+      calls += Array.isArray(node.material) ? node.geometry.groups.length : 1;
+    else if (node instanceof Points) calls += 1;
+  });
+  return calls;
+}
+
+/** Whether the body has vertices in the plate's colour at its front and at its back end. */
+function plateEnds(
+  body: Mesh,
+  plate: Color,
+): { front: boolean; rear: boolean } {
+  const colours = body.geometry.getAttribute("color");
+  const positions = body.geometry.getAttribute("position");
+  body.geometry.computeBoundingBox();
+  const { min, max } = body.geometry.boundingBox!;
+  const reach = (max.x - min.x) * 0.45;
+  const ends = { front: false, rear: false };
+  for (let index = 0; index < colours.count; index++) {
+    const matches =
+      Math.abs(colours.getX(index) - plate.r) < 1e-3 &&
+      Math.abs(colours.getY(index) - plate.g) < 1e-3 &&
+      Math.abs(colours.getZ(index) - plate.b) < 1e-3;
+    if (!matches) continue;
+    if (positions.getX(index) > reach) ends.front = true;
+    if (positions.getX(index) < -reach) ends.rear = true;
+  }
+  return ends;
+}
 
 function meshesOf(root: Object3D): Mesh[] {
   const meshes: Mesh[] = [];
@@ -148,13 +214,50 @@ describe("buildVehicleModel", () => {
     expect(tank.r).toBeGreaterThan(tank.b);
   });
 
-  it.each(VEHICLE_KINDS)("lights a %s with head and tail lamps", (kind) => {
-    const emissive = materialsOf(bodyOf(buildVehicleModel(kind, 0).root))
-      .filter((material) => material instanceof MeshLambertMaterial)
-      .map((material) => material.emissive.getHex());
+  it.each(VEHICLE_KINDS)(
+    "lights a %s with head lamps and running tail lamps, each with a flare",
+    (kind) => {
+      const { root, lamps } = buildVehicleModel(kind, 0);
+      const emissive = materialsOf(bodyOf(root))
+        .filter((material) => material instanceof MeshLambertMaterial)
+        .map((material) => material.emissive.getHex());
 
-    expect(emissive).toContain(0xfff3c4);
-    expect(emissive).toContain(0xff2a2a);
+      expect(emissive).toContain(HEADLIGHT);
+      expect(emissive).toContain(TAIL_RUNNING);
+      expect(lamps.tailSlot).toBeGreaterThanOrEqual(0);
+      expect(lamps.flares?.parent).toBe(root);
+      const heads = lamps.lamps.filter((lamp) => !lamp.tail);
+      const tails = lamps.lamps.filter((lamp) => lamp.tail);
+      expect(heads.length).toBeGreaterThanOrEqual(2);
+      expect(tails.length).toBeGreaterThanOrEqual(2);
+      for (const lamp of heads) expect(lamp.facing).toBe(1);
+      for (const lamp of tails) expect(lamp.facing).toBe(-1);
+      expect(lamps.flares?.geometry.getAttribute("position").count).toBe(
+        lamps.lamps.length,
+      );
+    },
+  );
+
+  it.each(VEHICLE_KINDS)(
+    "draws a %s in at most two more calls than before the lamps and trim",
+    (kind) => {
+      expect(drawCallsOf(buildVehicleModel(kind, 0).root)).toBeLessThanOrEqual(
+        DRAW_CALLS_BEFORE[kind] + EXTRA_DRAW_CALLS,
+      );
+    },
+  );
+
+  it("wears plates front and back on every passenger kind, classic blue on the oldtimer", () => {
+    for (const kind of PASSENGER_KINDS) {
+      const body = bodyOf(buildVehicleModel(kind, 0).root);
+      const look =
+        kind === "oldtimer" ? PLATE_LOOKS.classic : PLATE_LOOKS.modern;
+
+      expect(plateEnds(body, new Color(look.plate)), kind).toEqual({
+        front: true,
+        rear: true,
+      });
+    }
   });
 
   it("gives the police a light bar, the tank a turret and nobody else either", () => {

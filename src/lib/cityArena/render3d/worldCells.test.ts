@@ -18,6 +18,7 @@ import {
   fixtureTown,
   squareRing,
 } from "./testing/cityFixture";
+import { FACADE_BLOCK_ATTRIBUTE } from "./facadeAtlas";
 import { createWorldCells, type StructureView } from "./worldCells";
 import type { WorldMaterials } from "./worldMaterials";
 
@@ -32,14 +33,15 @@ function cellCorners(group: Group): string[] {
     .sort();
 }
 
-/** The merged walls mesh of the cell standing at a corner. */
+/** The merged walls mesh of the cell standing at a corner: the one carrying façade blocks. */
 function wallsAt(group: Group, x: number, z: number): Mesh | undefined {
   const cell = group.children.find(
     (child) => child.position.x === x && child.position.z === z,
   );
   return cell?.children.find(
     (child): child is Mesh =>
-      child instanceof Mesh && Array.isArray(child.material),
+      child instanceof Mesh &&
+      child.geometry.getAttribute(FACADE_BLOCK_ATTRIBUTE) !== undefined,
   );
 }
 
@@ -161,6 +163,24 @@ describe("createWorldCells", () => {
 
     world.update(ORIGIN, tiles, NO_STRUCTURES, VIEW_M, 0);
     expect(colour()).toBe(1);
+  });
+
+  it("rebuilds its cells at a new detail level, nearest first under the budget", () => {
+    const world = createWorldCells(createTestMaterials());
+    const tiles = [oneHouse()];
+    world.update(ORIGIN, tiles, NO_STRUCTURES, VIEW_M, Infinity, "basic");
+    const count = (): number =>
+      wallsAt(world.group, 0, 0)!.geometry.getAttribute("position").count;
+    const basic = count();
+
+    world.update(ORIGIN, tiles, NO_STRUCTURES, VIEW_M, 0, "full");
+    const first = count();
+    world.update(ORIGIN, tiles, NO_STRUCTURES, VIEW_M, Infinity, "full");
+
+    expect(first).toBe(2 * basic);
+    expect(count()).toBe(2 * basic);
+    world.update(ORIGIN, tiles, NO_STRUCTURES, VIEW_M, Infinity, "basic");
+    expect(count()).toBe(basic);
   });
 
   it("fills in a cell when its tile arrives after it was built", () => {

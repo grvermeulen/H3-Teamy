@@ -4,14 +4,14 @@ import type { DecodedBuilding } from "../world/decode";
 import type { Point } from "../world/projection";
 import { boundsOf } from "../mapBuild/geometry";
 import {
-  FACADE_MATERIAL_COUNT,
   MIN_BUILDING_HEIGHT_M,
   STOREY_M,
   buildBuildingGeometry,
   buildingHeight,
-  facadeMaterialIndex,
+  facadeStyleOf,
   shadeBuilding,
 } from "./buildingMesh";
+import { BLOCK_MODULES, FACADE_BLOCK_ATTRIBUTE } from "./facadeAtlas";
 import { FACADE_MODULE_M } from "./textures";
 
 /** A building fixture from a ring. */
@@ -130,7 +130,7 @@ describe("buildBuildingGeometry", () => {
     });
   });
 
-  it("runs wall u along the perimeter in 6 m modules and v up in storeys", () => {
+  it("runs wall u along the perimeter in 6 m modules and v up in storeys, in block units", () => {
     const { walls } = buildBuildingGeometry(
       [building(3, square(0, 0, 12), 2)],
       new Set(),
@@ -139,13 +139,14 @@ describe("buildBuildingGeometry", () => {
     const us = Array.from({ length: uv.count }, (_, at) => uv.getX(at));
     const vs = Array.from({ length: uv.count }, (_, at) => uv.getY(at));
 
+    const [cols, rows] = BLOCK_MODULES.upper;
     const spanU = Math.max(...us) - Math.min(...us);
     const spanV = Math.max(...vs) - Math.min(...vs);
-    expect(spanU).toBeCloseTo((4 * 12) / FACADE_MODULE_M);
-    expect(spanV).toBeCloseTo(buildingHeight(2) / STOREY_M);
+    expect(spanU * cols).toBeCloseTo((4 * 12) / FACADE_MODULE_M);
+    expect(spanV * rows).toBeCloseTo(buildingHeight(2) / STOREY_M);
     // Seeded offsets shift the grid by whole modules and storeys only.
-    expect(Number.isInteger(Math.min(...us))).toBe(true);
-    expect(Number.isInteger(Math.min(...vs))).toBe(true);
+    expect(Number.isInteger(Math.min(...us) * cols)).toBe(true);
+    expect(Number.isInteger(Math.min(...vs) * rows)).toBe(true);
   });
 
   it("paints the walls white so façade vertex colours show as painted", () => {
@@ -262,7 +263,7 @@ describe("buildBuildingGeometry", () => {
     expect(ranges).toEqual([]);
   });
 
-  it("groups the walls by façade material, each building's vertices in one range", () => {
+  it("draws every wall in one geometry, each building's vertices in one range and one block", () => {
     const buildings = Array.from({ length: 24 }, (_, index) =>
       building(
         100 + index,
@@ -273,19 +274,25 @@ describe("buildBuildingGeometry", () => {
 
     const { walls, ranges } = buildBuildingGeometry(buildings, new Set());
 
-    const groups = walls.groups;
-    expect(groups.length).toBeGreaterThan(1);
-    const indexCount = walls.getIndex()!.count;
-    expect(groups.reduce((sum, group) => sum + group.count, 0)).toBe(
-      indexCount,
-    );
-    for (const group of groups) {
-      expect(group.materialIndex).toBeGreaterThanOrEqual(0);
-      expect(group.materialIndex).toBeLessThan(FACADE_MATERIAL_COUNT);
+    expect(walls.groups).toEqual([]);
+    const blocks = walls.getAttribute(
+      FACADE_BLOCK_ATTRIBUTE,
+    ) as BufferAttribute;
+    expect(blocks.count).toBe(walls.getAttribute("position").count);
+    for (const range of ranges) {
+      const own = new Set<string>();
+      for (
+        let vertex = range.start;
+        vertex < range.start + range.count;
+        vertex++
+      )
+        own.add(`${blocks.getX(vertex)}:${blocks.getY(vertex)}`);
+      expect(own.size).toBe(1);
     }
-    expect(new Set(groups.map((group) => group.materialIndex)).size).toBe(
-      groups.length,
-    );
+    for (let vertex = 0; vertex < blocks.count; vertex++) {
+      expect(blocks.getX(vertex) + blocks.getZ(vertex)).toBeLessThanOrEqual(1);
+      expect(blocks.getY(vertex) + blocks.getW(vertex)).toBeLessThanOrEqual(1);
+    }
     expect(ranges.map((range) => range.structureId).sort()).toEqual(
       buildings.map((entry) => entry.structureId).sort(),
     );
@@ -294,26 +301,24 @@ describe("buildBuildingGeometry", () => {
   });
 });
 
-describe("facadeMaterialIndex", () => {
+describe("facadeStyleOf", () => {
   it("is a pure function of the building", () => {
     const tower = building(12345, square(0, 0, 30), 8);
 
-    expect(facadeMaterialIndex(tower)).toBe(facadeMaterialIndex({ ...tower }));
+    expect(facadeStyleOf(tower)).toBe(facadeStyleOf({ ...tower }));
   });
 
-  it("dresses houses in brick or plaster and towers in glass or concrete", () => {
-    const styles = (levels: number, side: number): Set<number> =>
+  it("dresses houses in brick or plaster, towers in glass, panels or concrete, halls in panels or concrete", () => {
+    const styles = (levels: number, side: number): Set<string> =>
       new Set(
-        Array.from({ length: 60 }, (_, id) =>
-          Math.floor(
-            facadeMaterialIndex(building(id, square(0, 0, side), levels)) / 3,
-          ),
+        Array.from({ length: 80 }, (_, id) =>
+          facadeStyleOf(building(id, square(0, 0, side), levels)),
         ),
       );
 
-    expect(styles(2, 9)).toEqual(new Set([0, 1]));
-    expect(styles(9, 30)).toEqual(new Set([2, 3]));
-    expect(styles(2, 60)).toEqual(new Set([2]));
+    expect(styles(2, 9)).toEqual(new Set(["brick", "plaster"]));
+    expect(styles(9, 30)).toEqual(new Set(["glass", "panel", "concrete"]));
+    expect(styles(2, 60)).toEqual(new Set(["panel", "concrete"]));
   });
 });
 
