@@ -15,11 +15,22 @@ declare module "sharp" {
     withoutEnlargement?: boolean;
   }
 
+  interface OutputInfo {
+    width: number;
+    height: number;
+    channels: number;
+  }
+
   interface Sharp {
     metadata(): Promise<Metadata>;
     resize(options?: ResizeOptions): Sharp;
     png(): Sharp;
+    ensureAlpha(): Sharp;
+    raw(): Sharp;
     toBuffer(): Promise<Buffer>;
+    toBuffer(options: {
+      resolveWithObject: true;
+    }): Promise<{ data: Buffer; info: OutputInfo }>;
   }
 
   function sharp(input?: SharpInput): Sharp;
