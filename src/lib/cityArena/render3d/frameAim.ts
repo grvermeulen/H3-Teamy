@@ -7,6 +7,7 @@ import type { PerspectiveCamera } from "three";
 import type { Scene } from "../render/renderScene";
 import type { WeaponKind } from "../sim/types";
 import { WEAPONS } from "../sim/weapons";
+import type { DecodedTile } from "../world/decode";
 import { probeAim, type AimPoint } from "./aimProbe";
 import { createAimWorld, type AimWorldSource } from "./aimWorld";
 import {
@@ -20,7 +21,6 @@ import type { CastAim } from "./cast3d";
 import { AIM_PROJECT_DISTANCE_M } from "./coords";
 import type { ShooterAim } from "./roundAims";
 import type { StructureView } from "./worldCells";
-import type { DecodedTile } from "../world/decode";
 
 /** What the aim reads from a frame; `View3dFrame` fits. */
 export type AimFrame = {
