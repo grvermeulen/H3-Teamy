@@ -29,6 +29,7 @@ import {
   type MeshBuffers,
   type UvMapping,
 } from "./meshBuffers";
+import { addArm } from "./roadArms";
 import { distinctPoints, inRegion, mitre, type RoadPiece } from "./roadMesh";
 
 /** Width of a cycle path, metres. */
@@ -482,28 +483,21 @@ export function pushStreetSides(
   }
 }
 
-/** Another road's centre line this close to a road's end means it goes on or meets one, metres. */
+/** Road centre lines this close to a road piece's end count as meeting it there, metres. */
 const DEAD_END_SNAP_M = 0.5;
 
 /**
- * Whether a road really stops at `end`: no other road — not the next piece the map build cut it
- * into at a tile seam, not a road it meets at a junction — has its centre line there. Only a dead
- * end gets its pavement rounded off.
+ * Whether a road really stops at `end`: roads leave the point one way only. A piece the map build
+ * cut at a tile seam, or the tiles' overlapping copy running on past it, or a road met at a
+ * junction, all add another way — while an overlapping copy of the same dead end adds none. Only a
+ * dead end gets its pavement rounded off.
  *
- * @param road - The road the end belongs to.
- * @param end - One of its pieces' ends.
+ * @param end - One of a road piece's ends.
  * @param context - The cell's surroundings.
- * @returns True when nothing else touches the end.
+ * @returns True when the road goes nowhere else from `end`.
  */
-export function isDeadEnd(
-  road: DecodedRoad,
-  end: Point,
-  context: CellContext,
-): boolean {
-  return (
-    context.nearestRoad(end, DEAD_END_SNAP_M, (other) => other !== road) ===
-    null
-  );
+export function isDeadEnd(end: Point, context: CellContext): boolean {
+  return context.armsAt(end, DEAD_END_SNAP_M) <= 1;
 }
 
 /** A zebra crossing: its middle, the road's direction there and the carriageway's width. */
@@ -515,11 +509,11 @@ function nodeKey([x, y]: Point): string {
 }
 
 /**
- * The roads at one node, and its arms: a road ending there adds one, a road running through adds
- * two. A junction has at least {@link JUNCTION_ARMS}; two pieces of one street meeting end to end
- * — as the map build cuts every road at the tile seams — have two, and are no junction.
+ * The roads at one node, and its arms: the distinct directions they leave it in (`roadArms.ts`).
+ * A junction has at least {@link JUNCTION_ARMS}; a street the tiles hold as two overlapping copies,
+ * or as two pieces meeting end to end at a seam, still has two, and is no junction.
  */
-type JunctionNode = { roads: Set<DecodedRoad>; arms: number };
+type JunctionNode = { roads: Set<DecodedRoad>; arms: Point[] };
 
 /** Arms a node needs to be a junction: a T has three. */
 const JUNCTION_ARMS = 3;
@@ -530,12 +524,17 @@ function junctionNodes(
 ): Map<string, JunctionNode> {
   const nodes = new Map<string, JunctionNode>();
   for (const road of roads) {
-    const last = road.points.length - 1;
-    road.points.forEach((point, index) => {
+    const { points } = road;
+    points.forEach((point, index) => {
       const key = nodeKey(point);
-      const node = nodes.get(key) ?? { roads: new Set<DecodedRoad>(), arms: 0 };
+      const node = nodes.get(key) ?? {
+        roads: new Set<DecodedRoad>(),
+        arms: [],
+      };
       node.roads.add(road);
-      node.arms += index === 0 || index === last ? 1 : 2;
+      if (index > 0) addArm(node.arms, point, points[index - 1]);
+      if (index < points.length - 1)
+        addArm(node.arms, point, points[index + 1]);
       nodes.set(key, node);
     });
   }
@@ -544,7 +543,7 @@ function junctionNodes(
 
 /** True when the node at `point` is a real junction, not a seam or a bend. */
 function isJunctionAt(nodes: Map<string, JunctionNode>, point: Point): boolean {
-  return (nodes.get(nodeKey(point))?.arms ?? 0) >= JUNCTION_ARMS;
+  return (nodes.get(nodeKey(point))?.arms.length ?? 0) >= JUNCTION_ARMS;
 }
 
 /** Walks `distance` metres along a road from vertex `index` toward `step`; null past its end or another junction. */
@@ -602,7 +601,7 @@ export function zebraSites(roads: readonly DecodedRoad[]): ZebraSite[] {
     road.points.forEach((point, index) => {
       const key = nodeKey(point);
       const meeting = nodes.get(key);
-      if (!meeting || meeting.arms < JUNCTION_ARMS) return;
+      if (!meeting || meeting.arms.length < JUNCTION_ARMS) return;
       const others = [...meeting.roads].filter((other) => other !== road);
       for (const step of [1, -1] as const) {
         const seed = seedFromString(

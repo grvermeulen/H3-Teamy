@@ -26,6 +26,7 @@ import {
   visitNear,
   type BucketGrid,
 } from "./bucketGrid";
+import { addArm } from "./roadArms";
 import { tileBuildingsIn, tileGroundIn, tileRoadsIn } from "./tileIndex";
 
 /** Side of a grid bucket, metres. */
@@ -125,6 +126,12 @@ export type CellContext = {
   inFootprint(point: Point, margin: number): boolean;
   /** Centres of the landmark buildings in reach. */
   landmarks: readonly Point[];
+  /**
+   * How many distinct ways roads leave a point: every road centre line within `radius` adds the
+   * directions it runs away from it — one for a road ending there, two for one passing through —
+   * with copies of the same road (tile overlaps, tile seams) counted once. A dead end has one.
+   */
+  armsAt(point: Point, radius: number): number;
 };
 
 /** The road segment grid over the context's area. */
@@ -287,5 +294,27 @@ export function createCellContext(
     },
     groundAt: (point) => groundIn(ground, point),
     inFootprint: (point, margin) => footprintAt(footprints, point, margin),
+    armsAt: (point, radius) => armsIn(grid, point, radius),
   };
+}
+
+/** The squared distance between two points. */
+function distanceSquared(p: Point, q: Point): number {
+  return (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2;
+}
+
+/** See {@link CellContext.armsAt}. */
+function armsIn(
+  grid: BucketGrid<RoadSegment>,
+  point: Point,
+  radius: number,
+): number {
+  const reach = radius * radius;
+  const arms: Point[] = [];
+  visitNear(grid, point, radius, ({ a, b }) => {
+    if (segmentDistanceSquared(point, a, b) > reach) return;
+    if (distanceSquared(point, a) > reach) addArm(arms, point, a);
+    if (distanceSquared(point, b) > reach) addArm(arms, point, b);
+  });
+  return arms.length;
 }

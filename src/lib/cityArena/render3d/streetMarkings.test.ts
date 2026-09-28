@@ -272,7 +272,7 @@ describe("isDeadEnd", () => {
         roadClass: "residential",
       },
     ]);
-    expect(isDeadEnd(roads[0]!, [0, 0], context)).toBe(true);
+    expect(isDeadEnd([0, 0], context)).toBe(true);
   });
 
   it("does not round off a piece that goes on across a tile seam", () => {
@@ -292,7 +292,49 @@ describe("isDeadEnd", () => {
         roadClass: "residential",
       },
     ]);
-    expect(isDeadEnd(roads[0]!, [0, 0], context)).toBe(false);
+    expect(isDeadEnd([0, 0], context)).toBe(false);
+  });
+
+  it("rounds off a dead end the tiles' overlap holds twice", () => {
+    const { context } = contextOf([
+      {
+        points: [
+          [-40, 0],
+          [-10, 0],
+          [0, 0],
+        ],
+        roadClass: "residential",
+      },
+      {
+        points: [
+          [-20, 0],
+          [-10, 0],
+          [0, 0],
+        ],
+        roadClass: "residential",
+      },
+    ]);
+    expect(isDeadEnd([0, 0], context)).toBe(true);
+  });
+
+  it("does not round off a copy cut short where the other copy runs on", () => {
+    const { context } = contextOf([
+      {
+        points: [
+          [-40, 0],
+          [0, 0],
+        ],
+        roadClass: "residential",
+      },
+      {
+        points: [
+          [-20, 0],
+          [40, 0],
+        ],
+        roadClass: "residential",
+      },
+    ]);
+    expect(isDeadEnd([0, 0], context)).toBe(false);
   });
 
   it("does not round off a side street where it meets a bigger road", () => {
@@ -312,7 +354,7 @@ describe("isDeadEnd", () => {
         roadClass: "primary",
       },
     ]);
-    expect(isDeadEnd(roads[0]!, [0, 0], context)).toBe(false);
+    expect(isDeadEnd([0, 0], context)).toBe(false);
   });
 });
 
@@ -341,6 +383,26 @@ describe("zebraSites", () => {
     const roads = fixtureTile(
       { x: 0, y: 0, rect: FIXTURE_TILE_RECT },
       { roads: pieces },
+    ).roads;
+
+    expect(zebraSites(roads)).toEqual([]);
+    expect(signSites(roads)).toEqual([]);
+  });
+
+  it("sees no junction along a road the tiles' overlap holds twice", () => {
+    const shared: Point[] = [
+      [-20, 0],
+      [0, 0],
+      [20, 0],
+    ];
+    const roads = fixtureTile(
+      { x: 0, y: 0, rect: FIXTURE_TILE_RECT },
+      {
+        roads: [
+          { points: [[-60, 0], ...shared, [40, 0]], roadClass: "secondary" },
+          { points: [[-40, 0], ...shared, [60, 0]], roadClass: "secondary" },
+        ],
+      },
     ).roads;
 
     expect(zebraSites(roads)).toEqual([]);

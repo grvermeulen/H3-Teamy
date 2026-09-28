@@ -367,7 +367,7 @@ function pushDetailedSides(
     piece.capEnd ? piece.points[piece.points.length - 1] : null,
   ];
   for (const end of ends) {
-    if (end && isDeadEnd(road, end, street.look.context))
+    if (end && isDeadEnd(end, street.look.context))
       pushDisc(buffers.pavement, end, radius, PAVEMENT_Y_M, origin, uv);
   }
 }
