@@ -322,6 +322,25 @@ describe("createEffects3d", () => {
     expect(light!.position.toArray()).toEqual(copGun.toArray());
   });
 
+  it("leaves a drive-by flash at its shooter, not on a gun that happens to be near", () => {
+    const driveBy: EffectState = { ...EXPLOSION, kind: "muzzle", x: 10, y: 10 };
+    const driver = { id: 5, x: 10, y: 10 } as ArenaPlayerState;
+    const nearbyGun = new Vector3(10.9, 1.4, 10.2);
+    const effects = createEffects3d({ maxParticles: 600 });
+
+    effects.sync(
+      scene({ effects: [driveBy], players: [driver] }),
+      undefined,
+      false,
+      new Map([[30, nearbyGun]]),
+    );
+    effects.update(0.001);
+
+    const [light] = litLights(effects.object);
+    expect(light!.position.toArray()).not.toEqual(nearbyGun.toArray());
+    expect(light!.position.y).toBeCloseTo(PERSON_CHEST_HEIGHT_M);
+  });
+
   it("starts the rounds of a known shooter at their muzzle", () => {
     const effects = createEffects3d({ maxParticles: 600 });
     const round: BulletState = {

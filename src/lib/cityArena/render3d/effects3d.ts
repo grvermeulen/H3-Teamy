@@ -112,17 +112,17 @@ export const MUZZLE_OWNER_REACH_M = 1.5;
 const NO_MUZZLES: MuzzlePoints = new Map();
 
 /**
- * Where a muzzle flash's flame and light go: its shooter's muzzle when the shooter is known and
- * holds one, else the nearest muzzle within {@link MUZZLE_OWNER_REACH_M} — a rocket's tube or a
- * tank's barrel end, where the simulation lights the flash away from the body.
+ * Where a muzzle flash's flame and light go: its shooter's muzzle when the shooter is known — or
+ * nowhere special when that shooter holds none in view (a drive-by from a car), never someone
+ * else's gun nearby. Only a flash lit away from every body — a rocket's tube or a tank's barrel
+ * end — goes to the nearest muzzle within {@link MUZZLE_OWNER_REACH_M}.
  */
 function flashMuzzle(
   effect: EffectsScene["effects"][number],
   shooter: number | null,
   muzzles: MuzzlePoints,
 ): Readonly<Vector3> | null {
-  const known = shooter === null ? undefined : muzzles.get(shooter);
-  if (known) return known;
+  if (shooter !== null) return muzzles.get(shooter) ?? null;
   let nearest: Readonly<Vector3> | null = null;
   let best = MUZZLE_OWNER_REACH_M * MUZZLE_OWNER_REACH_M;
   for (const point of muzzles.values()) {
