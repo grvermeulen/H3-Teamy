@@ -11,6 +11,8 @@ import {
   Document,
   GLB_BUFFER,
   NodeIO,
+  PropertyType,
+  VertexLayout,
   type Accessor,
   type GLTF,
   type Node,
@@ -48,6 +50,11 @@ import type { SourceIo } from "./packCharacters";
 const PROBE_DECIMALS = 3;
 /** One kibibyte, for the report. */
 const KIB = 1024;
+/**
+ * What dedup may merge: accessors and meshes (the wheels on one side share one), never the
+ * materials — they are identical but for their names, which carry each primitive's role.
+ */
+const DEDUPED = [PropertyType.ACCESSOR, PropertyType.MESH];
 /** Floats per position and per UV. */
 const XYZ = 3;
 const UV = 2;
@@ -224,7 +231,7 @@ async function packCar(
   );
   const car = packCarGeometry(soups, source, atlas);
   const document = carDocument(car);
-  await document.transform(weld(), dedup(), prune());
+  await document.transform(weld(), dedup({ propertyTypes: DEDUPED }), prune());
   const bytes = await io.writeBinary(document);
   await writeAtomic(path.join(CAR_OUT_DIR, carFile(source.kind)), bytes);
   return { car, bytes: bytes.length };
@@ -303,7 +310,8 @@ function probe(document: Document, name: string): void {
 /** Downloads (once), then probes or packs. */
 async function main(): Promise<void> {
   const archive = await fetchCarKit(NODE_SOURCE_IO);
-  const io = new NodeIO();
+  // Separate vertex buffers load as plain attributes, which the view merges as they are.
+  const io = new NodeIO().setVertexLayout(VertexLayout.SEPARATE);
   if (!process.argv.includes("--probe")) {
     await pack(io, archive.bytes);
     return;
