@@ -13,6 +13,7 @@ import {
   forwardSpeed,
   healthMaxOf,
   normalizeVehicleHealth,
+  normalizeVehicles,
   hullCircles,
   hullLayout,
   localToWorld,
@@ -252,6 +253,16 @@ describe("vehicle kinds", () => {
     expect(clampVehicleHealth("tank", 900)).toBe(750);
     expect(clampVehicleHealth("compact", Number.NaN)).toBe(160);
     expect(normalizeVehicleHealth({ ...sedan, health: 200 }).health).toBe(180);
+  });
+
+  it("normalizes only vehicles whose health is out of range", () => {
+    const sedan = createVehicle(1, "sedan", [0, 0], 0, 0);
+    const van = createVehicle(2, "van", [5, 0], 0, 0);
+    const broken = [{ ...sedan, health: 230 }, van];
+    const fixed = normalizeVehicles(broken);
+    expect(fixed[0].health).toBe(180);
+    expect(fixed[1]).toBe(van);
+    expect(normalizeVehicles([sedan, van])).toEqual([sedan, van]);
   });
 
   it("turns a bus more slowly than a compact at the same speed", () => {

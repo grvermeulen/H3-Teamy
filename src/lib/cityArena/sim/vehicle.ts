@@ -226,6 +226,17 @@ export function normalizeVehicleHealth(vehicle: VehicleState): VehicleState {
   return health === vehicle.health ? vehicle : { ...vehicle, health };
 }
 
+/** Clamps every car's health to its kind's maximum; used at the end of each sim tick. */
+export function normalizeVehicles(vehicles: VehicleState[]): VehicleState[] {
+  let changed = false;
+  const next = vehicles.map((vehicle) => {
+    const normalized = normalizeVehicleHealth(vehicle);
+    if (normalized !== vehicle) changed = true;
+    return normalized;
+  });
+  return changed ? next : vehicles;
+}
+
 /** Below this health a kind smokes. */
 export function smokeHealthOf(kind: VehicleKind): number {
   return VEHICLE_SPECS[kind].healthMax * SMOKE_HEALTH_SHARE;
