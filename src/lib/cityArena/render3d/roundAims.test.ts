@@ -1,16 +1,22 @@
 import { describe, expect, it } from "vitest";
 import type { BulletState } from "../sim/types";
+import { WEAPONS } from "../sim/weapons";
 import { createRoundAims } from "./roundAims";
 
 /** Player 3's round 10 m out of (0, 0), flying east. */
-const ROUND = {
+const ROUND: BulletState = {
   id: 1,
   ownerId: 3,
+  ignoreVehicleId: null,
   x: 10,
   y: 0,
   directionX: 1,
   directionY: 0,
-} as BulletState;
+  speedMps: WEAPONS.pistol.speedMps,
+  rangeLeftM: WEAPONS.pistol.rangeM - 10,
+  damage: WEAPONS.pistol.damage,
+  weapon: "pistol",
+};
 
 const AIM = { ownerId: 3, x: 30, y: 0, height: 4 };
 
