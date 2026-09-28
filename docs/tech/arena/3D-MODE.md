@@ -431,8 +431,8 @@ the tank have no Kit counterpart and keep procedural bodies, now rounded.
 
 ### Pipeline: `npm run arena:pack-cars`
 
-`scripts/arena/pack-cars.ts` (pure halves and tests: `packCars.ts`, `carGeometry.ts`,
-`carMeasure.ts`, `carAtlas.ts`, `zip.ts`) downloads the one owner-approved archive once into
+`scripts/arena/pack-cars.ts` (pure halves and tests: `packCars.ts`, `carSources.ts`,
+`carGeometry.ts`, `carBody.ts`, `carMeasure.ts`, `carAtlas.ts`, `zip.ts`) downloads the one owner-approved archive once into
 `.cache/arena/cars/` (gitignored), pinned by URL and sha256 — an archive whose hash moved is
 refused — reads it with a dependency-free zip reader, and writes `public/arena/cars/`:
 

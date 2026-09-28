@@ -8,10 +8,8 @@
 import type { CarEntry } from "../../src/lib/cityArena/carManifest";
 import {
   areaOf,
-  bakeTriangle,
   boundsOf,
   centroidOf,
-  emptyColoured,
   normalOf,
   shiftPositions,
   swatchOfTriangle,
@@ -20,6 +18,7 @@ import {
   type Coloured,
   type Soup,
 } from "./carGeometry";
+import { bakeTriangle, emptyColoured } from "./carBody";
 import type { Atlas, SwatchKey } from "./carAtlas";
 
 /** A wheel as the manifest records it. */

@@ -1,12 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { CAR_BUDGET_BYTES, auditCars, carManifestFiles } from "./check-cars";
 import { fixtureAtlas, fixtureCar } from "./carFixture";
-import {
-  CAR_SOURCES,
-  buildCarManifest,
-  carCredits,
-  packCarGeometry,
-} from "./packCars";
+import { buildCarManifest, carCredits, packCarGeometry } from "./packCars";
+import { CAR_SOURCES } from "./carSources";
 import type { PackFs } from "./packAudit";
 
 const MANIFEST = buildCarManifest(

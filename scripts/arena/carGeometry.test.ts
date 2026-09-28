@@ -8,17 +8,15 @@ import {
 } from "./carAtlas";
 import { fixtureAtlas, fixtureCar, fixtureSwatchColour } from "./carFixture";
 import {
-  PLATE_RECESS,
   boundsOf,
   boxSoup,
   centroidOf,
   normalOf,
   recentring,
-  splitBody,
   toCarFrame,
   triangleCount,
-  type BodyRules,
 } from "./carGeometry";
+import { PLATE_RECESS, splitBody, type BodyRules } from "./carBody";
 
 const RULES: BodyRules = {
   paint: [SWATCH.redPaint],

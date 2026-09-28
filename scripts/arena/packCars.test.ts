@@ -10,14 +10,13 @@ import { triangleCount } from "./carGeometry";
 import { liveryOf } from "./carMeasure";
 import {
   CAR_KIT,
-  CAR_SOURCES,
   buildCarManifest,
   carCredits,
   fetchCarKit,
   packCarGeometry,
   splitGlb,
-  type CarSource,
 } from "./packCars";
+import { CAR_SOURCES, type CarSource } from "./carSources";
 import { sha256Of, type SourceIo } from "./packCharacters";
 
 const BYTES = new Uint8Array([1, 2, 3, 4]);

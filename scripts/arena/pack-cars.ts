@@ -32,7 +32,6 @@ import { concatSoups, type Coloured, type Soup } from "./carGeometry";
 import { isMissing, writeAtomic } from "./files";
 import {
   CAR_OUT_DIR,
-  CAR_SOURCES,
   COLORMAP_URI,
   buildCarManifest,
   carCredits,
@@ -44,6 +43,7 @@ import {
   type CarModelSoups,
   type PackedCar,
 } from "./packCars";
+import { CAR_SOURCES } from "./carSources";
 import type { SourceIo } from "./packCharacters";
 
 /** Digits the probe prints of a length. */
