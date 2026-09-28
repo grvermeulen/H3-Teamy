@@ -19,7 +19,7 @@ import {
   type Primitive,
 } from "@gltf-transform/core";
 import { dedup, getBounds, prune, weld } from "@gltf-transform/functions";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import {
@@ -69,10 +69,8 @@ const NODE_SOURCE_IO: SourceIo = {
       throw error;
     }
   },
-  async write(file, bytes) {
-    await mkdir(path.dirname(file), { recursive: true });
-    await writeFile(file, bytes);
-  },
+  // Atomic, so an interrupted download never leaves a cut-off archive the sha256 pin would refuse.
+  write: (file, bytes) => writeAtomic(file, bytes),
   async fetch(url) {
     const response = await fetch(url);
     return {
