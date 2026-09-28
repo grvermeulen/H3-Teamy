@@ -11,7 +11,8 @@ already draws.
 
 Shipped alongside 3D: networked destructible buildings (sim-side health, collapse and rebuild,
 rendered as ruins in both 2D and 3D), a rocket launcher, and 3D-only guidance (navigation ribbon,
-mission beacons, player markers, a zone wall). Protocol version is **4**.
+mission beacons, player markers, a zone wall). Protocol version is **5** (4 added structures and
+the rocket; 5 adds aiming down the sights to the input frame).
 
 ## Screenshots
 

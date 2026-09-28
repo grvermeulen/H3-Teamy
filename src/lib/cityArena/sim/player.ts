@@ -7,6 +7,9 @@ import type { PlayerState, WorldInput } from "./types";
  */
 export const WALK_SPEED_MPS = 5.5;
 
+/** Share of the walking pace kept while aiming down the sights. */
+export const ADS_WALK_FACTOR = 0.55;
+
 /** Seconds a standing start takes to reach {@link WALK_SPEED_MPS}: enough weight to feel, too short to lag. */
 export const WALK_RAMP_S = 0.15;
 
@@ -38,14 +41,18 @@ function rampSpeed(
   return Math.min(target, from + WALK_ACCEL_MPS2 * factor * dt);
 }
 
-/** Advances by `dt`, applying the walking bonus before collision resolution; aiming overrides movement facing. */
+/**
+ * Advances by `dt`, applying the walking bonus (and the slower pace of aiming down the sights)
+ * before collision resolution; aiming overrides movement facing.
+ */
 export function stepPlayer(
   player: PlayerState,
   input: WorldInput,
   dt: number,
   collision: Pick<CollisionGrid, "resolveCircle">,
-  speedFactor = 1,
+  bonusFactor = 1,
 ): PlayerState {
+  const speedFactor = bonusFactor * (input.ads ? ADS_WALK_FACTOR : 1);
   const inputMagnitude = Math.hypot(input.move[0], input.move[1]);
   const magnitude = Math.min(1, inputMagnitude);
   if (magnitude < MOVE_DEAD_ZONE)

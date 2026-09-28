@@ -82,10 +82,16 @@ describe("input wire format", () => {
       "enter",
       "weaponNext",
       "moveIsAnalog",
+      "ads",
     ] as const) {
       const back = decodeInput(encodeInput(1, createInput({ [key]: true })));
       expect({ key, value: back.input[key] }).toEqual({ key, value: true });
     }
+  });
+
+  it("leaves aiming down the sights off when the flag is not set", () => {
+    const back = decodeInput(encodeInput(1, createInput({ fire: true })));
+    expect(back.input.ads).toBeUndefined();
   });
 
   it("clamps a move outside the unit range instead of overflowing the frame", () => {

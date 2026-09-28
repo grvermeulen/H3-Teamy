@@ -20,6 +20,11 @@ export type WorldInput = {
   fire: boolean;
   enter: boolean;
   weaponNext: boolean;
+  /**
+   * Aiming down the sights (the right mouse button, or the touch sights button): a spraying gun's
+   * cone narrows and walking slows. Absent means not aiming.
+   */
+  ads?: boolean;
 };
 
 /** An input with nothing pressed. */
@@ -51,6 +56,7 @@ export function createInput(partial: Partial<WorldInput>): WorldInput {
     fire: partial.fire ?? false,
     enter: partial.enter ?? false,
     weaponNext: partial.weaponNext ?? false,
+    ...(partial.ads ? { ads: true } : {}),
   };
 }
 
