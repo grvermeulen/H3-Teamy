@@ -14,6 +14,7 @@ import {
 import type {
   ArenaPlayerState,
   BulletState,
+  CopState,
   EffectState,
   VehicleState,
 } from "../sim/types";
@@ -291,6 +292,34 @@ describe("createEffects3d", () => {
     expect(fireParticles(effects.object)).toBe(0);
     const [light] = litLights(effects.object);
     expect(light!.position.toArray()).toEqual(drawnGun.toArray());
+  });
+
+  it("gives a flash lit at an officer beside you to the officer, flame and all", () => {
+    const theirs: EffectState = {
+      ...EXPLOSION,
+      kind: "muzzle",
+      x: 10.9,
+      y: 10,
+    };
+    const yourGun = new Vector3(10.3, 1.5, 10.15);
+    const copGun = new Vector3(11.4, 1.4, 10.05);
+    const officer = { id: 30, x: 10.9, y: 10 } as CopState;
+    const effects = createEffects3d({ maxParticles: 600 });
+
+    effects.sync(
+      scene({ effects: [theirs], players: [player(10, 10)], cops: [officer] }),
+      undefined,
+      true,
+      new Map([
+        [1, yourGun],
+        [30, copGun],
+      ]),
+    );
+    effects.update(0.001);
+
+    expect(fireParticles(effects.object)).toBeGreaterThan(0);
+    const [light] = litLights(effects.object);
+    expect(light!.position.toArray()).toEqual(copGun.toArray());
   });
 
   it("starts the rounds of a known shooter at their muzzle", () => {

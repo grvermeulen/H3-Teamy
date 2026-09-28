@@ -27,7 +27,8 @@ const DEBRIS_CAPACITY = 48;
 export type EffectsScene = Pick<
   Scene,
   "effects" | "bullets" | "vehicles" | "players" | "localPlayerId"
->;
+> &
+  Partial<Pick<Scene, "cops">>;
 
 /** The 3D effects. */
 export type Effects3d = {
@@ -69,22 +70,40 @@ function localFocus(scene: EffectsScene): { x: number; y: number } | null {
   return own ? { x: own.x, y: own.y } : null;
 }
 
+/** A body a muzzle flash may have been lit at: a player's or an officer's. */
+type Body = { id: number; x: number; y: number };
+
+/** The nearer of `best` and `body` to `(x, y)`, when `body` is within {@link MUZZLE_MATCH_M}. */
+function nearerBody(
+  best: { id: number | null; reach: number },
+  body: Body,
+  x: number,
+  y: number,
+): void {
+  const dx = x - body.x;
+  const dy = y - body.y;
+  const reach = dx * dx + dy * dy;
+  if (reach > best.reach) return;
+  best.id = body.id;
+  best.reach = reach;
+}
+
 /**
- * Whether a muzzle flash is the local player's own: the simulation lights it at the shooter, so
- * one within {@link MUZZLE_MATCH_M} of you is yours.
+ * Who lit a muzzle flash: the simulation lights it at the shooter's body, so it is the nearest
+ * player or officer within {@link MUZZLE_MATCH_M} — never simply you because you stand close to
+ * someone firing.
+ *
+ * @returns The shooter's id, or `null` when no body is that near (a rocket tube, a tank barrel).
  */
-function isOwnMuzzle(
+function shooterOf(
   scene: EffectsScene,
   effect: EffectsScene["effects"][number],
-): boolean {
-  if (effect.kind !== "muzzle") return false;
-  for (const player of scene.players) {
-    if (player.id !== scene.localPlayerId) continue;
-    const dx = effect.x - player.x;
-    const dy = effect.y - player.y;
-    return dx * dx + dy * dy <= MUZZLE_MATCH_M * MUZZLE_MATCH_M;
-  }
-  return false;
+): number | null {
+  const best = { id: null as number | null, reach: MUZZLE_MATCH_M ** 2 };
+  for (const player of scene.players)
+    nearerBody(best, player, effect.x, effect.y);
+  for (const cop of scene.cops ?? []) nearerBody(best, cop, effect.x, effect.y);
+  return best.id;
 }
 
 /** A muzzle flash within this reach (in the ground plane) of a shooter's muzzle is theirs, metres. */
@@ -93,17 +112,17 @@ export const MUZZLE_OWNER_REACH_M = 1.5;
 const NO_MUZZLES: MuzzlePoints = new Map();
 
 /**
- * Where a muzzle flash's flame and light go: your own muzzle when the flash is yours, else the
- * nearest shooter's within {@link MUZZLE_OWNER_REACH_M}. The simulation lights the flash where
- * the shot leaves from: the body, a rocket's tube or a tank's barrel end.
+ * Where a muzzle flash's flame and light go: its shooter's muzzle when the shooter is known and
+ * holds one, else the nearest muzzle within {@link MUZZLE_OWNER_REACH_M} — a rocket's tube or a
+ * tank's barrel end, where the simulation lights the flash away from the body.
  */
 function flashMuzzle(
-  scene: EffectsScene,
   effect: EffectsScene["effects"][number],
+  shooter: number | null,
   muzzles: MuzzlePoints,
 ): Readonly<Vector3> | null {
-  const own = muzzles.get(scene.localPlayerId);
-  if (own && isOwnMuzzle(scene, effect)) return own;
+  const known = shooter === null ? undefined : muzzles.get(shooter);
+  if (known) return known;
   let nearest: Readonly<Vector3> | null = null;
   let best = MUZZLE_OWNER_REACH_M * MUZZLE_OWNER_REACH_M;
   for (const point of muzzles.values()) {
@@ -129,8 +148,9 @@ function burstEffect(
     burst(targets, effect);
     return;
   }
-  const flame = !(ownMuzzleHidden && isOwnMuzzle(scene, effect));
-  burst(targets, effect, flame, flashMuzzle(scene, effect, muzzles));
+  const shooter = shooterOf(scene, effect);
+  const flame = !(ownMuzzleHidden && shooter === scene.localPlayerId);
+  burst(targets, effect, flame, flashMuzzle(effect, shooter, muzzles));
 }
 
 function createTargets(maxParticles: number): BurstTargets {
