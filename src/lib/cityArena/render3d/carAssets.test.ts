@@ -73,6 +73,42 @@ describe("loadCarAssets", () => {
     );
   });
 
+  it("does not keep the next view procedural when a load it threw away fails later", async () => {
+    const dropped = fakeIo();
+    vi.mocked(dropped.fetch).mockRejectedValueOnce(
+      new TypeError("Failed to fetch"),
+    );
+    const stale = loadCarAssets(dropped);
+    disposeGltfCarAssets();
+    expect(await stale).toBeNull();
+    expect(await loadCarAssets(fakeIo())).not.toBeNull();
+  });
+
+  it("frees every parsed scene when a file is refused or another fails to load", async () => {
+    for (const failing of ["refused", "unparsed"] as const) {
+      resetCarAssetsForTests();
+      const geometries: Mesh["geometry"][] = [];
+      const io = fakeIo();
+      let calls = 0;
+      vi.mocked(io.parse).mockImplementation(async () => {
+        calls += 1;
+        if (calls === 3 && failing === "unparsed") throw new Error("bad glb");
+        const scene = calls === 3 ? new Group() : fixtureCarScene();
+        scene.traverse((node) => {
+          const mesh = node as Mesh;
+          if (!mesh.isMesh) return;
+          vi.spyOn(mesh.geometry, "dispose");
+          geometries.push(mesh.geometry);
+        });
+        return { scene };
+      });
+      expect(await loadCarAssets(io), failing).toBeNull();
+      expect(geometries.length, failing).toBeGreaterThan(0);
+      for (const geometry of geometries)
+        expect(geometry.dispose, failing).toHaveBeenCalled();
+    }
+  });
+
   it("forgets the cars when disposed, and throws away a load that lands after", async () => {
     await loadCarAssets(fakeIo());
     disposeGltfCarAssets();

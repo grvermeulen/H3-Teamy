@@ -127,16 +127,28 @@ export function assembleCarAssets(
   return { cars };
 }
 
-/** Fetches and parses every file the manifest names. */
+/** The parsed files by name. */
+type CarFiles = Map<string, { scene: Object3D }>;
+
+/** Fetches and parses every file the manifest names; when one fails, frees the others first. */
 async function loadFiles(
   io: CarAssetIo,
   manifest: CarManifest,
-): Promise<Map<string, { scene: Object3D }>> {
+): Promise<CarFiles> {
   const files = Object.values(manifest.cars).map((car) => car.file);
-  const parsed = await Promise.all(
+  const settled = await Promise.allSettled(
     files.map(async (file) => io.parse(await fetchBytes(io, file))),
   );
-  return new Map(files.map((file, index) => [file, parsed[index]]));
+  const parsed: CarFiles = new Map();
+  settled.forEach((result, index) => {
+    if (result.status === "fulfilled") parsed.set(files[index]!, result.value);
+  });
+  const failure = settled.find(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  if (!failure) return parsed;
+  disposeCarFiles(parsed);
+  throw failure.reason;
 }
 
 /**
@@ -154,6 +166,11 @@ export function disposeCarScene(scene: Object3D): void {
       : [mesh.material];
     for (const material of materials) material.dispose();
   });
+}
+
+/** Frees every parsed file's scene. */
+function disposeCarFiles(files: CarFiles): void {
+  for (const { scene } of files.values()) disposeCarScene(scene);
 }
 
 /** Reports a failed load: a breadcrumb for a network blip, an exception for anything else. */
@@ -187,22 +204,29 @@ const state: LoadState = {
   generation: 0,
 };
 
-/** Loads everything; resolves `null` (after reporting) when anything fails. */
+/**
+ * Loads everything; resolves `null` (after reporting) when anything fails. Whatever was parsed is
+ * freed unless it is kept, and only a load still current marks the session failed: one a dispose
+ * threw away must not keep the next view procedural.
+ */
 async function load(
   io: CarAssetIo,
   generation: number,
 ): Promise<CarAssets | null> {
+  let files: CarFiles | null = null;
   try {
     const manifest = await fetchManifest(io);
-    const assets = assembleCarAssets(manifest, await loadFiles(io, manifest));
+    files = await loadFiles(io, manifest);
+    const assets = assembleCarAssets(manifest, files);
     if (generation !== state.generation) {
-      for (const car of Object.values(assets.cars)) disposeCarScene(car.scene);
+      disposeCarFiles(files);
       return null;
     }
     state.assets = assets;
     return assets;
   } catch (error: unknown) {
-    state.failed = true;
+    if (files) disposeCarFiles(files);
+    if (generation === state.generation) state.failed = true;
     reportLoadFailure(error);
     return null;
   }
