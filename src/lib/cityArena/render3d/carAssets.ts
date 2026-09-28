@@ -77,10 +77,31 @@ export function carNode(scene: Object3D, node: string): Object3D | undefined {
   return found;
 }
 
-/** Throws unless a parsed car has its body and all four wheels. */
+/** Whether a mesh carries the vertex colours a packed car is drawn in. */
+function isColouredMesh(object: Object3D): boolean {
+  const mesh = object as Mesh;
+  return (
+    mesh.isMesh === true && mesh.geometry.getAttribute("color") !== undefined
+  );
+}
+
+/**
+ * Throws unless a parsed car has its body (every mesh in it coloured) and all four wheels, each
+ * one coloured mesh: what the view builds from, checked once so a broken file fails the load
+ * instead of a frame.
+ */
 function checkParts(kind: CarKind, scene: Object3D): void {
-  for (const node of [CAR_BODY_NODE, ...CAR_WHEEL_NODES])
-    if (!carNode(scene, node)) throw new CarFileError(`${kind}: no ${node}`);
+  const body = carNode(scene, CAR_BODY_NODE);
+  if (!body) throw new CarFileError(`${kind}: no ${CAR_BODY_NODE}`);
+  body.traverse((node) => {
+    if ((node as Mesh).isMesh && !isColouredMesh(node))
+      throw new CarFileError(`${kind}: a body part without vertex colours`);
+  });
+  for (const node of CAR_WHEEL_NODES) {
+    const wheel = carNode(scene, node);
+    if (!wheel || !isColouredMesh(wheel))
+      throw new CarFileError(`${kind}: no coloured ${node}`);
+  }
 }
 
 /**

@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
-import { Group } from "three";
+import { Group, type Mesh } from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   assembleCarAssets,
@@ -94,5 +94,23 @@ describe("assembleCarAssets", () => {
       ]),
     );
     expect(() => assembleCarAssets(manifest, files)).toThrow(/van: no body/);
+  });
+
+  it("refuses a wheel without the vertex colours it is drawn in", () => {
+    const manifest = fixtureCarManifest();
+    const broken = fixtureCarScene();
+    const wheel = broken.children.find(
+      (child) => child.userData.name === "wheel-back-right",
+    ) as Mesh;
+    wheel.geometry.deleteAttribute("color");
+    const files = new Map(
+      Object.values(manifest.cars).map((car) => [
+        car.file,
+        { scene: car.file === "sport.glb" ? broken : fixtureCarScene() },
+      ]),
+    );
+    expect(() => assembleCarAssets(manifest, files)).toThrow(
+      /sport: no coloured wheel-back-right/,
+    );
   });
 });
