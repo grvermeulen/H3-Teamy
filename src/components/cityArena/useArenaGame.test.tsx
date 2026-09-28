@@ -682,6 +682,14 @@ describe("debug hooks", () => {
     });
     window.__arena?.dispatch({ fire: true }, 2);
     expect(window.__arena?.getViolations()).toBe(0);
+    expect(window.__arena?.audio.levels()).toMatchObject({
+      "amb-traffic": 0,
+      "amb-birds": 0,
+    });
+    expect(window.__arena?.audio.voices()).toMatchObject({
+      ambience: true,
+      oneShots: 0,
+    });
     unmount();
     expect(window.__arena).toBeUndefined();
   });

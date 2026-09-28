@@ -214,10 +214,7 @@ export function healthMaxOf(kind: VehicleKind): number {
  * Clamps a car's health to `[0, healthMaxOf(kind)]`, repairing non-finite values from a bad
  * snapshot or a kind/health mismatch on the wire.
  */
-export function clampVehicleHealth(
-  kind: VehicleKind,
-  health: number,
-): number {
+export function clampVehicleHealth(kind: VehicleKind, health: number): number {
   const max = healthMaxOf(kind);
   if (!Number.isFinite(health)) return max;
   return Math.min(max, Math.max(0, health));

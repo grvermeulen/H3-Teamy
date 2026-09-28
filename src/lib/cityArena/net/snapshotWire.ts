@@ -7,10 +7,7 @@
  * bandwidth ten times a second for state nobody renders.
  */
 
-import {
-  clampVehicleHealth,
-  VEHICLE_KINDS,
-} from "../sim/vehicle";
+import { clampVehicleHealth, VEHICLE_KINDS } from "../sim/vehicle";
 import type { MissionProfile } from "../missions/types";
 import { BONUS_KINDS, type LandmarkBonus } from "../sim/landmarkBonuses";
 import type { MatchPhase, MatchState } from "./matchPhase";

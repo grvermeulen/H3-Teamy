@@ -37,7 +37,9 @@ describe("ArenaDebugOverlay", () => {
         }}
       />,
     );
-    expect(screen.getByTestId("arena-debug")).toHaveTextContent("frame p95 — ms");
+    expect(screen.getByTestId("arena-debug")).toHaveTextContent(
+      "frame p95 — ms",
+    );
   });
 
   it("prints the metrics", () => {

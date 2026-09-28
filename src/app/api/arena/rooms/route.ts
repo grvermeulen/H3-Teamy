@@ -27,7 +27,9 @@ export async function GET(req: NextRequest): Promise<Response> {
     );
   } catch (error: unknown) {
     if (!isDbUnavailableError(error)) {
-      Sentry.captureException(error, { tags: { area: "arena", kind: "rooms" } });
+      Sentry.captureException(error, {
+        tags: { area: "arena", kind: "rooms" },
+      });
     }
     return NextResponse.json(
       { rooms: [], error: "Actieve potjes zijn even niet beschikbaar" },

@@ -177,7 +177,9 @@ describe("checkInvariants", () => {
     expect(
       checkInvariants({
         ...healthy,
-        vehicles: [{ ...createVehicle(199, "sedan", [0, 0], 0, 0), health: 200 }],
+        vehicles: [
+          { ...createVehicle(199, "sedan", [0, 0], 0, 0), health: 200 },
+        ],
       }),
     ).toContain("vehicle 199 health 200 out of range (max 180)");
   });

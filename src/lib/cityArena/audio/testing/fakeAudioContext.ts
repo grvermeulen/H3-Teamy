@@ -3,8 +3,10 @@ import type {
   AudioContextLike,
   AudioNodeLike,
   AudioParamLike,
+  BiquadFilterLike,
   GainNodeLike,
   OscillatorLike,
+  StereoPannerLike,
 } from "../sound";
 
 /** Recorded audio parameter operation. */
@@ -24,6 +26,16 @@ export type FakeOscillator = OscillatorLike & {
 /** In-memory gain fake used by the synth tests. */
 export type FakeGain = GainNodeLike & { operations: FakeAudioOperation[] };
 
+/** In-memory stereo panner fake used by the placement tests. */
+export type FakePanner = StereoPannerLike & {
+  operations: FakeAudioOperation[];
+};
+
+/** In-memory biquad filter fake used by the placement tests. */
+export type FakeFilter = BiquadFilterLike & {
+  operations: FakeAudioOperation[];
+};
+
 /** In-memory buffer source fake used by the sample tests. */
 export type FakeBufferSource = BufferSourceLike & {
   operations: FakeAudioOperation[];
@@ -40,6 +52,9 @@ export type FakeAudioContext = AudioContextLike & {
   oscillators: FakeOscillator[];
   gains: FakeGain[];
   sources: FakeBufferSource[];
+  /** Panners and filters handed out, in order; empty for a context built without them. */
+  panners: FakePanner[];
+  filters: FakeFilter[];
   resumeCalls: number;
   closeCalls: number;
   createBufferSource(): FakeBufferSource;
@@ -47,6 +62,12 @@ export type FakeAudioContext = AudioContextLike & {
   /** The nodes handed out for media elements, in order. */
   mediaSources: AudioNodeLike[];
   createMediaElementSource(element: HTMLMediaElement): AudioNodeLike;
+};
+
+/** Options for {@link createFakeAudioContext}. */
+export type FakeAudioContextOptions = {
+  /** False for a context without stereo panners and biquad filters; default true. */
+  spatial?: boolean;
 };
 
 function param(operations: FakeAudioOperation[]): AudioParamLike {
@@ -66,6 +87,10 @@ function param(operations: FakeAudioOperation[]): AudioParamLike {
       current = value;
       operations.push({ kind: "ramp", value, time });
     },
+    setTargetAtTime(value: number, time: number): void {
+      current = value;
+      operations.push({ kind: "target", value, time });
+    },
   };
 }
 
@@ -76,82 +101,142 @@ function node(operations: FakeAudioOperation[]): AudioNodeLike {
   };
 }
 
-/** Creates a fake context and a factory returning it. */
-export function createFakeAudioContext(): {
-  context: FakeAudioContext;
-  factory: () => FakeAudioContext;
-} {
-  const oscillators: FakeOscillator[] = [];
-  const gains: FakeGain[] = [];
-  const sources: FakeBufferSource[] = [];
-  const mediaSources: AudioNodeLike[] = [];
-  const context: FakeAudioContext = {
-    currentTime: 10,
-    destination: node([]),
-    oscillators,
-    gains,
-    sources,
-    mediaSources,
-    resumeCalls: 0,
-    closeCalls: 0,
-    createGain(): FakeGain {
+/** A source node fake whose `start`/`stop` flip its flags. */
+function playable<Extra extends object>(
+  extra: Extra,
+): Extra & {
+  operations: FakeAudioOperation[];
+  started: boolean;
+  stopped: boolean;
+  start(): void;
+  stop(): void;
+} & AudioNodeLike {
+  const operations: FakeAudioOperation[] = [];
+  const fake = {
+    ...node(operations),
+    ...extra,
+    operations,
+    started: false,
+    stopped: false,
+    start: () => {
+      fake.started = true;
+      operations.push({ kind: "start" });
+    },
+    stop: () => {
+      fake.stopped = true;
+      operations.push({ kind: "stop" });
+    },
+  };
+  return fake;
+}
+
+/** The panner and filter factories, recording into the given lists. */
+function spatialNodes(
+  panners: FakePanner[],
+  filters: FakeFilter[],
+): Pick<AudioContextLike, "createStereoPanner" | "createBiquadFilter"> {
+  return {
+    createStereoPanner(): FakePanner {
       const operations: FakeAudioOperation[] = [];
-      const gain = {
+      const panner = {
         ...node(operations),
         operations,
-        gain: param(operations),
-      } as FakeGain;
-      gains.push(gain);
+        pan: param(operations),
+      };
+      panners.push(panner);
+      return panner;
+    },
+    createBiquadFilter(): FakeFilter {
+      const operations: FakeAudioOperation[] = [];
+      const filter = {
+        ...node(operations),
+        operations,
+        type: "lowpass",
+        frequency: param(operations),
+      };
+      filters.push(filter);
+      return filter;
+    },
+  };
+}
+
+/** The lists a fake context records its nodes into. */
+type FakeNodeLists = Pick<
+  FakeAudioContext,
+  "oscillators" | "gains" | "sources" | "mediaSources"
+>;
+
+/** The gain, oscillator, buffer and media-element factories, recording into `lists`. */
+function sourceNodes(
+  lists: FakeNodeLists,
+): Pick<
+  FakeAudioContext,
+  | "createGain"
+  | "createOscillator"
+  | "createBufferSource"
+  | "createMediaElementSource"
+> {
+  return {
+    createGain(): FakeGain {
+      const operations: FakeAudioOperation[] = [];
+      const gain = { ...node(operations), operations, gain: param(operations) };
+      lists.gains.push(gain);
       return gain;
     },
     createOscillator(): FakeOscillator {
-      const operations: FakeAudioOperation[] = [];
-      const oscillator = {
-        ...node(operations),
-        operations,
-        type: "sine",
-        frequency: param(operations),
-        started: false,
-        stopped: false,
-        start: () => {
-          oscillator.started = true;
-          operations.push({ kind: "start" });
-        },
-        stop: () => {
-          oscillator.stopped = true;
-          operations.push({ kind: "stop" });
-        },
-      } as FakeOscillator;
-      oscillators.push(oscillator);
+      const oscillator = playable({ type: "sine", frequency: param([]) });
+      oscillator.frequency = param(oscillator.operations);
+      lists.oscillators.push(oscillator);
       return oscillator;
     },
     createBufferSource(): FakeBufferSource {
-      const operations: FakeAudioOperation[] = [];
-      const source = {
-        ...node(operations),
-        operations,
-        buffer: null,
+      const noBuffer: AudioBufferLike | null = null;
+      const source: FakeBufferSource = playable({
+        buffer: noBuffer,
         loop: false,
-        playbackRate: param(operations),
-        started: false,
-        stopped: false,
-        start: () => {
-          source.started = true;
-          operations.push({ kind: "start" });
-        },
-        stop: () => {
-          source.stopped = true;
-          operations.push({ kind: "stop" });
-        },
-      } as FakeBufferSource;
-      sources.push(source);
+        playbackRate: param([]),
+      });
+      source.playbackRate = param(source.operations);
+      // A real source fires `ended` when stopped as well as when it plays out.
+      const stop = source.stop;
+      source.stop = () => {
+        stop();
+        source.onended?.();
+      };
+      lists.sources.push(source);
       return source;
     },
     createMediaElementSource(): AudioNodeLike {
       const source = node([]);
-      mediaSources.push(source);
+      lists.mediaSources.push(source);
       return source;
     },
+  };
+}
+
+/** Creates a fake context and a factory returning it. */
+export function createFakeAudioContext(options: FakeAudioContextOptions = {}): {
+  context: FakeAudioContext;
+  factory: () => FakeAudioContext;
+} {
+  const lists: FakeNodeLists = {
+    oscillators: [],
+    gains: [],
+    sources: [],
+    mediaSources: [],
+  };
+  const panners: FakePanner[] = [];
+  const filters: FakeFilter[] = [];
+  const context: FakeAudioContext = {
+    ...lists,
+    ...sourceNodes(lists),
+    ...(options.spatial === false ? {} : spatialNodes(panners, filters)),
+    currentTime: 10,
+    destination: node([]),
+    panners,
+    filters,
+    resumeCalls: 0,
+    closeCalls: 0,
     decodeAudioData(data: ArrayBuffer): Promise<AudioBufferLike> {
       return data.byteLength === 0
         ? Promise.reject(new Error("undecodable"))

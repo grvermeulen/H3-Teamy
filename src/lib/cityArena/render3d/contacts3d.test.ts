@@ -10,10 +10,7 @@ import {
   type ContactsScene,
   contactSeed,
 } from "./contacts3d";
-import {
-  CHARACTER_DRAW_DISTANCE_M,
-  FULL_RATE_ANIMATION_M,
-} from "./entities";
+import { CHARACTER_DRAW_DISTANCE_M, FULL_RATE_ANIMATION_M } from "./entities";
 import type { ContactSpot } from "./missionMarkers";
 
 type Fake = {

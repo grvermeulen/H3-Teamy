@@ -230,6 +230,7 @@ async function bootSession(
     },
   );
   runtime.hapticsEnabled = settingsRef.current.vibrate;
+  runtime.sound.setAmbienceEnabled(settingsRef.current.ambience);
   runtime.quality = settingsRef.current.quality;
   runtime.dynamicCamera = settingsRef.current.dynamicCamera;
   runtime.camera3d = settingsRef.current.camera3d;
@@ -601,6 +602,10 @@ function createTestHooks(
       runtime.state = replacePlayer(runtime.state, player);
     },
     getViolations: () => runtimeRef.current?.violations ?? 0,
+    audio: {
+      levels: () => runtimeRef.current?.sound.debug().world.ambience ?? null,
+      voices: () => runtimeRef.current?.sound.debug() ?? null,
+    },
   };
 }
 
@@ -720,6 +725,7 @@ function applySettings(runtime: Runtime | null, settings: ArenaSettings): void {
   runtime.camera3d = settings.camera3d;
   runtime.sound.radio?.setEnabled(settings.radio);
   runtime.sound.radio?.tune(settings.radioStation ?? "");
+  runtime.sound.setAmbienceEnabled(settings.ambience);
 }
 
 /** Owns the world session, the fixed-step arena loop, the camera, the HUD and the death screen state. */
