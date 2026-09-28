@@ -326,6 +326,8 @@ type ArenaPlayfieldProps = {
   tip: { shown: boolean; dismiss: () => void };
   sharedScreen?: boolean;
   onOpenMap: () => void;
+  /** A menu, the map or an offer is open over the playfield. */
+  paused: boolean;
 };
 
 /** Canvas plus the loading, error, touch-control, death and debug layers drawn on top of it. */
@@ -340,6 +342,7 @@ function ArenaPlayfield({
   tip,
   sharedScreen = false,
   onOpenMap,
+  paused,
 }: ArenaPlayfieldProps): React.JSX.Element {
   const playing = game.phase === "playing";
   return (
@@ -385,6 +388,7 @@ function ArenaPlayfield({
           stick={stick}
           aimStick={aimStick}
           tip={tip}
+          paused={paused}
         />
       ) : null}
       {game.phase === "loading" ? (
@@ -581,6 +585,7 @@ export default function CityArenaOverlay({
         tip={tip}
         sharedScreen={entry.role === "hybrid"}
         onOpenMap={openMap}
+        paused={modalOpen}
       />
       <ArenaFooter
         showTouch={showTouch}

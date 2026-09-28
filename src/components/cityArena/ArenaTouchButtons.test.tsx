@@ -1,5 +1,15 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  TOUCH_LOOK_RAD_PER_PX,
+  createTouchLook,
+} from "@/lib/cityArena/input/touchLook";
 import ArenaTouchButtons from "./ArenaTouchButtons";
 
 describe("ArenaTouchButtons", () => {
@@ -119,5 +129,151 @@ describe("ArenaTouchButtons", () => {
     fireEvent.blur(fire);
     expect(onButton).toHaveBeenCalledTimes(2);
     expect(onButton).toHaveBeenLastCalledWith("fire", false);
+  });
+});
+
+/** Sets `document.hidden`, which jsdom keeps `false`. */
+function stubHidden(hidden: boolean): void {
+  Object.defineProperty(document, "hidden", {
+    configurable: true,
+    get: () => hidden,
+  });
+}
+
+describe("ArenaTouchButtons in 3D", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+    stubHidden(false);
+  });
+
+  it("shows Richten and the round Schieten button only with a look pad", () => {
+    render(
+      <ArenaTouchButtons
+        inVehicle={false}
+        onButton={vi.fn()}
+        showFire={false}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Richten" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Schieten" })).toBeNull();
+    cleanup();
+    render(
+      <ArenaTouchButtons
+        inVehicle={false}
+        onButton={vi.fn()}
+        showFire={false}
+        look={createTouchLook(() => 1)}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Richten" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Schieten" }).className,
+    ).toContain("rounded-full");
+  });
+
+  it("fires while Schieten is held and stops on release", () => {
+    const onButton = vi.fn();
+    render(
+      <ArenaTouchButtons
+        inVehicle={false}
+        onButton={onButton}
+        look={createTouchLook(() => 1)}
+      />,
+    );
+    const fire = screen.getByRole("button", { name: "Schieten" });
+    fireEvent.pointerDown(fire, { pointerId: 1, clientX: 10, clientY: 10 });
+    expect(onButton).toHaveBeenLastCalledWith("fire", true);
+    fireEvent.pointerUp(fire, { pointerId: 1, clientX: 10, clientY: 10 });
+    expect(onButton).toHaveBeenLastCalledWith("fire", false);
+  });
+
+  it("turns the look by a drag that starts on Schieten, still firing", () => {
+    const onButton = vi.fn();
+    const look = createTouchLook(() => 1);
+    render(
+      <ArenaTouchButtons inVehicle={false} onButton={onButton} look={look} />,
+    );
+    const fire = screen.getByRole("button", { name: "Schieten" });
+    fireEvent.pointerDown(fire, { pointerId: 4, clientX: 100, clientY: 50 });
+    fireEvent.pointerMove(fire, { pointerId: 4, clientX: 160, clientY: 50 });
+    expect(look.take().yaw).toBeCloseTo(60 * TOUCH_LOOK_RAD_PER_PX);
+    expect(onButton).toHaveBeenLastCalledWith("fire", true);
+    fireEvent.pointerCancel(fire, { pointerId: 4, clientX: 160, clientY: 50 });
+    expect(onButton).toHaveBeenLastCalledWith("fire", false);
+    fireEvent.pointerMove(fire, { pointerId: 4, clientX: 200, clientY: 50 });
+    expect(look.take().yaw).toBe(0);
+  });
+
+  it("flips the sights with Richten and shows it pressed", () => {
+    const onButton = vi.fn();
+    render(
+      <ArenaTouchButtons
+        inVehicle={false}
+        onButton={onButton}
+        look={createTouchLook(() => 1)}
+      />,
+    );
+    const sights = screen.getByRole("button", { name: "Richten" });
+    expect(sights).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(sights);
+    expect(onButton).toHaveBeenLastCalledWith("ads", true);
+    expect(sights).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(sights);
+    expect(onButton).toHaveBeenLastCalledWith("ads", false);
+    expect(sights).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("puts the sights down when they are no longer allowed, and keeps them down", () => {
+    const onButton = vi.fn();
+    const look = createTouchLook(() => 1);
+    const { rerender } = render(
+      <ArenaTouchButtons inVehicle={false} onButton={onButton} look={look} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Richten" }));
+    rerender(
+      <ArenaTouchButtons
+        inVehicle={false}
+        onButton={onButton}
+        look={look}
+        sightsAllowed={false}
+      />,
+    );
+    expect(onButton).toHaveBeenLastCalledWith("ads", false);
+    const sights = screen.getByRole("button", { name: "Richten" });
+    expect(sights).toHaveAttribute("aria-pressed", "false");
+    expect(sights).toBeDisabled();
+    rerender(
+      <ArenaTouchButtons inVehicle={false} onButton={onButton} look={look} />,
+    );
+    expect(sights).toHaveAttribute("aria-pressed", "false");
+    expect(onButton).toHaveBeenLastCalledWith("ads", false);
+  });
+
+  it("puts the sights down when the page is hidden or the buttons go away", () => {
+    const onButton = vi.fn();
+    const { unmount } = render(
+      <ArenaTouchButtons
+        inVehicle={false}
+        onButton={onButton}
+        look={createTouchLook(() => 1)}
+      />,
+    );
+    const sights = screen.getByRole("button", { name: "Richten" });
+    fireEvent.click(sights);
+    stubHidden(true);
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(sights).toHaveAttribute("aria-pressed", "false");
+    expect(onButton).toHaveBeenLastCalledWith("ads", false);
+    stubHidden(false);
+    fireEvent.click(sights);
+    expect(onButton).toHaveBeenLastCalledWith("ads", true);
+    unmount();
+    expect(onButton).toHaveBeenLastCalledWith("ads", false);
   });
 });

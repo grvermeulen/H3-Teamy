@@ -612,8 +612,16 @@ describe("CityArenaOverlay", () => {
       screen.getByRole("button", { name: "Schieten" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/sleep rechts om rond te kijken/)).toBeTruthy();
+    // The sights toggle goes up with the pistol, and down while the menu is open.
+    const sights = screen.getByRole("button", { name: "Richten" });
+    fireEvent.click(sights);
+    expect(sights).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Menu", exact: true }));
+    expect(sights).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(screen.getByRole("button", { name: "Verder spelen" }));
     fireEvent.click(screen.getByRole("button", { name: "Wissel naar 2D" }));
     expect(screen.queryByTestId("touch-look-pad")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Richten" })).toBeNull();
     expect(screen.getByTestId("touch-aim-surface")).toBeInTheDocument();
   });
 
