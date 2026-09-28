@@ -61,9 +61,15 @@ const COCKPIT: CockpitPose = {
 
 function fakeCockpit(): Cockpit3d & {
   update: ReturnType<typeof vi.fn>;
+  muzzleWorld: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
 } {
-  return { object: new Group(), update: vi.fn(), dispose: vi.fn() };
+  return {
+    object: new Group(),
+    update: vi.fn(),
+    muzzleWorld: vi.fn(() => false),
+    dispose: vi.fn(),
+  };
 }
 
 function cityCamera(): PerspectiveCamera {
@@ -199,6 +205,21 @@ describe("createViewModelPass: the muzzle", () => {
     expect(seenByCity.x).toBeCloseTo(seenByHands.x, 6);
     expect(seenByCity.y).toBeCloseTo(seenByHands.y, 6);
     expect(muzzle.z).toBeCloseTo(barrel.z, 6);
+  });
+
+  it("hands out the cockpit gun hand's muzzle during a drive-by at the wheel", () => {
+    const cockpit = fakeCockpit();
+    cockpit.muzzleWorld.mockImplementation((target: Vector3) => {
+      target.set(4, 1, 6);
+      return true;
+    });
+    const pass = createViewModelPass(fakeViewModel, () => cockpit);
+    const target = new Vector3();
+    pass.update(cityCamera(), null, COCKPIT);
+    expect(pass.muzzleWorld(target)).toBe(true);
+    expect(target.toArray()).toEqual([4, 1, 6]);
+    pass.update(cityCamera(), null, null);
+    expect(pass.muzzleWorld(new Vector3())).toBe(false);
   });
 });
 

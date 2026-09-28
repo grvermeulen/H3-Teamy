@@ -67,7 +67,7 @@ export type ViewModel = {
 /** A shot's kick has fully recovered after this long, seconds. */
 export const VIEW_RECOIL_RECOVERY_S = 0.22;
 /** A shot older than this many ticks when first seen is not kicked (e.g. on entering the view). */
-const FRESH_SHOT_TICKS = 3;
+export const FRESH_SHOT_TICKS = 3;
 /** How far a full kick pushes the hands back toward the camera, metres. */
 const KICK_BACK_M = 0.06;
 /** How far a full kick tips the muzzle up, radians. */
@@ -351,7 +351,7 @@ type ViewState = {
 };
 
 /** The glowing ball at the barrel on a shot. */
-type FlashMesh = Mesh<IcosahedronGeometry, FireballMaterial>;
+export type FlashMesh = Mesh<IcosahedronGeometry, FireballMaterial>;
 
 /** The parts the view model moves. */
 type ViewParts = {
@@ -390,8 +390,13 @@ function syncShot(state: ViewState, input: ViewModelInput): void {
   if (state.tip) state.flash = VIEW_FLASH_S;
 }
 
-/** The muzzle flash: hidden between shots, set at `holder`'s barrel tip by the weapon swap. */
-function createFlashMesh(): FlashMesh {
+/**
+ * A muzzle flash for a gun held in view: hidden between shots; hang it on the barrel's tip, its
+ * long axis (+X) along the barrel. Owns its geometry and material.
+ *
+ * @returns The flash; show it with {@link showFlash}.
+ */
+export function createFlashMesh(): FlashMesh {
   const flash = new Mesh(
     new IcosahedronGeometry(1, VIEW_FLASH_DETAIL),
     createFireballMaterial(VIEW_FLASH_COLOUR),
@@ -402,11 +407,14 @@ function createFlashMesh(): FlashMesh {
 }
 
 /**
- * Shows the flash for what is left of it: full size and bright on the shot's frame, shrinking
+ * Shows a flash for what is left of it: full size and bright on the shot's frame, shrinking
  * and fading after; stretched along the barrel.
+ *
+ * @param flash - The flash, from {@link createFlashMesh}.
+ * @param remainingS - Seconds it still shows, from {@link VIEW_FLASH_S} at the shot down to 0.
  */
-function placeFlash(flash: FlashMesh, state: ViewState): void {
-  const share = state.flash / VIEW_FLASH_S;
+export function showFlash(flash: FlashMesh, remainingS: number): void {
+  const share = remainingS / VIEW_FLASH_S;
   flash.visible = share > 0;
   if (!flash.visible) return;
   const size =
@@ -535,7 +543,7 @@ function poseViewModel(
   });
   placeRig(parts.rig, state, LAYOUTS[input.weapon], input.speed, share);
   parts.rig.visible = !(isScoped(input.weapon) && share >= 1);
-  placeFlash(parts.flash, state);
+  showFlash(parts.flash, state.flash);
   advance(state, input);
 }
 

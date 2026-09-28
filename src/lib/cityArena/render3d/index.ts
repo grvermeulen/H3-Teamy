@@ -63,7 +63,8 @@ export type View3dFrame = {
   deadSeconds: number | null;
   /**
    * Aiming down the sights (the held right mouse button, or the touch sights toggle): the view
-   * zooms and the hands bring the gun up. Absent, at the hip.
+   * zooms and the hands bring the gun up, or at the wheel the gun comes out of the window. Absent,
+   * at the hip.
    */
   ads?: boolean;
   quality: RenderQuality;

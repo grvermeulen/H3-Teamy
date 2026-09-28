@@ -60,11 +60,12 @@ export type ViewModelPass = {
     cockpit?: CockpitPose | null,
   ): OverlayPass | null;
   /**
-   * Where the hands' gun ends in the world this frame: the pass camera stands exactly where the
-   * city camera does, so the point lines up with the drawn gun in the city too.
+   * Where the drawn gun ends in the world this frame — the hands', or at the wheel the cockpit's
+   * gun hand during a drive-by: the pass camera stands exactly where the city camera does, so the
+   * point lines up with the drawn gun in the city too.
    *
    * @param target - Receives the world position; untouched when there is none.
-   * @returns `false` unless the last `update` showed the hands holding a gun.
+   * @returns `false` unless the last `update` showed the hands or the cockpit holding a gun.
    */
   muzzleWorld(target: Vector3): boolean;
   /** Frees the hands' geometry and detaches the cockpit. */
@@ -136,10 +137,12 @@ export function createViewModelPass(
   scene.add(...createEveningLights(), camera, cockpit.object);
   const pass: OverlayPass = { scene, camera };
   let handsShown = false;
+  let cockpitShown = false;
   let cityFovDeg = HANDS_FOV_DEG;
   return {
     update(city, input, pose = null) {
       handsShown = input !== null && !pose;
+      cockpitShown = pose !== null;
       if (!input && !pose) return null;
       cityFovDeg = city.fov;
       followCamera(camera, city, pose ? city.fov : HANDS_FOV_DEG);
@@ -154,7 +157,9 @@ export function createViewModelPass(
       return pass;
     },
     muzzleWorld(target) {
-      if (!handsShown || !viewModel.muzzleWorld(target)) return false;
+      // The cockpit is drawn through the city's own lens; only the hands keep a lens of their own.
+      if (!handsShown) return cockpitShown && cockpit.muzzleWorld(target);
+      if (!viewModel.muzzleWorld(target)) return false;
       toCityLens(target, camera, cityFovDeg);
       return true;
     },

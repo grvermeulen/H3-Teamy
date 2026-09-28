@@ -116,7 +116,7 @@ const NO_MUZZLES: MuzzlePoints = new Map();
 
 /**
  * Where a muzzle flash's flame and light go: its shooter's muzzle when the shooter is known — or
- * nowhere special when that shooter holds none in view (a drive-by from a car), never someone
+ * nowhere special when that shooter holds none in view (out of draw distance), never someone
  * else's gun nearby. Only a flash lit away from every body — a rocket's tube or a tank's barrel
  * end — goes to the nearest muzzle within {@link MUZZLE_OWNER_REACH_M}.
  */

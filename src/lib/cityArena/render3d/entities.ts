@@ -21,11 +21,12 @@ import type {
   WeaponKind,
 } from "../sim/types";
 import { firesCannon, forwardSpeed, lengthOf } from "../sim/vehicle";
-import { isMelee } from "../sim/weapons";
 import { pedLookOf, type CharacterLook } from "./characterLooks";
 import type { PoseInput } from "./characterPose";
 import type { Character3d } from "./characters";
 import { headingToRotationY, setWorldPosition } from "./coords";
+import { holdsGun } from "./driveByPose";
+import { createDriveBys, type DriveBys, type DriveByShown } from "./driveBys";
 import {
   createMotion,
   createSteerMemory,
@@ -43,6 +44,7 @@ import {
   muzzleTickNear,
   registerShot,
   type ShotMemory,
+  type ShooterBody,
 } from "./entityShots";
 import { createMuzzleMap, type MuzzleMap } from "./muzzleMap";
 import type { Pickup3d } from "./pickups3d";
@@ -108,6 +110,8 @@ export type EntityView = {
   firstPerson: boolean;
   /** The local player's aim, radians — a tank they drive turns its turret to it. */
   aim: number;
+  /** The local player aims down the sights: at the wheel, their gun comes out of the window. */
+  ads?: boolean;
   /** Characters beyond this distance are drawn simply (the "laag" quality); unset: all detailed. */
   characterDetailM?: number;
 };
@@ -140,6 +144,8 @@ export type LocalCharacter = {
   speed: number;
   /** The car the player drives while alive, drawn or not; `null` on foot or dead. */
   vehicle: LocalVehicle | null;
+  /** The window your gun is out of while you drive and shoot or aim; `null` otherwise. */
+  driveBy: Readonly<DriveByShown> | null;
 };
 
 /** The 3D cast. */
@@ -211,8 +217,12 @@ type Frame = {
   /** Reused for `local.vehicle` while the local player drives. */
   readonly localVehicle: LocalVehicle;
   readonly muzzles: EffectState[];
+  /** The scene's players and living officers: who a muzzle flash may belong to. */
+  readonly shooters: ShooterBody[];
   /** Where each shooter's gun points from, this frame. */
   readonly muzzleMap: MuzzleMap;
+  /** Armed drivers' guns out of their windows. */
+  readonly driveBys: DriveBys;
   /** Receives one character's muzzle before it is recorded. */
   readonly muzzlePoint: Vector3;
   readonly pose: PoseInput;
@@ -238,11 +248,6 @@ function within(
   const dx = x - focus.x;
   const dy = y - focus.y;
   return dx * dx + dy * dy <= distance * distance;
-}
-
-/** Guns are raised to aim; fists, the bat and the tank's cannon are not. */
-function holdsGun(weapon: WeaponKind): boolean {
-  return !isMelee(weapon) && weapon !== "cannon";
 }
 
 /** True when a living player stands within `range` of `(x, y)`. */
@@ -549,7 +554,9 @@ function describeLocalVehicle(
   frame: Frame,
   car: VehicleState,
   input: Vehicle3dInput,
+  driveBy: Readonly<DriveByShown> | null,
 ): void {
+  frame.local.driveBy = driveBy;
   const vehicle = frame.localVehicle;
   vehicle.id = car.id;
   vehicle.kind = car.kind;
@@ -581,6 +588,23 @@ function recordBarrel(
     car.y + Math.sin(aim) * reach,
   );
   frame.muzzleMap.set(driverId, frame.muzzlePoint);
+}
+
+/**
+ * A living driver's gun out of the window while they shoot (or you aim), within the characters'
+ * draw distance; your weapon for the cockpit. Returns the window while the gun is out.
+ */
+function syncDriveBy(
+  frame: Frame,
+  car: VehicleState,
+  driver: ArenaPlayerState | undefined,
+  own: boolean,
+): Readonly<DriveByShown> | null {
+  if (!driver || driver.diedAtTick !== null || car.wrecked) return null;
+  if (own) frame.local.weapon = driver.weapon;
+  if (!within(frame.focus, car.x, car.y, CHARACTER_DRAW_DISTANCE_M))
+    return null;
+  return frame.driveBys.sync(frame, driver, car, own);
 }
 
 /** True when the living local player drives `driver`'s car. */
@@ -616,7 +640,8 @@ function syncVehicle(frame: Frame, scene: Scene, car: VehicleState): void {
   if (driver && input.turretYaw !== null && !car.wrecked)
     recordBarrel(frame, car, driver.id, input.turretYaw);
   const own = isLocalDriver(scene, driver);
-  if (own) describeLocalVehicle(frame, car, input);
+  const driveBy = syncDriveBy(frame, car, driver, own);
+  if (own) describeLocalVehicle(frame, car, input, driveBy);
   object.visible = !(own && frame.view.firstPerson && !car.wrecked);
 }
 
@@ -666,6 +691,7 @@ function createLocal(): Pick<Frame, "local" | "localVehicle"> {
       firedTick: null,
       speed: 0,
       vehicle: null,
+      driveBy: null,
     },
     localVehicle: {
       id: 0,
@@ -689,7 +715,9 @@ function createFrame(factories: EntityFactories, group: Group): Frame {
     pools: createPools(group),
     ...createLocal(),
     muzzles: [],
+    shooters: [],
     muzzleMap: createMuzzleMap(),
+    driveBys: createDriveBys(group),
     muzzlePoint: new Vector3(),
     pose: {
       speed: 0,
@@ -727,10 +755,19 @@ function createFrame(factories: EntityFactories, group: Group): Frame {
 }
 
 /** Runs one frame's sync over every kind of entity. */
+/** Refills `out` with the scene's players and living officers, no new objects. */
+function collectShooters(scene: Scene, out: ShooterBody[]): void {
+  out.length = 0;
+  for (const player of scene.players) out.push(player);
+  for (const cop of scene.cops) if (cop.diedAtTick === null) out.push(cop);
+}
+
 function syncScene(frame: Frame, scene: Scene): void {
   collectFreshMuzzles(scene.effects, scene.tick, frame.muzzles);
+  collectShooters(scene, frame.shooters);
   frame.local.onFoot = false;
   frame.local.vehicle = null;
+  frame.local.driveBy = null;
   for (const player of scene.players) syncPlayer(frame, scene, player);
   for (const ped of scene.peds) syncPed(frame, scene, ped);
   for (const cop of scene.cops) syncCop(frame, scene, cop);
@@ -764,13 +801,16 @@ export function createEntitySync(factories: EntityFactories): EntitySync {
       frame.focus = cameraFocus;
       frame.view = view;
       for (const pool of pools) pool.begin();
+      frame.driveBys.begin();
       frame.muzzleMap.begin();
       syncScene(frame, scene);
       frame.muzzleMap.end();
+      frame.driveBys.end();
       for (const pool of pools) pool.end();
     },
     dispose() {
       for (const pool of pools) pool.dispose();
+      frame.driveBys.dispose();
     },
   };
 }

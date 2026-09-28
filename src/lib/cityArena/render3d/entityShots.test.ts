@@ -6,6 +6,8 @@ import {
   collectFreshMuzzles,
   createShotMemory,
   muzzleTickNear,
+  newestMuzzleNear,
+  newestOwnMuzzle,
   registerShot,
 } from "./entityShots";
 
@@ -53,6 +55,29 @@ describe("muzzleTickNear", () => {
     const muzzles = [effect({ x: MUZZLE_MATCH_M + 0.01 })];
     expect(muzzleTickNear(muzzles, 0, 0)).toBeNull();
     expect(muzzleTickNear([effect({ x: MUZZLE_MATCH_M })], 0, 0)).toBe(TICK);
+  });
+});
+
+describe("newestMuzzleNear", () => {
+  it("hands over the newest flash within reach, whose angle is the shot's aim", () => {
+    const older = effect({ id: 1, bornTick: TICK - 1, angle: 0.3 });
+    const newest = effect({ id: 2, x: 0.4, angle: -1.2 });
+    const far = effect({ id: 3, x: MUZZLE_MATCH_M + 1, bornTick: TICK + 1 });
+    expect(newestMuzzleNear([older, newest, far], 0, 0)).toBe(newest);
+    expect(newestMuzzleNear([far], 0, 0)).toBeNull();
+  });
+});
+
+describe("newestOwnMuzzle", () => {
+  it("gives a flash to the body nearest it, never to a neighbour within reach", () => {
+    const driver = { x: 0, y: 0 };
+    const officer = { x: 0.9, y: 0 };
+    const bodies = [driver, officer];
+    const own = effect({ id: 1, x: 0, bornTick: TICK - 1, angle: 1.5 });
+    const theirs = effect({ id: 2, x: 0.9, angle: -1.5 });
+    expect(newestOwnMuzzle([own, theirs], driver, bodies)).toBe(own);
+    expect(newestOwnMuzzle([theirs], driver, bodies)).toBeNull();
+    expect(newestOwnMuzzle([own, theirs], officer, bodies)).toBe(theirs);
   });
 });
 
