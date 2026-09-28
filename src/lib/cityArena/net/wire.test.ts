@@ -260,6 +260,18 @@ describe("snapshot wire format", () => {
     expect(decodeSnapshot(snapshot).vehicles[0]!.health).toBe(180);
   });
 
+  it("clamps over-max vehicle health when encoding a snapshot row", () => {
+    const state = {
+      ...boot(),
+      vehicles: [
+        { ...createVehicle(201, "sedan", [0, 0], 0, 0), health: 230 },
+      ],
+    };
+    const snapshot = encodeSnapshot(state, 0, {});
+    expect(snapshot.v[0]![7]).toBe(180);
+    expect(decodeSnapshot(snapshot).vehicles[0]!.health).toBe(180);
+  });
+
   it("round-trips cars, pedestrians, cops, bullets and pickups", () => {
     const state = boot(4);
     const back = decodeSnapshot(encodeSnapshot(state, 0, {}));
