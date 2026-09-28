@@ -86,6 +86,17 @@ export function tileBuildingsIn(
 }
 
 /**
+ * A tile's building buckets, holding positions in `tile.buildings`: for a caller that visits them
+ * (`bucketGrid.visitArea`) every frame without the lists {@link tileBuildingsIn} builds.
+ *
+ * @param tile - The tile.
+ * @returns Its building grid, made on first use.
+ */
+export function tileBuildingGrid(tile: DecodedTile): BucketGrid<number> {
+  return indexOf(tile).buildings;
+}
+
+/**
  * A tile's roads whose bounds meet an area, in the tile's order.
  *
  * @param tile - The tile.

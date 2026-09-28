@@ -38,6 +38,9 @@ Drive-bys from the chase camera and from the driver's seat (see [Drive-bys](#dri
 | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | ![A rifle held out of the driver's window, and an Uzi firing out of the passenger window](img/3d/3d-drive-by.jpg) | ![First person: the right hand off the wheel, the Uzi firing out of the passenger window](img/3d/3d-cockpit-drive-by.jpg) |
 
+Aiming down the sights — the pistol, the rifle's scope, over the shoulder — is pictured under
+[Aiming](#aiming).
+
 The glTF cast (see [Characters: the glTF cast](#characters-the-gltf-cast)):
 
 |                                                                                       |                                                                                              |
@@ -99,8 +102,9 @@ Grouped by responsibility; every exported symbol carries its own JSDoc.
 | File              | Responsibility                                                                                                                      |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `index.ts`        | `createView3d(canvas)`: wires every layer together, places the camera, drives one frame                                             |
+| `frameAim.ts`     | The local player's aim per frame: the sights' ease, the aim probe's run, the scope's opacity                                        |
 | `renderer3d.ts`   | WebGL renderer, three.js scene, camera, evening lights, fog; `RenderQuality`, view distance and pixel-ratio tables                  |
-| `cameraRig.ts`    | Third-person and first-person rigs (the driver's eye per vehicle kind), pitch limits, car chase and death orbit                     |
+| `cameraRig.ts`    | Third- and first-person rigs (the driver's eye per kind), pitch limits, chase, death orbit, the sights' zoom                        |
 | `cameraFeel.ts`   | The 2D feedback's screen shake (`SHAKE_METRES_PER_PX`) and drunk sway, as a camera nudge and roll                                   |
 | `sharedAssets.ts` | `disposeSharedAssets`: frees the module-level character (procedural and glTF), vehicle, pickup, weapon, cockpit and drive-by caches |
 | `coords.ts`       | The one world ↔ three.js mapping (`(x, y)` metres → `(x, height, y)`) and angle helpers                                             |
@@ -181,8 +185,8 @@ Grouped by responsibility; every exported symbol carries its own JSDoc.
 | File                  | Responsibility                                                                                                                                                 |
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `weapons3d.ts`        | Small procedural weapon models, shared between a character's hand and first person                                                                             |
-| `viewmodel.ts`        | First-person forearms/fists: stride bob, shot kick, punch/swing, weapon-change dip; the barrel tip in the world                                                |
-| `viewModelPass.ts`    | Draws the hands — or, at the wheel, the cockpit — in a pass of its own (near-clipped camera) over the city                                                     |
+| `viewmodel.ts`        | First-person forearms/fists: bob, kick, punch/swing, swap dip, the sights pose; the barrel tip in the world                                                    |
+| `viewModelPass.ts`    | Draws the hands (own 70° lens) — or, at the wheel, the cockpit — in a pass of its own over the city                                                            |
 | `cockpitSpecs.ts`     | `COCKPITS`: every vehicle kind's driver's eye, wheel, dashboard, windscreen, bonnet and frame, in car space                                                    |
 | `cockpitParts.ts`     | Pure builders of a kind's cockpit geometry: interior shell, bonnet paint, wheel, dial, glass, siren strips                                                     |
 | `cockpit3d.ts`        | A live cockpit: per-kind cached geometry, the wheel turning in both hands (the right one leaving it for the gun in a drive-by), speedometer needle, siren glow |
@@ -191,7 +195,10 @@ Grouped by responsibility; every exported symbol carries its own JSDoc.
 | `driveBy3d.ts`        | A drive-by's arm in the car's frame: sleeve, forearm on the sill or dash, the held weapon level along the aim, its muzzle                                      |
 | `driveBys.ts`         | Every armed driver's drive-by for the entity sync: shots, aim (another driver's from their flash), pooled arms, muzzles                                        |
 | `muzzleMap.ts`        | The frame's muzzle point per shooter id (players, officers, a drive-by's gun, a tank's barrel), pooled                                                         |
-| `muzzleBlend.ts`      | `CONVERGE_M` and the maths that draws a round out of its muzzle onto the flat line                                                                             |
+| `muzzleBlend.ts`      | `CONVERGE_M` and the maths that draws a round out of its muzzle onto the flat line, or toward the aim point                                                    |
+| `roundAims.ts`        | The aim point each of your rounds was fired at, captured when first seen, pooled by bullet id                                                                  |
+| `aimProbe.ts`         | The ray through the screen centre against people, vehicles, buildings and the ground: the aim point                                                            |
+| `aimWorld.ts`         | The probe's world from a frame: pooled people and vehicles, the standing buildings near the ray by tile bucket                                                 |
 | `projectiles3d.ts`    | Pooled rockets and cannon shells (by bullet id), trails laid by distance flown, launched from the muzzle                                                       |
 | `projectileModels.ts` | Shared rocket and shell geometry/materials                                                                                                                     |
 | `tracers.ts`          | One shared `LineSegments` draw call for every gun round in flight, drawn out of its shooter's muzzle                                                           |
@@ -230,7 +237,7 @@ Grouped by responsibility; every exported symbol carries its own JSDoc.
 | `playerMarkers3d.ts` | A camera-facing diamond over every other living player                                           |
 | `playerArrows.ts`    | Edge-of-screen arrows toward friends who are out of view                                         |
 | `missionMarkers.ts`  | Pure read of the scene's mission contacts/objectives for `guidance3d`/`contacts3d`               |
-| `overlay3d.ts`       | The 2D HUD canvas overlay: crosshair and off-screen arrows                                       |
+| `overlay3d.ts`       | The 2D HUD canvas overlay: the centred crosshair or the rifle's scope, and arrows                |
 
 ## City detail
 
@@ -419,7 +426,8 @@ has exactly one credits row.
 `WorldInput.move` into the camera's frame before it reaches the (unchanged) simulation: on foot,
 and for an analog stick in a car, "forward" always means "along the camera", while a keyboard
 driving a car keeps its tank steering (W gas, A/D steer) untouched. The flat sim's `aim` angle is
-replaced by the camera's own look yaw, since 3D gives the player no 2D canvas point to aim at.
+replaced by the heading toward what the crosshair covers (see [Aiming](#aiming)), since 3D gives
+the player no 2D canvas point to aim at.
 `src/lib/cityArena/input/cameraYaw.ts` supplies the camera's own motion besides the mouse: the
 third-person chase eases behind the car after `CHASE_IDLE_S` = 1.2 s of a resting mouse, the
 driver's seat is bolted to the car and only offset by the mouse, and — with no aim stick held — a
@@ -431,7 +439,8 @@ a second stick can still look around, until the touch look pad has turned the ca
 
 `src/lib/cityArena/input/mouseLook.ts` (`attachMouseLook`) binds to the 2D canvas: a primary click
 requests the browser's pointer lock, and while locked, pointer movement turns yaw/pitch at
-`MOUSE_SENSITIVITY_RAD_PER_PX` = 0.0024 rad/px. Pointer lock is refused in some embedded browsers
+`MOUSE_SENSITIVITY_RAD_PER_PX` = 0.0024 rad/px, times the player's sensitivity and the sights'
+zoom; the right button aims down the sights (see [Aiming](#aiming)). Pointer lock is refused in some embedded browsers
 and sandboxed frames (`requestPointerLock()` rejecting is expected, not a bug) — that refusal is a
 Sentry breadcrumb, and mouse-look falls back to **lock-free** mode: plain `pointermove` events over
 the canvas turn the camera without any button held, and every click still retries the real lock.
@@ -494,6 +503,101 @@ that turning to look never pulls the trigger (aim round §6):
 | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
 | ![3D on a phone: look pad on the right, Richten over Schieten](img/3d/3d-touch-layout.jpg) | ![The same held sideways: Richten beside Schieten, clear of the radar](img/3d/3d-touch-layout-landscape.jpg) |
 
+## Aiming
+
+Shooter aiming on desktop (aim spec `docs/superpowers/specs/2026-09-28-arena-aim-drive-cars-design.md`
+§5): the crosshair sits at the centre, what is under it is what you shoot, the right mouse button
+aims down the sights, and `M` opens the map.
+
+|                                                                                                               |                                                                                          |
+| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| ![The pistol aimed down the sights: the slide under the crosshair, the view at 50°](img/3d/3d-ads-pistol.jpg) | ![The rifle's scope at 24°: dark tube, duplex reticle, lit dot](img/3d/3d-ads-rifle.jpg) |
+
+Over the shoulder with the sights up, an Uzi burst heading for the crosshair:
+![The camera pulled in to 1.9 m at 45°](img/3d/3d-ads-shoulder.jpg)
+
+### The crosshair and the aim probe
+
+- **Centred crosshair.** `overlay3d.ts` draws the crosshair at the screen's centre in both camera
+  modes, always (nothing while dead). Its old placement on the flat shot line 25 m ahead is gone.
+- **Aim probe** (`aimProbe.ts`, fed by `aimWorld.ts`, run by `frameAim.ts`). Each frame, right
+  after the camera is placed, a ray from the camera through the screen centre is tested against
+  people (upright capsules, 0.4 m radius, 1.8 m tall; bodies as 1 m × 0.35 m boxes), vehicles
+  (boxes turned to their heading, sized by `lengthOf`/`widthOf`/`vehicleHeight`), the standing
+  buildings (footprint prisms up to `buildingHeight(levels)`, walls and flat top; destroyed ones
+  looked through) and the ground plane. Buildings are asked for per 8 m step of the ray
+  (`PROBE_STEP_M`) through each loaded tile's building buckets (`tileIndex.tileBuildingGrid`),
+  never across the whole map; the walk stops at the first step holding a hit, or once the ray has
+  climbed over every roof. Your own body and car are looked through, and over the shoulder a hit
+  between the camera and you is ignored. The reach is the held weapon's range past you, never less
+  than `AIM_PROJECT_DISTANCE_M` (25 m), so a fist still aims where the camera looks; nothing hit
+  within it is the sky, the point at reach along the ray. A ray that meets the ground before it
+  gets to you aims where it passes you. A probe allocates nothing (scalar maths on module
+  scratch, the world's lists reuse their entries, the buildings come through a visitor).
+  `View3dHandle.aimPoint()` hands the point (world x/y, height, distance, what it hit) to the
+  runtime.
+- **The simulation's aim** (`view3d/frame3d.ts`, `crosshairHeading` in `input/cameraInput.ts`) is
+  the flat heading from the player — or the centre of the car they drive — to the aim point. Over
+  the right shoulder that is what makes the round go where the crosshair points: the camera's own
+  line runs past the shoulder offset. With no point (before the first frame, dead) or one within
+  `MIN_AIM_REACH_M` (1 m) of the shooter, the camera yaw. The point is the last frame's: the input
+  is read before the frame renders. A gamepad aim stick still wins.
+- **Rounds head for the aim point** (`aimedHeight` in `muzzleBlend.ts`, `roundAims.ts`). The local
+  shooter's tracers, rockets and their trails are drawn from the muzzle's height straight to the
+  aim point's height at its distance, and on along that slope beyond it, never below the ground; a
+  rocket noses up or down to match. Each round keeps the aim it was fired at, so it does not bend
+  as the crosshair moves on: captured the first frame it is seen, from the point the frame's input
+  read (the last frame's probe, `probeFrame` hands the cast that one before probing anew), so a
+  flick does not tilt the streak away from the shot. Sideways the rounds still settle onto their
+  flat line over `CONVERGE_M`. Everyone else's rounds are drawn as before. At the wheel of a tank
+  the sights and the probe's reach follow its cannon (`localWeapon`), which is what it fires.
+
+### Aiming down the sights
+
+The right mouse button, held, aims down the sights. `mouseLook.ts` writes the button's bit to the
+`pointer` source of the input state's `ads` button — a press or release made while another button
+is held reaches the page as a `pointermove`, and counts too (`pointerAim.ts` likewise fires on a
+left press made while the right is held). It works only while the mouse is in the game (the pointer
+locked, or the lock-free fallback), lets go when the lock is lost or released or the window loses
+focus, and the playfield keeps the browser's context menu away. The simulation slows walking
+(not with fists or the bat, which have no sights: `walkingInput`) and narrows a spraying gun's
+cone (the round's foundation, protocol 5); the view (`cameraRig.ts`, `viewmodel.ts`,
+`overlay3d.ts`):
+
+| Held                                    | First person, `ADS_FOV_DEG` | Over the shoulder          | In a car (chase) |
+| --------------------------------------- | --------------------------- | -------------------------- | ---------------- |
+| pistol, Uzi, shotgun                    | 70 → 50°                    | boom 3.6 → 1.9 m, 60 → 45° | 65 → 45°         |
+| rifle                                   | 70 → 24°, scope on the HUD  | as above (no scope)        | 65 → 45°         |
+| rocket launcher (and the tank's cannon) | 70 → 45°                    | as above                   | 65 → 45°         |
+| fists, bat                              | no sights                   | no sights                  | no sights        |
+
+- The sights come up and go down over `ADS_EASE_S` = 0.15 s (`easeSights`, shaped by a smoothstep
+  in `sightsShare`); a weapon swap drops them, and they lower over a body.
+- In first person the hands bring the gun in until its sight point (`viewmodel.ts`: the top of the
+  pistol's slide, the front sight post, the shotgun's rib, the launcher's sight on the left of its
+  tube) sits on the crosshair, the barrel running straight ahead under it; the bob and the idle
+  sway are stilled and the hands grow from 0.48 to `SIGHTS_SCALE` = 0.75 of their size so the gun
+  reads. The hands keep a lens of their own (`HANDS_FOV_DEG` = 70°) while the city zooms, as
+  shooters draw their view models, so the gun does not swell with the zoom; the muzzle handed to
+  the tracers is moved to where the zoomed city draws the hands' barrel.
+- The rifle's scope fades in over the last 40 % of the ease: a dark tube round a clear circle
+  (0.42 of the screen's shorter side), its rim, a duplex reticle with a lit red dot; the rifle
+  model goes once the scope is fully up. The scope shows only behind the eyes on foot.
+- In a car the camera zooms but the car keeps driving.
+
+### Mouse feel and M for the map
+
+- **Mouse feel.** Mouse-look turns by the raw pointer-lock deltas — no smoothing, no acceleration —
+  × `MOUSE_SENSITIVITY_RAD_PER_PX` (0.0024 rad/px) × the player's **Muisgevoeligheid** (a slider in
+  the menu's 3D group, 0.25–2.5×, default 1; `mouseSensitivity` in the settings, where a stored
+  value out of range falls back on its own and keeps the other settings) × the sights' zoom,
+  `tan(fov / 2)` over the unzoomed `tan(fov / 2)` (`RigPose.zoom`, handed out by
+  `View3dHandle.lookZoom()`), so a zoomed view does not whip.
+- **M — map.** `KeyM` (`keyboard.ts`, `MAP_KEY`) opens the same map as the HUD's map button, in 2D
+  and 3D, and a second M closes it (as Escape does). It reaches its hook although the open map
+  suspends the other game keys, and is ignored while typing and while the menu is open. The
+  controls hint names it ("M kaart"), and in 3D the sights ("rechtermuisknop vizier").
+
 ## Cockpit
 
 In first person at the wheel you look out of the car from the driver's seat (immersion spec
@@ -552,9 +656,9 @@ shooter's muzzle instead (immersion spec §5):
 - **Convergence** (`muzzleBlend.ts`). A round is drawn at its point on the flat line plus the
   muzzle's offset from the line's start, and that offset fades out (a smoothstep) over the first
   `CONVERGE_M` = 15 m flown. The round keeps its true speed and direction the whole way — it leaves
-  the barrel, then settles onto the line — so it lands exactly where the flat hit-scan hits and the
-  crosshair (still drawn on the true line) points. A tracer's tail is the same point 3 m back and
-  never reaches behind the muzzle.
+  the barrel, then settles onto the line — so it lands exactly where the flat hit-scan hits. Your
+  own rounds also climb or dip toward what the crosshair covers (see [Aiming](#aiming)). A
+  tracer's tail is the same point 3 m back and never reaches behind the muzzle.
 - **Rockets and shells** (`projectiles3d.ts`) start at the launcher tube or tank barrel and keep the
   muzzle they left from, so a strafing shooter does not swing a rocket already in flight; their
   smoke trails are laid through the same blend.
@@ -740,10 +844,17 @@ damage sources table above.
 ## Known limitations
 
 - **Bullets stay in the simulation's flat plane.** The 2D simulation has no concept of height, so a
-  bullet's vertical position in 3D is presentation only: rounds are drawn from their shooter's
-  muzzle and converge onto the in-plane line at chest height within 15 m (`CONVERGE_M`); aiming up
-  or down changes where the 3D camera looks, not what the flat hit-scan can actually hit. The
-  crosshair is deliberately drawn on the true in-plane shot line so it never lies about this.
+  round's height in 3D is presentation only: your rounds climb or dip toward the crosshair's aim
+  point and everyone else's converge onto the chest-height line within 15 m (`CONVERGE_M`). The
+  flat heading does go through the aim point, but the hit-scan stays level: a shot at a
+  first-floor window or up into the sky still flies at chest height through whatever stands in
+  that direction, and a round drawn landing on a roof is not a hit there.
+- **Aiming at the ground just ahead swings the shot over the shoulder.** Looking steeply down in
+  third person puts the aim point on the ground a metre or two in front of you, beside the
+  camera's shoulder-offset line; the flat heading to it then turns noticeably away from the
+  camera's yaw (within 1 m it falls back to the yaw). Such shots mostly go into the street anyway.
+- **The aim point is one frame old.** The input is read before the frame renders, so a fast flick
+  aims the round at what the crosshair covered one frame earlier.
 - **Your own side drive-by sits on the far side of the chase camera.** The third-person camera
   looks along your aim from behind the car, so an arm out of a side window reaches away from it,
   mostly behind the roof, and over the dash the roof hides it; the flash and rounds still show.

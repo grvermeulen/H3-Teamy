@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createInputState } from "@/lib/cityArena/input/inputState";
 import type { View3dFrame, View3dHandle } from "@/lib/cityArena/render3d";
 import { fakeGetContext } from "@/lib/cityArena/render/testing/fakeContext";
 import { WebGl2UnavailableError } from "@/lib/cityArena/webgl2";
@@ -42,9 +43,16 @@ function stubPointerLock(target: Element | null): void {
 /** A handle whose calls the tests inspect. */
 function fakeHandle(): View3dHandle & {
   render: ReturnType<typeof vi.fn>;
+  aimPoint: ReturnType<typeof vi.fn>;
+  lookZoom: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
 } {
-  return { render: vi.fn(), dispose: vi.fn() };
+  return {
+    render: vi.fn(),
+    aimPoint: vi.fn(() => null),
+    lookZoom: vi.fn(() => 1),
+    dispose: vi.fn(),
+  };
 }
 
 /** A runtime whose player faces `facing`. */
@@ -70,6 +78,7 @@ type Props = {
 /** Renders the hook, switched off, with a layer and a HUD canvas in place. */
 function renderView3d(facing = 1.1) {
   const runtimeRef = { current: fakeRuntime(facing) };
+  const inputRef = { current: createInputState() };
   const hud = document.createElement("canvas");
   hud.requestPointerLock = vi.fn(() => Promise.resolve());
   const hudCanvasRef = { current: hud };
@@ -80,6 +89,7 @@ function renderView3d(facing = 1.1) {
       useView3d({
         ...props,
         runtimeRef,
+        inputRef,
         hudCanvasRef,
         onFallback,
         onPause,
@@ -90,7 +100,16 @@ function renderView3d(facing = 1.1) {
   hook.result.current.layerRef.current = layer;
   const on = (overrides: Partial<Props> = {}): void =>
     hook.rerender({ active: true, mode: "third", epoch: 0, ...overrides });
-  return { ...hook, runtimeRef, hud, layer, onFallback, onPause, on };
+  return {
+    ...hook,
+    runtimeRef,
+    inputRef,
+    hud,
+    layer,
+    onFallback,
+    onPause,
+    on,
+  };
 }
 
 describe("useView3d", () => {
@@ -301,6 +320,36 @@ describe("useView3d", () => {
     expect(Sentry.captureException).toHaveBeenCalledWith(error, {
       tags: { area: "arena", kind: "render3d" },
     });
+  });
+
+  it("hands the runtime what the view's crosshair covers and how far its sights zoom", async () => {
+    const handle = fakeHandle();
+    const point = { x: 4, y: 9, height: 1, distance: 12, target: "ground" };
+    handle.aimPoint.mockReturnValue(point);
+    handle.lookZoom.mockReturnValue(0.4);
+    mockCreateView3d.mockReturnValue(handle);
+    const { runtimeRef, on } = renderView3d();
+    on();
+    const runtime = runtimeRef.current;
+    await waitFor(() => expect(runtime.view3d).toBeTruthy());
+    expect(runtime.view3d!.aimPoint()).toBe(point);
+    expect(runtime.view3d!.lookZoom()).toBe(0.4);
+  });
+
+  it("aims down the sights with the right mouse button through the input state", async () => {
+    mockCreateView3d.mockReturnValue(fakeHandle());
+    const { runtimeRef, inputRef, hud, on } = renderView3d();
+    on();
+    await waitFor(() => expect(runtimeRef.current.look).toBeTruthy());
+    stubPointerLock(hud);
+    hud.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        pointerType: "mouse",
+        button: 2,
+        buttons: 2,
+      }),
+    );
+    expect(inputRef.current.snapshot().ads).toBe(true);
   });
 
   it("never attaches a view switched off before the module arrived", async () => {

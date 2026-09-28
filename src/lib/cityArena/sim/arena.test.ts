@@ -37,10 +37,13 @@ import {
   type ArenaState,
   type BulletState,
   type DriverState,
+  type WeaponKind,
   type WorldInput,
 } from "./types";
 import { createVehicle, distanceToVehicle } from "./vehicle";
 import { ADS_SPREAD_FACTOR, WEAPONS } from "./weapons";
+import { ADS_WALK_FACTOR } from "./player";
+import { predictLocal } from "../net/predictLocal";
 import { PARKED_ENTRY_TICKS } from "./hijacking";
 
 /** One zone with spawn nodes at 0, 100, 200 and 300 m along y = 0. */
@@ -356,6 +359,31 @@ describe("stepArena with several players", () => {
 });
 
 describe("stepArena on foot", () => {
+  it("slows a walker aiming a gun's sights, not one with fists or the bat, host and prediction alike", () => {
+    const start = boot();
+    const aiming = createInput({ move: [1, 0], ads: true });
+    const pace = (weapon: WeaponKind, advance: typeof stepArena): number => {
+      let state: ArenaState = {
+        ...start,
+        players: [{ ...localPlayer(start), weapon }],
+      };
+      for (let tick = 0; tick < 10; tick++)
+        state = advance(
+          state,
+          new Map([[localPlayer(state).id, aiming]]),
+          step,
+          world,
+          createRng(99),
+        );
+      return localPlayer(state).speed;
+    };
+    for (const advance of [stepArena, predictLocal]) {
+      const bare = pace("fist", advance);
+      expect(pace("bat", advance)).toBeCloseTo(bare);
+      expect(pace("pistol", advance)).toBeCloseTo(bare * ADS_WALK_FACTOR);
+    }
+  });
+
   it("advances the tick and walks with the aim as facing", () => {
     const start = boot();
     const walked = run(start, createInput({ move: [1, 0], aim: Math.PI }), 30);

@@ -14,6 +14,7 @@ import {
   type ViewModelInput,
 } from "./viewmodel";
 import {
+  HANDS_FOV_DEG,
   VIEW_MODEL_FAR_M,
   VIEW_MODEL_NEAR_M,
   createViewModelPass,
@@ -110,20 +111,30 @@ describe("createViewModelPass", () => {
     expect(lights).toContain(DirectionalLight);
   });
 
-  it("follows a change of the city camera's field of view and shape", () => {
+  it("keeps the hands' own lens while the sights zoom the city, following the screen's shape", () => {
     const pass = createViewModelPass(fakeViewModel);
     const city = cityCamera();
     pass.update(city, HANDS);
-    city.fov = 60;
+    city.fov = 50;
     city.aspect = 4 / 3;
     city.updateProjectionMatrix();
     const camera = pass.update(city, HANDS)!.camera as PerspectiveCamera;
-    expect(camera.fov).toBe(60);
+    expect(camera.fov).toBe(HANDS_FOV_DEG);
     expect(camera.aspect).toBe(4 / 3);
     expect(camera.projectionMatrix.elements).toEqual(
-      new PerspectiveCamera(60, 4 / 3, VIEW_MODEL_NEAR_M, camera.far)
+      new PerspectiveCamera(HANDS_FOV_DEG, 4 / 3, VIEW_MODEL_NEAR_M, camera.far)
         .projectionMatrix.elements,
     );
+  });
+
+  it("gives the cockpit the city camera's own lens, zoomed or not", () => {
+    const pass = createViewModelPass(fakeViewModel, fakeCockpit);
+    const city = cityCamera();
+    city.fov = 50;
+    city.updateProjectionMatrix();
+    const camera = pass.update(city, null, COCKPIT)!
+      .camera as PerspectiveCamera;
+    expect(camera.fov).toBe(50);
   });
 
   it("sizes the hands and moves them out with a wider screen, keeping their spot on it", () => {
@@ -173,6 +184,27 @@ describe("createViewModelPass: the muzzle", () => {
     expect(pass.muzzleWorld(new Vector3())).toBe(false);
     pass.update(cityCamera(), null);
     expect(pass.muzzleWorld(new Vector3())).toBe(false);
+  });
+
+  it("moves the muzzle to where the zoomed city draws the hands' barrel", () => {
+    const viewModel = fakeViewModel();
+    const barrel = new Vector3(0.08, -0.05, -0.4);
+    viewModel.muzzleWorld.mockImplementation((target: Vector3) => {
+      target.copy(barrel);
+      return true;
+    });
+    const pass = createViewModelPass(() => viewModel, fakeCockpit);
+    const city = new PerspectiveCamera(50, 16 / 9, 0.1, 1000);
+    city.updateMatrixWorld();
+    const hands = pass.update(city, HANDS)!.camera as PerspectiveCamera;
+    hands.updateMatrixWorld();
+    const muzzle = new Vector3();
+    pass.muzzleWorld(muzzle);
+    const seenByCity = muzzle.clone().project(city);
+    const seenByHands = barrel.clone().project(hands);
+    expect(seenByCity.x).toBeCloseTo(seenByHands.x, 6);
+    expect(seenByCity.y).toBeCloseTo(seenByHands.y, 6);
+    expect(muzzle.z).toBeCloseTo(barrel.z, 6);
   });
 
   it("hands out the cockpit gun hand's muzzle during a drive-by at the wheel", () => {

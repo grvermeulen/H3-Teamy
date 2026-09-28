@@ -5,7 +5,10 @@
  * `render3d/`, so this module — imported statically by the frame loop — never pulls three.js
  * into the 2D bundle.
  */
-import { cameraRelativeInput } from "@/lib/cityArena/input/cameraInput";
+import {
+  cameraRelativeInput,
+  crosshairHeading,
+} from "@/lib/cityArena/input/cameraInput";
 import {
   INITIAL_CAR_LOOK,
   nextCarYaw,
@@ -16,6 +19,7 @@ import type { MouseLook } from "@/lib/cityArena/input/mouseLook";
 import type { Rect } from "@/lib/cityArena/mapBuild/geometry";
 import type { DrawStats } from "@/lib/cityArena/render/drawWorld";
 import { drawFeedback } from "@/lib/cityArena/render/feedback";
+import { MOUSE_SENSITIVITY } from "@/lib/cityArena/schemas";
 import type { Scene } from "@/lib/cityArena/render/renderScene";
 import type {
   StructureView,
@@ -82,12 +86,25 @@ function drawsIn3d(runtime: Runtime): runtime is Runtime3d {
 }
 
 /**
- * The simulation input for a 3D frame (spec §6.3–6.4). The camera yaw is the aim; in a car the
- * yaw eases behind the heading once the mouse rests (and rides along with the car in first
- * person, `nextCarYaw`); a touch or gamepad aim stick is read relative to the camera, which
- * turns toward it, and a lone movement stick turns it toward the walk (`stickTurnedYaw`) until
- * the touch look pad has turned it (`touchLook3d.ts`), whose drag counts as a look like the
- * mouse's. Movement is then rotated into the camera's frame.
+ * The heading the crosshair aims along: from the local player, or the car they drive, to what the
+ * view's crosshair covered in the last frame (aim spec §5); the camera yaw without one.
+ */
+function crosshairAim(
+  runtime: Runtime3d,
+  shooter: { x: number; y: number } | null | undefined,
+  yaw: number,
+): number {
+  if (!shooter) return yaw;
+  return crosshairHeading(shooter, runtime.view3d.aimPoint(), yaw);
+}
+
+/**
+ * The simulation input for a 3D frame (spec §6.3–6.4). The aim is what the crosshair covers
+ * (`crosshairAim`); in a car the yaw eases behind the heading once the mouse rests (and rides
+ * along with the car in first person, `nextCarYaw`); a touch or gamepad aim stick is read
+ * relative to the camera, which turns toward it, and a lone movement stick turns it toward the
+ * walk (`stickTurnedYaw`) until the touch look pad has turned it (`touchLook3d.ts`), whose drag
+ * counts as a look like the mouse's. Movement is then rotated into the camera's frame.
  *
  * @param runtime - The 3D runtime; its yaw, car-camera memory and sent aim are updated.
  * @param live - This frame's merged keyboard, pointer, stick and gamepad input.
@@ -112,7 +129,10 @@ export function input3d(
     state: runtime.carLook ?? INITIAL_CAR_LOOK,
   });
   runtime.carLook = next.state;
-  const aim = live.aim === null ? next.yaw : stickWorldYaw(next.yaw, live.aim);
+  const aim =
+    live.aim === null
+      ? crosshairAim(runtime, car ?? player, next.yaw)
+      : stickWorldYaw(next.yaw, live.aim);
   const yaw = stickTurnedYaw(
     next.yaw,
     live,
@@ -140,7 +160,6 @@ function view3dFrame(
     yaw: runtime.look.yaw(),
     pitch: lookPitch(runtime),
     aim: runtime.aim3d ?? runtime.look.yaw(),
-    ads: runtime.ads3d === true,
     mode: runtime.camera3d ?? "third",
     dt,
     nowMs,
@@ -148,6 +167,7 @@ function view3dFrame(
       runtime.diedAtMs === null
         ? null
         : (nowMs - runtime.diedAtMs) / MS_PER_SECOND,
+    ads: runtime.ads3d === true && !runtime.inputSuspended,
     quality: runtime.quality,
     size,
   };
@@ -156,7 +176,8 @@ function view3dFrame(
 /**
  * Paints a 3D frame (spec §6.2): the 2D canvas is sized and cleared as in 2D and becomes the
  * transparent HUD layer, the 3D view renders the scene underneath and its crosshair on top, and
- * the feedback vignette is drawn last, exactly as the 2D paint does.
+ * the feedback vignette is drawn last, exactly as the 2D paint does. Mouse-look then turns by the
+ * player's sensitivity, slowed by however much the sights zoomed the view (aim spec §5).
  *
  * @param canvas - The playfield's 2D canvas.
  * @param rect - Its layout box.
@@ -178,6 +199,10 @@ export function paint3d(
   if (!context) return NO_RASTER;
   const size = { width: rect.width, height: rect.height };
   runtime.view3d.render(view3dFrame(runtime, scene, size, nowMs, dt), context);
+  runtime.look.setZoom(runtime.view3d.lookZoom());
+  runtime.look.setSensitivity(
+    runtime.mouseSensitivity ?? MOUSE_SENSITIVITY.default,
+  );
   drawFeedback(context, size, runtime.feedback);
   return NO_RASTER;
 }

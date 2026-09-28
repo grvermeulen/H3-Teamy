@@ -175,6 +175,7 @@ describe("ArenaSettingsSchema", () => {
       quality: "auto",
       view: "2d",
       camera3d: "third",
+      mouseSensitivity: 1,
       touchLookSensitivity: 1,
     });
     expect(
@@ -190,6 +191,21 @@ describe("ArenaSettingsSchema", () => {
       ArenaSettingsSchema.parse({ radio: false, radioStation: "rijn" }),
     ).toMatchObject({ radio: false, radioStation: "rijn" });
     expect(ArenaSettingsSchema.parse({}).radioStation).toBeUndefined();
+  });
+
+  it("keeps a mouse sensitivity within 0.25–2.5×; out of range, only it falls back", () => {
+    expect(
+      ArenaSettingsSchema.parse({ mouseSensitivity: 1.5 }).mouseSensitivity,
+    ).toBe(1.5);
+    expect(
+      ArenaSettingsSchema.parse({ mouseSensitivity: 3, sound: false }),
+    ).toMatchObject({ mouseSensitivity: 1, sound: false });
+    expect(
+      ArenaSettingsSchema.parse({ mouseSensitivity: 0.1 }).mouseSensitivity,
+    ).toBe(1);
+    expect(
+      ArenaSettingsSchema.parse({ mouseSensitivity: "snel" }).mouseSensitivity,
+    ).toBe(1);
   });
 
   it("accepts the view and 3D-camera choices, and rejects anything else", () => {

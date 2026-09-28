@@ -270,3 +270,41 @@ describe("attachWheel", () => {
     detach();
   });
 });
+
+describe("attachKeyboard: M for the map", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("opens the map with M and closes it with a second M, though the open map holds the keyboard", () => {
+    let mapOpen = false;
+    const onMap = vi.fn(() => {
+      mapOpen = !mapOpen;
+    });
+    const detach = attachKeyboard(window, createInputState(), undefined, {
+      onMap,
+      isSuspended: () => mapOpen,
+    });
+    press("KeyM");
+    expect(mapOpen).toBe(true);
+    press("KeyM");
+    expect(mapOpen).toBe(false);
+    detach();
+  });
+
+  it("ignores M held down, and M typed into a field", () => {
+    const onMap = vi.fn();
+    const detach = attachKeyboard(window, createInputState(), undefined, {
+      onMap,
+    });
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { code: "KeyM", repeat: true }),
+    );
+    const field = document.createElement("input");
+    document.body.append(field);
+    press("KeyM", field);
+    field.remove();
+    expect(onMap).not.toHaveBeenCalled();
+    detach();
+  });
+});

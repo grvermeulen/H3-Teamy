@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createInputState } from "./inputState";
 import { MOUSE_SENSITIVITY_RAD_PER_PX, attachMouseLook } from "./mouseLook";
 
 /** Stubs `document.pointerLockElement`, which jsdom does not implement. */
@@ -306,6 +307,124 @@ describe("attachMouseLook losing the lock", () => {
     stubPointerLock(canvas);
     click(canvas);
     expect(canvas.requestPointerLock).not.toHaveBeenCalled();
+    look.detach();
+  });
+});
+
+/** A right-button change on `target`: `buttons` is the held set after it (2 = right, 3 = both). */
+function rightButton(
+  target: HTMLElement,
+  type: "pointerdown" | "pointermove" | "pointerup",
+  buttons: number,
+): void {
+  target.dispatchEvent(
+    new PointerEvent(type, { pointerType: "mouse", button: 2, buttons }),
+  );
+}
+
+describe("attachMouseLook: aiming down the sights", () => {
+  let canvas: HTMLCanvasElement;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    canvas = document.createElement("canvas");
+    canvas.requestPointerLock = vi.fn(() => Promise.resolve());
+    stubPointerLock(canvas);
+    document.exitPointerLock = vi.fn();
+  });
+
+  afterEach(() => {
+    stubPointerLock(null);
+  });
+
+  it("aims down the sights while the right button is held, and lets go on release", () => {
+    const input = createInputState();
+    const look = attachMouseLook(canvas, { input });
+    rightButton(canvas, "pointerdown", 2);
+    expect(input.snapshot().ads).toBe(true);
+    rightButton(canvas, "pointerup", 0);
+    expect(input.snapshot().ads).toBeUndefined();
+    look.detach();
+  });
+
+  it("follows a right button pressed or let go while the left one is held", () => {
+    const input = createInputState();
+    const look = attachMouseLook(canvas, { input });
+    rightButton(canvas, "pointermove", 3);
+    expect(input.snapshot().ads).toBe(true);
+    rightButton(canvas, "pointermove", 1);
+    expect(input.snapshot().ads).toBeUndefined();
+    look.detach();
+  });
+
+  it("lets go of the sights when the lock is lost, released, or mouse-look detached", () => {
+    const input = createInputState();
+    const look = attachMouseLook(canvas, { input });
+    document.dispatchEvent(new Event("pointerlockchange"));
+    rightButton(canvas, "pointerdown", 2);
+    stubPointerLock(null);
+    document.dispatchEvent(new Event("pointerlockchange"));
+    expect(input.snapshot().ads).toBeUndefined();
+
+    stubPointerLock(canvas);
+    document.dispatchEvent(new Event("pointerlockchange"));
+    rightButton(canvas, "pointerdown", 2);
+    look.release();
+    expect(input.snapshot().ads).toBeUndefined();
+
+    rightButton(canvas, "pointerdown", 2);
+    look.detach();
+    expect(input.snapshot().ads).toBeUndefined();
+  });
+
+  it("lets go of the sights when the window loses focus with the button held", () => {
+    const input = createInputState();
+    const look = attachMouseLook(canvas, { input });
+    rightButton(canvas, "pointerdown", 2);
+    window.dispatchEvent(new Event("blur"));
+    expect(input.snapshot().ads).toBeUndefined();
+    look.detach();
+  });
+
+  it("does not aim before the player has clicked into the game", () => {
+    stubPointerLock(null);
+    const input = createInputState();
+    const look = attachMouseLook(canvas, { input });
+    rightButton(canvas, "pointerdown", 2);
+    expect(input.snapshot().ads).toBeUndefined();
+    look.detach();
+  });
+
+  it("keeps the browser's menu off the playfield, and only there", () => {
+    const look = attachMouseLook(canvas);
+    const elsewhere = document.createElement("div");
+    const onPlayfield = new MouseEvent("contextmenu", { cancelable: true });
+    const offPlayfield = new MouseEvent("contextmenu", { cancelable: true });
+    canvas.dispatchEvent(onPlayfield);
+    elsewhere.dispatchEvent(offPlayfield);
+    expect(onPlayfield.defaultPrevented).toBe(true);
+    expect(offPlayfield.defaultPrevented).toBe(false);
+    look.detach();
+  });
+
+  it("turns by the player's mouse sensitivity, times the zoom, with no smoothing", () => {
+    const look = attachMouseLook(canvas);
+    look.setSensitivity(2);
+    canvas.dispatchEvent(new MouseEvent("pointermove", { movementX: 10 }));
+    expect(look.yaw()).toBeCloseTo(20 * MOUSE_SENSITIVITY_RAD_PER_PX);
+    look.setZoom(0.5);
+    canvas.dispatchEvent(new MouseEvent("pointermove", { movementX: 10 }));
+    expect(look.yaw()).toBeCloseTo(30 * MOUSE_SENSITIVITY_RAD_PER_PX);
+    canvas.dispatchEvent(new MouseEvent("pointermove", { movementY: -10 }));
+    expect(look.pitch()).toBeCloseTo(10 * MOUSE_SENSITIVITY_RAD_PER_PX);
+    look.detach();
+  });
+
+  it("turns slower by the zoom the sights give the view", () => {
+    const look = attachMouseLook(canvas);
+    look.setZoom(0.5);
+    canvas.dispatchEvent(new MouseEvent("pointermove", { movementX: 100 }));
+    expect(look.yaw()).toBeCloseTo(50 * MOUSE_SENSITIVITY_RAD_PER_PX);
     look.detach();
   });
 });

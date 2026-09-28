@@ -48,9 +48,9 @@ export function dropTouchLook(runtime: Runtime3d): void {
 }
 
 /**
- * Turns the 3D camera by what the look pad added up since the last frame, slowed to aim
- * assist's friction while the crosshair is on a living target. The mouse is never slowed: only
- * the pad's turn goes through here.
+ * Turns the 3D camera by what the look pad added up since the last frame, slowed by the sights'
+ * zoom (as mouse-look is) and to aim assist's friction while the crosshair is on a living target.
+ * The mouse is never assisted: only the pad's turn goes through here.
  *
  * @param runtime - The 3D runtime; mouse-look's yaw and the pad's tilt are updated.
  * @param from - Where the player (or their car) stands, or `null` when they are not in the state.
@@ -63,8 +63,11 @@ export function applyTouchLook(
 ): number {
   const camera = runtime.touchCamera;
   if (!camera) return 0;
-  return turnTouchCamera(camera, runtime.look, () =>
-    from ? assistFactor(runtime, from) : 1,
+  const zoom = runtime.view3d.lookZoom();
+  return turnTouchCamera(
+    camera,
+    runtime.look,
+    () => zoom * (from ? assistFactor(runtime, from) : 1),
   );
 }
 

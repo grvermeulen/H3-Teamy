@@ -438,7 +438,7 @@ function controlsHint(
   view3d: boolean,
 ): string {
   if (!showTouch)
-    return `WASD of pijltjes lopen of sturen · muis richt en schiet · E instappen of biertje bestellen · Q, wiel of 1-6 wapens · ${view3d ? "V camera · " : ""}R radio · Tab scorebord · Esc menu.`;
+    return `WASD of pijltjes lopen of sturen · muis richt en schiet · ${view3d ? "rechtermuisknop vizier · " : ""}E instappen of biertje bestellen · Q, wiel of 1-6 wapens · M kaart · ${view3d ? "V camera · " : ""}R radio · Tab scorebord · Esc menu.`;
   if (view3d)
     return "Sleep links om te lopen of te sturen; sleep rechts om rond te kijken; houd Schieten vast om te schieten.";
   return twinStick
@@ -527,6 +527,7 @@ export default function CityArenaOverlay({
       onScoreboard: setScoreboardHeld,
       suspended: menuOpen || mapData !== null,
       onPause: openMenu,
+      onMap: () => toggleMap(),
     },
     sharedScreen:
       entry.role === "hybrid"
@@ -544,6 +545,12 @@ export default function CityArenaOverlay({
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const closeMap = useCallback(() => setMapData(null), []);
   const openMap = (): void => setMapData(game.navigationMap());
+  // M, like the HUD's map button, opens the map; a second M closes it. Not over the menu.
+  const toggleMap = (): void => {
+    if (menuOpen) return;
+    if (mapData) closeMap();
+    else openMap();
+  };
   const toggleView = (): void =>
     game.updateSettings({ view: game.settings.view === "3d" ? "2d" : "3d" });
   const leave = useCallback(() => {

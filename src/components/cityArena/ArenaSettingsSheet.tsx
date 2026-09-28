@@ -8,6 +8,7 @@ import {
 import type { ArenaLayout, ArenaSettings } from "@/lib/cityArena/schemas";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
 import { ArenaCastHelp, ArenaCastIcon } from "./ArenaCastHelp";
+import { ArenaMouseSensitivity } from "./ArenaMouseSensitivity";
 
 /** Props for {@link ArenaSettingsSheet}. */
 export type ArenaSettingsSheetProps = {
@@ -300,6 +301,11 @@ export function ArenaSettingsSheet({
               <>
                 <ViewSettings settings={settings} onChange={onChange} />
                 <CameraSettings settings={settings} onChange={onChange} />
+                <ArenaMouseSensitivity
+                  value={settings.mouseSensitivity}
+                  disabled={settings.view !== "3d"}
+                  onChange={(value) => onChange({ mouseSensitivity: value })}
+                />
               </>
             )}
             <p className="arena-label mt-3 text-[var(--arena-dim)]">

@@ -15,6 +15,7 @@ import {
   useState,
   type RefObject,
 } from "react";
+import type { InputState } from "@/lib/cityArena/input/inputState";
 import {
   attachMouseLook,
   type LockState,
@@ -129,6 +130,8 @@ export function guardView3d(
         onFailure(error);
       }
     },
+    aimPoint: () => handle.aimPoint(),
+    lookZoom: () => handle.lookZoom(),
     dispose: () => handle.dispose(),
   };
 }
@@ -140,13 +143,18 @@ type AttachInput = {
   hud: HTMLCanvasElement;
   runtime: Runtime;
   mode: CameraMode;
+  /** Where the right button's sights go. */
+  input: InputState;
   callbacks: View3dCallbacks;
   onFailure: (error: unknown) => void;
   /** The touch look pad; the frame reads it through `runtime.touchCamera` while the view runs. */
   touchPad: TouchLook;
 };
 
-/** Mouse-look on `hud`, facing where the player does, within the mode's pitch range. */
+/**
+ * Mouse-look on `hud`, facing where the player does, within the mode's pitch range, its right
+ * button aiming down the sights through the input state.
+ */
 function startLook(input: AttachInput): MouseLook {
   const { runtime, callbacks } = input;
   const limits = input.module.pitchLimitsFor(input.mode);
@@ -155,6 +163,7 @@ function startLook(input: AttachInput): MouseLook {
     onGesture: () => runtime.sound.unlock(),
     onLockLost: callbacks.onPause,
     onLockChange: callbacks.onLockChange,
+    input: input.input,
   });
   look.setYaw(yaw);
   look.setPitchLimits(...limits);
@@ -237,6 +246,8 @@ export type MountOptions = {
   hud: HTMLCanvasElement;
   runtimeRef: RefObject<Runtime | null>;
   modeRef: RefObject<CameraMode>;
+  /** The input state the right button's sights are written to. */
+  inputRef: RefObject<InputState>;
   attachedRef: RefObject<Attached | null>;
   callbacks: View3dCallbacks;
   onFailure: (error: unknown) => void;
@@ -269,6 +280,7 @@ export function mountView3d(options: MountOptions): () => void {
         hud: options.hud,
         runtime,
         mode: options.modeRef.current,
+        input: options.inputRef.current,
         callbacks: options.callbacks,
         onFailure: options.onFailure,
         touchPad: options.touchPad,
@@ -313,6 +325,8 @@ export type UseView3dOptions = {
   epoch: number;
   mode: CameraMode;
   runtimeRef: RefObject<Runtime | null>;
+  /** The input state the right button aims down the sights through (aim spec §5). */
+  inputRef: RefObject<InputState>;
   /** The playfield's 2D canvas: the HUD layer, and where mouse-look locks the pointer. */
   hudCanvasRef: RefObject<HTMLCanvasElement | null>;
   /** Switches the settings back to 2D. */
@@ -388,7 +402,7 @@ function usePitchLimits(
  * @returns The layer ref, the failure toast and the pointer-lock state.
  */
 export function useView3d(options: UseView3dOptions): View3dControls {
-  const { active, epoch, mode, runtimeRef, hudCanvasRef } = options;
+  const { active, epoch, mode, runtimeRef, inputRef, hudCanvasRef } = options;
   const layerRef = useRef<HTMLDivElement | null>(null);
   const attachedRef = useRef<Attached | null>(null);
   const modeRef = useLatest(mode);
@@ -410,6 +424,7 @@ export function useView3d(options: UseView3dOptions): View3dControls {
       hud,
       runtimeRef,
       modeRef,
+      inputRef,
       attachedRef,
       callbacks: {
         onFallback: () => onFallbackRef.current(),
@@ -428,6 +443,7 @@ export function useView3d(options: UseView3dOptions): View3dControls {
     epoch,
     hudCanvasRef,
     runtimeRef,
+    inputRef,
     modeRef,
     onFallbackRef,
     onPauseRef,

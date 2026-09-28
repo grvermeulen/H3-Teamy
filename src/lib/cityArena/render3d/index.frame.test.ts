@@ -117,7 +117,18 @@ function sceneOf(
 ): ArenaScene {
   return {
     localPlayerId: 2,
-    players: [{ id: 2, x: 25, y: 60, vehicleId: null }],
+    players: [
+      {
+        id: 2,
+        x: 25,
+        y: 60,
+        vehicleId: null,
+        diedAtTick: null,
+        weapon: "pistol",
+      },
+    ],
+    peds: [],
+    cops: [],
     vehicles,
     effects,
     tick: TICK,
@@ -212,11 +223,21 @@ describe("createView3d frame path", () => {
       ads: false,
     });
     const effects = vi.mocked(createEffects3d).mock.results[0]!.value;
-    expect(effects.sync).toHaveBeenCalledWith(
+    // Your rounds head for what the crosshair covered when the input fired them: the frame before.
+    expect(effects.sync).toHaveBeenLastCalledWith(
       SCENE,
       focus,
       false,
       expect.any(Map),
+      null,
+    );
+    view.render(frameOf("third"), OVERLAY);
+    expect(effects.sync).toHaveBeenLastCalledWith(
+      SCENE,
+      focus,
+      false,
+      expect.any(Map),
+      expect.objectContaining({ ownerId: 2 }),
     );
     expect(effects.update).toHaveBeenCalledWith(DT);
     expect(renderer.render).toHaveBeenCalledWith(null);
@@ -328,6 +349,50 @@ describe("createView3d frame path", () => {
       renderer.camera,
       expect.objectContaining({ friends: scene }),
     );
+  });
+
+  it("probes what the crosshair covers: the house ahead, and nothing while dead", () => {
+    const view = createView3d(document.createElement("canvas"));
+    expect(view.aimPoint()).toBeNull();
+
+    view.render(frameOf("third", { yaw: Math.PI / 2 }), OVERLAY);
+
+    expect(view.aimPoint()).toMatchObject({ target: "building" });
+    expect(view.aimPoint()!.y).toBeCloseTo(72, 6);
+    view.render(frameOf("third", { deadSeconds: 1 }), OVERLAY);
+    expect(view.aimPoint()).toBeNull();
+  });
+
+  it("zooms down the sights while the frame aims, telling mouse-look how much", () => {
+    const view = createView3d(document.createElement("canvas"));
+    const { renderer } = partsOfView();
+    const frames = (ads: boolean): void => {
+      for (let frame = 0; frame < 12; frame += 1)
+        view.render(frameOf("first", { ads }), OVERLAY);
+    };
+    frames(true);
+    expect(renderer.camera.fov).toBeCloseTo(50);
+    expect(view.lookZoom()).toBeLessThan(0.7);
+    frames(false);
+    expect(renderer.camera.fov).toBeCloseTo(70);
+    expect(view.lookZoom()).toBe(1);
+  });
+
+  it("looks through the rifle's scope behind the eyes, and past it over the shoulder", () => {
+    const view = createView3d(document.createElement("canvas"));
+    const scene = {
+      ...SCENE,
+      players: [{ ...SCENE.players[0]!, weapon: "rifle" }],
+    } as unknown as ArenaScene;
+    for (let frame = 0; frame < 12; frame += 1)
+      view.render(frameOf("first", { scene, ads: true }), OVERLAY);
+    expect(vi.mocked(drawOverlay3d).mock.lastCall?.[2]).toMatchObject({
+      scope: 1,
+    });
+    view.render(frameOf("third", { scene, ads: true }), OVERLAY);
+    expect(vi.mocked(drawOverlay3d).mock.lastCall?.[2]).toMatchObject({
+      scope: 0,
+    });
   });
 
   it("draws the first-person hands in a pass of their own over the city", () => {
