@@ -42,9 +42,10 @@ function stubPointerLock(target: Element | null): void {
 /** A handle whose calls the tests inspect. */
 function fakeHandle(): View3dHandle & {
   render: ReturnType<typeof vi.fn>;
+  aimPoint: ReturnType<typeof vi.fn>;
   dispose: ReturnType<typeof vi.fn>;
 } {
-  return { render: vi.fn(), dispose: vi.fn() };
+  return { render: vi.fn(), aimPoint: vi.fn(() => null), dispose: vi.fn() };
 }
 
 /** A runtime whose player faces `facing`. */
@@ -247,6 +248,18 @@ describe("useView3d", () => {
     expect(Sentry.captureException).toHaveBeenCalledWith(error, {
       tags: { area: "arena", kind: "render3d" },
     });
+  });
+
+  it("hands the runtime what the view's crosshair covers", async () => {
+    const handle = fakeHandle();
+    const point = { x: 4, y: 9, height: 1, distance: 12, target: "ground" };
+    handle.aimPoint.mockReturnValue(point);
+    mockCreateView3d.mockReturnValue(handle);
+    const { runtimeRef, on } = renderView3d();
+    on();
+    const runtime = runtimeRef.current;
+    await waitFor(() => expect(runtime.view3d).toBeTruthy());
+    expect(runtime.view3d!.aimPoint()).toBe(point);
   });
 
   it("never attaches a view switched off before the module arrived", async () => {

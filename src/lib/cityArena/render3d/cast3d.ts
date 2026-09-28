@@ -20,6 +20,7 @@ import {
 import type { ContactSpot } from "./missionMarkers";
 import { createPickup3d } from "./pickups3d";
 import type { OverlayPass, RenderQuality } from "./renderer3d";
+import type { ShooterAim } from "./roundAims";
 import { createVehicle3d } from "./vehicles3d";
 import type { ViewModelInput } from "./viewmodel";
 import {
@@ -58,6 +59,15 @@ export type CastFrame = {
   quality: RenderQuality;
 };
 
+/** The local player's aim this frame (aim spec §5), from the view's probe. */
+export type CastAim = {
+  /** Where the crosshair points, for the local player's rounds; `null` while there is none. */
+  shot: Readonly<ShooterAim> | null;
+};
+
+/** No aim: everyone's rounds converge onto their flat line. */
+const NO_AIM: CastAim = { shot: null };
+
 /** The moving part of the 3D view. */
 export type Cast3d = {
   /** Add to the scene once. */
@@ -70,6 +80,7 @@ export type Cast3d = {
    * @param focus - The camera focus, world metres: what the draw distances are measured from.
    * @param camera - The city camera, already placed for this frame.
    * @param contacts - The mission contacts to stand in the street (the mission markers').
+   * @param aim - The local player's aim: where their rounds are drawn heading.
    * @returns The hands' or cockpit's pass to draw over the city, or `null` when neither shows.
    */
   update(
@@ -77,6 +88,7 @@ export type Cast3d = {
     focus: { x: number; y: number },
     camera: PerspectiveCamera,
     contacts?: readonly ContactSpot[],
+    aim?: CastAim,
   ): OverlayPass | null;
   /**
    * The collapses, rubble and falling furniture, made with the effects by the first `update`
@@ -218,7 +230,7 @@ export function createCast3d(
   let fx: Fx | null = null;
   return {
     object,
-    update(frame, focus, camera, contacts = NO_CONTACTS) {
+    update(frame, focus, camera, contacts = NO_CONTACTS, aim = NO_AIM) {
       view.firstPerson = frame.mode === "first";
       view.aim = frame.aim;
       view.characterDetailM =
@@ -233,6 +245,7 @@ export function createCast3d(
         focus,
         firstPerson.handsShown,
         entities.muzzles.points,
+        aim.shot,
       );
       fx.effects.update(frame.dt);
       fx.destruction.update(frame.dt);

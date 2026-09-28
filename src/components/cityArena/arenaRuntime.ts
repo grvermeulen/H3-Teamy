@@ -278,7 +278,7 @@ export type Runtime = {
   camera3d?: ArenaSettings["camera3d"];
   /** What the 3D car camera remembers between frames: mouse idle time and last heading. */
   carLook?: CarLook;
-  /** The heading the 3D input last sent the simulation to shoot along; the crosshair follows it. */
+  /** The heading the 3D input last sent the simulation: at what the crosshair covers. */
   aim3d?: number;
 };
 

@@ -120,7 +120,11 @@ vi.mock("@sentry/nextjs", () => ({
 
 /** jsdom has no WebGL: the 3D view is a stand-in whose creation each test can make fail. */
 const mockCreateView3d = vi.hoisted(() =>
-  vi.fn(() => ({ render: vi.fn(), dispose: vi.fn() })),
+  vi.fn(() => ({
+    render: vi.fn(),
+    aimPoint: vi.fn(() => null),
+    dispose: vi.fn(),
+  })),
 );
 vi.mock("@/lib/cityArena/render3d", () => ({
   createView3d: mockCreateView3d,

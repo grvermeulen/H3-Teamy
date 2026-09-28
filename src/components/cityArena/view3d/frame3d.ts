@@ -5,7 +5,10 @@
  * `render3d/`, so this module — imported statically by the frame loop — never pulls three.js
  * into the 2D bundle.
  */
-import { cameraRelativeInput } from "@/lib/cityArena/input/cameraInput";
+import {
+  cameraRelativeInput,
+  crosshairHeading,
+} from "@/lib/cityArena/input/cameraInput";
 import {
   INITIAL_CAR_LOOK,
   nextCarYaw,
@@ -81,11 +84,24 @@ function drawsIn3d(runtime: Runtime): runtime is Runtime3d {
 }
 
 /**
- * The simulation input for a 3D frame (spec §6.3–6.4). The camera yaw is the aim; in a car the
- * yaw eases behind the heading once the mouse rests (and rides along with the car in first
- * person, `nextCarYaw`); a touch or gamepad aim stick is read relative to the camera, which
- * turns toward it, and a lone movement stick turns it toward the walk (`stickTurnedYaw`).
- * Movement is then rotated into the camera's frame.
+ * The heading the crosshair aims along: from the local player, or the car they drive, to what the
+ * view's crosshair covered in the last frame (aim spec §5); the camera yaw without one.
+ */
+function crosshairAim(
+  runtime: Runtime3d,
+  shooter: { x: number; y: number } | null | undefined,
+  yaw: number,
+): number {
+  if (!shooter) return yaw;
+  return crosshairHeading(shooter, runtime.view3d.aimPoint(), yaw);
+}
+
+/**
+ * The simulation input for a 3D frame (spec §6.3–6.4). The aim is what the crosshair covers
+ * (`crosshairAim`); in a car the yaw eases behind the heading once the mouse rests (and rides
+ * along with the car in first person, `nextCarYaw`); a touch or gamepad aim stick is read
+ * relative to the camera, which turns toward it, and a lone movement stick turns it toward the
+ * walk (`stickTurnedYaw`). Movement is then rotated into the camera's frame.
  *
  * @param runtime - The 3D runtime; its yaw, car-camera memory and sent aim are updated.
  * @param live - This frame's merged keyboard, pointer, stick and gamepad input.
@@ -109,7 +125,10 @@ export function input3d(
     state: runtime.carLook ?? INITIAL_CAR_LOOK,
   });
   runtime.carLook = next.state;
-  const aim = live.aim === null ? next.yaw : stickWorldYaw(next.yaw, live.aim);
+  const aim =
+    live.aim === null
+      ? crosshairAim(runtime, car ?? player, next.yaw)
+      : stickWorldYaw(next.yaw, live.aim);
   const yaw = stickTurnedYaw(next.yaw, live, car !== null, dt);
   look.setYaw(yaw);
   runtime.aim3d = aim;

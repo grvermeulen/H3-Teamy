@@ -15,6 +15,7 @@ import { createDebrisPool } from "./debris";
 import { createFlashPool } from "./flashes";
 import { createParticleSystem, type ParticleSystem } from "./particles";
 import { createProjectiles3d } from "./projectiles3d";
+import type { ShooterAim } from "./roundAims";
 import { createSeenIds } from "./seenIds";
 import { createVehicleSmoke } from "./vehicleSmoke";
 
@@ -51,12 +52,14 @@ export type Effects3d = {
    *   flashes at its own barrel instead.
    * @param muzzles - Every shooter's muzzle by owner id (yours the view model's in first
    *   person): flashes and their light go there, and rounds and rockets start there.
+   * @param aim - Where your crosshair points: your rounds and rockets climb or dip toward it.
    */
   sync(
     scene: EffectsScene,
     focus?: { x: number; y: number },
     ownMuzzleHidden?: boolean,
     muzzles?: MuzzlePoints,
+    aim?: Readonly<ShooterAim> | null,
   ): void;
   /** Advances every particle, chunk, fireball and flash light by `dt` seconds. */
   update(dt: number): void;
@@ -190,12 +193,18 @@ export function createEffects3d(options: { maxParticles: number }): Effects3d {
   return {
     object,
     smoke,
-    sync(scene, focus, ownMuzzleHidden = false, muzzles = NO_MUZZLES) {
+    sync(
+      scene,
+      focus,
+      ownMuzzleHidden = false,
+      muzzles = NO_MUZZLES,
+      aim = null,
+    ) {
       for (const effect of scene.effects)
         if (seen.firstSeen(effect.id))
           burstEffect(targets, scene, effect, ownMuzzleHidden, muzzles);
       seen.endFrame();
-      projectiles.sync(scene.bullets, muzzles);
+      projectiles.sync(scene.bullets, muzzles, aim);
       vehicleSmoke.sync(scene.vehicles, focus ?? localFocus(scene), clock);
     },
     update(dt) {

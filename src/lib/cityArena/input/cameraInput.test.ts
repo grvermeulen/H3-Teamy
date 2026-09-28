@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createInput } from "../sim/types";
-import { cameraRelativeInput } from "./cameraInput";
+import {
+  MIN_AIM_REACH_M,
+  cameraRelativeInput,
+  crosshairHeading,
+} from "./cameraInput";
 
 describe("cameraRelativeInput", () => {
   it("rotates keyboard forward (W) to point along the camera's yaw", () => {
@@ -55,5 +59,22 @@ describe("cameraRelativeInput", () => {
       enter: true,
       weaponNext: true,
     });
+  });
+});
+
+describe("crosshairHeading", () => {
+  it("points from the shooter at what the crosshair covers", () => {
+    expect(crosshairHeading({ x: 0, y: 0 }, { x: 30, y: -3 }, 0)).toBeCloseTo(
+      Math.atan2(-3, 30),
+    );
+    expect(crosshairHeading({ x: 5, y: 5 }, { x: 5, y: 25 }, 0)).toBeCloseTo(
+      Math.PI / 2,
+    );
+  });
+
+  it("keeps the camera's yaw without an aim point, or with one at the shooter's feet", () => {
+    expect(crosshairHeading({ x: 0, y: 0 }, null, 0.4)).toBe(0.4);
+    const close = MIN_AIM_REACH_M * 0.9;
+    expect(crosshairHeading({ x: 0, y: 0 }, { x: 0, y: close }, 0.4)).toBe(0.4);
   });
 });

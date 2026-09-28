@@ -12,7 +12,7 @@ import { probeAim, type AimPoint } from "./aimProbe";
 import { createAimWorld, type AimWorldSource } from "./aimWorld";
 import { applyCameraFeel, cameraFeelOf } from "./cameraFeel";
 import { applyRigPose, rigPose, type CameraMode } from "./cameraRig";
-import { createCast3d, type Cast3d } from "./cast3d";
+import { createCast3d, type Cast3d, type CastAim } from "./cast3d";
 import { createCity3d, type City3d } from "./city3d";
 import { AIM_PROJECT_DISTANCE_M } from "./coords";
 import { createGuidance3d, type Guidance3d } from "./guidance3d";
@@ -24,6 +24,7 @@ import {
   type RenderQuality,
   type Renderer3d,
 } from "./renderer3d";
+import type { ShooterAim } from "./roundAims";
 import { createRuins3d, type Ruins3d } from "./ruins3d";
 import { disposeSharedAssets } from "./sharedAssets";
 import type { StructureView } from "./worldCells";
@@ -45,8 +46,8 @@ export type View3dFrame = {
   yaw: number;
   pitch: number;
   /**
-   * The heading the simulation shoots along this frame: the yaw, or a camera-relative touch or
-   * gamepad aim stick — the crosshair follows it.
+   * The heading the simulation shoots along this frame: toward what the crosshair covered, or a
+   * camera-relative touch or gamepad aim stick.
    */
   aim: number;
   mode: CameraMode;
@@ -126,12 +127,15 @@ type View3dParts = {
   aim: FrameAim;
 };
 
-/** What the probe looks through each frame, and what it found. */
+/** What the probe looks through each frame, what it found, and what the cast is handed. */
 type FrameAim = {
   world: AimWorldSource;
   point: AimPoint;
   /** False before the first frame and while dead: there is no crosshair then. */
   shown: boolean;
+  /** Your shot at the point, handed to the cast while the crosshair shows. */
+  shooter: ShooterAim;
+  cast: CastAim;
 };
 
 /** A frame aim before its first probe. */
@@ -140,7 +144,19 @@ function createFrameAim(): FrameAim {
     world: createAimWorld(),
     point: { x: 0, y: 0, height: 0, distance: 0, target: "sky" },
     shown: false,
+    shooter: { ownerId: 0, x: 0, y: 0, height: 0 },
+    cast: { shot: null },
   };
+}
+
+/** Hands the cast your shot at the probed point, or none while there is no crosshair. */
+function aimCast(aim: FrameAim, scene: ArenaScene): void {
+  aim.cast.shot = aim.shown ? aim.shooter : null;
+  if (!aim.shown) return;
+  aim.shooter.ownerId = scene.localPlayerId;
+  aim.shooter.x = aim.point.x;
+  aim.shooter.y = aim.point.y;
+  aim.shooter.height = aim.point.height;
 }
 
 /** The weapon the local player holds; bare fists when they are not in the scene. */
@@ -162,13 +178,15 @@ function probeFrame(
 ): void {
   const { aim } = parts;
   aim.shown = frame.deadSeconds === null;
-  if (!aim.shown) return;
-  aim.world.sync(frame.scene, frame.tiles, frame.structures);
-  const reach = Math.max(
-    AIM_PROJECT_DISTANCE_M,
-    WEAPONS[localWeapon(frame.scene)].rangeM,
-  );
-  probeAim(parts.renderer.camera, aim.world, reach, aim.point, focus);
+  if (aim.shown) {
+    aim.world.sync(frame.scene, frame.tiles, frame.structures);
+    const reach = Math.max(
+      AIM_PROJECT_DISTANCE_M,
+      WEAPONS[localWeapon(frame.scene)].rangeM,
+    );
+    probeAim(parts.renderer.camera, aim.world, reach, aim.point, focus);
+  }
+  aimCast(aim, frame.scene);
 }
 
 /**
@@ -229,7 +247,13 @@ function renderFrame(
   placeCamera(renderer.camera, frame, focus);
   probeFrame(parts, frame, focus);
   markers.update(frame.scene);
-  const hands = cast.update(frame, focus, renderer.camera, markers.contacts);
+  const hands = cast.update(
+    frame,
+    focus,
+    renderer.camera,
+    markers.contacts,
+    parts.aim.cast,
+  );
   parts.guidance.update(frame, focus, renderer.camera, markers.beacons);
   city.update(focus, frame);
   wreck(parts, frame);
