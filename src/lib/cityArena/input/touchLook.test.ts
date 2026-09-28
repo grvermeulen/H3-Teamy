@@ -61,6 +61,15 @@ describe("createTouchLook", () => {
     expect(look.take().yaw).toBeCloseTo(20 * TOUCH_LOOK_RAD_PER_PX);
   });
 
+  it("hands the look to a finger that takes it over, such as the fire button's", () => {
+    const look = createTouchLook(() => 1);
+    look.onDown(finger(1, 0, 0));
+    look.onDown(finger(2, 500, 500), true);
+    look.onMove(finger(1, 40, 0));
+    look.onMove(finger(2, 530, 500));
+    expect(look.take().yaw).toBeCloseTo(30 * TOUCH_LOOK_RAD_PER_PX);
+  });
+
   it("stops turning once the finger is lifted, and takes the next finger", () => {
     const look = createTouchLook(() => 1);
     look.onDown(finger(1, 0, 0));

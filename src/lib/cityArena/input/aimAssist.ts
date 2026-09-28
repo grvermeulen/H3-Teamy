@@ -73,9 +73,17 @@ export function assistScale(
     : 1;
 }
 
-/** A character's centre as a target. */
-function chestOf(character: { x: number; y: number }): AssistTarget {
-  return { x: character.x, y: character.y, height: ASSIST_TARGET_HEIGHT_M };
+/** Puts a character's centre at `index` of `out`, reusing the target already there. */
+function placeChest(
+  out: AssistTarget[],
+  index: number,
+  character: { x: number; y: number },
+): number {
+  const target = out[index] ?? { x: 0, y: 0, height: ASSIST_TARGET_HEIGHT_M };
+  target.x = character.x;
+  target.y = character.y;
+  out[index] = target;
+  return index + 1;
 }
 
 /**
@@ -84,19 +92,24 @@ function chestOf(character: { x: number; y: number }): AssistTarget {
  *
  * @param state - The simulation state.
  * @param selfId - The local player's id.
- * @returns The targets' centres.
+ * @param out - The list to refill, its targets reused, so a frame allocates nothing.
+ * @returns `out`, holding the targets' centres.
  */
 export function assistTargets(
   state: Pick<ArenaState, "players" | "cops" | "peds">,
   selfId: number,
+  out: AssistTarget[] = [],
 ): AssistTarget[] {
-  const targets: AssistTarget[] = [];
+  let count = 0;
   for (const player of state.players)
     if (player.id !== selfId && player.health > 0 && player.diedAtTick === null)
-      targets.push(chestOf(player));
+      count = placeChest(out, count, player);
   for (const cop of state.cops)
-    if (cop.health > 0 && cop.diedAtTick === null) targets.push(chestOf(cop));
+    if (cop.health > 0 && cop.diedAtTick === null)
+      count = placeChest(out, count, cop);
   for (const ped of state.peds)
-    if (ped.health > 0 && ped.mode !== "dead") targets.push(chestOf(ped));
-  return targets;
+    if (ped.health > 0 && ped.mode !== "dead")
+      count = placeChest(out, count, ped);
+  out.length = count;
+  return out;
 }

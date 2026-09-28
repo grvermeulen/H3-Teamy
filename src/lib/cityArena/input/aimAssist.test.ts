@@ -86,4 +86,26 @@ describe("assistTargets", () => {
     expect(targets.map((target) => target.x)).toEqual([2, 4, 6, 7]);
     expect(targets[0]!.height).toBe(ASSIST_TARGET_HEIGHT_M);
   });
+
+  it("refills the list it is handed, reusing its targets, so a frame allocates nothing", () => {
+    const crowd = {
+      players: [],
+      cops: [],
+      peds: [
+        { x: 6, y: 6, health: 30, mode: "walk" },
+        { x: 7, y: 7, health: 30, mode: "walk" },
+      ],
+    } as unknown as ArenaState;
+    const out: ReturnType<typeof assistTargets> = [];
+    const first = assistTargets(crowd, 0, out);
+    const reused = first[0];
+    const fewer = assistTargets(
+      { ...crowd, peds: crowd.peds.slice(0, 1) } as ArenaState,
+      0,
+      out,
+    );
+    expect(fewer).toBe(out);
+    expect(fewer).toHaveLength(1);
+    expect(fewer[0]).toBe(reused);
+  });
 });

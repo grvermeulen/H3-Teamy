@@ -184,11 +184,13 @@ export const ArenaSettingsSchema = z.object({
   /** "3D-camera": third person (over the shoulder) or first person; irrelevant in 2D. */
   camera3d: z.enum(["third", "first"]).default("third"),
   /** "Kijkgevoeligheid": scales how far a drag on the 3D touch look pad turns the camera. */
+  // Out of range resets this setting alone, not every other one with it.
   touchLookSensitivity: z
     .number()
     .min(TOUCH_LOOK_SENSITIVITY_MIN)
     .max(TOUCH_LOOK_SENSITIVITY_MAX)
-    .default(TOUCH_LOOK_SENSITIVITY_DEFAULT),
+    .default(TOUCH_LOOK_SENSITIVITY_DEFAULT)
+    .catch(TOUCH_LOOK_SENSITIVITY_DEFAULT),
 });
 
 /** Parsed settings type, inferred from {@link ArenaSettingsSchema} so the two cannot drift. */

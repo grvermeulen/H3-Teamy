@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
@@ -117,6 +117,7 @@ function HoldButton({
   onButton,
 }: HoldButtonProps): React.JSX.Element {
   const hold = holdHandlers(name, onButton);
+  useReleaseOnUnmount(name, onButton);
   return (
     <button
       type="button"
@@ -163,6 +164,35 @@ function ScopeIcon(): React.JSX.Element {
   );
 }
 
+/**
+ * Lets go of `name` when the button unmounts: a 2D/3D swap or a fallback can take the button
+ * away mid-press, and no pointer-up ever reaches it then.
+ */
+function useReleaseOnUnmount(
+  name: ButtonName,
+  onButton: (name: ButtonName, pressed: boolean) => void,
+): void {
+  useEffect(() => () => onButton(name, false), [name, onButton]);
+}
+
+/**
+ * The pointer the fire button is turning the look with, and a release of that finger from the
+ * look pad when the button unmounts mid-drag, so the pad does not stay owned by a gone finger.
+ */
+function useLookReleaseOnUnmount(look: TouchLook): {
+  current: number | null;
+} {
+  const pointer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (pointer.current !== null)
+        look.onUp({ pointerId: pointer.current, clientX: 0, clientY: 0 });
+    },
+    [look],
+  );
+  return pointer;
+}
+
 /** Props for {@link FireButton}. */
 type FireButtonProps = {
   onButton: (name: ButtonName, pressed: boolean) => void;
@@ -176,9 +206,12 @@ type FireButtonProps = {
  */
 function FireButton({ onButton, look }: FireButtonProps): React.JSX.Element {
   const hold = holdHandlers("fire", onButton);
+  const pointer = useLookReleaseOnUnmount(look);
+  useReleaseOnUnmount("fire", onButton);
   const letGo = (event: ReactPointerEvent<HTMLButtonElement>): void => {
     hold.release();
     look.onUp(event);
+    pointer.current = null;
   };
   return (
     <button
@@ -186,7 +219,8 @@ function FireButton({ onButton, look }: FireButtonProps): React.JSX.Element {
       className={FIRE_BUTTON_CLASS}
       onPointerDown={(event) => {
         hold.press(event);
-        look.onDown(event);
+        look.onDown(event, true);
+        pointer.current = event.pointerId;
         capturePointer(event);
       }}
       onPointerMove={(event) => look.onMove(event)}

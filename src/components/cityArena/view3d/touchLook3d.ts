@@ -12,6 +12,9 @@ import {
 import { tiltedPitch, turnTouchCamera } from "@/lib/cityArena/input/touchLook";
 import type { Runtime3d } from "./frame3d";
 
+/** The assist's targets, refilled every frame the pad turns: one list for the page's life. */
+const assistScratch: ReturnType<typeof assistTargets> = [];
+
 /**
  * Aim assist's factor for the look pad this frame. The look is measured from the player's (or
  * their car's) eye along the camera's yaw and pitch: the over-the-shoulder camera sits half a
@@ -30,7 +33,7 @@ function assistFactor(
   };
   return assistScale(
     camera,
-    assistTargets(runtime.state, runtime.netplay.playerId),
+    assistTargets(runtime.state, runtime.netplay.playerId, assistScratch),
   );
 }
 

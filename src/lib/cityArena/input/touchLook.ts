@@ -18,7 +18,11 @@ export type LookTurn = { yaw: number; pitch: number };
 
 /** One finger at a time turns the camera; the frame takes the turn it added up. */
 export type TouchLook = {
-  onDown(event: LookPointer): void;
+  /**
+   * A finger goes down. It owns the pad unless another finger already does — or `takeOver` is
+   * set, as for the fire button, whose drag must aim even with a thumb resting on the pad.
+   */
+  onDown(event: LookPointer, takeOver?: boolean): void;
   onMove(event: LookPointer): void;
   onUp(event: LookPointer): void;
   /** The turn accumulated since the last call, radians; the next call starts from zero. */
@@ -32,7 +36,7 @@ type Finger = { id: number; x: number; y: number };
 
 /**
  * Creates a look pad. The first finger down owns it until lifted; a second finger (a pinch, a
- * thumb on a button) is ignored. Dragging right turns right and dragging up looks up, at
+ * thumb on a button) is ignored, unless it takes the pad over. Dragging right turns right and dragging up looks up, at
  * {@link TOUCH_LOOK_RAD_PER_PX} times `scale()` per pixel.
  *
  * @param scale - The "Kijkgevoeligheid" setting, read on every move.
@@ -43,8 +47,8 @@ export function createTouchLook(scale: () => number): TouchLook {
   let yaw = 0;
   let pitch = 0;
   return {
-    onDown(event) {
-      if (finger) return;
+    onDown(event, takeOver = false) {
+      if (finger && !takeOver) return;
       finger = { id: event.pointerId, x: event.clientX, y: event.clientY };
     },
     onMove(event) {

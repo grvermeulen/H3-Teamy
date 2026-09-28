@@ -191,6 +191,34 @@ describe("ArenaTouchButtons in 3D", () => {
     expect(onButton).toHaveBeenLastCalledWith("fire", false);
   });
 
+  it("lets go of the trigger and the look when Schieten goes away mid-press", () => {
+    const onButton = vi.fn();
+    const look = createTouchLook(() => 1);
+    const { rerender } = render(
+      <ArenaTouchButtons inVehicle={false} onButton={onButton} look={look} />,
+    );
+    const fire = screen.getByRole("button", { name: "Schieten" });
+    fireEvent.pointerDown(fire, { pointerId: 7, clientX: 10, clientY: 10 });
+    expect(onButton).toHaveBeenLastCalledWith("fire", true);
+    rerender(<ArenaTouchButtons inVehicle={false} onButton={onButton} />);
+    expect(onButton).toHaveBeenCalledWith("fire", false);
+    look.onDown({ pointerId: 8, clientX: 0, clientY: 0 });
+    look.onMove({ pointerId: 8, clientX: 25, clientY: 0 });
+    expect(look.take().yaw).toBeCloseTo(25 * TOUCH_LOOK_RAD_PER_PX);
+  });
+
+  it("takes the look over from a finger already on the pad", () => {
+    const look = createTouchLook(() => 1);
+    render(
+      <ArenaTouchButtons inVehicle={false} onButton={vi.fn()} look={look} />,
+    );
+    look.onDown({ pointerId: 1, clientX: 0, clientY: 0 });
+    const fire = screen.getByRole("button", { name: "Schieten" });
+    fireEvent.pointerDown(fire, { pointerId: 2, clientX: 100, clientY: 50 });
+    fireEvent.pointerMove(fire, { pointerId: 2, clientX: 140, clientY: 50 });
+    expect(look.take().yaw).toBeCloseTo(40 * TOUCH_LOOK_RAD_PER_PX);
+  });
+
   it("turns the look by a drag that starts on Schieten, still firing", () => {
     const onButton = vi.fn();
     const look = createTouchLook(() => 1);
@@ -273,7 +301,8 @@ describe("ArenaTouchButtons in 3D", () => {
     stubHidden(false);
     fireEvent.click(sights);
     expect(onButton).toHaveBeenLastCalledWith("ads", true);
+    const before = onButton.mock.calls.length;
     unmount();
-    expect(onButton).toHaveBeenLastCalledWith("ads", false);
+    expect(onButton.mock.calls.slice(before)).toContainEqual(["ads", false]);
   });
 });
