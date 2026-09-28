@@ -467,7 +467,11 @@ async function join(
   return ticketFor(tx, await maintainHost(tx, room, now), memberId, now);
 }
 
-/** Executes a validated room operation under PostgreSQL locks; cache fallback never grants authority. */
+/**
+ * Executes a validated room operation under PostgreSQL locks; cache fallback never grants authority.
+ *
+ * @throws DbUnavailableError wanneer arena-tabellen ontbreken (P2021/P2022).
+ */
 export async function commandArenaRoom(
   user: ArenaActor,
   command: ArenaRoomCommand,

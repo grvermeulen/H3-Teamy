@@ -30,6 +30,7 @@ export const MENU_LABEL = "Menu";
 export const SOUND_LABEL = "Geluid";
 export const VIBRATE_LABEL = "Trillen";
 export const RADIO_LABEL = "Radio";
+export const AMBIENCE_LABEL = "Omgevingsgeluid";
 export const STATION_LABEL = "Zender";
 export const CONTROLS_LABEL = "Besturing";
 export const SINGLE_STICK_LABEL = "Enkele stick";
@@ -211,9 +212,9 @@ function StationSelect({
 }
 
 /**
- * The in-game menu (spec §7): Geluid, Trillen, Radio, Besturing and the way out. It pauses nothing —
- * a potje with other people in it cannot wait for one of them — so the city keeps running
- * behind the veil.
+ * The in-game menu (spec §7): Geluid, Trillen, Radio, Omgevingsgeluid, Besturing and the way
+ * out. It pauses nothing — a potje with other people in it cannot wait for one of them — so the
+ * city keeps running behind the veil.
  *
  * @param props - The settings, how to change them, and the two ways out.
  * @returns The sheet.
@@ -280,6 +281,11 @@ export function ArenaSettingsSheet({
               label={RADIO_LABEL}
               checked={settings.radio}
               onChange={(radio) => onChange({ radio })}
+            />
+            <SettingSwitch
+              label={AMBIENCE_LABEL}
+              checked={settings.ambience}
+              onChange={(ambience) => onChange({ ambience })}
             />
             <SettingSwitch
               label="Dynamische camera"

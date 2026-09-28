@@ -170,6 +170,7 @@ describe("ArenaSettingsSchema", () => {
       vibrate: true,
       twinStick: true,
       radio: true,
+      ambience: true,
       dynamicCamera: true,
       quality: "auto",
       view: "2d",

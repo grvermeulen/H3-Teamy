@@ -5,6 +5,8 @@ import {
   Mesh,
   PointLight,
   Points,
+  Vector3,
+  type BufferAttribute,
   type Material,
   type Object3D,
   type ShaderMaterial,
@@ -12,6 +14,7 @@ import {
 import type {
   ArenaPlayerState,
   BulletState,
+  CopState,
   EffectState,
   VehicleState,
 } from "../sim/types";
@@ -21,6 +24,7 @@ import {
   EXPLOSION_SMOKE_COUNT,
   IMPACT_SPARK_COUNT,
 } from "./bursts";
+import { PERSON_CHEST_HEIGHT_M } from "./coords";
 import { createEffects3d, type EffectsScene } from "./effects3d";
 
 const EXPLOSION: EffectState = {
@@ -232,6 +236,142 @@ describe("createEffects3d", () => {
     effects.update(0.001);
 
     expect(fireParticles(effects.object)).toBeGreaterThan(0);
+  });
+
+  it("lights a muzzle flash at its shooter's muzzle, the nearest one within reach", () => {
+    const flash: EffectState = { ...EXPLOSION, kind: "muzzle", x: 10, y: 10 };
+    const muzzles = new Map([
+      [7, new Vector3(10.8, 1.45, 10.1)],
+      [30, new Vector3(11.9, 1.4, 10)],
+      [31, new Vector3(40, 1.4, 10)],
+    ]);
+    const effects = createEffects3d({ maxParticles: 600 });
+
+    effects.sync(scene({ effects: [flash] }), undefined, false, muzzles);
+    effects.update(0.001);
+
+    const [light] = litLights(effects.object);
+    expect(light!.position.toArray()).toEqual([10.8, 1.45, 10.1]);
+  });
+
+  it("lights a flash nobody's muzzle is near just ahead of the shooter, as before", () => {
+    const flash: EffectState = { ...EXPLOSION, kind: "muzzle", x: 10, y: 10 };
+    const effects = createEffects3d({ maxParticles: 600 });
+
+    effects.sync(
+      scene({ effects: [flash] }),
+      undefined,
+      false,
+      new Map([[30, new Vector3(20, 1.4, 10)]]),
+    );
+    effects.update(0.001);
+
+    const [light] = litLights(effects.object);
+    expect(light!.position.y).toBeCloseTo(PERSON_CHEST_HEIGHT_M);
+    expect(light!.position.x).toBeGreaterThan(10);
+    expect(light!.position.x).toBeLessThan(11);
+  });
+
+  it("moves your own flash's light to the drawn gun in first person, without a flame", () => {
+    const yours: EffectState = { ...EXPLOSION, kind: "muzzle", x: 10, y: 10 };
+    const drawnGun = new Vector3(10.3, 1.5, 10.15);
+    const cop = new Vector3(10.5, 1.4, 10.05);
+    const effects = createEffects3d({ maxParticles: 600 });
+
+    effects.sync(
+      scene({ effects: [yours], players: [player(10, 10)] }),
+      undefined,
+      true,
+      new Map([
+        [30, cop],
+        [1, drawnGun],
+      ]),
+    );
+    effects.update(0.001);
+
+    expect(fireParticles(effects.object)).toBe(0);
+    const [light] = litLights(effects.object);
+    expect(light!.position.toArray()).toEqual(drawnGun.toArray());
+  });
+
+  it("gives a flash lit at an officer beside you to the officer, flame and all", () => {
+    const theirs: EffectState = {
+      ...EXPLOSION,
+      kind: "muzzle",
+      x: 10.9,
+      y: 10,
+    };
+    const yourGun = new Vector3(10.3, 1.5, 10.15);
+    const copGun = new Vector3(11.4, 1.4, 10.05);
+    const officer = { id: 30, x: 10.9, y: 10 } as CopState;
+    const effects = createEffects3d({ maxParticles: 600 });
+
+    effects.sync(
+      scene({ effects: [theirs], players: [player(10, 10)], cops: [officer] }),
+      undefined,
+      true,
+      new Map([
+        [1, yourGun],
+        [30, copGun],
+      ]),
+    );
+    effects.update(0.001);
+
+    expect(fireParticles(effects.object)).toBeGreaterThan(0);
+    const [light] = litLights(effects.object);
+    expect(light!.position.toArray()).toEqual(copGun.toArray());
+  });
+
+  it("leaves a drive-by flash at its shooter, not on a gun that happens to be near", () => {
+    const driveBy: EffectState = { ...EXPLOSION, kind: "muzzle", x: 10, y: 10 };
+    const driver = { id: 5, x: 10, y: 10 } as ArenaPlayerState;
+    const nearbyGun = new Vector3(10.9, 1.4, 10.2);
+    const effects = createEffects3d({ maxParticles: 600 });
+
+    effects.sync(
+      scene({ effects: [driveBy], players: [driver] }),
+      undefined,
+      false,
+      new Map([[30, nearbyGun]]),
+    );
+    effects.update(0.001);
+
+    const [light] = litLights(effects.object);
+    expect(light!.position.toArray()).not.toEqual(nearbyGun.toArray());
+    expect(light!.position.y).toBeCloseTo(PERSON_CHEST_HEIGHT_M);
+  });
+
+  it("starts the rounds of a known shooter at their muzzle", () => {
+    const effects = createEffects3d({ maxParticles: 600 });
+    const round: BulletState = {
+      id: 9,
+      ownerId: 7,
+      ignoreVehicleId: null,
+      x: 10,
+      y: 10,
+      directionX: 1,
+      directionY: 0,
+      speedMps: 110,
+      rangeLeftM: WEAPONS.uzi.rangeM,
+      damage: 10,
+      weapon: "uzi",
+    };
+    const muzzle = new Vector3(10.7, 1.45, 10.1);
+
+    effects.sync(
+      scene({ bullets: [round] }),
+      undefined,
+      false,
+      new Map([[7, muzzle]]),
+    );
+
+    const tracers = effects.object.getObjectByName("tracers") as Mesh;
+    const position = tracers.geometry.getAttribute(
+      "position",
+    ) as BufferAttribute;
+    expect(
+      new Vector3().fromBufferAttribute(position, 0).distanceTo(muzzle),
+    ).toBeCloseTo(0);
   });
 
   it("draws the rounds in flight as tracers", () => {

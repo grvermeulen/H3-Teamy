@@ -1,5 +1,5 @@
-import { Group } from "three";
-import { describe, expect, it, vi } from "vitest";
+import { Group, type Vector3 } from "three";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Scene } from "../render/renderScene";
 import { createArenaPlayer } from "../sim/roster";
 import type {
@@ -20,6 +20,7 @@ import {
   CHARACTER_DRAW_DISTANCE_M,
   COP_AIM_RANGE_M,
   FREE_LIST_CAP,
+  TANK_BARREL_HEIGHT_M,
   VEHICLE_DRAW_DISTANCE_M,
   createEntitySync,
   type EntityFactories,
@@ -513,6 +514,79 @@ describe("createEntitySync: characters", () => {
   });
 });
 
+describe("createEntitySync: muzzles", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /** Makes a fake character's gun point from `(x, y, z)`. */
+  function armed(fake: FakeCharacter, x: number, y: number, z: number): void {
+    fake.muzzleWorld.mockImplementation((target: Vector3) => {
+      target.set(x, y, z);
+      return true;
+    });
+  }
+
+  it("records each armed player's and officer's muzzle by id, after posing them", () => {
+    const { sync, characters } = syncOf();
+    const scene = sceneOf({
+      players: [player(7, 5, 0)],
+      peds: [ped(20, 10, 0)],
+      cops: [cop(30, 15, 0)],
+    });
+    sync.update(scene, FRAME_S, ORIGIN, THIRD);
+    const [friend, walker, officer] = characters;
+    armed(friend!, 5.6, 1.4, 0.2);
+    armed(officer!, 15.7, 1.35, 0.1);
+    sync.update(scene, FRAME_S, ORIGIN, THIRD);
+    expect(sync.muzzles.points.get(7)!.toArray()).toEqual([5.6, 1.4, 0.2]);
+    expect(sync.muzzles.points.get(30)!.toArray()).toEqual([15.7, 1.35, 0.1]);
+    expect(sync.muzzles.points.has(20)).toBe(false);
+    expect(walker!.muzzleWorld).toHaveBeenCalledTimes(0);
+    const [posed] = officer!.update.mock.invocationCallOrder.slice(-1);
+    const [asked] = officer!.muzzleWorld.mock.invocationCallOrder.slice(-1);
+    expect(posed).toBeLessThan(asked!);
+  });
+
+  it("drops owners that left, died or put their gun away", () => {
+    const { sync, characters } = syncOf();
+    const both = sceneOf({
+      players: [player(7, 5, 0)],
+      cops: [cop(30, 15, 0)],
+    });
+    sync.update(both, FRAME_S, ORIGIN, THIRD);
+    armed(characters[0]!, 5.6, 1.4, 0);
+    armed(characters[1]!, 15.6, 1.4, 0);
+    sync.update(both, FRAME_S, ORIGIN, THIRD);
+    expect(sync.muzzles.points.size).toBe(2);
+    const deadCop = cop(30, 15, 0, { diedAtTick: 290 });
+    sync.update(sceneOf({ cops: [deadCop] }), FRAME_S, ORIGIN, THIRD);
+    expect(sync.muzzles.points.size).toBe(0);
+    characters[1]!.muzzleWorld.mockReturnValue(false);
+    sync.update(sceneOf({ cops: [cop(30, 15, 0)] }), FRAME_S, ORIGIN, THIRD);
+    expect(sync.muzzles.points.has(30)).toBe(false);
+  });
+
+  it("fires a tank driver's shells from the barrel's end at barrel height", () => {
+    const { sync } = syncOf();
+    const scene = sceneOf({
+      players: [player(7, 30, 0, { vehicleId: 51, facing: Math.PI / 2 })],
+      vehicles: [car(51, 30, 0, { kind: "tank" })],
+    });
+    sync.update(scene, FRAME_S, ORIGIN, THIRD);
+    const barrel = sync.muzzles.points.get(7)!;
+    expect(barrel.x).toBeCloseTo(30);
+    expect(barrel.y).toBe(TANK_BARREL_HEIGHT_M);
+    expect(barrel.z).toBeCloseTo(VEHICLE_SPECS.tank.lengthM / 2);
+    const wreck = sceneOf({
+      players: [player(7, 30, 0, { vehicleId: 51 })],
+      vehicles: [car(51, 30, 0, { kind: "tank", wrecked: true })],
+    });
+    sync.update(wreck, FRAME_S, ORIGIN, THIRD);
+    expect(sync.muzzles.points.has(7)).toBe(false);
+  });
+});
+
 describe("createEntitySync: the glTF cast", () => {
   /** A sync whose characters turn glTF once `loaded` is set. */
   function gltfSync(): ReturnType<typeof syncOf> & {
@@ -654,6 +728,85 @@ describe("createEntitySync: vehicles", () => {
       null,
       null,
     ]);
+  });
+
+  it("hides your own whole car in first person, and shows it in third person or as a wreck", () => {
+    const { sync, vehicles } = syncOf();
+    const scene = (wrecked: boolean): Scene =>
+      sceneOf({
+        players: [
+          player(1, 0, 0, { vehicleId: 50 }),
+          player(7, 20, 0, { vehicleId: 51 }),
+        ],
+        vehicles: [car(50, 0, 0, { wrecked }), car(51, 20, 0)],
+      });
+    sync.update(scene(false), FRAME_S, ORIGIN, FIRST);
+    const [yours, theirs] = vehicles;
+    expect(yours!.object.visible).toBe(false);
+    expect(theirs!.object.visible).toBe(true);
+    sync.update(scene(false), FRAME_S, ORIGIN, THIRD);
+    expect(yours!.object.visible).toBe(true);
+    sync.update(scene(true), FRAME_S, ORIGIN, FIRST);
+    expect(yours!.object.visible).toBe(true);
+    expect(sync.local.vehicle).toMatchObject({ id: 50, wrecked: true });
+  });
+
+  it("tells the cockpit your car's kind, paint, steering, speed, pose and siren", () => {
+    const { sync, vehicles } = syncOf();
+    const yours = car(50, 8, 9, {
+      kind: "police",
+      colour: 4,
+      heading: 0.7,
+      velocityX: 6,
+      velocityY: 2,
+    });
+    const scene = sceneOf({
+      players: [player(1, 8, 9, { vehicleId: 50, driveSteer: -0.6 })],
+      vehicles: [yours],
+      sirenVehicleIds: new Set([50]),
+    });
+    sync.update(scene, FRAME_S, ORIGIN, FIRST);
+    expect(sync.local.vehicle).toEqual({
+      id: 50,
+      kind: "police",
+      colour: 4,
+      steer: vehicles[0]!.input!.steer,
+      speedMps: forwardSpeed(yours),
+      heading: 0.7,
+      x: 8,
+      y: 9,
+      siren: true,
+      wrecked: false,
+    });
+    expect(sync.local.vehicle!.steer).toBe(-0.6);
+    expect(sync.local.onFoot).toBe(false);
+  });
+
+  it("has no car for the cockpit on foot, when dead, or when another player drives", () => {
+    const { sync } = syncOf();
+    sync.update(
+      sceneOf({ players: [player(1, 0, 0)], vehicles: [car(50, 0, 0)] }),
+      FRAME_S,
+      ORIGIN,
+      FIRST,
+    );
+    expect(sync.local.vehicle).toBeNull();
+    const dead = player(1, 0, 0, { vehicleId: 50, diedAtTick: 280 });
+    sync.update(
+      sceneOf({ players: [dead], vehicles: [car(50, 0, 0)] }),
+      FRAME_S,
+      ORIGIN,
+      FIRST,
+    );
+    expect(sync.local.vehicle).toBeNull();
+    const friend = player(7, 0, 0, { vehicleId: 50 });
+    sync.update(
+      sceneOf({ players: [friend], vehicles: [car(50, 0, 0)] }),
+      FRAME_S,
+      ORIGIN,
+      FIRST,
+    );
+    expect(sync.local.vehicle).toBeNull();
   });
 
   it("draws vehicles within 320 m and rebuilds one whose kind changed under its id", () => {

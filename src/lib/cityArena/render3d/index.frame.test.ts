@@ -69,11 +69,19 @@ vi.mock("./destruction3d", async () => {
 vi.mock("./entities", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./entities")>();
   const three = await import("three");
+  const { createMuzzleMap } = await import("./muzzleMap");
   return {
     ...actual,
     createEntitySync: vi.fn(() => ({
       group: new three.Group(),
-      local: { onFoot: true, weapon: "pistol", firedTick: null, speed: 0 },
+      muzzles: createMuzzleMap(),
+      local: {
+        onFoot: true,
+        weapon: "pistol",
+        firedTick: null,
+        speed: 0,
+        vehicle: null,
+      },
       update: vi.fn(),
       dispose: vi.fn(),
     })),
@@ -203,7 +211,12 @@ describe("createView3d frame path", () => {
       aim: 0.7,
     });
     const effects = vi.mocked(createEffects3d).mock.results[0]!.value;
-    expect(effects.sync).toHaveBeenCalledWith(SCENE, focus, false);
+    expect(effects.sync).toHaveBeenCalledWith(
+      SCENE,
+      focus,
+      false,
+      expect.any(Map),
+    );
     expect(effects.update).toHaveBeenCalledWith(DT);
     expect(renderer.render).toHaveBeenCalledWith(null);
   });

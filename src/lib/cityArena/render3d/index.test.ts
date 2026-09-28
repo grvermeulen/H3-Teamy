@@ -41,11 +41,11 @@ describe("focusOf", () => {
     expect(focusOf(scene(null))).toEqual({ x: 5, y: 6, driving: null });
   });
 
-  it("follows the car, with its length and heading, while driving", () => {
+  it("follows the car, with its length, heading and kind, while driving", () => {
     expect(focusOf(scene(8))).toEqual({
       x: 7,
       y: 9,
-      driving: { length: 12, heading: 1.2 },
+      driving: { length: 12, heading: 1.2, kind: "bus" },
     });
   });
 });

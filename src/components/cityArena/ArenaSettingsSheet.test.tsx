@@ -76,6 +76,16 @@ describe("ArenaSettingsSheet", () => {
     });
   });
 
+  it("has an Omgevingsgeluid switch, on by default, that patches the setting", () => {
+    const handlers = renderSheet();
+    expect(screen.getByLabelText("Omgevingsgeluid")).toBeChecked();
+    fireEvent.click(screen.getByLabelText("Omgevingsgeluid"));
+    expect(handlers.onChange).toHaveBeenLastCalledWith({ ambience: false });
+    cleanup();
+    renderSheet({ settings: { ...DEFAULT_ARENA_SETTINGS, ambience: false } });
+    expect(screen.getByLabelText("Omgevingsgeluid")).not.toBeChecked();
+  });
+
   it("has a Radio switch and a Zender select over the dial that patch the settings", () => {
     const handlers = renderSheet();
     expect(screen.getByLabelText("Radio")).toBeChecked();

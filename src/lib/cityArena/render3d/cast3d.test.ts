@@ -1,8 +1,9 @@
-import { Group, PerspectiveCamera } from "three";
+import { Group, PerspectiveCamera, type Vector3 } from "three";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Scene } from "../render/renderScene";
 import { createArenaPlayer } from "../sim/roster";
 import type { ArenaPlayerState } from "../sim/types";
+import { createVehicle } from "../sim/vehicle";
 import {
   EFFECT_PARTICLES,
   REAL_ENTITY_FACTORIES,
@@ -14,6 +15,7 @@ import { createEffects3d } from "./effects3d";
 import type { EntityFactories } from "./entities";
 import { createPickup3d } from "./pickups3d";
 import { createVehicle3d } from "./vehicles3d";
+import type { ViewModelPass } from "./viewModelPass";
 
 const effectsMade = vi.hoisted(
   () =>
@@ -96,6 +98,18 @@ function fakeFactories(): EntityFactories & {
   };
 }
 
+/** A hands-and-cockpit pass that records what it was asked to show. */
+function fakePass(): ViewModelPass & {
+  update: ReturnType<typeof vi.fn>;
+  muzzleWorld: ReturnType<typeof vi.fn>;
+} {
+  return {
+    update: vi.fn(() => null),
+    muzzleWorld: vi.fn(() => false),
+    dispose: vi.fn(),
+  };
+}
+
 function you(extra: Partial<ArenaPlayerState> = {}): ArenaPlayerState {
   return { ...createArenaPlayer([3, 4], 0), id: 1, ...extra };
 }
@@ -146,7 +160,12 @@ describe("createCast3d", () => {
     const [effects] = effectsMade;
     expect(effects!.object).toBeInstanceOf(Group);
     expect((effects!.object as Group).parent).toBe(cast.object);
-    expect(effects!.sync).toHaveBeenCalledWith(frame.scene, FOCUS, false);
+    expect(effects!.sync).toHaveBeenCalledWith(
+      frame.scene,
+      FOCUS,
+      false,
+      expect.any(Map),
+    );
     expect(effects!.update).toHaveBeenCalledWith(0.02);
     const [synced] = effects!.sync.mock.invocationCallOrder;
     const [updated] = effects!.update.mock.invocationCallOrder;
@@ -199,11 +218,68 @@ describe("createCast3d", () => {
     expect(cast.update(dead, FOCUS, camera)).toBeNull();
   });
 
+  it("asks for the cockpit at the wheel in first person, the hands on foot, and neither when dead", () => {
+    const pass = fakePass();
+    const cast = createCast3d(fakeFactories(), pass);
+    const camera = new PerspectiveCamera();
+    const driving = frameOf({ mode: "first" });
+    driving.scene.players = [you({ vehicleId: 9, driveSteer: 0.5 })];
+    driving.scene.vehicles = [
+      { ...createVehicle(9, "van", [3, 4], 0.3, 6), velocityX: 5 },
+    ];
+    cast.update(driving, FOCUS, camera);
+    expect(pass.update).toHaveBeenLastCalledWith(camera, null, {
+      kind: "van",
+      colour: 6,
+      steer: 0.5,
+      speedMps: expect.any(Number),
+      siren: false,
+      tick: 90,
+      dt: 0.02,
+      x: 3,
+      y: 4,
+      heading: 0.3,
+    });
+    cast.update(frameOf({ mode: "first" }), FOCUS, camera);
+    expect(pass.update).toHaveBeenLastCalledWith(
+      camera,
+      expect.objectContaining({ weapon: "pistol" }),
+      null,
+    );
+    const dead = frameOf({ mode: "first" });
+    dead.scene.players = [you({ diedAtTick: 80 })];
+    cast.update(dead, FOCUS, camera);
+    expect(pass.update).toHaveBeenLastCalledWith(camera, null, null);
+  });
+
+  it("drives from the chase camera without a cockpit, and from a wreck without one", () => {
+    const pass = fakePass();
+    const cast = createCast3d(fakeFactories(), pass);
+    const camera = new PerspectiveCamera();
+    const driving = frameOf();
+    driving.scene.players = [you({ vehicleId: 9 })];
+    driving.scene.vehicles = [createVehicle(9, "sedan", [3, 4], 0, 1)];
+    cast.update(driving, FOCUS, camera);
+    expect(pass.update).toHaveBeenLastCalledWith(camera, null, null);
+    const wreck = frameOf({ mode: "first" });
+    wreck.scene.players = [you({ vehicleId: 9 })];
+    wreck.scene.vehicles = [
+      { ...createVehicle(9, "sedan", [3, 4], 0, 1), wrecked: true },
+    ];
+    cast.update(wreck, FOCUS, camera);
+    expect(pass.update).toHaveBeenLastCalledWith(camera, null, null);
+  });
+
   it("leaves your own muzzle flame to the hands in first person", () => {
     const cast = createCast3d(fakeFactories());
     const first = frameOf({ mode: "first" });
     cast.update(first, FOCUS, new PerspectiveCamera());
-    expect(effectsMade[0]!.sync).toHaveBeenCalledWith(first.scene, FOCUS, true);
+    expect(effectsMade[0]!.sync).toHaveBeenCalledWith(
+      first.scene,
+      FOCUS,
+      true,
+      expect.any(Map),
+    );
   });
 
   it("keeps your own muzzle flame in the world when no hands are drawn: a first-person drive-by", () => {
@@ -218,7 +294,43 @@ describe("createCast3d", () => {
       driving.scene,
       FOCUS,
       false,
+      expect.any(Map),
     );
+  });
+
+  it("hands the effects every shooter's muzzle, yours from the drawn gun in first person", () => {
+    const pass = fakePass();
+    // Like the real pass: a muzzle only in a frame that showed the hands.
+    pass.muzzleWorld.mockImplementation((target: Vector3) => {
+      if (pass.update.mock.calls.at(-1)?.[1] === null) return false;
+      target.set(3.4, 1.5, 4.1);
+      return true;
+    });
+    const factories = fakeFactories();
+    factories.character.mockImplementation(() => ({
+      object: new Group(),
+      update: vi.fn(),
+      dispose: vi.fn(),
+      muzzleWorld: vi.fn((target: Vector3) => {
+        target.set(3.6, 1.4, 4);
+        return true;
+      }),
+    }));
+    const cast = createCast3d(factories, pass);
+    const camera = new PerspectiveCamera();
+    cast.update(frameOf(), FOCUS, camera);
+    const [, , , thirdPerson] = effectsMade[0]!.sync.mock.calls.at(-1)!;
+    expect((thirdPerson as Map<number, Vector3>).get(1)!.toArray()).toEqual([
+      3.6, 1.4, 4,
+    ]);
+    cast.update(frameOf({ mode: "first" }), FOCUS, camera);
+    const [, , , firstPerson] = effectsMade[0]!.sync.mock.calls.at(-1)!;
+    expect((firstPerson as Map<number, Vector3>).get(1)!.toArray()).toEqual([
+      3.4, 1.5, 4.1,
+    ]);
+    const [posed] = pass.update.mock.invocationCallOrder.slice(-1);
+    const [synced] = effectsMade[0]!.sync.mock.invocationCallOrder.slice(-1);
+    expect(posed).toBeLessThan(synced!);
   });
 
   it("draws characters beyond 45 m simply at 'laag', and every one detailed otherwise", () => {
