@@ -150,7 +150,12 @@ function armOf(
   );
 }
 
-/** Registers a shot from the next-shot tick moving on, else another driver's flash at the seat. */
+/**
+ * Registers a shot from the next-shot tick moving on, else a flash at the seat: always for another
+ * driver, and for you on the first frame at the wheel, when there is no tick yet to compare with
+ * (a shot fired as you board or draw the gun). `newestOwnMuzzle` hands the flash only to the body
+ * nearest it, so an officer's beside the car is never taken for yours.
+ */
 function trackShot(
   context: DriveByContext,
   memory: DriverMemory,
@@ -160,7 +165,7 @@ function trackShot(
   memory.nextShotTick = driver.nextShotTick;
   let fired: number | null = null;
   if (previous !== null && driver.nextShotTick > previous) fired = context.tick;
-  else if (!memory.local)
+  else if (!memory.local || previous === null)
     fired =
       newestOwnMuzzle(context.muzzles, driver, context.shooters)?.bornTick ??
       null;

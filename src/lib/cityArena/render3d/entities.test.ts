@@ -647,6 +647,18 @@ describe("createEntitySync: drive-bys", () => {
     );
   });
 
+  it("holds your gun out for a shot fired the very frame you are first seen at the wheel", () => {
+    const { sync } = syncOf();
+    const fired = sceneOf({
+      players: [player(1, 10, 5, { vehicleId: 50, nextShotTick: TICK + 10 })],
+      vehicles: [car(50, 10, 5, { heading: HEADING })],
+      effects: [{ ...muzzle(10, 5), angle: HEADING - 1.4 }],
+    });
+    sync.update(fired, FRAME_S, ORIGIN, AIM_LEFT);
+    expect(arms(sync)[0]?.visible).toBe(true);
+    expect(sync.local.driveBy).toMatchObject({ side: "left", firedTick: TICK });
+  });
+
   it("shows nothing for fists or a bat, and leaves a tank to its cannon", () => {
     for (const weapon of ["fist", "bat"] as const) {
       const { sync } = syncOf();
