@@ -135,21 +135,22 @@ export function stickWorldYaw(yaw: number, stickAngle: number): number {
  *
  * @param yaw - The camera yaw, radians.
  * @param input - The frame's aim (a stick's screen angle, or `null`) and movement.
- * @param driving - In a car the chase camera does the following instead.
+ * @param noWalkFollow - The walk turns nothing: in a car the chase camera does the following
+ * instead, and once the touch look pad has turned the camera the player does the looking.
  * @param dt - Seconds this frame.
  * @returns The new yaw.
  */
 export function stickTurnedYaw(
   yaw: number,
   input: Pick<WorldInput, "aim" | "move" | "moveIsAnalog">,
-  driving: boolean,
+  noWalkFollow: boolean,
   dt: number,
 ): number {
   if (input.aim !== null)
     return easeYaw(yaw, stickWorldYaw(yaw, input.aim), STICK_TURN_PER_S, dt);
   const [sx, sy] = input.move;
   const push = Math.hypot(sx, sy);
-  if (driving || !input.moveIsAnalog || push === 0) return yaw;
+  if (noWalkFollow || !input.moveIsAnalog || push === 0) return yaw;
   const walk = stickWorldYaw(yaw, Math.atan2(sy, sx));
   if (Math.abs(angleDelta(yaw, walk)) > MOVE_FOLLOW_MAX_RAD) return yaw;
   return easeYaw(yaw, walk, MOVE_FOLLOW_PER_S * push, dt);

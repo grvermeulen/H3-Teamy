@@ -273,7 +273,7 @@ function encodeVehicles(state: ArenaState): number[][] {
     packAngle(vehicle.heading),
     Math.round(vehicle.velocityX * POSITION_SCALE),
     Math.round(vehicle.velocityY * POSITION_SCALE),
-    Math.round(vehicle.health),
+    clampVehicleHealth(vehicle.kind, Math.round(vehicle.health)),
     vehicle.wrecked ? 1 : 0,
     vehicle.colour,
   ]);

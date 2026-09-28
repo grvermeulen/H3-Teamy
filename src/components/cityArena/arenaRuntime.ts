@@ -25,6 +25,7 @@ import type { InputState } from "@/lib/cityArena/input/inputState";
 import type { Rect } from "@/lib/cityArena/mapBuild/geometry";
 import type { MouseLook } from "@/lib/cityArena/input/mouseLook";
 import type { PointerAim } from "@/lib/cityArena/input/pointerAim";
+import type { TouchCamera } from "@/lib/cityArena/input/touchLook";
 import {
   createCamera,
   screenToWorld,
@@ -129,6 +130,7 @@ import {
   view3dRuntime,
   type Runtime3d,
 } from "./view3d/frame3d";
+import { dropTouchLook } from "./view3d/touchLook3d";
 import {
   createArenaSound,
   type ArenaSound,
@@ -280,6 +282,8 @@ export type Runtime = {
   carLook?: CarLook;
   /** The heading the 3D input last sent the simulation to shoot along; the crosshair follows it. */
   aim3d?: number;
+  /** The touch look pad, attached alongside {@link look} (spec §6); `view3d/touchLook3d.ts`. */
+  touchCamera?: TouchCamera | null;
 };
 
 /**
@@ -1109,7 +1113,10 @@ function liveInput(
   input: InputState,
   dt: number,
 ): WorldInput {
-  if (runtime.inputSuspended) return EMPTY_INPUT;
+  if (runtime.inputSuspended) {
+    if (runtime3d) dropTouchLook(runtime3d);
+    return EMPTY_INPUT;
+  }
   const live = readArenaGamepad(input.snapshot());
   const turned = runtime3d ? input3d(runtime3d, live, dt) : live;
   return holdFireDuringOffer(turned, myPlayer(runtime));

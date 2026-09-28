@@ -531,7 +531,8 @@ replaced by the camera's own look yaw, since 3D gives the player no 2D canvas po
 third-person chase eases behind the car after `CHASE_IDLE_S` = 1.2 s of a resting mouse, the
 driver's seat is bolted to the car and only offset by the mouse, and — with no aim stick held — a
 lone movement stick slowly turns the camera toward the walking direction so a touch player without
-a second stick can still look around.
+a second stick can still look around, until the touch look pad has turned the camera (see
+[Touch](#touch)); from then on the camera is the player's to turn.
 
 ### Mouse-look and the lock-free fallback
 
@@ -560,10 +561,45 @@ third person, ±30° in first person; `useView3d` re-applies the limits whenever
 
 ### Touch
 
-The existing camera-relative touch aim stick pushes the camera yaw the same way a gamepad stick
-does (`stickTurnedYaw` in `cameraYaw.ts`); without an aim stick held, the movement stick nudges the
-camera as described above. No new touch controls were added for 3D — the existing twin-stick and
-single-stick layouts (`docs/tech/arena/README.md`, Plan 6) drive it unchanged.
+2D, split screen and the TV controller keep their controls (the twin-stick or single-stick layouts
+of `docs/tech/arena/README.md`, Plan 6). In 3D on a touch device the right-hand side changes, so
+that turning to look never pulls the trigger (aim round §6):
+
+- **Look pad** (`components/cityArena/TouchLookPad.tsx`, `input/touchLook.ts`): the right 55 % of
+  the playfield, where the aim stick sits in 2D, under the buttons and the radar. One finger at a
+  time — a second finger is ignored — and a drag turns the camera at `TOUCH_LOOK_RAD_PER_PX` =
+  0.008 rad/px times **Kijkgevoeligheid** (`touchLookSensitivity`, 0,25–2,5×, default 1; a slider
+  under Besturing in the menu on touch devices). Dragging right turns right, up looks up. It never
+  fires. The turn adds up between frames and `view3d/touchLook3d.ts` takes it once per frame: the
+  yaw goes onto mouse-look's (so the chase camera counts it as a look and waits before easing
+  behind the car), the pitch is a tilt on top of mouse-look's inside the mode's range
+  (`TouchCamera`, whose range `useView3d` updates with the camera mode).
+- **Schieten**: a big round button in the bottom-right corner, under the thumb. Held, it fires (the
+  `buttons` source of `fire`); a drag that starts on it also feeds the look pad, and the pointer is
+  captured, so one thumb can keep firing while it tracks a target and may wander off the button.
+- **Richten** (scope icon, pressed while up): toggles the `buttons` source of the foundation's
+  `ads` button. It goes down, and is disabled, with the fist or the bat, on the death screen and
+  while the menu, the map or a mission offer is open; it also goes down when the page is hidden
+  (the input is cleared then). On a short screen (≤ 480 px tall, a phone held sideways) it sits
+  beside Schieten instead of above it, clear of the radar.
+- Wapen, Instappen/Uitstappen and (in a car) Radio stay, to the left of that pair. In a car the
+  left stick steers as before, the pad turns the camera and Schieten drive-bys.
+- **Aim assist** (`input/aimAssist.ts`, touch only): while the crosshair is within
+  `ASSIST_CONE_RAD` (2°) of a living target's body — other players, officers and pedestrians within
+  `ASSIST_RANGE_M` (60 m); never yourself and never a car, so never your own — the pad's turn is
+  multiplied by `ASSIST_FRICTION` (0.45). No auto-rotate, no auto-fire, and the mouse is never
+  slowed. The look is measured from the player's (or car's) eye along the camera's yaw and pitch;
+  the over-the-shoulder camera's half-metre offset is a few degrees at close range, which the
+  target's own width absorbs.
+- A first-run tip explains the layout ("… rechts slepen om rond te kijken · houd Schieten vast om
+  te schieten · Richten zoomt in"), stored under `h3-arena-touch3d-tip-v1` apart from the 2D tip,
+  and the footer hint names the look pad and Schieten.
+- A stick surface that unmounts mid-drag lets go of its stick, so the 2D aim stick cannot stay
+  aiming and firing when 3D takes over under the thumb.
+
+|                                                                                            |                                                                                                              |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| ![3D on a phone: look pad on the right, Richten over Schieten](img/3d/3d-touch-layout.jpg) | ![The same held sideways: Richten beside Schieten, clear of the radar](img/3d/3d-touch-layout-landscape.jpg) |
 
 ## Cockpit
 
