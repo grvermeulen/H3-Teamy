@@ -29,6 +29,12 @@ const TOUCH_BUTTON_CLASS =
 /** The 3D fire button: big and round under the right thumb. */
 const FIRE_BUTTON_CLASS =
   "flex h-[88px] w-[88px] touch-none flex-col items-center justify-center gap-0.5 rounded-full border-2 border-white/40 bg-red-600/45 text-[11px] font-semibold text-white select-none active:bg-red-600/75 [-webkit-user-select:none] [-webkit-touch-callout:none]";
+/**
+ * Richten above Schieten; on a short screen (a phone held sideways) beside it, up and to the left,
+ * so the pair stays clear of the radar in the top corner.
+ */
+const AIM_CLUSTER_CLASS =
+  "flex flex-col items-center gap-3 [@media(max-height:480px)]:flex-row [@media(max-height:480px)]:items-start";
 /** The 3D sights toggle above it; amber while the sights are up. */
 const SIGHTS_BUTTON_CLASS =
   "flex h-14 w-14 touch-manipulation flex-col items-center justify-center rounded-full border-2 border-white/40 bg-white/10 text-[10px] font-semibold text-white select-none aria-pressed:border-[var(--arena-amber)] aria-pressed:bg-[var(--arena-amber)] aria-pressed:text-[var(--arena-void)] disabled:opacity-40 [-webkit-user-select:none] [-webkit-touch-callout:none]";
@@ -284,9 +290,9 @@ function CarAndWeaponButtons({
 /**
  * Wapen, Instappen/Uitstappen and — with a single stick — Schieten, stacked at the bottom right
  * above the footer (spec §7), with Radio on top while in a car (Plan 7). In 3D on touch the round
- * Schieten button sits in the corner under the thumb with Richten above it, and the others move to
- * their left (aim round §6). Above the aim surface and the look pad in stacking order, so a thumb
- * on a button never starts the surface underneath.
+ * Schieten button sits in the corner under the thumb with Richten above it (beside it on a short
+ * screen), and the others move to their left (aim round §6). Above the aim surface and the look
+ * pad in stacking order, so a thumb on a button never starts the surface underneath.
  */
 export default function ArenaTouchButtons(
   props: ArenaTouchButtonsProps,
@@ -312,7 +318,7 @@ export default function ArenaTouchButtons(
       <div className="flex flex-col gap-2">
         <CarAndWeaponButtons {...props} />
       </div>
-      <div className="flex flex-col items-center gap-3">
+      <div className={AIM_CLUSTER_CLASS}>
         <SightsToggle onButton={onButton} allowed={sightsAllowed} />
         <FireButton onButton={onButton} look={look} />
       </div>
