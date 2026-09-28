@@ -215,11 +215,8 @@ export function createEffects3d(options: { maxParticles: number }): Effects3d {
       flashes.update(dt);
     },
     dispose() {
-      fire.dispose();
-      smoke.dispose();
-      debris.dispose();
-      flashes.dispose();
-      projectiles.dispose();
+      for (const part of [fire, smoke, debris, flashes, projectiles])
+        part.dispose();
     },
   };
 }

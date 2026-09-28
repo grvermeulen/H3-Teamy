@@ -5,13 +5,10 @@ import {
   RADIO_STATIONS,
   stationById,
 } from "@/lib/cityArena/audio/radio/stations";
-import {
-  MOUSE_SENSITIVITY,
-  type ArenaLayout,
-  type ArenaSettings,
-} from "@/lib/cityArena/schemas";
+import type { ArenaLayout, ArenaSettings } from "@/lib/cityArena/schemas";
 import { useDialogFocusTrap } from "./useDialogFocusTrap";
 import { ArenaCastHelp, ArenaCastIcon } from "./ArenaCastHelp";
+import { ArenaMouseSensitivity } from "./ArenaMouseSensitivity";
 
 /** Props for {@link ArenaSettingsSheet}. */
 export type ArenaSettingsSheetProps = {
@@ -53,8 +50,6 @@ const LAYOUT_OPTIONS: { value: ArenaLayout | "auto"; label: string }[] = [
 export const VIEW_LABEL = "Weergave";
 /** "3D-camera": third or first person, meaningless (and disabled) outside 3D. */
 export const CAMERA3D_LABEL = "3D-camera";
-/** "Muisgevoeligheid": how fast the mouse turns the 3D view, as a multiple (aim spec §5). */
-export const MOUSE_SENSITIVITY_LABEL = "Muisgevoeligheid";
 
 /** One button in a two-way segmented control, pressed state shown with `aria-pressed`. */
 function SegmentButton<Value extends string>({
@@ -140,45 +135,6 @@ function CameraSettings({
         />
       </div>
     </fieldset>
-  );
-}
-
-/** The mouse sensitivity as the slider shows it: two decimals, a Dutch comma, "1,50×". */
-function sensitivityText(value: number): string {
-  const digits = value.toLocaleString("nl-NL", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-  return `${digits}×`;
-}
-
-/** The "Muisgevoeligheid" slider, live only in 3D, where the mouse turns the view. */
-function MouseSensitivitySlider({
-  settings,
-  onChange,
-}: Pick<ArenaSettingsSheetProps, "settings" | "onChange">): React.JSX.Element {
-  return (
-    <label className="flex min-h-[44px] items-center justify-between gap-4 border-b border-[var(--arena-line)] py-2 text-sm text-[var(--arena-text)]">
-      <span>{MOUSE_SENSITIVITY_LABEL}</span>
-      <span className="flex items-center gap-2">
-        <input
-          type="range"
-          aria-label={MOUSE_SENSITIVITY_LABEL}
-          min={MOUSE_SENSITIVITY.min}
-          max={MOUSE_SENSITIVITY.max}
-          step={MOUSE_SENSITIVITY.step}
-          value={settings.mouseSensitivity}
-          disabled={settings.view !== "3d"}
-          onChange={(event) =>
-            onChange({ mouseSensitivity: Number(event.target.value) })
-          }
-          className="w-28 accent-[var(--arena-amber)] disabled:opacity-40"
-        />
-        <span className="w-12 text-right tabular-nums">
-          {sensitivityText(settings.mouseSensitivity)}
-        </span>
-      </span>
-    </label>
   );
 }
 
@@ -345,9 +301,10 @@ export function ArenaSettingsSheet({
               <>
                 <ViewSettings settings={settings} onChange={onChange} />
                 <CameraSettings settings={settings} onChange={onChange} />
-                <MouseSensitivitySlider
-                  settings={settings}
-                  onChange={onChange}
+                <ArenaMouseSensitivity
+                  value={settings.mouseSensitivity}
+                  disabled={settings.view !== "3d"}
+                  onChange={(value) => onChange({ mouseSensitivity: value })}
                 />
               </>
             )}

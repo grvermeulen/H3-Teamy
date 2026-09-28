@@ -18,6 +18,7 @@ import {
   type EntityView,
 } from "./entities";
 import type { ContactSpot } from "./missionMarkers";
+import type { MuzzlePoints } from "./muzzleMap";
 import { createPickup3d } from "./pickups3d";
 import type { OverlayPass, RenderQuality } from "./renderer3d";
 import type { ShooterAim } from "./roundAims";
@@ -112,6 +113,25 @@ function fxFor(parent: Group, current: Fx | null, quality: RenderQuality): Fx {
   const destruction = createDestruction3d(effects.smoke);
   parent.add(effects.object, destruction.object);
   return { effects, destruction };
+}
+
+/**
+ * Brings the effects (made by the first frame) to the frame and steps them and the destruction.
+ * Your own flame moves to the hands' barrel only while the hands are there to show it.
+ */
+function stepFx(
+  parent: Group,
+  current: Fx | null,
+  frame: CastFrame,
+  focus: { x: number; y: number },
+  own: { handsShown: boolean; muzzles: MuzzlePoints; aim: CastAim },
+): Fx {
+  const fx = fxFor(parent, current, frame.quality);
+  const { handsShown, muzzles, aim } = own;
+  fx.effects.sync(frame.scene, focus, handsShown, muzzles, aim.shot);
+  fx.effects.update(frame.dt);
+  fx.destruction.update(frame.dt);
+  return fx;
 }
 
 /**
@@ -259,17 +279,11 @@ export function createCast3d(
         camera,
         aim.sights,
       );
-      fx = fxFor(object, fx, frame.quality);
-      // Your own flame moves to the hands' barrel only while the hands are there to show it.
-      fx.effects.sync(
-        frame.scene,
-        focus,
-        firstPerson.handsShown,
-        entities.muzzles.points,
-        aim.shot,
-      );
-      fx.effects.update(frame.dt);
-      fx.destruction.update(frame.dt);
+      fx = stepFx(object, fx, frame, focus, {
+        handsShown: firstPerson.handsShown,
+        muzzles: entities.muzzles.points,
+        aim,
+      });
       return pass;
     },
     destruction: () => fx?.destruction ?? null,

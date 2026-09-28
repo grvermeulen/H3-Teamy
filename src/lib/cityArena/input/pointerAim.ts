@@ -37,6 +37,41 @@ function releaseFireIfPrimaryUp(state: InputState, event: PointerEvent): void {
     state.setButton("pointer", "fire", false);
 }
 
+/** Where the pointer is on the target, CSS pixels from its top-left corner. */
+function pointOn(
+  target: PointerAimTarget,
+  event: PointerEvent,
+): [number, number] {
+  const rect = target.getBoundingClientRect();
+  return [event.clientX - rect.left, event.clientY - rect.top];
+}
+
+/** The pointer events the aim listens to, each with its handler. */
+type PointerHandlers = Record<
+  | "pointermove"
+  | "pointerdown"
+  | "pointerup"
+  | "pointercancel"
+  | "pointerleave",
+  (event: PointerEvent) => void
+>;
+
+/** Adds every handler to `target`; returns the function that removes them all. */
+function listenAll(
+  target: PointerAimTarget,
+  handlers: PointerHandlers,
+): () => void {
+  const entries = Object.entries(handlers) as [
+    keyof PointerHandlers,
+    (event: PointerEvent) => void,
+  ][];
+  for (const [type, handler] of entries) target.addEventListener(type, handler);
+  return () => {
+    for (const [type, handler] of entries)
+      target.removeEventListener(type, handler);
+  };
+}
+
 /**
  * Binds mouse movement (aim position) and the left button (fire) on the canvas; touch pointers
  * belong to the stick and the buttons. A left press made while another button is held (the right
@@ -56,24 +91,20 @@ export function attachPointerAim(
   claimsClick?: () => boolean,
 ): PointerAim {
   let position: [number, number] | null = null;
-  const track = (event: PointerEvent): void => {
-    const rect = target.getBoundingClientRect();
-    position = [event.clientX - rect.left, event.clientY - rect.top];
-  };
   const press = (): void => {
     onUserGesture?.();
     if (!claimsClick?.()) state.setButton("pointer", "fire", true);
   };
   const onMove = (event: PointerEvent): void => {
     if (event.pointerType !== "mouse") return;
-    track(event);
+    position = pointOn(target, event);
     if (isChordedPress(event)) press();
     else releaseFireIfPrimaryUp(state, event);
   };
   const onDown = (event: PointerEvent): void => {
     if (event.pointerType !== "mouse" || event.button !== PRIMARY_BUTTON)
       return;
-    track(event);
+    position = pointOn(target, event);
     press();
   };
   const onUp = (event: PointerEvent): void => {
@@ -84,21 +115,19 @@ export function attachPointerAim(
     position = null;
     state.setButton("pointer", "fire", false);
   };
-  target.addEventListener("pointermove", onMove);
-  target.addEventListener("pointerdown", onDown);
-  target.addEventListener("pointerup", onUp);
-  target.addEventListener("pointercancel", onUp);
-  target.addEventListener("pointerleave", onLeave);
+  const unlisten = listenAll(target, {
+    pointermove: onMove,
+    pointerdown: onDown,
+    pointerup: onUp,
+    pointercancel: onUp,
+    pointerleave: onLeave,
+  });
   return {
     position: () => position,
     detach() {
       position = null;
       state.setButton("pointer", "fire", false);
-      target.removeEventListener("pointermove", onMove);
-      target.removeEventListener("pointerdown", onDown);
-      target.removeEventListener("pointerup", onUp);
-      target.removeEventListener("pointercancel", onUp);
-      target.removeEventListener("pointerleave", onLeave);
+      unlisten();
     },
   };
 }

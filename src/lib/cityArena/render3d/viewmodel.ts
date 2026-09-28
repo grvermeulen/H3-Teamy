@@ -519,6 +519,26 @@ function createViewState(): ViewState {
   };
 }
 
+/** Poses the hands and gun for a frame: the weapon, the shot's kick, the sights, the bob. */
+function poseViewModel(
+  state: ViewState,
+  parts: ViewParts,
+  input: ViewModelInput,
+): void {
+  const point = sightOf(input.weapon);
+  const share = point ? (input.sights ?? 0) : 0;
+  syncWeapon(state, parts, input.weapon);
+  syncShot(state, input);
+  placeHands(parts, preparedLayout(input.weapon), state.kick, {
+    share,
+    point,
+  });
+  placeRig(parts.rig, state, LAYOUTS[input.weapon], input.speed, share);
+  parts.rig.visible = !(isScoped(input.weapon) && share >= 1);
+  placeFlash(parts.flash, state);
+  advance(state, input);
+}
+
 /**
  * The player's hands and weapon for the first-person view.
  *
@@ -546,20 +566,7 @@ export function createViewModel(): ViewModel {
   const state = createViewState();
   return {
     object,
-    update(input) {
-      const point = sightOf(input.weapon);
-      const share = point ? (input.sights ?? 0) : 0;
-      syncWeapon(state, parts, input.weapon);
-      syncShot(state, input);
-      placeHands(parts, preparedLayout(input.weapon), state.kick, {
-        share,
-        point,
-      });
-      placeRig(rig, state, LAYOUTS[input.weapon], input.speed, share);
-      rig.visible = !(isScoped(input.weapon) && share >= 1);
-      placeFlash(flash, state);
-      advance(state, input);
-    },
+    update: (input) => poseViewModel(state, parts, input),
     muzzleWorld(target) {
       if (!state.tip) return false;
       holder.updateWorldMatrix(true, false);
