@@ -12,6 +12,7 @@ import {
   pushStreetSides,
   pushZebras,
   sideBands,
+  signSites,
   zebraSites,
   type StreetTargets,
 } from "./streetMarkings";
@@ -145,6 +146,44 @@ describe("pushStreetSides", () => {
     expect(atMouth(flatPoints(paint)).length).toBeGreaterThan(0);
   });
 
+  it("opens a side street's mouth on the bent half of a chunk too", () => {
+    const tile = fixtureTile(
+      { x: 0, y: 0, rect: FIXTURE_TILE_RECT },
+      {
+        roads: [
+          {
+            points: [
+              [-55, 0],
+              [0, 0],
+              [0, 55],
+            ],
+            roadClass: "primary",
+          },
+          {
+            points: [
+              [0, 2.5],
+              [40, 2.5],
+            ],
+            roadClass: "residential",
+          },
+        ],
+      },
+    );
+    const context = createCellContext(
+      { minX: -64, minY: -64, maxX: 64, maxY: 64 },
+      [tile],
+      new Set(),
+    );
+
+    const { detail } = sidesOf(tile.roads[0], context);
+
+    const mouth = sideBands("residential").edge - 0.5;
+    const inMouth = flatPoints(detail).filter(
+      ([x, z]) => x > 2 && x < 12 && Math.abs(z - 2.5) < mouth,
+    );
+    expect(inMouth).toHaveLength(0);
+  });
+
   it("lays a grass verge where the road runs through fields with no house near, pavement by houses", () => {
     const field = {
       ring: [
@@ -216,6 +255,64 @@ describe("zebraSites", () => {
       expect(fromJunction(site.centre)).toBeGreaterThan(3);
       expect(fromJunction(site.centre)).toBeLessThan(15);
     }
+  });
+
+  it("sees no junction where one road is only cut into pieces, as tile seams cut it", () => {
+    const pieces: { points: Point[]; roadClass: RoadClass }[] = [];
+    for (let x = -200; x < 200; x += 50)
+      pieces.push({
+        points: [
+          [x, 0],
+          [x + 25, 0],
+          [x + 50, 0],
+        ],
+        roadClass: "secondary",
+      });
+    const roads = fixtureTile(
+      { x: 0, y: 0, rect: FIXTURE_TILE_RECT },
+      { roads: pieces },
+    ).roads;
+
+    expect(zebraSites(roads)).toEqual([]);
+    expect(signSites(roads)).toEqual([]);
+  });
+
+  it("still sees the junction when the through road is cut right at it", () => {
+    const roads = fixtureTile(
+      { x: 0, y: 0, rect: FIXTURE_TILE_RECT },
+      {
+        roads: [
+          {
+            points: [
+              [-120, 0],
+              [-40, 0],
+              [0, 0],
+            ],
+            roadClass: "primary",
+          },
+          {
+            points: [
+              [0, 0],
+              [40, 0],
+              [120, 0],
+            ],
+            roadClass: "primary",
+          },
+          {
+            points: [
+              [0, 0],
+              [0, 80],
+            ],
+            roadClass: "residential",
+          },
+        ],
+      },
+    ).roads;
+
+    const sites = zebraSites(roads);
+    expect(sites.length).toBeGreaterThan(0);
+    for (const site of sites)
+      expect(Math.hypot(site.centre[0], site.centre[1])).toBeLessThan(15);
   });
 
   it("never marks a zebra on a motorway", () => {

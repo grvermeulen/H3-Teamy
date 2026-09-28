@@ -122,6 +122,24 @@ export function lampRoadWidth(roadClass: RoadClass): number {
 /** A piece of a centre line, with the mitred frame at each of its points. */
 type Chunk = { points: Point[]; frames: ReturnType<typeof mitre>[] };
 
+/**
+ * The side normal of the segment `along` metres down a polyline whose segment lengths are known —
+ * the mitre's convention, taken on the segment itself so a bend inside a chunk is followed.
+ */
+function normalAlong(
+  points: readonly Point[],
+  lengths: readonly number[],
+  along: number,
+): Point {
+  let rest = along;
+  let index = 0;
+  while (index < lengths.length - 1 && rest > lengths[index]) {
+    rest -= lengths[index];
+    index += 1;
+  }
+  return mitre([points[index], points[index + 1]], 0).across;
+}
+
 /** The point `along` metres down a polyline whose segment lengths are known. */
 function pointAlong(
   points: readonly Point[],
@@ -435,7 +453,7 @@ function kerbRuns(
   const measured = measure(chunk.points);
   return freeRuns(chunk, (along) => {
     const at = pointAlong(measured.points, measured.lengths, along);
-    const direction = chunk.frames[0].across;
+    const direction = normalAlong(measured.points, measured.lengths, along);
     const probe: Point = [
       at[0] + direction[0] * line * side,
       at[1] + direction[1] * line * side,
@@ -472,19 +490,37 @@ function nodeKey([x, y]: Point): string {
   return `${Math.round(x / NODE_KEY_STEP_M)}:${Math.round(y / NODE_KEY_STEP_M)}`;
 }
 
-/** The roads meeting at every point of every road, by node key. */
+/**
+ * The roads at one node, and its arms: a road ending there adds one, a road running through adds
+ * two. A junction has at least {@link JUNCTION_ARMS}; two pieces of one street meeting end to end
+ * — as the map build cuts every road at the tile seams — have two, and are no junction.
+ */
+type JunctionNode = { roads: Set<DecodedRoad>; arms: number };
+
+/** Arms a node needs to be a junction: a T has three. */
+const JUNCTION_ARMS = 3;
+
+/** The roads meeting at every point of every road, by node key, with the node's arms. */
 function junctionNodes(
   roads: readonly DecodedRoad[],
-): Map<string, Set<DecodedRoad>> {
-  const nodes = new Map<string, Set<DecodedRoad>>();
-  for (const road of roads)
-    for (const point of road.points) {
+): Map<string, JunctionNode> {
+  const nodes = new Map<string, JunctionNode>();
+  for (const road of roads) {
+    const last = road.points.length - 1;
+    road.points.forEach((point, index) => {
       const key = nodeKey(point);
-      const set = nodes.get(key) ?? new Set<DecodedRoad>();
-      set.add(road);
-      nodes.set(key, set);
-    }
+      const node = nodes.get(key) ?? { roads: new Set<DecodedRoad>(), arms: 0 };
+      node.roads.add(road);
+      node.arms += index === 0 || index === last ? 1 : 2;
+      nodes.set(key, node);
+    });
+  }
   return nodes;
+}
+
+/** True when the node at `point` is a real junction, not a seam or a bend. */
+function isJunctionAt(nodes: Map<string, JunctionNode>, point: Point): boolean {
+  return (nodes.get(nodeKey(point))?.arms ?? 0) >= JUNCTION_ARMS;
 }
 
 /** Walks `distance` metres along a road from vertex `index` toward `step`; null past its end or another junction. */
@@ -493,7 +529,7 @@ function walk(
   index: number,
   step: 1 | -1,
   distance: number,
-  nodes: Map<string, Set<DecodedRoad>>,
+  nodes: Map<string, JunctionNode>,
 ): { at: Point; direction: Point } | null {
   let rest = distance;
   for (
@@ -503,7 +539,7 @@ function walk(
   ) {
     const [a, b] = [road.points[at], road.points[at + step]];
     const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    if (at !== index && (nodes.get(nodeKey(a))?.size ?? 0) > 1) return null;
+    if (at !== index && isJunctionAt(nodes, a)) return null;
     if (length > 0 && rest <= length) {
       const direction: Point = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
       return {
@@ -542,8 +578,8 @@ export function zebraSites(roads: readonly DecodedRoad[]): ZebraSite[] {
     road.points.forEach((point, index) => {
       const key = nodeKey(point);
       const meeting = nodes.get(key);
-      if (!meeting || meeting.size < 2) return;
-      const others = [...meeting].filter((other) => other !== road);
+      if (!meeting || meeting.arms < JUNCTION_ARMS) return;
+      const others = [...meeting.roads].filter((other) => other !== road);
       for (const step of [1, -1] as const) {
         const seed = seedFromString(
           `${key}:${nodeKey(road.points[0])}:${step}`,
@@ -650,7 +686,7 @@ function approachSigns(
   index: number,
   step: 1 | -1,
   major: DecodedRoad,
-  nodes: Map<string, Set<DecodedRoad>>,
+  nodes: Map<string, JunctionNode>,
 ): SignSite[] {
   const bands = sideBands(major.roadClass);
   const setback = bands.edge + bands.cycle + bands.pavement + SIGN_SETBACK_M;
@@ -690,7 +726,8 @@ export function signSites(roads: readonly DecodedRoad[]): SignSite[] {
   for (const road of roads) {
     if (!GIVE_WAY_CLASSES.includes(road.roadClass)) continue;
     road.points.forEach((point, index) => {
-      const meeting = [...(nodes.get(nodeKey(point)) ?? [])];
+      if (!isJunctionAt(nodes, point)) return;
+      const meeting = [...(nodes.get(nodeKey(point))?.roads ?? [])];
       const bigger = meeting.filter(
         (other) =>
           ROAD_RANK[other.roadClass] > ROAD_RANK[road.roadClass] &&
