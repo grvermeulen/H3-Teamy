@@ -6,6 +6,8 @@
  * own motion for footsteps and skids, and the traffic, people and map that can be heard around them.
  */
 
+import type { SoundPoint } from "@/lib/cityArena/audio/eventVoices";
+import type { ArenaSound } from "@/lib/cityArena/audio/sound";
 import type { SelfMotion } from "@/lib/cityArena/audio/selfSounds";
 import { listenerAt } from "@/lib/cityArena/audio/spatial";
 import type { SpotLandmark } from "@/lib/cityArena/audio/spotSounds";
@@ -97,10 +99,63 @@ export function trafficSources(
     }));
 }
 
+/** A person slower than this is standing still and makes no footsteps, m/s. */
+export const WALKER_MIN_SPEED_MPS = 0.3;
+
+/** Where each person stood last frame, per sound layer: how walkers are told from standers. */
+const lastSpots = new WeakMap<ArenaSound, Map<number, SoundPoint>>();
+
+/**
+ * The people who moved at walking pace since the last frame. Remembers this frame's spots for the
+ * next and forgets the people who have gone.
+ *
+ * @param peds - This frame's living people, as drawn.
+ * @param spots - Where each stood last frame; updated in place.
+ * @param dt - Seconds since the last frame.
+ * @returns The ones on the move.
+ */
+export function walkersAmong(
+  peds: readonly (SoundPoint & { id: number })[],
+  spots: Map<number, SoundPoint>,
+  dt: number,
+): SoundPoint[] {
+  const walkers: SoundPoint[] = [];
+  const reach = WALKER_MIN_SPEED_MPS * dt;
+  const seen = new Set<number>();
+  for (const ped of peds) {
+    const last = spots.get(ped.id);
+    if (last && dt > 0 && Math.hypot(ped.x - last.x, ped.y - last.y) >= reach)
+      walkers.push(ped);
+    spots.set(ped.id, { x: ped.x, y: ped.y });
+    seen.add(ped.id);
+  }
+  for (const id of spots.keys()) if (!seen.has(id)) spots.delete(id);
+  return walkers;
+}
+
+/** The movement memory of one sound layer. */
+function spotsOf(sound: ArenaSound): Map<number, SoundPoint> {
+  const known = lastSpots.get(sound);
+  if (known) return known;
+  const spots = new Map<number, SoundPoint>();
+  lastSpots.set(sound, spots);
+  return spots;
+}
+
+/** Nothing to hear: no traffic, people, map or landmarks. */
+const SILENT_WORLD = {
+  traffic: [],
+  peds: [],
+  walkers: [],
+  tiles: [],
+  landmarks: [],
+};
+
 /**
  * Hands this frame to the sound: the listener at the local player's blended position (their
  * car's, when driving) facing the 3D camera's yaw or north, their motion for footsteps, and the
- * traffic, people and tiles around them.
+ * traffic, people and tiles around them. With no local player there is nobody to hear: the
+ * listener is cleared, so the city's loops stop instead of holding their last level.
  *
  * @param runtime - The runtime's sound, state and seat.
  * @param scene - The frame about to be drawn, with the blended players.
@@ -113,15 +168,22 @@ export function updateFrameSound(
   yaw3d: number | null,
   dt: number,
 ): void {
+  const { sound } = runtime;
   const me = playerById(runtime.state, runtime.netplay.playerId);
-  if (!me) return;
+  if (!me) {
+    sound.setListener(null);
+    sound.updateWorld({ dt, ...SILENT_WORLD });
+    return;
+  }
   const heard = scene.players.find((player) => player.id === me.id) ?? me;
-  runtime.sound.setListener(listenerAt(heard.x, heard.y, yaw3d));
-  runtime.sound.updateSelf(selfMotion(runtime.state, me));
-  runtime.sound.updateWorld({
+  const peds = scene.peds.filter((ped) => ped.mode !== "dead");
+  sound.setListener(listenerAt(heard.x, heard.y, yaw3d));
+  sound.updateSelf(selfMotion(runtime.state, me));
+  sound.updateWorld({
     dt,
     traffic: trafficSources(scene, me.vehicleId),
-    peds: scene.peds.filter((ped) => ped.mode !== "dead"),
+    peds,
+    walkers: walkersAmong(peds, spotsOf(sound), dt),
     tiles: scene.world.tiles,
     landmarks: spotLandmarks(runtime.session.index()),
   });

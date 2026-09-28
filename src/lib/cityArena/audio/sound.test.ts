@@ -550,7 +550,7 @@ describe("the city's loops", () => {
     traffic: TrafficSource[],
     dt = 0.016,
   ): Parameters<ArenaSound["updateWorld"]>[0] {
-    return { dt, traffic, peds: [], tiles: [], landmarks: [] };
+    return { dt, traffic, peds: [], walkers: [], tiles: [], landmarks: [] };
   }
 
   /** A car `id` at (`x`, `y`) moving at `speedMps`. */
@@ -647,6 +647,7 @@ describe("the street around the listener", () => {
         dt: 0.1,
         traffic: [],
         peds: [walker],
+        walkers: [walker],
         tiles: [],
         landmarks: [],
       });
@@ -677,6 +678,7 @@ describe("Omgevingsgeluid", () => {
       dt: 0.1,
       traffic: [],
       peds: [{ x: 3, y: 0 }],
+      walkers: [{ x: 3, y: 0 }],
       tiles: [],
       landmarks: [],
     };

@@ -55,23 +55,23 @@ function stateWith(driving: boolean): ArenaState {
   } as unknown as ArenaState;
 }
 
+/** A runtime slice around `state`, with a spy sound. */
+function frameRuntime(state: ArenaState): FrameSoundRuntime {
+  return {
+    sound: spySound(),
+    state,
+    netplay: { kind: "offline", playerId: 0 },
+    session: { index: () => NO_LANDMARKS },
+  };
+}
+
 describe("updateFrameSound", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  /** A runtime slice around `state`. */
-  function runtimeOf(state: ArenaState): FrameSoundRuntime {
-    return {
-      sound: spySound(),
-      state,
-      netplay: { kind: "offline", playerId: 0 },
-      session: { index: () => NO_LANDMARKS },
-    };
-  }
-
   it("puts the ears on the blended player, facing the 3D camera's yaw", () => {
-    const runtime = runtimeOf(stateWith(false));
+    const runtime = frameRuntime(stateWith(false));
     const blended = { ...runtime.state.players[0]!, x: 3, y: 4 };
     updateFrameSound(runtime, sceneWith([blended]), 1.2, 0.016);
     expect(runtime.sound.setListener).toHaveBeenCalledWith({
@@ -82,7 +82,7 @@ describe("updateFrameSound", () => {
   });
 
   it("faces north (screen up) in 2D", () => {
-    const runtime = runtimeOf(stateWith(false));
+    const runtime = frameRuntime(stateWith(false));
     updateFrameSound(runtime, sceneWith([]), null, 0.016);
     expect(runtime.sound.setListener).toHaveBeenCalledWith({
       x: 0,
@@ -92,7 +92,7 @@ describe("updateFrameSound", () => {
   });
 
   it("hands the player's own motion on for the footsteps", () => {
-    const runtime = runtimeOf(stateWith(false));
+    const runtime = frameRuntime(stateWith(false));
     updateFrameSound(runtime, sceneWith([]), null, 0.016);
     expect(runtime.sound.updateSelf).toHaveBeenCalledWith({
       tick: 12,
@@ -100,6 +100,35 @@ describe("updateFrameSound", () => {
       speedMps: 1.4,
       car: null,
     });
+  });
+
+  it("gives footsteps only to the people who moved since the last frame", () => {
+    const runtime = frameRuntime(stateWith(false));
+    const pedsAt = (walkerX: number): FrameSoundScene["peds"] =>
+      [
+        { id: 1, x: walkerX, y: 2, mode: "walk" },
+        { id: 2, x: 5, y: 5, mode: "walk" },
+      ] as unknown as FrameSoundScene["peds"];
+    updateFrameSound(runtime, sceneWith([], { peds: pedsAt(2) }), null, 0.02);
+    updateFrameSound(
+      runtime,
+      sceneWith([], { peds: pedsAt(2.03) }),
+      null,
+      0.02,
+    );
+    const world = vi.mocked(runtime.sound.updateWorld).mock.calls.at(-1)![0];
+    expect(world.peds.map((ped) => ped.x)).toEqual([2.03, 5]);
+    expect(world.walkers.map((ped) => ped.x)).toEqual([2.03]);
+  });
+
+  it("stops the city's loops once the local player has gone", () => {
+    const runtime = frameRuntime({
+      ...stateWith(false),
+      players: [],
+    } as ArenaState);
+    updateFrameSound(runtime, sceneWith([]), null, 0.02);
+    expect(runtime.sound.setListener).toHaveBeenCalledWith(null);
+    expect(runtime.sound.updateWorld).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -162,6 +191,7 @@ describe("trafficSources", () => {
       dt: 0.02,
       traffic: [{ id: 7, x: 4, y: 0, speedMps: 3, siren: false }],
       peds: [walker],
+      walkers: [],
       tiles: [],
       landmarks: [],
     });

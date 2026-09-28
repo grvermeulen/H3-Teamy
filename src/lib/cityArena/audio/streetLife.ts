@@ -28,6 +28,8 @@ import type { TrafficSource } from "./trafficVoices";
 export type StreetWorld = {
   dt: number;
   peds: readonly SoundPoint[];
+  /** The people on the move, whose footsteps can be heard. */
+  walkers: readonly SoundPoint[];
   traffic: readonly TrafficSource[];
   landmarks: readonly SpotLandmark[];
 };
@@ -95,7 +97,7 @@ export function createStreetLife(
           gainScale: 1,
         });
       recent = [...recent, ...due].slice(-RECENT_SPOTS);
-      const step = pedSteps.step(world.dt, listener, world.peds);
+      const step = pedSteps.step(world.dt, listener, world.walkers);
       if (step)
         playAt("footstep", step, listener, {
           soundClass: "footstep",

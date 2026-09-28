@@ -31,8 +31,10 @@ export type WorldSounds = {
   dt: number;
   /** The cars that can be heard: moving traffic and other players' cars, not the listener's own. */
   traffic: readonly TrafficSource[];
-  /** The people about, alive, where they are drawn. */
+  /** The people about, alive, where they are drawn: they chatter, standing or not. */
   peds: readonly SoundPoint[];
+  /** The people among them on the move: only they make footsteps. */
+  walkers: readonly SoundPoint[];
   /** The decoded map tiles around the listener. */
   tiles: readonly DecodedTile[];
   /** The landmarks, in metres: the church bell tolls from one. */

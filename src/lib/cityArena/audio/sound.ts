@@ -125,7 +125,7 @@ export type ArenaSound = {
   unlock(): void;
   setEnabled(enabled: boolean): void;
   /** Where the ears are this frame; until the first call every sound plays as if at the listener. */
-  setListener(listener: Listener): void;
+  setListener(listener: Listener | null): void;
   /** Voices a tick's events, each placed around the listener; `sources` fills in what they lack. */
   handleEvents(events: ArenaEvent[], sources?: EventSources): void;
   updateEngine(speedMps: number, active: boolean): void;
@@ -552,7 +552,7 @@ export function createArenaSound(
   return {
     unlock: () => unlockCore(core),
     setEnabled: (next) => setCoreEnabled(core, next),
-    setListener(listener: Listener): void {
+    setListener(listener: Listener | null): void {
       core.listener = listener;
     },
     handleEvents(events: ArenaEvent[], sources?: EventSources): void {
