@@ -85,6 +85,42 @@ describe("useActiveRooms", () => {
     );
   });
 
+  it("treats 503 as an empty lobby without Sentry when the backend is degraded", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              rooms: [],
+              error: "Actieve potjes zijn even niet beschikbaar",
+            }),
+            { status: 503 },
+          ),
+      ),
+    );
+    const { result } = renderHook(() => useActiveRooms(true));
+    await settle();
+    expect(result.current).toEqual({ status: "ready", rooms: [] });
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
+  it("treats 429 as offline without Sentry when rate limited", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ error: "Te veel verzoeken" }), {
+            status: 429,
+          }),
+      ),
+    );
+    const { result } = renderHook(() => useActiveRooms(true));
+    await settle();
+    expect(result.current).toEqual({ status: "offline" });
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
   it("stops polling once unmounted, even if a fetch was mid-flight", async () => {
     // The regression this guards: a fetch resolving after unmount used to schedule the next
     // poll anyway, leaving a chain running against a card that no longer exists.
