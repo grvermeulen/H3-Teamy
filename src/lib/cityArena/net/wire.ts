@@ -41,6 +41,8 @@ const FLAG_FIRE = 1;
 const FLAG_ENTER = 2;
 const FLAG_WEAPON_NEXT = 4;
 const FLAG_MOVE_ANALOG = 8;
+/** Aiming down the sights (arena protocol 5). */
+const FLAG_ADS = 16;
 
 /** One input as it travels: `[seq, moveX, moveY, aim, flags]`. */
 export type InputFrame = number[];
@@ -135,7 +137,8 @@ export function encodeInput(seq: number, input: WorldInput): InputFrame {
     (input.fire ? FLAG_FIRE : 0) |
     (input.enter ? FLAG_ENTER : 0) |
     (input.weaponNext ? FLAG_WEAPON_NEXT : 0) |
-    (input.moveIsAnalog ? FLAG_MOVE_ANALOG : 0);
+    (input.moveIsAnalog ? FLAG_MOVE_ANALOG : 0) |
+    (input.ads ? FLAG_ADS : 0);
   return [
     seq,
     quantise(input.move[0], MOVE_SCALE, MOVE_SCALE),
@@ -206,6 +209,7 @@ export function decodeInput(frame: InputFrame): {
       fire: (flags & FLAG_FIRE) !== 0,
       enter: (flags & FLAG_ENTER) !== 0,
       weaponNext: (flags & FLAG_WEAPON_NEXT) !== 0,
+      ...((flags & FLAG_ADS) !== 0 ? { ads: true } : {}),
     },
   };
 }

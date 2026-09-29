@@ -7,8 +7,12 @@ import { z } from "zod";
  * a stale tab's own outdated validator does not know width 23 or the new `z` key — it would reject
  * every snapshot it *receives* from an updated host. Refusing the stale tab cleanly at join/create
  * is better than letting it into a room where it silently rejects everything once inside.
+ *
+ * Bumped to 5 for aiming down the sights: the input frame's flags gain `ads`, which narrows a
+ * spraying gun's cone and slows walking. An old host would ignore the flag while a new client
+ * predicts the slower walk, so the two must not share a room.
  */
-export const ARENA_PROTOCOL_VERSION = 4;
+export const ARENA_PROTOCOL_VERSION = 5;
 
 /** Server time windows for room liveness and channel authorization. */
 export const ROOM_RULES = {

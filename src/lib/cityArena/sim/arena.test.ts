@@ -37,9 +37,13 @@ import {
   type ArenaState,
   type BulletState,
   type DriverState,
+  type WeaponKind,
   type WorldInput,
 } from "./types";
 import { createVehicle, distanceToVehicle } from "./vehicle";
+import { ADS_SPREAD_FACTOR, WEAPONS } from "./weapons";
+import { ADS_WALK_FACTOR } from "./player";
+import { predictLocal } from "../net/predictLocal";
 import { PARKED_ENTRY_TICKS } from "./hijacking";
 
 /** One zone with spawn nodes at 0, 100, 200 and 300 m along y = 0. */
@@ -262,6 +266,27 @@ function twoPlayers(state: ArenaState): ArenaState {
   };
 }
 
+describe("vehicle health", () => {
+  it("clamps out-of-range health at the end of every tick", () => {
+    const state = boot();
+    const broken: ArenaState = {
+      ...state,
+      vehicles: [
+        ...state.vehicles,
+        { ...createVehicle(201, "sedan", [40, 0], 0, 0), health: 230 },
+      ],
+    };
+    expect(checkInvariants(broken)).toContain(
+      "vehicle 201 health 230 out of range (max 180)",
+    );
+    const next = run(broken, EMPTY_INPUT, 1);
+    expect(next.vehicles.find((vehicle) => vehicle.id === 201)?.health).toBe(
+      180,
+    );
+    expect(checkInvariants(next)).toEqual([]);
+  });
+});
+
 describe("joining and leaving", () => {
   it("spawns a joiner on a spawn node and refuses the ninth", () => {
     let state = boot();
@@ -334,6 +359,31 @@ describe("stepArena with several players", () => {
 });
 
 describe("stepArena on foot", () => {
+  it("slows a walker aiming a gun's sights, not one with fists or the bat, host and prediction alike", () => {
+    const start = boot();
+    const aiming = createInput({ move: [1, 0], ads: true });
+    const pace = (weapon: WeaponKind, advance: typeof stepArena): number => {
+      let state: ArenaState = {
+        ...start,
+        players: [{ ...localPlayer(start), weapon }],
+      };
+      for (let tick = 0; tick < 10; tick++)
+        state = advance(
+          state,
+          new Map([[localPlayer(state).id, aiming]]),
+          step,
+          world,
+          createRng(99),
+        );
+      return localPlayer(state).speed;
+    };
+    for (const advance of [stepArena, predictLocal]) {
+      const bare = pace("fist", advance);
+      expect(pace("bat", advance)).toBeCloseTo(bare);
+      expect(pace("pistol", advance)).toBeCloseTo(bare * ADS_WALK_FACTOR);
+    }
+  });
+
   it("advances the tick and walks with the aim as facing", () => {
     const start = boot();
     const walked = run(start, createInput({ move: [1, 0], aim: Math.PI }), 30);
@@ -650,6 +700,36 @@ describe("stepArena firing and death", () => {
     );
     expect(blast.bullets).toHaveLength(5);
     expect(localPlayer(blast).ammo.shotgun).toBe(7);
+  });
+
+  it("keeps a shotgun's pellets in half the cone while aiming down the sights", () => {
+    const state = boot();
+    const armed: ArenaPlayerState = {
+      ...localPlayer(state),
+      weapon: "shotgun",
+      ammo: FULL_AMMO,
+    };
+    const aim = 0;
+    const widest = (ads: boolean): number => {
+      const blast = run(
+        { ...state, players: [armed] },
+        createInput({ fire: true, aim, ads }),
+        1,
+      );
+      expect(blast.bullets).toHaveLength(WEAPONS.shotgun.pellets);
+      return Math.max(
+        ...blast.bullets.map((bullet) =>
+          Math.abs(Math.atan2(bullet.directionY, bullet.directionX) - aim),
+        ),
+      );
+    };
+    const aimed = widest(true);
+    const loose = widest(false);
+    expect(aimed).toBeLessThanOrEqual(
+      WEAPONS.shotgun.spreadRad * ADS_SPREAD_FACTOR + 1e-9,
+    );
+    expect(loose).toBeGreaterThan(0);
+    expect(aimed).toBeCloseTo(loose * ADS_SPREAD_FACTOR);
   });
 
   it("caps a shotgun pull at the live-bullet limit instead of overshooting it", () => {

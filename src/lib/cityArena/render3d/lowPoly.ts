@@ -167,8 +167,15 @@ function pushBevels(out: number[], half: Vec3, bevel: number): void {
   }
 }
 
-/** Triangle soup of a box centred on the origin, bevelled by `bevel` metres. */
-function bevelledBoxPositions(size: Vec3, bevel: number): number[] {
+/**
+ * Triangle soup of a box centred on the origin, bevelled by `bevel` metres: its six faces inset
+ * by the bevel, twelve bevel strips and eight corner facets, every triangle wound outward.
+ *
+ * @param size - The box's extent along x, y and z.
+ * @param bevel - How far the bevel cuts in from each edge, metres; 0 keeps sharp edges.
+ * @returns Nine numbers per triangle.
+ */
+export function bevelledBoxPositions(size: Vec3, bevel: number): number[] {
   const half: Vec3 = [size[0] / 2, size[1] / 2, size[2] / 2];
   const out: number[] = [];
   pushFaces(out, half, bevel);

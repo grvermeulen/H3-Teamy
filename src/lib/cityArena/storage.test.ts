@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/nextjs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ARENA_SETTINGS_KEY,
+  ARENA_TOUCH_3D_TIP_KEY,
   ARENA_TOUCH_TIP_KEY,
   hasSeenArenaTouchTip,
   loadArenaSettings,
@@ -33,6 +34,8 @@ describe("arena settings storage", () => {
       quality: "auto",
       view: "2d",
       camera3d: "third",
+      mouseSensitivity: 1,
+      touchLookSensitivity: 1,
     });
   });
 
@@ -51,6 +54,8 @@ describe("arena settings storage", () => {
       quality: "auto",
       view: "2d",
       camera3d: "third",
+      mouseSensitivity: 1,
+      touchLookSensitivity: 1,
     });
     expect(loadArenaSettings().lastZone).toBe("rhenen");
   });
@@ -68,6 +73,8 @@ describe("arena settings storage", () => {
       quality: "auto",
       view: "2d",
       camera3d: "third",
+      mouseSensitivity: 1,
+      touchLookSensitivity: 1,
     });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(Error),
@@ -93,6 +100,8 @@ describe("arena settings storage", () => {
       quality: "auto",
       view: "2d",
       camera3d: "third",
+      mouseSensitivity: 1,
+      touchLookSensitivity: 1,
     });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(Error),
@@ -138,6 +147,8 @@ describe("arena settings storage", () => {
       quality: "auto",
       view: "2d",
       camera3d: "third",
+      mouseSensitivity: 1,
+      touchLookSensitivity: 1,
     });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
   });
@@ -147,6 +158,13 @@ describe("arena settings storage", () => {
     markArenaTouchTipSeen();
     expect(localStorage.getItem(ARENA_TOUCH_TIP_KEY)).toBe("1");
     expect(hasSeenArenaTouchTip()).toBe(true);
+  });
+
+  it("remembers the 3D touch tip apart from the 2D one", () => {
+    markArenaTouchTipSeen("3d");
+    expect(localStorage.getItem(ARENA_TOUCH_3D_TIP_KEY)).toBe("1");
+    expect(hasSeenArenaTouchTip("3d")).toBe(true);
+    expect(hasSeenArenaTouchTip()).toBe(false);
   });
 
   it("treats a storage that refuses to be read as 'seen', and reports it", () => {

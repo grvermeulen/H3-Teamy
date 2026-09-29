@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import type { InputState } from "./inputState";
 
 /** Radians of yaw or pitch added per pixel of pointer-locked mouse movement (spec §6.3). */
 export const MOUSE_SENSITIVITY_RAD_PER_PX = 0.0024;
@@ -9,6 +10,11 @@ const DEFAULT_PITCH_MAX_RAD = 0.7;
 
 /** `PointerEvent.button` for the primary (left) mouse button. */
 const PRIMARY_BUTTON = 0;
+/** `PointerEvent.button` for the secondary (right) mouse button, and its bit in `buttons`. */
+const SECONDARY_BUTTON = 2;
+const SECONDARY_BUTTON_MASK = 2;
+/** The pointer events a right-button press or release arrives in (a chord comes as a move). */
+const BUTTON_EVENTS = ["pointerdown", "pointermove", "pointerup"] as const;
 
 /** Where mouse-look stands with the pointer lock. */
 export type LockState = {
@@ -32,6 +38,11 @@ export type MouseLookHooks = {
   onLockLost?: () => void;
   /** The lock or the lock-free fallback turned on or off. */
   onLockChange?: (state: LockState) => void;
+  /**
+   * Where the right button aims down the sights (aim spec §5): the `pointer` source of its `ads`
+   * button, held while the button is and the mouse is in the game.
+   */
+  input?: Pick<InputState, "setButton">;
 };
 
 /** Live yaw and pitch driven by the mouse, and the camera-easing signal. */
@@ -45,6 +56,13 @@ export type MouseLook = {
   claimsClick(): boolean;
   setYaw(yaw: number): void;
   setPitchLimits(min: number, max: number): void;
+  /**
+   * Scales the turn per pixel by how much the sights narrow the view (`tan(fov / 2)` over the
+   * unzoomed), so a zoomed view does not whip; 1 at the hip.
+   */
+  setZoom(zoom: number): void;
+  /** Scales the turn per pixel by the player's "Muisgevoeligheid", a multiple; 1 by default. */
+  setSensitivity(sensitivity: number): void;
   /** Radians of yaw added since the last call — the chase camera eases only when this is 0 for a while. */
   takeYawDelta(): number;
   /**
@@ -71,6 +89,12 @@ type LookState = LockState & {
   pitchMax: number;
   /** {@link MouseLook.release} let go of the lock: the unlock it causes is not the player's. */
   releasing: boolean;
+  /** The turn per pixel's shares of {@link MOUSE_SENSITIVITY_RAD_PER_PX}: the sights' zoom … */
+  zoom: number;
+  /** … and the player's sensitivity. */
+  sensitivity: number;
+  /** Whether the right button holds the sights up. */
+  ads: boolean;
 };
 
 /** An error's name (a `DOMException` is not an `Error` everywhere), else the value itself. */
@@ -116,16 +140,64 @@ function requestLock(
   }
 }
 
-/** Turns the view by one pointer move. */
+/** Turns the view by one pointer move: the raw deltas, scaled but never smoothed. */
 function turn(state: LookState, event: PointerEvent): void {
-  const dYaw = event.movementX * MOUSE_SENSITIVITY_RAD_PER_PX;
+  const perPixel =
+    MOUSE_SENSITIVITY_RAD_PER_PX * state.sensitivity * state.zoom;
+  const dYaw = event.movementX * perPixel;
   state.yaw += dYaw;
   state.yawDelta += dYaw;
   state.pitch = clamp(
-    state.pitch - event.movementY * MOUSE_SENSITIVITY_RAD_PER_PX,
+    state.pitch - event.movementY * perPixel,
     state.pitchMin,
     state.pitchMax,
   );
+}
+
+/** Raises or lowers the sights, telling the input state only on a change. */
+function holdSights(
+  state: LookState,
+  hooks: MouseLookHooks,
+  held: boolean,
+): void {
+  if (state.ads === held) return;
+  state.ads = held;
+  hooks.input?.setButton("pointer", "ads", held);
+}
+
+/**
+ * Binds the right button to the sights — held while its bit is set and the mouse is in the game —
+ * and keeps the browser's context menu off the playfield. Leaving the target or the window losing
+ * focus (whose release never reaches us) lets go. Returns the unbind, which lets go too.
+ */
+function bindSights(
+  target: HTMLElement,
+  state: LookState,
+  hooks: MouseLookHooks,
+  inGame: () => boolean,
+): () => void {
+  const onButton = (event: PointerEvent): void => {
+    if (event.pointerType !== "mouse" || event.button !== SECONDARY_BUTTON)
+      return;
+    const held = (event.buttons & SECONDARY_BUTTON_MASK) !== 0;
+    holdSights(state, hooks, held && inGame());
+  };
+  const onLeave = (): void => holdSights(state, hooks, false);
+  const onMenu = (event: Event): void => event.preventDefault();
+  for (const type of BUTTON_EVENTS) target.addEventListener(type, onButton);
+  target.addEventListener("pointerleave", onLeave);
+  target.addEventListener("pointercancel", onLeave);
+  target.addEventListener("contextmenu", onMenu);
+  window.addEventListener("blur", onLeave);
+  return () => {
+    for (const type of BUTTON_EVENTS)
+      target.removeEventListener(type, onButton);
+    target.removeEventListener("pointerleave", onLeave);
+    target.removeEventListener("pointercancel", onLeave);
+    target.removeEventListener("contextmenu", onMenu);
+    window.removeEventListener("blur", onLeave);
+    holdSights(state, hooks, false);
+  };
 }
 
 /** The angle half of a {@link MouseLook}, reading and steering `state`. */
@@ -133,7 +205,13 @@ function angleReader(
   state: LookState,
 ): Pick<
   MouseLook,
-  "yaw" | "pitch" | "setYaw" | "setPitchLimits" | "takeYawDelta"
+  | "yaw"
+  | "pitch"
+  | "setYaw"
+  | "setPitchLimits"
+  | "setZoom"
+  | "setSensitivity"
+  | "takeYawDelta"
 > {
   return {
     yaw: () => state.yaw,
@@ -145,6 +223,12 @@ function angleReader(
       state.pitchMin = min;
       state.pitchMax = max;
       state.pitch = clamp(state.pitch, min, max);
+    },
+    setZoom(zoom) {
+      state.zoom = zoom;
+    },
+    setSensitivity(sensitivity) {
+      state.sensitivity = sensitivity;
     },
     takeYawDelta() {
       const delta = state.yawDelta;
@@ -168,6 +252,7 @@ function lockListeners(
       if (locked) state.lockFree = false;
       const released = state.releasing;
       state.releasing = false;
+      if (!locked) holdSights(state, hooks, false);
       hooks.onLockChange?.({ locked, lockFree: state.lockFree });
       if (!locked && !released) hooks.onLockLost?.();
     },
@@ -186,6 +271,9 @@ function initialLookState(target: HTMLElement): LookState {
     locked: false,
     lockFree: typeof target.requestPointerLock !== "function",
     releasing: false,
+    zoom: 1,
+    sensitivity: 1,
+    ads: false,
   };
 }
 
@@ -194,9 +282,11 @@ function initialLookState(target: HTMLElement): LookState {
  * turns the camera while the pointer is locked to `target`. Where the lock is unsupported or
  * refused, plain mouse moves over `target` turn it instead (no button needed), and each click
  * tries the lock again. A stray move before the player has clicked in never turns the camera.
+ * The right button, held, aims down the sights (aim spec §5), and the browser's menu stays off
+ * `target`.
  *
  * @param target - The element to lock the pointer to (the playfield canvas).
- * @param hooks - The gesture, lock-lost and lock-state callbacks.
+ * @param hooks - The gesture, lock-lost and lock-state callbacks, and the input the sights go to.
  * @returns The live yaw/pitch reader and its detach function.
  */
 export function attachMouseLook(
@@ -217,6 +307,12 @@ export function attachMouseLook(
       turn(state, event);
   };
   const lock = lockListeners(target, state, hooks);
+  const unbindSights = bindSights(
+    target,
+    state,
+    hooks,
+    () => isLocked() || state.lockFree,
+  );
   target.addEventListener("pointerdown", onPointerDown);
   target.addEventListener("pointermove", onPointerMove);
   document.addEventListener("pointerlockchange", lock.onChange);
@@ -227,11 +323,13 @@ export function attachMouseLook(
     lockFree: () => state.lockFree,
     claimsClick: () => !state.lockFree && !isLocked(),
     release() {
+      holdSights(state, hooks, false);
       if (!isLocked()) return;
       state.releasing = true;
       document.exitPointerLock();
     },
     detach() {
+      unbindSights();
       target.removeEventListener("pointerdown", onPointerDown);
       target.removeEventListener("pointermove", onPointerMove);
       document.removeEventListener("pointerlockchange", lock.onChange);

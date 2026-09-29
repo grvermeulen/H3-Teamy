@@ -73,3 +73,6 @@ jobs:
 
       - name: Arena characters (files, budget and credits)
         run: npm run arena:check-characters
+
+      - name: Arena cars (files, budget and credits)
+        run: npm run arena:check-cars

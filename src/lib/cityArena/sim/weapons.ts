@@ -1,5 +1,10 @@
 import type { Blast } from "./blast";
-import type { AmmoState, MagazineWeapon, WeaponKind } from "./types";
+import type {
+  AmmoState,
+  MagazineWeapon,
+  WeaponKind,
+  WorldInput,
+} from "./types";
 
 /** Ticks per second of the fixed step (mirrors `SIM_STEP_S`). */
 const TICKS_PER_SECOND = 30;
@@ -157,6 +162,22 @@ export const WEAPON_ORDER: WeaponKind[] = [
 /** The weapons that hit what they touch rather than fire a round; they get no muzzle flash. */
 const MELEE_WEAPONS: ReadonlySet<WeaponKind> = new Set(["fist", "bat"]);
 
+/** Share of a spraying gun's cone left while aiming down the sights. */
+export const ADS_SPREAD_FACTOR = 0.5;
+
+/**
+ * A weapon's spec as it fires: aiming down the sights narrows its cone by
+ * {@link ADS_SPREAD_FACTOR}; otherwise the spec itself.
+ *
+ * @param spec - The weapon's spec.
+ * @param ads - Whether the shooter aims down the sights.
+ * @returns The spec to fire with.
+ */
+export function aimedSpec(spec: WeaponSpec, ads: boolean): WeaponSpec {
+  if (!ads || spec.spreadRad === 0) return spec;
+  return { ...spec, spreadRad: spec.spreadRad * ADS_SPREAD_FACTOR };
+}
+
 /**
  * True for a weapon swung rather than fired.
  *
@@ -165,6 +186,22 @@ const MELEE_WEAPONS: ReadonlySet<WeaponKind> = new Set(["fist", "bat"]);
  */
 export function isMelee(kind: WeaponKind): boolean {
   return MELEE_WEAPONS.has(kind);
+}
+
+/**
+ * The input a walker holding `weapon` moves on: fists and the bat have no sights, so a held sights
+ * button must not slow them (aim spec §3); with a gun the input is kept as it is.
+ *
+ * @param input - The tick's input.
+ * @param weapon - The walker's weapon.
+ * @returns `input`, or a copy with `ads` off for a melee weapon.
+ */
+export function walkingInput(
+  input: WorldInput,
+  weapon: WeaponKind,
+): WorldInput {
+  if (!input.ads || !isMelee(weapon)) return input;
+  return { ...input, ads: false };
 }
 
 /** The weapons that carry rounds; the others never run out. */

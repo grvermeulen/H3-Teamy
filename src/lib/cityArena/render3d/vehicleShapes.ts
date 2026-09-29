@@ -8,7 +8,12 @@
  * the hull the physics collides with. Part tables hold each kind's measurements, named by row.
  */
 import type { BufferGeometry, Mesh, Object3D } from "three";
-import { CAR_WINDOW } from "../render/palette";
+import {
+  addDoorLines,
+  addPlates,
+  addWheelArches,
+  PLATE_LOOKS,
+} from "./vehicleTrim";
 import {
   cylinder,
   slab,
@@ -66,8 +71,8 @@ export type ShapeRig = {
 /** Builds one kind into a kit. */
 export type Shape = (kit: Kit) => ShapeRig;
 
-/** Car window glass, as a number. */
-export const GLASS = Number.parseInt(CAR_WINDOW.slice(1), 16);
+/** Car window glass: tinted darker than the 2D sprite's, the gloss still catching the light. */
+export const GLASS = 0x121a24;
 /** Bumpers, grilles, bed liners and other black plastic. */
 export const TRIM = 0x26282c;
 /** Polished bumpers, grilles and hubs. */
@@ -189,6 +194,8 @@ type CarProfile = {
   bodyInset: number;
   wheel: WheelLook;
   axleInset: number;
+  /** Rounds the body and the glass house to this radius instead of bevelling them: the oldtimer's curves. */
+  round?: number;
 };
 
 /** Body ends stop this far short of the bumpers' faces. */
@@ -223,6 +230,14 @@ const LAMP_EDGE_M = 0.3;
 const GRILLE_SHARE = 0.34;
 /** Door mirror size in every direction. */
 const MIRROR_M = 0.12;
+/** Bevels on a car's lower body, its glass house and its roof panel. */
+const BODY_BEVEL_M = 0.05;
+const GLASS_BEVEL_M = 0.025;
+const ROOF_BEVEL_M = 0.02;
+/** Door lines sit this far inside the pillars' feet. */
+const DOOR_LINE_INSET_M = 0.06;
+/** The rear plate's middle stands this far above the bumper's top. */
+const REAR_PLATE_RISE_M = 0.09;
 /** The mirrors sit this far behind the windscreen's foot. */
 const MIRROR_SET_BACK_M = 0.16;
 
@@ -294,6 +309,7 @@ const OLDTIMER: CarProfile = {
   bodyInset: 0.25,
   wheel: { radius: 0.36, width: 0.16, tyre: TYRE, rim: 0xece6d6, hub: CHROME },
   axleInset: 0.85,
+  round: 0.14,
 };
 
 /** Front and rear axle `inset` from each end, the front one steering. */
@@ -302,7 +318,15 @@ function axlesInset(kit: Kit, wheel: WheelLook, inset: number): Axle[] {
   return [axle(kit, x, wheel, true), axle(kit, -x, wheel, false)];
 }
 
-/** The lower body: a slab sloping at nose and tail and leaning in at the shoulders. */
+/** A shell's edges: rounded to `round` when the profile asks for it, else bevelled. */
+function shellEdges(
+  round: number | undefined,
+  bevel: number,
+): Pick<SlabSpec, "round" | "bevel"> {
+  return round ? { round } : { bevel };
+}
+
+/** The lower body: a bevelled (or rounded) slab sloping at nose and tail and leaning in at the shoulders. */
 function addCarBody(kit: Kit, profile: CarProfile): void {
   const end = kit.length / 2 - BODY_END_M;
   kit.paint(
@@ -311,6 +335,7 @@ function addCarBody(kit: Kit, profile: CarProfile): void {
       y: [profile.sill, profile.belt],
       width: kit.width - 2 * profile.bodyInset,
       taper: { front: NOSE_SLOPE_M, rear: TAIL_SLOPE_M, side: SHOULDER_M },
+      ...shellEdges(profile.round, BODY_BEVEL_M),
     }),
   );
 }
@@ -322,7 +347,13 @@ function addGreenhouse(kit: Kit, profile: CarProfile, roof: number): void {
     kit.width - 2 * (profile.bodyInset + SHOULDER_M + GLASS_STEP_M);
   const top = roof - ROOF_THICKNESS_M;
   kit.tint(
-    slab({ x: profile.cabin, y: [belt, top], width: glassWidth, taper }),
+    slab({
+      x: profile.cabin,
+      y: [belt, top],
+      width: glassWidth,
+      taper,
+      ...shellEdges(profile.round && profile.round / 2, GLASS_BEVEL_M),
+    }),
     GLASS,
   );
   const roofSpan: Span = [
@@ -330,7 +361,14 @@ function addGreenhouse(kit: Kit, profile: CarProfile, roof: number): void {
     profile.cabin[1] - taper.front,
   ];
   const roofWidth = glassWidth - 2 * taper.side + PROUD_M;
-  kit.paint(slab({ x: roofSpan, y: [top, roof], width: roofWidth }));
+  kit.paint(
+    slab({
+      x: roofSpan,
+      y: [top, roof],
+      width: roofWidth,
+      ...shellEdges(profile.round && ROOF_THICKNESS_M / 2, ROOF_BEVEL_M),
+    }),
+  );
   const pillarX = (roofSpan[0] + roofSpan[1]) / 2;
   kit.paint(
     slab({
@@ -382,13 +420,43 @@ function addMirrors(kit: Kit, profile: CarProfile): void {
   );
 }
 
+/** Where a car's doors meet: the A-pillar's foot, the B-pillar and the C-pillar's foot. */
+function doorStations(profile: CarProfile): number[] {
+  const { cabin, taper } = profile;
+  const front = cabin[1] - taper.front + DOOR_LINE_INSET_M;
+  const rear = cabin[0] + taper.rear - DOOR_LINE_INSET_M;
+  return [front, (front + rear) / 2, rear];
+}
+
+/** A car's wheel arches, door lines and plates. */
+function addCarTrim(
+  kit: Kit,
+  profile: CarProfile,
+  axles: readonly Axle[],
+): void {
+  const side = kit.width / 2 - profile.bodyInset;
+  addWheelArches(kit, axles, side);
+  addDoorLines(kit, doorStations(profile), {
+    sill: profile.sill,
+    belt: profile.belt,
+    side,
+    lean: SHOULDER_M,
+  });
+  addPlates(kit, {
+    front: profile.sill + BUMPER_HEIGHT_M / 2,
+    rear: profile.sill + BUMPER_HEIGHT_M + REAR_PLATE_RISE_M,
+  });
+}
+
 /** A whole passenger car with its roof at `roof`; returns its axles. */
 function passengerCar(kit: Kit, profile: CarProfile, roof: number): Axle[] {
   addCarBody(kit, profile);
   addGreenhouse(kit, profile, roof);
   addCarEnds(kit, profile);
   addMirrors(kit, profile);
-  return axlesInset(kit, profile.wheel, profile.axleInset);
+  const axles = axlesInset(kit, profile.wheel, profile.axleInset);
+  addCarTrim(kit, profile, axles);
+  return axles;
 }
 
 /** Height of the police light bar from the roof to the top of its lenses. */
@@ -429,27 +497,49 @@ function stripeColour(index: number): number {
   return index % 2 === 0 ? POLICE_ORANGE : POLICE_BLUE;
 }
 
+/** Height of the police livery's band of leaning stripes. */
+export const POLICE_STRIPE_HEIGHT_M = STRIPE_BAND[1] - STRIPE_BAND[0];
+
+/** Where a band of livery stripes runs: along the body, up the flank, and the flank's distance out. */
+export type StripeBand = { x: Span; y: Span; side: number };
+
+/**
+ * A band of leaning orange and blue stripes on both flanks, half sunk into a flank `band.side`
+ * from the centre line so it never floats off it.
+ *
+ * @param kit - Where its parts go.
+ * @param band - Where it runs.
+ */
+export function addPoliceStripes(
+  kit: Pick<Kit, "tint">,
+  band: StripeBand,
+): void {
+  const z = band.side - LIVERY_DEPTH_M / 2 + LIVERY_PROUD_M;
+  const panel = { y: band.y, width: LIVERY_DEPTH_M, z };
+  const count = Math.floor((band.x[1] - band.x[0]) / SIDE_STRIPE_PITCH_M);
+  const shear = { axis: "y", perMetre: SIDE_STRIPE_LEAN } as const;
+  for (let index = 0; index < count; index++) {
+    const from = band.x[0] + index * SIDE_STRIPE_PITCH_M;
+    mirrored({ ...panel, x: [from, from + SIDE_STRIPE_PITCH_M], shear }, (g) =>
+      kit.tint(g, stripeColour(index)),
+    );
+  }
+}
+
 /** A blue sill band and a band of leaning orange and blue stripes along both sides. */
 function addPoliceSides(kit: Kit, profile: CarProfile): void {
-  const z =
-    kit.width / 2 - profile.bodyInset - LIVERY_DEPTH_M / 2 + LIVERY_PROUD_M;
+  const side = kit.width / 2 - profile.bodyInset;
+  const z = side - LIVERY_DEPTH_M / 2 + LIVERY_PROUD_M;
   const reach = kit.length / 2 - STRIPE_END_MARGIN_M;
   const band = (span: Span): Span => [
     profile.sill + span[0],
     profile.sill + span[1],
   ];
-  const panel = { y: band(STRIPE_BAND), width: LIVERY_DEPTH_M, z };
-  mirrored({ ...panel, x: [-reach, reach], y: band(SILL_BAND) }, (g) =>
-    kit.tint(g, POLICE_BLUE),
+  mirrored(
+    { x: [-reach, reach], y: band(SILL_BAND), width: LIVERY_DEPTH_M, z },
+    (g) => kit.tint(g, POLICE_BLUE),
   );
-  const count = Math.floor((2 * reach) / SIDE_STRIPE_PITCH_M);
-  for (let index = 0; index < count; index++) {
-    const from = -reach + index * SIDE_STRIPE_PITCH_M;
-    const shear = { axis: "y", perMetre: SIDE_STRIPE_LEAN } as const;
-    mirrored({ ...panel, x: [from, from + SIDE_STRIPE_PITCH_M], shear }, (g) =>
-      kit.tint(g, stripeColour(index)),
-    );
-  }
+  addPoliceStripes(kit, { x: [-reach, reach], y: band(STRIPE_BAND), side });
 }
 
 /** Diagonal orange and blue stripes across the bonnet, as on the 2D sprite. */
@@ -593,11 +683,18 @@ const VAN_WHEEL: WheelLook = {
   hub: DARK_HUB,
 };
 
+/** Half the width of the van's load box, metres: where its arches stand. */
+const VAN_SIDE_M = 0.93;
+
 /** A panel van. */
 const vanShape: Shape = (kit) => {
   addParts(kit, VAN_PARTS);
   addBumpers(kit, VAN_BUMPER_Y_M);
-  return { axles: axlesInset(kit, VAN_WHEEL, VAN_AXLE_INSET_M) };
+  const axles = axlesInset(kit, VAN_WHEEL, VAN_AXLE_INSET_M);
+  addWheelArches(kit, axles, VAN_SIDE_M);
+  const plate = VAN_BUMPER_Y_M + BUMPER_HEIGHT_M / 2;
+  addPlates(kit, { front: plate, rear: plate + BUMPER_HEIGHT_M });
+  return { axles };
 };
 
 /** Thickness of the pickup bed's walls. */
@@ -650,7 +747,7 @@ const FENDER_LENGTH_M = 1.05;
 /** How far a fender's axis sits above its wheel's axle. */
 const FENDER_RISE_M = 0.34;
 /** Sides of a fender: round enough to read as a curve. */
-const FENDER_SEGMENTS = 10;
+const FENDER_SEGMENTS = 16;
 /** The running boards reach this far under each fender. */
 const BOARD_OVERLAP_M = 0.05;
 /** Thickness of a running board under the sill. */
@@ -721,12 +818,17 @@ const OLDTIMER_ENDS: readonly Part[] = [
   },
 ];
 
-/** A pre-war saloon: narrow body, separate fenders, running boards, chrome. */
+/** The oldtimer's plates hang on the middle of its chrome bumpers, metres up. */
+const OLDTIMER_BUMPER_MIDDLE_M = 0.36;
+
+/** A pre-war saloon: narrow body, separate fenders, running boards, chrome, classic blue plates. */
 const oldtimerShape: Shape = (kit) => {
   addCarBody(kit, OLDTIMER);
   addGreenhouse(kit, OLDTIMER, kit.height);
   addFenders(kit, OLDTIMER);
   addParts(kit, OLDTIMER_ENDS);
+  const plate = OLDTIMER_BUMPER_MIDDLE_M;
+  addPlates(kit, { front: plate, rear: plate }, PLATE_LOOKS.classic);
   return { axles: axlesInset(kit, OLDTIMER.wheel, OLDTIMER.axleInset) };
 };
 

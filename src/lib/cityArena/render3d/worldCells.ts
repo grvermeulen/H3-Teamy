@@ -20,6 +20,7 @@ import {
   type LandmarkStyles,
 } from "./buildCell";
 import { shadeBuilding, type BuildingRange } from "./buildingMesh";
+import type { CityDetail } from "./cityDetail";
 import {
   cellKey,
   cellsWithin,
@@ -62,7 +63,8 @@ export type WorldCells = {
    * then cells whose tiles changed and missing cells, nearest first, until `budgetMs` has passed
    * (always at least one), drops cells beyond 1.4 × `viewDistance`, copies moved furniture
    * proxies (those handed out by `furnitureNear`) into their instances, and shades each damaged
-   * building by its share of health. With unchanged inputs it only checks for movement.
+   * building by its share of health. With unchanged inputs it only checks for movement. A new
+   * `detail` level marks every built cell for rebuilding, nearest first under the budget.
    */
   update(
     focus: { x: number; y: number },
@@ -70,6 +72,7 @@ export type WorldCells = {
     structures: readonly StructureView[],
     viewDistance: number,
     budgetMs: number,
+    detail?: CityDetail,
   ): void;
   /**
    * The furniture of the built cells standing within `radius` metres of a point, for cosmetic
@@ -170,6 +173,8 @@ type City = {
   owners: Map<number, string>;
   /** The tiles as last given, in order. */
   tiles: readonly DecodedTile[];
+  /** The detail level cells are built at. */
+  detail: CityDetail;
   /** The damage of every listed structure, and the destroyed ones among them. */
   damage: Map<number, number>;
   destroyed: Set<number>;
@@ -240,8 +245,15 @@ function dropCell(city: City, key: string): void {
 /** Builds (or rebuilds) one cell from the current tiles and destroyed set. */
 function buildInto(city: City, cell: CellCoord, key: string): void {
   const tiles = tilesReaching(cell, city.tiles);
-  const { destroyed, materials, landmarks } = city;
-  const built = buildCell({ cell, tiles, destroyed, materials, landmarks });
+  const { destroyed, materials, landmarks, detail } = city;
+  const built = buildCell({
+    cell,
+    tiles,
+    destroyed,
+    materials,
+    landmarks,
+    detail,
+  });
   const down = city.cells.get(key)?.down ?? new Map<string, Quaternion>();
   dropCell(city, key);
   const health = healthOf(built);
@@ -290,6 +302,13 @@ function syncTiles(city: City, tiles: readonly DecodedTile[]): void {
       city.stale.add(key);
     }
   }
+}
+
+/** Takes a detail level; a new one marks every built cell for rebuilding. */
+function syncDetail(city: City, detail: CityDetail): void {
+  if (detail === city.detail) return;
+  city.detail = detail;
+  for (const key of city.cells.keys()) city.stale.add(key);
 }
 
 /** True when the structure list differs from the last one in any damage or destruction. */
@@ -489,6 +508,7 @@ function emptyCity(
     cells: new Map(),
     owners: new Map(),
     tiles: [],
+    detail: "basic",
     damage: new Map(),
     destroyed: new Set(),
     wanted: [],
@@ -513,7 +533,9 @@ function updateCity(
   },
   viewDistance: number,
   budgetMs: number,
+  detail: CityDetail,
 ): void {
+  syncDetail(city, detail);
   syncTiles(city, frame.tiles);
   syncStructures(city, frame.structures);
   const looked = lookAround(city, focus, viewDistance);
@@ -543,8 +565,15 @@ export function createWorldCells(
   const city = emptyCity(materials, landmarks);
   return {
     group: city.group,
-    update: (focus, tiles, structures, viewDistance, budgetMs) =>
-      updateCity(city, focus, { tiles, structures }, viewDistance, budgetMs),
+    update: (focus, tiles, structures, viewDistance, budgetMs, detail) =>
+      updateCity(
+        city,
+        focus,
+        { tiles, structures },
+        viewDistance,
+        budgetMs,
+        detail ?? "basic",
+      ),
     furnitureNear: (x, y, radius, into = []) =>
       handOutFurniture(city, x, y, radius, into),
     keepDown: (piece, pose) => keepDown(city, piece, pose),

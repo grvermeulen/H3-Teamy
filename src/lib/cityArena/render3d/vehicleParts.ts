@@ -7,17 +7,27 @@
  * material instead of a material each: their colour travels in the geometry.
  */
 import {
+  AdditiveBlending,
   BoxGeometry,
   BufferAttribute,
+  BufferGeometry,
   Color,
   CylinderGeometry,
+  DataTexture,
+  Float32BufferAttribute,
+  LinearFilter,
   Mesh,
   MeshLambertMaterial,
   MeshPhongMaterial,
-  type BufferGeometry,
+  PointsMaterial,
   type Material,
 } from "three";
-import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import {
+  mergeGeometries,
+  mergeVertices,
+} from "three/addons/utils/BufferGeometryUtils.js";
+import { bevelledBoxPositions } from "./lowPoly";
 
 /** The charred black every part of a wreck turns to (spec §6.7). */
 export const CHARRED_COLOUR = 0x1a1512;
@@ -25,6 +35,10 @@ export const CHARRED_COLOUR = 0x1a1512;
 const GLOSS_SHININESS = 60;
 /** Specular tint of that glint, a soft grey so it never outshines the paint. */
 const GLOSS_SPECULAR = 0x3a3a3a;
+/** Facets in a rounded slab's quarter-turn edge: enough to read as round, few enough to stay low-poly. */
+export const ROUND_SEGMENTS = 2;
+/** A rounded slab's radius stays this share under half its thinnest side, so its faces keep a flat middle. */
+const ROUND_LIMIT_SHARE = 0.98;
 /** Sides of a cylinder unless a part asks for more or fewer: faceted, as low-poly art is. */
 const DEFAULT_SEGMENTS = 12;
 /** Vertex colour of parts whose material carries the colour itself. */
@@ -50,6 +64,13 @@ export type SlabSpec = {
   z?: number;
   taper?: Taper;
   shear?: Shear;
+  /** Cuts every edge back by this much, metres, so the body catches the light on its edges. */
+  bevel?: number;
+  /**
+   * Rounds every edge and corner to this radius, metres, in {@link ROUND_SEGMENTS} flat facets a
+   * quarter turn: rounder than a bevel, for the big shells of the bus, the oldtimer and the tank.
+   */
+  round?: number;
 };
 
 /** A cylinder lying along `axis`, centred `at`; its top end points along +axis. */
@@ -106,8 +127,28 @@ export const paintMaterial: (hex: number) => MeshPhongMaterial = memoise(
     }),
 );
 
+/**
+ * The paint of a Kit model in one body colour, shared by every such vehicle painted in it: the
+ * vertices carry the Kit's shading as a grey the colour is multiplied by.
+ *
+ * @param hex - The colour, `0xrrggbb`.
+ * @returns The shared material.
+ */
+export const shadedPaintMaterial: (hex: number) => MeshPhongMaterial = memoise(
+  (hex: number) =>
+    new MeshPhongMaterial({
+      color: hex,
+      vertexColors: true,
+      shininess: GLOSS_SHININESS,
+      specular: GLOSS_SPECULAR,
+      flatShading: true,
+    }),
+);
+
 /** The one vertex-coloured material, created on first use. */
 let sharedDetail: MeshPhongMaterial | null = null;
+/** The additive material of every vehicle's light flares, created on first use. */
+let sharedFlare: PointsMaterial | null = null;
 
 /**
  * Frees every material the vehicles share and forgets it, so a view that has gone keeps none (nor
@@ -120,6 +161,9 @@ export function disposeVehicleMaterials(): void {
   }
   sharedDetail?.dispose();
   sharedDetail = null;
+  sharedFlare?.map?.dispose();
+  sharedFlare?.dispose();
+  sharedFlare = null;
 }
 
 /**
@@ -166,19 +210,70 @@ export function charredMaterial(): MeshLambertMaterial {
   return matteMaterial(CHARRED_COLOUR);
 }
 
-/** Pulls the top face of a box centred on the origin in by `taper`. */
-function pullInTop(geometry: BufferGeometry, taper: Taper): void {
+/**
+ * Pulls a box centred on the origin in toward its top by `taper`, each vertex by its share of the
+ * height: the top face all the way, the bottom not at all, a bevel's rings in between.
+ */
+function pullInTop(
+  geometry: BufferGeometry,
+  taper: Taper,
+  height: number,
+): void {
   const position = geometry.getAttribute("position");
+  const [front, rear, side] = [
+    taper.front ?? 0,
+    taper.rear ?? 0,
+    taper.side ?? 0,
+  ];
   for (let index = 0; index < position.count; index++) {
-    if (position.getY(index) <= 0) continue;
+    const up = (position.getY(index) + height / 2) / height;
+    const share = Math.min(1, Math.max(0, up));
+    if (share === 0) continue;
     const x = position.getX(index);
     const z = position.getZ(index);
-    position.setX(
-      index,
-      x > 0 ? x - (taper.front ?? 0) : x + (taper.rear ?? 0),
-    );
-    position.setZ(index, z - Math.sign(z) * (taper.side ?? 0));
+    position.setX(index, x > 0 ? x - front * share : x + rear * share);
+    position.setZ(index, z - Math.sign(z) * side * share);
   }
+}
+
+/** A bevelled box centred on the origin, indexed and with UVs so it merges with plain boxes. */
+function bevelledBox(
+  size: readonly [number, number, number],
+  bevel: number,
+): BufferGeometry {
+  const positions = bevelledBoxPositions(
+    size,
+    Math.min(bevel, Math.min(...size) / 2),
+  );
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  const count = positions.length / 3;
+  geometry.setAttribute(
+    "uv",
+    new Float32BufferAttribute(new Float32Array(count * 2), 2),
+  );
+  geometry.setIndex(Array.from({ length: count }, (_, index) => index));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+/** A box centred on the origin with every edge rounded, indexed and with UVs so it merges. */
+function roundedBox(
+  size: readonly [number, number, number],
+  radius: number,
+): BufferGeometry {
+  const limit = (Math.min(...size) / 2) * ROUND_LIMIT_SHARE;
+  const rounded = new RoundedBoxGeometry(
+    size[0],
+    size[1],
+    size[2],
+    ROUND_SEGMENTS,
+    Math.min(radius, limit),
+  );
+  // three builds it unindexed; welding its shared corners indexes it for merging.
+  const welded = mergeVertices(rounded);
+  rounded.dispose();
+  return welded;
 }
 
 /** Leans a box centred on the origin forward by `shear`. */
@@ -201,8 +296,13 @@ function shearAlong(geometry: BufferGeometry, shear: Shear): void {
 export function slab(spec: SlabSpec): BufferGeometry {
   const [x0, x1] = spec.x;
   const [y0, y1] = spec.y;
-  const geometry = new BoxGeometry(x1 - x0, y1 - y0, spec.width);
-  if (spec.taper) pullInTop(geometry, spec.taper);
+  const size: [number, number, number] = [x1 - x0, y1 - y0, spec.width];
+  const geometry = spec.round
+    ? roundedBox(size, spec.round)
+    : spec.bevel
+      ? bevelledBox(size, spec.bevel)
+      : new BoxGeometry(...size);
+  if (spec.taper) pullInTop(geometry, spec.taper, size[1]);
   if (spec.shear) shearAlong(geometry, spec.shear);
   if (spec.taper || spec.shear) geometry.computeVertexNormals();
   geometry.translate((x0 + x1) / 2, (y0 + y1) / 2, spec.z ?? 0);
@@ -229,8 +329,13 @@ export function cylinder(spec: CylinderSpec): BufferGeometry {
   return geometry;
 }
 
-/** Writes one colour into every vertex, in three's working colour space. */
-function tintVertices(geometry: BufferGeometry, hex: number): void {
+/**
+ * Writes one colour into every vertex, in three's working colour space.
+ *
+ * @param geometry - The geometry; its `color` attribute is replaced.
+ * @param hex - The colour, `0xrrggbb`.
+ */
+export function tintVertices(geometry: BufferGeometry, hex: number): void {
   const colour = new Color(hex);
   const count = geometry.getAttribute("position").count;
   const data = new Float32Array(count * 3);
@@ -336,4 +441,71 @@ export function wheelGeometry(look: WheelLook): BufferGeometry {
     parts.map(([geometry]) => geometry),
     false,
   );
+}
+
+/** Side of the flare sprite's texture, px. */
+const FLARE_TEXTURE_PX = 32;
+/** Exponent of the flare's falloff from its middle to its rim. */
+const FLARE_FALLOFF_POWER = 2.5;
+/** A flare's size: three.js scales a point by 1 / depth, so it spans about this many metres. */
+const FLARE_SIZE = 0.9;
+/** Past this cosine between a lamp's facing and the view, its flare shows at full strength. */
+const FLARE_FULL_FACING = 0.55;
+/**
+ * Fades a flare by how squarely its lamp faces the camera (the point's normal is the lamp's
+ * facing), so a tail lamp never haloes round the front of its car.
+ */
+const FLARE_FACING_GLSL = `#include <project_vertex>
+	vColor *= smoothstep( 0.0, ${FLARE_FULL_FACING.toFixed(2)}, dot( normalize( normalMatrix * normal ), normalize( - mvPosition.xyz ) ) );`;
+/** Channels per pixel of the flare texture, and a full 8-bit channel. */
+const RGBA = 4;
+const FULL_CHANNEL = 255;
+
+/** A white disc whose alpha falls off from the middle to nothing at the rim. */
+function flareTexture(): DataTexture {
+  const data = new Uint8Array(FLARE_TEXTURE_PX * FLARE_TEXTURE_PX * RGBA);
+  const centre = (FLARE_TEXTURE_PX - 1) / 2;
+  for (let y = 0; y < FLARE_TEXTURE_PX; y++)
+    for (let x = 0; x < FLARE_TEXTURE_PX; x++) {
+      const rim = Math.hypot(x - centre, y - centre) / centre;
+      const offset = (y * FLARE_TEXTURE_PX + x) * RGBA;
+      data.fill(FULL_CHANNEL, offset, offset + RGBA - 1);
+      data[offset + RGBA - 1] = Math.round(
+        FULL_CHANNEL * Math.max(0, 1 - rim) ** FLARE_FALLOFF_POWER,
+      );
+    }
+  const texture = new DataTexture(data, FLARE_TEXTURE_PX, FLARE_TEXTURE_PX);
+  texture.magFilter = LinearFilter;
+  texture.minFilter = LinearFilter;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+/**
+ * The additive glow round every vehicle's lamps, drawn as one point per lamp in the lamp's own
+ * vertex colour, fading as the lamp turns away; no depth writes, so a flare never cuts into what
+ * is behind it, and no fog, so lamps still show through the haze.
+ *
+ * @returns The shared material.
+ */
+export function flareMaterial(): PointsMaterial {
+  if (sharedFlare) return sharedFlare;
+  sharedFlare = new PointsMaterial({
+    map: flareTexture(),
+    size: FLARE_SIZE,
+    sizeAttenuation: true,
+    vertexColors: true,
+    blending: AdditiveBlending,
+    transparent: true,
+    depthWrite: false,
+    fog: false,
+  });
+  sharedFlare.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace(
+      "#include <project_vertex>",
+      FLARE_FACING_GLSL,
+    );
+  };
+  sharedFlare.customProgramCacheKey = () => "vehicle-flare";
+  return sharedFlare;
 }

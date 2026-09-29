@@ -1,7 +1,9 @@
 /**
  * The first-person view model: the player's own forearms and fists, in the player's skin tone with
  * the bead bracelet, holding the current weapon. It bobs with the stride, kicks on each shot,
- * throws a punch or swings the bat, and dips out and back in when the weapon changes.
+ * throws a punch or swings the bat, and dips out and back in when the weapon changes. Aiming down
+ * the sights (aim spec §5) it brings the gun in to the middle, sights on the crosshair and the bob
+ * stilled; the rifle's scope takes over from its model once it is fully up.
  *
  * Everything is in camera space (−Z ahead, +Y up, +X right): attach {@link ViewModel.object} to
  * the camera. It uses the lit character material, so the camera must be in a lit scene. A gun's
@@ -19,6 +21,7 @@ import {
   type PerspectiveCamera,
 } from "three";
 import type { WeaponKind } from "../sim/types";
+import { isScoped } from "./cameraRig";
 import { LOOKS } from "./characterLooks";
 import { RUN_SPEED_MPS, RUN_STRIDE_M, WALK_STRIDE_M } from "./characterPose";
 import { characterMaterials } from "./characterRig";
@@ -40,6 +43,8 @@ export type ViewModelInput = {
   speed: number;
   /** Seconds since the previous frame. */
   dt: number;
+  /** How far the sights are up, 0 (at the hip, the default) … 1. */
+  sights?: number;
 };
 
 /** The hands and weapon in front of the first-person camera. */
@@ -62,7 +67,7 @@ export type ViewModel = {
 /** A shot's kick has fully recovered after this long, seconds. */
 export const VIEW_RECOIL_RECOVERY_S = 0.22;
 /** A shot older than this many ticks when first seen is not kicked (e.g. on entering the view). */
-const FRESH_SHOT_TICKS = 3;
+export const FRESH_SHOT_TICKS = 3;
 /** How far a full kick pushes the hands back toward the camera, metres. */
 const KICK_BACK_M = 0.06;
 /** How far a full kick tips the muzzle up, radians. */
@@ -90,6 +95,8 @@ const ARM_YAW_RAD = 0.3;
  * {@link placeViewModel}, the gun and hands take about a quarter of the lower-right quadrant.
  */
 export const VIEW_MODEL_SCALE = 0.48;
+/** With the sights up the hands grow to this size, so the gun reads under the crosshair. */
+export const SIGHTS_SCALE = 0.75;
 /** The typical grip the layouts are drawn around, camera space; it keeps its depth when scaled. */
 const LAYOUT_ANCHOR: Vec3 = [0.13, -0.13, -0.36];
 /** Where the anchor lands on screen, normalised device coordinates (right and down of centre). */
@@ -113,6 +120,32 @@ const VIEW_FLASH_DETAIL = 1;
 
 /** Straight ahead, in camera space. */
 const AHEAD: Vec3 = [0, 0, -1];
+
+/**
+ * Where each gun's sights are, weapon space (grip at the origin, barrel along +X): the top of the
+ * pistol's slide, the front sight post, the shotgun's barrel rib, the launcher's sight on the left
+ * of its tube. Aimed down, this point sits on the crosshair with the barrel running straight ahead
+ * under it. Fists and the bat have none.
+ */
+const SIGHTS: Partial<Record<WeaponKind, Vec3>> = {
+  pistol: [0.14, 0.076, 0],
+  uzi: [0.17, 0.11, 0],
+  shotgun: [0.6, 0.092, 0],
+  rifle: [0.5, 0.1175, 0],
+  rocket: [0.12, 0.195, -0.05],
+};
+/** With the sights up the gun comes this much closer to the eye, metres in the layouts' size. */
+const SIGHTS_PULL_M = 0.04;
+
+/**
+ * Where a weapon's sights are, in its own space.
+ *
+ * @param weapon - The weapon.
+ * @returns The sight point, or `null` for a weapon without sights.
+ */
+export function sightOf(weapon: WeaponKind): Vec3 | null {
+  return SIGHTS[weapon] ?? null;
+}
 
 /** Where the hands hold a weapon, in camera space. */
 type ViewLayout = {
@@ -318,10 +351,12 @@ type ViewState = {
 };
 
 /** The glowing ball at the barrel on a shot. */
-type FlashMesh = Mesh<IcosahedronGeometry, FireballMaterial>;
+export type FlashMesh = Mesh<IcosahedronGeometry, FireballMaterial>;
 
 /** The parts the view model moves. */
 type ViewParts = {
+  /** The view model's root, placed and sized for the lens by {@link placeViewModel}. */
+  root: Group;
   rig: Group;
   holder: Group;
   right: Group;
@@ -355,8 +390,13 @@ function syncShot(state: ViewState, input: ViewModelInput): void {
   if (state.tip) state.flash = VIEW_FLASH_S;
 }
 
-/** The muzzle flash: hidden between shots, set at `holder`'s barrel tip by the weapon swap. */
-function createFlashMesh(): FlashMesh {
+/**
+ * A muzzle flash for a gun held in view: hidden between shots; hang it on the barrel's tip, its
+ * long axis (+X) along the barrel. Owns its geometry and material.
+ *
+ * @returns The flash; show it with {@link showFlash}.
+ */
+export function createFlashMesh(): FlashMesh {
   const flash = new Mesh(
     new IcosahedronGeometry(1, VIEW_FLASH_DETAIL),
     createFireballMaterial(VIEW_FLASH_COLOUR),
@@ -367,11 +407,14 @@ function createFlashMesh(): FlashMesh {
 }
 
 /**
- * Shows the flash for what is left of it: full size and bright on the shot's frame, shrinking
+ * Shows a flash for what is left of it: full size and bright on the shot's frame, shrinking
  * and fading after; stretched along the barrel.
+ *
+ * @param flash - The flash, from {@link createFlashMesh}.
+ * @param remainingS - Seconds it still shows, from {@link VIEW_FLASH_S} at the shot down to 0.
  */
-function placeFlash(flash: FlashMesh, state: ViewState): void {
-  const share = state.flash / VIEW_FLASH_S;
+export function showFlash(flash: FlashMesh, remainingS: number): void {
+  const share = remainingS / VIEW_FLASH_S;
   flash.visible = share > 0;
   if (!flash.visible) return;
   const size =
@@ -381,14 +424,37 @@ function placeFlash(flash: FlashMesh, state: ViewState): void {
   flash.material.uniforms.uOpacity.value = share;
 }
 
+/** Where the holder goes with the sights up; reused, so aiming allocates nothing. */
+const sightsGrip = new Vector3();
+
 /**
- * Places the weapon and both hands for the layout, blending toward a strike by `strike`. Writes
- * only into the parts' own position and quaternion, so it allocates nothing.
+ * Where the holder puts the sight point on the camera's axis, barrel ahead, given where the root
+ * sits for the lens. The aim turns the weapon's +X to −Z and its +Z to +X, so the sight lies
+ * `(z, y, −x)` from the grip.
+ */
+function placeSights(
+  root: Object3D,
+  layout: PreparedLayout,
+  sight: Vec3,
+): Vector3 {
+  const scale = root.scale.x;
+  return sightsGrip.set(
+    -root.position.x / scale - sight[2],
+    -root.position.y / scale - sight[1],
+    layout.grip.z + SIGHTS_PULL_M,
+  );
+}
+
+/**
+ * Places the weapon and both hands for the layout, blending toward a strike by `strike` and
+ * toward the sights pose by `sights`. Writes only into the parts' own position and quaternion,
+ * so it allocates nothing.
  */
 function placeHands(
   parts: ViewParts,
   layout: PreparedLayout,
   strike: number,
+  sights: { share: number; point: Vec3 | null },
 ): void {
   const { holder, right, left } = parts;
   holder.position.copy(layout.grip);
@@ -397,6 +463,11 @@ function placeHands(
     holder.position.lerp(layout.strike.grip, strike);
     holder.quaternion.slerp(layout.strike.aim, strike);
   }
+  if (sights.point && sights.share > 0)
+    holder.position.lerp(
+      placeSights(parts.root, layout, sights.point),
+      sights.share,
+    );
   right.position.copy(holder.position);
   left.visible = layout.support !== null || layout.leftFist !== null;
   if (layout.support) {
@@ -409,16 +480,18 @@ function placeHands(
   }
 }
 
-/** Bob, idle sway, kick and the swap dip, applied to the whole rig. */
+/** Bob, idle sway, kick and the swap dip, applied to the whole rig; the sights still the bob. */
 function placeRig(
   rig: Group,
   state: ViewState,
   layout: ViewLayout,
   speed: number,
+  sights: number,
 ): void {
-  const amount = Math.min(1, speed / BOB_FULL_SPEED_MPS);
+  const steady = 1 - sights;
+  const amount = Math.min(1, speed / BOB_FULL_SPEED_MPS) * steady;
   const kick = state.kick * state.kick * layout.kick;
-  const sway = Math.sin(state.seconds * IDLE_SWAY_RATE) * IDLE_SWAY_M;
+  const sway = Math.sin(state.seconds * IDLE_SWAY_RATE) * IDLE_SWAY_M * steady;
   rig.position.set(
     Math.sin(state.stridePhase) * BOB_SWAY_M * amount,
     -((1 - Math.cos(2 * state.stridePhase)) / 2) * BOB_DIP_M * amount +
@@ -454,6 +527,26 @@ function createViewState(): ViewState {
   };
 }
 
+/** Poses the hands and gun for a frame: the weapon, the shot's kick, the sights, the bob. */
+function poseViewModel(
+  state: ViewState,
+  parts: ViewParts,
+  input: ViewModelInput,
+): void {
+  const point = sightOf(input.weapon);
+  const share = point ? (input.sights ?? 0) : 0;
+  syncWeapon(state, parts, input.weapon);
+  syncShot(state, input);
+  placeHands(parts, preparedLayout(input.weapon), state.kick, {
+    share,
+    point,
+  });
+  placeRig(parts.rig, state, LAYOUTS[input.weapon], input.speed, share);
+  parts.rig.visible = !(isScoped(input.weapon) && share >= 1);
+  showFlash(parts.flash, state.flash);
+  advance(state, input);
+}
+
 /**
  * The player's hands and weapon for the first-person view.
  *
@@ -471,6 +564,7 @@ export function createViewModel(): ViewModel {
   object.name = "viewModel";
   object.add(rig);
   const parts: ViewParts = {
+    root: object,
     rig,
     holder,
     right: rightArm.group,
@@ -480,14 +574,7 @@ export function createViewModel(): ViewModel {
   const state = createViewState();
   return {
     object,
-    update(input) {
-      syncWeapon(state, parts, input.weapon);
-      syncShot(state, input);
-      placeHands(parts, preparedLayout(input.weapon), state.kick);
-      placeRig(rig, state, LAYOUTS[input.weapon], input.speed);
-      placeFlash(flash, state);
-      advance(state, input);
-    },
+    update: (input) => poseViewModel(state, parts, input),
     muzzleWorld(target) {
       if (!state.tip) return false;
       holder.updateWorldMatrix(true, false);
@@ -511,22 +598,26 @@ const HALF_ANGLE_PER_DEGREE = Math.PI / 360;
  * Sizes and places the view model for a camera's lens: shrinks it by {@link VIEW_MODEL_SCALE}
  * about {@link LAYOUT_ANCHOR}, keeping the anchor's depth, and moves the anchor to
  * {@link VIEW_MODEL_SCREEN_ANCHOR} on screen — so the gun sits at the same spot on a wide monitor
- * and a narrow phone, and the forearms still run off the bottom-right edge. Allocates nothing.
+ * and a narrow phone, and the forearms still run off the bottom-right edge. With the sights up the
+ * hands grow toward {@link SIGHTS_SCALE}. Allocates nothing.
  *
  * @param object - The view model's {@link ViewModel.object}, attached to `camera`.
  * @param camera - The camera it is drawn through, with its field of view and aspect set.
+ * @param sights - How far the sights are up, 0 (at the hip, the default) … 1.
  */
 export function placeViewModel(
   object: Object3D,
   camera: Pick<PerspectiveCamera, "fov" | "aspect">,
+  sights = 0,
 ): void {
   const [anchorX, anchorY, anchorZ] = LAYOUT_ANCHOR;
   const halfHeight = -anchorZ * Math.tan(camera.fov * HALF_ANGLE_PER_DEGREE);
   const halfWidth = halfHeight * camera.aspect;
-  object.scale.setScalar(VIEW_MODEL_SCALE);
+  const scale = VIEW_MODEL_SCALE + (SIGHTS_SCALE - VIEW_MODEL_SCALE) * sights;
+  object.scale.setScalar(scale);
   object.position.set(
-    VIEW_MODEL_SCREEN_ANCHOR.x * halfWidth - VIEW_MODEL_SCALE * anchorX,
-    VIEW_MODEL_SCREEN_ANCHOR.y * halfHeight - VIEW_MODEL_SCALE * anchorY,
-    anchorZ * (1 - VIEW_MODEL_SCALE),
+    VIEW_MODEL_SCREEN_ANCHOR.x * halfWidth - scale * anchorX,
+    VIEW_MODEL_SCREEN_ANCHOR.y * halfHeight - scale * anchorY,
+    anchorZ * (1 - scale),
   );
 }

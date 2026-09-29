@@ -4,8 +4,8 @@
  * work in three.js space, `(x, height, y)`, relative to their cell's corner.
  */
 import {
+  BufferAttribute,
   BufferGeometry,
-  Float32BufferAttribute,
   ShapeUtils,
   Vector2,
   type Vector3Tuple,
@@ -157,6 +157,46 @@ export function pushFlatPolygon(
   pushPolygonSurface(buffers, ring, () => height, UP, origin, uvOf);
 }
 
+/** The largest vertex index a 16-bit index buffer holds. */
+const MAX_UINT16_INDEX = 0xffff;
+
+/**
+ * A float attribute over a copy of `values`. `TypedArray.set` copies a plain number list about
+ * twice as fast as the typed array constructor three's `Float32BufferAttribute` uses, and a
+ * cell's geometry is mostly such copies.
+ *
+ * @param values - The values, `itemSize` per vertex.
+ * @param itemSize - Components per vertex.
+ * @returns A new attribute owning its own `Float32Array`.
+ */
+export function float32Attribute(
+  values: readonly number[],
+  itemSize: number,
+): BufferAttribute {
+  const array = new Float32Array(values.length);
+  array.set(values);
+  return new BufferAttribute(array, itemSize);
+}
+
+/**
+ * An index attribute over a copy of `indices`: 16-bit while every index fits, else 32-bit.
+ *
+ * @param indices - Three per triangle.
+ * @param vertexCount - The geometry's vertices, which bounds every index.
+ * @returns A new index attribute.
+ */
+export function indexAttribute(
+  indices: readonly number[],
+  vertexCount: number,
+): BufferAttribute {
+  const array =
+    vertexCount - 1 > MAX_UINT16_INDEX
+      ? new Uint32Array(indices.length)
+      : new Uint16Array(indices.length);
+  array.set(indices);
+  return new BufferAttribute(array, 1);
+}
+
 /**
  * The buffers as an indexed geometry, optionally with a white `color` attribute for materials
  * that tint by vertex colour.
@@ -170,20 +210,14 @@ export function toGeometry(
   withWhiteColour = false,
 ): BufferGeometry {
   const geometry = new BufferGeometry();
-  geometry.setAttribute(
-    "position",
-    new Float32BufferAttribute(buffers.positions, 3),
-  );
-  geometry.setAttribute(
-    "normal",
-    new Float32BufferAttribute(buffers.normals, 3),
-  );
-  geometry.setAttribute("uv", new Float32BufferAttribute(buffers.uvs, 2));
+  geometry.setAttribute("position", float32Attribute(buffers.positions, 3));
+  geometry.setAttribute("normal", float32Attribute(buffers.normals, 3));
+  geometry.setAttribute("uv", float32Attribute(buffers.uvs, 2));
   if (withWhiteColour) {
     const white = new Float32Array(buffers.positions.length).fill(1);
-    geometry.setAttribute("color", new Float32BufferAttribute(white, 3));
+    geometry.setAttribute("color", new BufferAttribute(white, 3));
   }
-  geometry.setIndex(buffers.indices);
+  geometry.setIndex(indexAttribute(buffers.indices, vertexCount(buffers)));
   geometry.computeBoundingSphere();
   return geometry;
 }

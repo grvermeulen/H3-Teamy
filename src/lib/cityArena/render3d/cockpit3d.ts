@@ -3,6 +3,8 @@
  * — dashboard and speedometer, the steering wheel turning in both hands, pillars, roof header,
  * door tops, the rear-view mirror, a faint sheen on the windscreen and the bonnet in the car's own
  * colour. Drawn in the view-model pass (`viewModelPass.ts`), so it never clips into the world.
+ * During a drive-by the right hand leaves the wheel to hold the gun out of the window
+ * (`cockpitGun.ts`); the left keeps turning the wheel.
  *
  * {@link Cockpit3d.object} is the car's own frame: place it where the car stands and turn it with
  * `headingToRotationY(heading)`. Geometry is built once per kind (the paint once per kind and
@@ -36,6 +38,11 @@ import {
   sirenStripGeometry,
   wheelGeometry,
 } from "./cockpitParts";
+import {
+  createCockpitGun,
+  type CockpitDriveBy,
+  type CockpitGun,
+} from "./cockpitGun";
 import { COCKPITS, type CockpitSpec, type CockpitWheel } from "./cockpitSpecs";
 import { createGlowMaterial, type GlowMaterial } from "./glowMaterial";
 import type { Vec3 } from "./lowPoly";
@@ -59,6 +66,8 @@ export type CockpitInput = {
   tick: number;
   /** Seconds since the previous frame. */
   dt: number;
+  /** Your gun out of the window: the right hand leaves the wheel to hold it. Absent: both on it. */
+  driveBy?: CockpitDriveBy | null;
 };
 
 /** A cockpit. */
@@ -67,6 +76,14 @@ export type Cockpit3d = {
   object: Object3D;
   /** Rebuilds the model when the kind or colour changed, then turns the wheel and the needle. */
   update(input: CockpitInput): void;
+  /**
+   * Where the gun hand's barrel ends in the world during a drive-by, as posed by the last
+   * `update`: your muzzle in first person at the wheel.
+   *
+   * @param target - Receives the world position; untouched without the gun out.
+   * @returns `false` while both hands are on the wheel.
+   */
+  muzzleWorld(target: Vector3): boolean;
   /** Detaches the cockpit; the shared geometry stays until {@link disposeCockpitAssets}. */
   dispose(): void;
 };
@@ -408,6 +425,22 @@ function flashHeader(model: CockpitModel, input: CockpitInput): void {
   glow.red.visible = phase === 1;
 }
 
+/** A model's hands start with the left one: the right is the one that takes the gun. */
+const RIGHT_HAND = 1;
+
+/** Takes the right hand off the wheel while the gun hand shows, and puts it back after. */
+function freeRightHand(model: CockpitModel, shooting: boolean): void {
+  const right = model.hands[RIGHT_HAND];
+  if (right) right.object.visible = !shooting;
+}
+
+/** A gun hand in the cockpit's car frame. */
+function mountGun(object: Group): CockpitGun {
+  const gun = createCockpitGun();
+  object.add(gun.object);
+  return gun;
+}
+
 /**
  * Creates a cockpit. It builds its model on the first `update` and again whenever the kind or
  * colour changes; the wheel starts where the steering is, then eases after it.
@@ -418,6 +451,7 @@ export function createCockpit3d(): Cockpit3d {
   const object = new Group();
   object.name = "cockpit";
   let model: CockpitModel | null = null;
+  let gun: CockpitGun | null = null;
   return {
     object,
     update(input) {
@@ -429,10 +463,17 @@ export function createCockpit3d(): Cockpit3d {
       turnWheel(model, input);
       if (model.needle) model.needle.rotation.x = needleAngle(input.speedMps);
       flashHeader(model, input);
+      const driveBy = input.driveBy ?? null;
+      if (driveBy) gun ??= mountGun(object);
+      const { kind, tick, dt } = input;
+      freeRightHand(model, gun?.update(driveBy, kind, tick, dt) ?? false);
     },
+    muzzleWorld: (target) => gun?.muzzleWorld(target) ?? false,
     dispose() {
       model?.root.removeFromParent();
       model = null;
+      gun?.dispose();
+      gun = null;
       object.removeFromParent();
     },
   };

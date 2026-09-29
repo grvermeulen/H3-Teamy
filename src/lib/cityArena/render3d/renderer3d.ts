@@ -25,7 +25,8 @@ import {
   FOG_COLOUR,
   MOON_LIGHT,
 } from "./palette3d";
-import { SKY_RADIUS_M, createSkyDome } from "./sky";
+import { cityDetailFor } from "./cityDetail";
+import { SKY_RADIUS_M, createSkyDome, setSkyDetail } from "./sky";
 
 /** The settings' render quality. */
 export type RenderQuality = ArenaSettings["quality"];
@@ -174,7 +175,7 @@ export function createRenderer3d(canvas: HTMLCanvasElement): Renderer3d {
   renderer.toneMapping = ACESFilmicToneMapping;
   renderer.toneMappingExposure = TONE_MAPPING_EXPOSURE;
   const scene = createEveningScene();
-  const sky = createSkyDome();
+  const sky = createSkyDome(MOON_DIRECTION);
   scene.add(sky);
   const camera = new PerspectiveCamera(
     INITIAL_FOV_DEG,
@@ -191,6 +192,7 @@ export function createRenderer3d(canvas: HTMLCanvasElement): Renderer3d {
       const fog = scene.fog as Fog;
       fog.far = viewDistanceFor(quality, size.width);
       fog.near = fog.far * FOG_NEAR_SHARE;
+      setSkyDetail(sky, cityDetailFor(quality));
     },
     render(overlay) {
       sky.position.copy(camera.position);

@@ -26,6 +26,7 @@ import {
   spawnParkedCars,
   spawnTanks,
 } from "./spawn";
+import { normalizeVehicles } from "./vehicle";
 import { applyWanted } from "./wanted";
 import { applyZoneRule } from "./zoneRule";
 import { soberUp } from "./beer";
@@ -213,6 +214,7 @@ export function stepArena(
   const zone = anchor ? findZone(world.index, [anchor.x, anchor.y]) : null;
   return {
     ...next,
+    vehicles: normalizeVehicles(next.vehicles),
     effects: pruneEffects(next.effects, tick),
     zoneKey: anchor ? (zone?.key ?? null) : next.zoneKey,
   };

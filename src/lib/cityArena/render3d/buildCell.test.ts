@@ -115,10 +115,7 @@ describe("buildCell", () => {
     ];
     for (const material of layers)
       expect(drawnWith(group, material).length).toBeGreaterThan(0);
-    const walls = group.children.filter(
-      (child) => child instanceof Mesh && Array.isArray(child.material),
-    );
-    expect(walls).toHaveLength(1);
+    expect(drawnWith(group, materials.facade)).toHaveLength(1);
     const dressing = group.children.filter((child) => child.type === "Group");
     expect(dressing).toHaveLength(1);
   });
@@ -404,7 +401,8 @@ describe("buildCell", () => {
     );
     const shared = [
       ...Object.values(materials.surfaces),
-      ...Object.values(materials.facades).flat(),
+      materials.facade,
+      materials.detail,
       materials.roadMarking,
       materials.treeTrunk,
       ...materials.canopies,

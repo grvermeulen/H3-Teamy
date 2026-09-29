@@ -11,7 +11,8 @@ already draws.
 
 Shipped alongside 3D: networked destructible buildings (sim-side health, collapse and rebuild,
 rendered as ruins in both 2D and 3D), a rocket launcher, and 3D-only guidance (navigation ribbon,
-mission beacons, player markers, a zone wall). Protocol version is **4**.
+mission beacons, player markers, a zone wall). Protocol version is **5** (4 added structures and
+the rocket; 5 adds aiming down the sights to the input frame).
 
 ## Screenshots
 
@@ -31,11 +32,35 @@ First person at the wheel and on foot with the Uzi (see [Cockpit](#cockpit) and
 | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | ![The sedan's cockpit: wheel in both hands, speedometer, pillars, yellow bonnet](img/3d/3d-cockpit.jpg) | ![An Uzi round streaking from the barrel toward the crosshair](img/3d/3d-muzzle-tracers.jpg) |
 
+Drive-bys from the chase camera and from the driver's seat (see [Drive-bys](#drive-bys)):
+
+|                                                                                                                   |                                                                                                                           |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| ![A rifle held out of the driver's window, and an Uzi firing out of the passenger window](img/3d/3d-drive-by.jpg) | ![First person: the right hand off the wheel, the Uzi firing out of the passenger window](img/3d/3d-cockpit-drive-by.jpg) |
+
+Aiming down the sights — the pistol, the rifle's scope, over the shoulder — is pictured under
+[Aiming](#aiming).
+
 The glTF cast (see [Characters: the glTF cast](#characters-the-gltf-cast)):
 
 |                                                                                       |                                                                                              |
 | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | ![A street of pedestrians, each dressed differently](img/3d/3d-characters-street.jpg) | ![The player: bald, red shades, mint shorts, pistol raised](img/3d/3d-characters-player.jpg) |
+
+The Kenney cars (see [Cars: the Kenney Car Kit](#cars-the-kenney-car-kit)):
+
+|                                                                                                   |                                                                                            |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| ![Traffic: an orange pickup, a red and a blue car, a rounded oldtimer](img/3d/3d-cars-street.jpg) | ![A white police car with its light bar on, three stars wanted](img/3d/3d-cars-police.jpg) |
+| ![Before: the procedural sedan from the chase camera](img/3d/3d-cars-before.jpg)                  | ![After: the Kit sedan from the chase camera](img/3d/3d-cars-after.jpg)                    |
+
+Every Kit kind, procedural above and Kit below, and the rounded bus, oldtimer and tank (before,
+after):
+
+![The seven Kit kinds, procedural and from the Kit](img/3d/3d-cars-gallery.jpg)
+
+| ![Bus, oldtimer and tank before](img/3d/3d-heavy-before.jpg) | ![The same, rounded](img/3d/3d-heavy-after.jpg) |
+| ------------------------------------------------------------ | ----------------------------------------------- |
 
 ## Architecture
 
@@ -89,76 +114,112 @@ Grouped by responsibility; every exported symbol carries its own JSDoc.
 
 **Entry point, renderer and shared plumbing**
 
-| File              | Responsibility                                                                                                     |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `index.ts`        | `createView3d(canvas)`: wires every layer together, places the camera, drives one frame                            |
-| `renderer3d.ts`   | WebGL renderer, three.js scene, camera, evening lights, fog; `RenderQuality`, view distance and pixel-ratio tables |
-| `cameraRig.ts`    | Third-person and first-person rigs (the driver's eye per vehicle kind), pitch limits, car chase and death orbit    |
-| `cameraFeel.ts`   | The 2D feedback's screen shake (`SHAKE_METRES_PER_PX`) and drunk sway, as a camera nudge and roll                  |
-| `sharedAssets.ts` | `disposeSharedAssets`: frees the module-level character (procedural and glTF), vehicle, pickup and weapon caches   |
-| `coords.ts`       | The one world ↔ three.js mapping (`(x, y)` metres → `(x, height, y)`) and angle helpers                            |
-| `idHash.ts`       | Deterministic per-id "randomness" (façade choice, tree size/turn) so every device builds the same town             |
-| `disposal.ts`     | `disposeObject`: frees geometries, materials and textures of a whole `Object3D` subtree                            |
-| `meshBuffers.ts`  | Growable vertex/index buffers the city builders fill, turned into one indexed `BufferGeometry`                     |
-| `lowPoly.ts`      | Bevelled/tapered block and faceted-rod primitives, vertex-coloured and flat-shaded                                 |
-| `footprint.ts`    | Footprint measurements (centre, longest edge) shared by roofs, landmark dressing and ruins                         |
-| `testing/`        | Shared test doubles/helpers for render3d's own test suite (`gltfFixture.ts`: in-code glTF characters)              |
+| File              | Responsibility                                                                                                                                           |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts`        | `createView3d(canvas)`: wires every layer together, places the camera, drives one frame                                                                  |
+| `frameAim.ts`     | The local player's aim per frame: the sights' ease, the aim probe's run, the scope's opacity                                                             |
+| `renderer3d.ts`   | WebGL renderer, three.js scene, camera, evening lights, fog; `RenderQuality`, view distance and pixel-ratio tables                                       |
+| `cameraRig.ts`    | Third- and first-person rigs (the driver's eye per kind), pitch limits, chase, death orbit, the sights' zoom                                             |
+| `cameraFeel.ts`   | The 2D feedback's screen shake (`SHAKE_METRES_PER_PX`) and drunk sway, as a camera nudge and roll                                                        |
+| `sharedAssets.ts` | `disposeSharedAssets`: frees the module-level character (procedural and glTF), vehicle (procedural and Kit), pickup, weapon, cockpit and drive-by caches |
+| `coords.ts`       | The one world ↔ three.js mapping (`(x, y)` metres → `(x, height, y)`) and angle helpers                                                                  |
+| `idHash.ts`       | Deterministic per-id "randomness" (façade choice, tree size/turn) so every device builds the same town                                                   |
+| `disposal.ts`     | `disposeObject`: frees geometries, materials and textures of a whole `Object3D` subtree                                                                  |
+| `meshBuffers.ts`  | Growable vertex/index buffers the city builders fill, turned into one indexed `BufferGeometry`                                                           |
+| `lowPoly.ts`      | Bevelled/tapered block and faceted-rod primitives, vertex-coloured and flat-shaded                                                                       |
+| `footprint.ts`    | Footprint measurements (centre, longest edge) shared by roofs, landmark dressing and ruins                                                               |
+| `testing/`        | Test doubles for render3d's own suite (`gltfFixture.ts` / `carFixture.ts`: in-code glTF characters, cars)                                                |
 
 **The streamed city**
 
-| File                  | Responsibility                                                                                                                                                             |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `city3d.ts`           | Owns the shared `WorldMaterials` and the streamed cells; rebuilds a cell when a landmark lookup changes                                                                    |
-| `cellGrid.ts`         | The 128 m cell grid, counted from the world origin                                                                                                                         |
-| `worldCells.ts`       | Streams cells around the camera under a time budget, drops far ones, rebuilds a cell when a building in it falls, rebuilds or its tile arrives, scorches damaged buildings |
-| `buildCell.ts`        | One cell's merged geometry from the decoded map tiles: ground, roads, buildings, trees, furniture                                                                          |
-| `worldMaterials.ts`   | The materials every cell shares (never owned or disposed per cell)                                                                                                         |
-| `textures.ts`         | Loads the 2D surface art as repeating textures; paints façade textures (brick/plaster/glass, lit windows) on a canvas from a seed                                          |
-| `sky.ts`              | The evening sky dome, fog-matched at the horizon                                                                                                                           |
-| `roadMesh.ts`         | Road ribbons, centre-line markings, street lamps along the pavements                                                                                                       |
-| `buildingMesh.ts`     | Extruded walls with façade textures; roofs by the 2D map's own tile-vs-gravel rule                                                                                         |
-| `pitchedRoof.ts`      | A ridge-and-gable roof for non-rectangular footprints (churches, pools)                                                                                                    |
-| `treeMesh.ts`         | Instanced trunks and canopies, two greens                                                                                                                                  |
-| `furnitureMesh.ts`    | Instanced lamps/benches/bus shelters with a pose proxy for cosmetic knock-over                                                                                             |
-| `landmarkDressing.ts` | Per-landmark silhouettes (church spire, pool glass hall, campus glass, café awning, brewery chimney)                                                                       |
+| File                  | Responsibility                                                                                                                                                                           |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `city3d.ts`           | Owns the shared `WorldMaterials` and the streamed cells; rebuilds a cell when a landmark lookup changes                                                                                  |
+| `cellGrid.ts`         | The 128 m cell grid, counted from the world origin                                                                                                                                       |
+| `worldCells.ts`       | Streams cells around the camera under a time budget, drops far ones, rebuilds a cell when a building in it falls, rebuilds or its tile arrives, scorches damaged buildings               |
+| `buildCell.ts`        | One cell's merged geometry from the decoded map tiles: ground, roads, buildings, trees, furniture; at full detail also street paint, kerbs, clutter, bikes and lamp pools                |
+| `worldMaterials.ts`   | The materials every cell shares (never owned or disposed per cell)                                                                                                                       |
+| `textures.ts`         | Loads the 2D surface art as repeating textures; the façade wall colours per finish                                                                                                       |
+| `sky.ts`              | The evening sky dome, fog-matched at the horizon; shows the stars and moon at full detail                                                                                                |
+| `roadMesh.ts`         | Road ribbons, centre-line markings, street lamps along the pavements (moved out past cycle paths at full detail)                                                                         |
+| `buildingMesh.ts`     | Walls (one façade-atlas draw per cell) and roofs by the 2D map's own tile-vs-gravel rule; at full detail gables, shopfronts, balconies, awnings and roof detail from the building's plan |
+| `pitchedRoof.ts`      | A ridge-and-gable roof for non-rectangular footprints (churches, pools)                                                                                                                  |
+| `treeMesh.ts`         | Instanced trunks and canopies: two greens at basic detail; at full detail three species, sized, turned and tinted per tree                                                               |
+| `furnitureMesh.ts`    | Instanced lamps/benches/bus shelters with a pose proxy for cosmetic knock-over; a pool of light under each lamp at full detail                                                           |
+| `landmarkDressing.ts` | Per-landmark silhouettes (church spire, pool glass hall, campus glass, café awning, brewery chimney)                                                                                     |
+
+**City detail** (full detail at "auto" and "hoog"; see [City detail](#city-detail))
+
+| File                                                    | Responsibility                                                                                                                                                                                                           |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `cityDetail.ts`                                         | `CityDetail` (`basic` / `full`) and `cityDetailFor(quality)`: "laag" builds basic, "auto" and "hoog" full                                                                                                                |
+| `cellContext.ts`                                        | A cell's surroundings within 48 m, bucketed: nearest road, on-carriageway, ground kind and footprint questions for the detail builders                                                                                   |
+| `bucketGrid.ts`                                         | The plain bucket grid `cellContext.ts` and `tileIndex.ts` are built on                                                                                                                                                   |
+| `tileIndex.ts`                                          | A per-tile bucket index of buildings, roads and ground, made once per tile, so a cell never scans a whole 2 km tile                                                                                                      |
+| `detailBuffers.ts`                                      | Vertex-coloured quads and oriented boxes, merged into a cell's one detail mesh                                                                                                                                           |
+| `facadeSheets.ts`                                       | The twelve façade colourways (brick, plaster, panel, concrete, glass) and which one a building wears, by id and block                                                                                                    |
+| `facadeAtlas.ts`                                        | Paints every colourway's window, ground-floor and plain modules plus the shopfronts into one atlas; the patched material that wraps UVs inside each block                                                                |
+| `facadePaint.ts` / `facadeWalls.ts` / `facadeGround.ts` | The atlas's painters: windows (lit warm or cold, curtains), wall textures and plinths, doors and eight shopfronts with sign boards                                                                                       |
+| `wallQuads.ts`                                          | Wall quads at storey height: the basic layout, and the detailed one with windows centred on each wall and shop bays on the ground floor                                                                                  |
+| `facadePlan.ts`                                         | A building's plan by id: colourway, shop walls, gable, balconies, chimney, dormer, fascia                                                                                                                                |
+| `gableHouse.ts`                                         | Stepped and bell gables on narrow terraced houses, with their pitched roofs                                                                                                                                              |
+| `roofDetail.ts`                                         | Roof faces with a 25 cm overhang, fascia boards, chimneys, dormers                                                                                                                                                       |
+| `facadeExtras.ts`                                       | Balconies on flats and awnings over shopfronts                                                                                                                                                                           |
+| `streetMarkings.ts`                                     | Kerbs (cut back at side streets), red cycle paths, zebra crossings, sign sites and grass verges                                                                                                                          |
+| `streetClutter.ts` / `clutterShapes.ts`                 | Where clutter goes (shops, houses, gardens, flats, zebras; at most 150 pieces a cell, never on a carriageway, cycle path or footprint) and its shapes: bikes, racks, bins, containers, bollards, signs, planters, hedges |
+| `treeSpecies.ts`                                        | Broadleaf, poplar and conifer: each tree's species by id and the unit crowns, darker underneath                                                                                                                          |
+| `skyDetail.ts`                                          | The seeded star field and the moon disc with its halo                                                                                                                                                                    |
+| `lampPools.ts`                                          | Additive pools of lamplight on the street, fading to black in the fog, out for a fallen lamp                                                                                                                             |
 
 **Characters and vehicles**
 
-| File                                         | Responsibility                                                                         |
-| -------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `characters.ts`                              | The character factory (glTF cast, procedural fallback, LOD) and the procedural person  |
-| `characterAssets.ts`                         | Lazily loaded glTF cast: manifest, models, rig clips split per layer                   |
-| `characterAppearance.ts`                     | Pure: look + id → model, palette colours, hidden slots, scale, accessories             |
-| `characterAnimation.ts`                      | Pure: pose → clip weights and gait pace (`clipMix`)                                    |
-| `gltfCharacter.ts` / `gltfAnimator.ts`       | A glTF `Character3d` and its layered `AnimationMixer`                                  |
-| `characterPalette.ts`                        | The palette-slot Lambert material the glTF cast draws with                             |
-| `characterAccessories.ts`                    | Accessories on the glTF cast's bones (cap, glasses, shades, bracelet, backpack, badge) |
-| `characterRig.ts`                            | The shared 17-bone rig and per-look merged geometry                                    |
-| `characterPose.ts`                           | Pure procedural poses: idle, walk/run (phased by distance), aim, death                 |
-| `characterLooks.ts`                          | The cast's looks, translated from the 2D sprites' sampled colours                      |
-| `characterParts.ts`                          | Body/face/hair as rigid low-poly parts bound to one bone each                          |
-| `characterExtras.ts`                         | Accessories (shades, caps, hoods, backpack, hi-vis) layered over a look                |
-| `vehicles3d.ts`                              | A live vehicle: wheel roll, light bar, tank turret follow, wreck look, over a model    |
-| `vehicleModels.ts`                           | Procedural low-poly model per vehicle kind, one merged body mesh + wheels              |
-| `vehicleParts.ts`                            | Shared material cache and primitive shapes vehicles are cut from                       |
-| `vehicleShapes.ts` / `vehicleShapesHeavy.ts` | Per-kind shape builders (passenger kinds; bus/tractor/tank)                            |
-| `vehicleSmoke.ts`                            | Wreck column smoke and bonnet smoke below the 2D `smokeHealthOf` threshold             |
+| File                                         | Responsibility                                                                                            |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `characters.ts`                              | The character factory (glTF cast, procedural fallback, LOD) and the procedural person                     |
+| `characterAssets.ts`                         | Lazily loaded glTF cast: manifest, models, rig clips split per layer                                      |
+| `characterAppearance.ts`                     | Pure: look + id → model, palette colours, hidden slots, scale, accessories                                |
+| `characterAnimation.ts`                      | Pure: pose → clip weights and gait pace (`clipMix`)                                                       |
+| `gltfCharacter.ts` / `gltfAnimator.ts`       | A glTF `Character3d` and its layered `AnimationMixer`                                                     |
+| `characterPalette.ts`                        | The palette-slot Lambert material the glTF cast draws with                                                |
+| `characterAccessories.ts`                    | Accessories on the glTF cast's bones (cap, glasses, shades, bracelet, backpack, badge)                    |
+| `characterRig.ts`                            | The shared 17-bone rig and per-look merged geometry                                                       |
+| `characterPose.ts`                           | Pure procedural poses: idle, walk/run (phased by distance), aim, death                                    |
+| `characterLooks.ts`                          | The cast's looks, translated from the 2D sprites' sampled colours                                         |
+| `characterParts.ts`                          | Body/face/hair as rigid low-poly parts bound to one bone each                                             |
+| `characterExtras.ts`                         | Accessories (shades, caps, hoods, backpack, hi-vis) layered over a look                                   |
+| `vehicles3d.ts`                              | A live vehicle (wheel roll, brake lamps, light bar, turret, wreck look) and the Kit-or-procedural factory |
+| `vehicleModels.ts`                           | `buildVehicleModel`: the Kit model once loaded, else a procedural body mesh + wheels + flares             |
+| `vehicleLooks.ts`                            | What both builders share: each kind's height, `bodyColour`, the light-bar lens materials                  |
+| `carAssets.ts`                               | Lazily loaded Kenney Car Kit: manifest and one file per kind                                              |
+| `gltfVehicle.ts`                             | A `VehicleModel` from a Kit model: shared scaled body, tinted paint, round wheels, lamps, plates          |
+| `vehicleParts.ts`                            | Shared material cache and primitive shapes vehicles are cut from (bevelled or rounded slabs)              |
+| `vehicleShapes.ts` / `vehicleShapesHeavy.ts` | Per-kind shape builders (passenger kinds; bus/tractor/tank)                                               |
+| `vehicleTrim.ts`                             | Wheel arches, door shut lines and Dutch number plates (yellow; classic blue on the oldtimer)              |
+| `vehicleLamps.ts`                            | Head and tail lamps as lamps: the tail lamps' running/brake glow and one additive flare per lamp          |
+| `vehicleSmoke.ts`                            | Wreck column smoke and bonnet smoke below the 2D `smokeHealthOf` threshold                                |
 
 **Weapons, view model and projectiles**
 
-| File                  | Responsibility                                                                                                  |
-| --------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `weapons3d.ts`        | Small procedural weapon models, shared between a character's hand and first person                              |
-| `viewmodel.ts`        | First-person forearms/fists: stride bob, shot kick, punch/swing, weapon-change dip; the barrel tip in the world |
-| `viewModelPass.ts`    | Draws the hands — or, at the wheel, the cockpit — in a pass of its own (near-clipped camera) over the city      |
-| `cockpitSpecs.ts`     | `COCKPITS`: every vehicle kind's driver's eye, wheel, dashboard, windscreen, bonnet and frame, in car space     |
-| `cockpitParts.ts`     | Pure builders of a kind's cockpit geometry: interior shell, bonnet paint, wheel, dial, glass, siren strips      |
-| `cockpit3d.ts`        | A live cockpit: per-kind cached geometry, the wheel turning in both hands, speedometer needle, siren glow       |
-| `muzzleMap.ts`        | The frame's muzzle point per shooter id (players, officers, a tank's barrel), pooled                            |
-| `muzzleBlend.ts`      | `CONVERGE_M` and the maths that draws a round out of its muzzle onto the flat line                              |
-| `projectiles3d.ts`    | Pooled rockets and cannon shells (by bullet id), trails laid by distance flown, launched from the muzzle        |
-| `projectileModels.ts` | Shared rocket and shell geometry/materials                                                                      |
-| `tracers.ts`          | One shared `LineSegments` draw call for every gun round in flight, drawn out of its shooter's muzzle            |
+| File                  | Responsibility                                                                                                                                                 |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `weapons3d.ts`        | Small procedural weapon models, shared between a character's hand and first person                                                                             |
+| `viewmodel.ts`        | First-person forearms/fists: bob, kick, punch/swing, swap dip, the sights pose; the barrel tip in the world                                                    |
+| `viewModelPass.ts`    | Draws the hands (own 70° lens) — or, at the wheel, the cockpit — in a pass of its own over the city                                                            |
+| `cockpitSpecs.ts`     | `COCKPITS`: every vehicle kind's driver's eye, wheel, dashboard, windscreen, bonnet and frame, in car space                                                    |
+| `cockpitParts.ts`     | Pure builders of a kind's cockpit geometry: interior shell, bonnet paint, wheel, dial, glass, siren strips                                                     |
+| `cockpit3d.ts`        | A live cockpit: per-kind cached geometry, the wheel turning in both hands (the right one leaving it for the gun in a drive-by), speedometer needle, siren glow |
+| `cockpitGun.ts`       | The cockpit's gun hand in a drive-by: the street's arm hung in the car frame, with the view model's flash and a damped kick                                    |
+| `driveByPose.ts`      | Pure: the window a drive-by leans out of (left, right, over the dash; 35° cone, hysteresis), the arm's joints and turns, when the gun shows                    |
+| `driveBy3d.ts`        | A drive-by's arm in the car's frame: sleeve, forearm on the sill or dash, the held weapon level along the aim, its muzzle                                      |
+| `driveBys.ts`         | Every armed driver's drive-by for the entity sync: shots, aim (another driver's from their flash), pooled arms, muzzles                                        |
+| `muzzleMap.ts`        | The frame's muzzle point per shooter id (players, officers, a drive-by's gun, a tank's barrel), pooled                                                         |
+| `muzzleBlend.ts`      | `CONVERGE_M` and the maths that draws a round out of its muzzle onto the flat line, or toward the aim point                                                    |
+| `roundAims.ts`        | The aim point each of your rounds was fired at, captured when first seen, pooled by bullet id                                                                  |
+| `aimProbe.ts`         | The ray through the screen centre against people, vehicles, buildings and the ground: the aim point                                                            |
+| `aimWorld.ts`         | The probe's world from a frame: pooled people and vehicles, the standing buildings near the ray by tile bucket                                                 |
+| `projectiles3d.ts`    | Pooled rockets and cannon shells (by bullet id), trails laid by distance flown, launched from the muzzle                                                       |
+| `projectileModels.ts` | Shared rocket and shell geometry/materials                                                                                                                     |
+| `tracers.ts`          | One shared `LineSegments` draw call for every gun round in flight, drawn out of its shooter's muzzle                                                           |
 
 **Pickups, effects and destruction**
 
@@ -179,22 +240,111 @@ Grouped by responsibility; every exported symbol carries its own JSDoc.
 
 **Guidance, cast and HUD**
 
-| File                 | Responsibility                                                                        |
-| -------------------- | ------------------------------------------------------------------------------------- |
-| `cast3d.ts`          | One frame step: entity sync, mission contacts, hands or cockpit, effects, destruction |
-| `entities.ts`        | Per-frame pooled sync of players/peds/cops/cars/pickups; your car and every muzzle    |
-| `entityPool.ts`      | Recycles scene objects per entity id through free lists keyed by look/vehicle variant |
-| `entityMotion.ts`    | Infers walk speed, gait phase and wheel turn between frames (pure, allocation-free)   |
-| `entityShots.ts`     | Who fired this frame, for character recoil and the view model                         |
-| `guidance3d.ts`      | Owns the route, beacons, zone wall and player markers layers                          |
-| `route3d.ts`         | The glowing navigation band along the route, rebuilt only when the route changes      |
-| `beacons3d.ts`       | Pulsing light columns over mission contacts/objectives, readable from far away        |
-| `contacts3d.ts`      | Mission contacts as idle characters, dressed by a hash of their id                    |
-| `zoneWall3d.ts`      | The match zone's edge as a wall of light, built only near the player                  |
-| `playerMarkers3d.ts` | A camera-facing diamond over every other living player                                |
-| `playerArrows.ts`    | Edge-of-screen arrows toward friends who are out of view                              |
-| `missionMarkers.ts`  | Pure read of the scene's mission contacts/objectives for `guidance3d`/`contacts3d`    |
-| `overlay3d.ts`       | The 2D HUD canvas overlay: crosshair and off-screen arrows                            |
+| File                 | Responsibility                                                                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------ |
+| `cast3d.ts`          | One frame step: entity sync, mission contacts, hands or cockpit, effects, destruction            |
+| `entities.ts`        | Per-frame pooled sync of players/peds/cops/cars/pickups and drive-bys; your car and every muzzle |
+| `entityPool.ts`      | Recycles scene objects per entity id through free lists keyed by look/vehicle variant            |
+| `entityMotion.ts`    | Infers walk speed, gait phase and wheel turn between frames (pure, allocation-free)              |
+| `entityShots.ts`     | Who fired this frame, for character recoil and the view model                                    |
+| `guidance3d.ts`      | Owns the route, beacons, zone wall and player markers layers                                     |
+| `route3d.ts`         | The glowing navigation band along the route, rebuilt only when the route changes                 |
+| `beacons3d.ts`       | Pulsing light columns over mission contacts/objectives, readable from far away                   |
+| `contacts3d.ts`      | Mission contacts as idle characters, dressed by a hash of their id                               |
+| `zoneWall3d.ts`      | The match zone's edge as a wall of light, built only near the player                             |
+| `playerMarkers3d.ts` | A camera-facing diamond over every other living player                                           |
+| `playerArrows.ts`    | Edge-of-screen arrows toward friends who are out of view                                         |
+| `missionMarkers.ts`  | Pure read of the scene's mission contacts/objectives for `guidance3d`/`contacts3d`               |
+| `overlay3d.ts`       | The 2D HUD canvas overlay: the centred crosshair or the rifle's scope, and arrows                |
+
+## City detail
+
+The immersion pass (plan `docs/superpowers/plans/2026-09-27-arena-immersion-4-city-detail.md`)
+turned the blocky first city into a Dutch evening town. The detail comes in two levels, picked by
+the render quality (`cityDetail.ts`): **"laag" builds `basic`**, exactly the first city's geometry
+(a snapshot test holds every basic cell of the fixture town to the first city's vertex counts),
+and **"auto" and "hoog" build `full`**. Changing quality marks every cell stale; they rebuild
+nearest first under the usual budget.
+
+What `full` adds:
+
+- **Façades.** One canvas atlas holds twelve Dutch colourways — red, brown, yellow and grey
+  brick, five plasters, panels, concrete, glass — each with upper-storey window modules (lit warm
+  or cold, some with curtains), a ground floor with doors, and eight shopfronts with sign boards
+  and goods in lit windows. Each wall vertex carries its atlas block, and a patched Lambert shader
+  wraps the UVs inside it, so every wall of a cell is one draw call (at "laag" too). Windows are
+  centred on each wall. Per building id, `facadePlan.ts` picks shopfronts on walls facing a busy
+  road, stepped or bell gables on narrow terraced houses, balconies on flats, awnings, chimneys,
+  dormers and fascia boards under a 25 cm roof overhang.
+- **Streets.** Bevelled kerbs (cut back where a side street joins), red cycle paths on primary and
+  secondary roads (lamps move out past them), zebra crossings by junctions with give-way, zone and
+  crossing signs, and grass verges where the map leaves a strip between road and field.
+- **Street clutter.** Bike racks in front of shops, bikes against house walls, wheelie bins with
+  coloured lids, containers by flats, bollards, planters and clipped hedges along front gardens —
+  at most 150 pieces a cell, never on a carriageway, cycle path or footprint. All of it merges
+  into the cell's one vertex-coloured detail mesh; the bikes are one instanced mesh, tinted per bike.
+- **Trees.** Broadleaf (62 %), poplar (20 %) or conifer (18 %) by tree id, ±20 % in size, turned
+  and tinted from each species' evening greens, crowns darker underneath.
+- **Sky and lamplight.** 1500 seeded stars fading into the horizon glow, and the moon on the
+  moonlight's bearing at 22° up (the light itself shines from 64°, so the streets stay lit); a
+  soft additive pool of light on the street under every lamp, fading to black in the fog and out
+  when the lamp is knocked over.
+- **Vehicles** (every quality). Bevelled bodies, dark wheel arches, door lines, darker glass and
+  Dutch plates; head and tail lamps with a flare that only shows from in front of its lamp; tail
+  lamps that brighten while the car slows faster than coasting (`watchBrakes` measures the
+  deceleration over the time since the speed last changed, so a frame rate above the simulation's
+  30 Hz never fakes a stop); a wreck's lamps go dark. Since the aim round, seven kinds draw the
+  Kenney Car Kit's models instead (see [Cars: the Kenney Car Kit](#cars-the-kenney-car-kit)),
+  keeping all of this.
+
+Everything is seeded by map ids (`idHash.ts`), so every device builds the same town, and all of it
+is presentation only: no simulation, collision or wire change.
+
+| Before ("auto", first city)                                        | After ("auto", full detail)                                                                                |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| ![Rhenen by the Cunerakerk before](img/3d/city-rhenen-before.jpg)  | ![Rhenen by the Cunerakerk after: kerbs, zebras, bollards, lamp pool, stars](img/3d/city-rhenen-after.jpg) |
+| ![A Wageningen street before](img/3d/city-wageningen-before.jpg)   | ![The same street after: brick colourways, bins, hedges, moon](img/3d/city-wageningen-after.jpg)           |
+| ![A road through the fields before](img/3d/city-fields-before.jpg) | ![The same road after: verge, lamp pools, stars](img/3d/city-fields-after.jpg)                             |
+| ![A car before](img/3d/city-car-before.jpg)                        | ![Traffic after: head-lamp flares, tail lamps, plates](img/3d/city-traffic-after.jpg)                      |
+
+|                                                                            |                                                                                   |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| ![Shopfronts, an awning, a zebra and a bell gable](img/3d/city-shops.jpg)  | ![Two stepped gables over shopfronts, an awning in front](img/3d/city-gables.jpg) |
+| ![Broadleaf, poplar and conifer along a cycle path](img/3d/city-trees.jpg) | ![The moon and stars over the fields](img/3d/city-moon.jpg)                       |
+
+### Measured cost
+
+Browser: dev build, 1280 × 678 canvas at device pixel ratio 1, median of three runs per spot;
+"city" is the frame with every person and vehicle removed, and the milliseconds are JavaScript
+plus GPU per frame (with `gl.finish`) on a shared, noisy dev machine. Spots: A Rhenen by the
+Cunerakerk, B a Wageningen residential street, C a road through the fields.
+
+| Spot | Quality | City draw calls, before → after | City frame, ms before → after |
+| ---- | ------- | ------------------------------- | ----------------------------- |
+| A    | auto    | 236 → 225                       | 1.13 → 1.98                   |
+| B    | auto    | 242 → 238                       | 1.17 → 1.18                   |
+| C    | auto    | 64 → 74                         | 0.40 → 0.54                   |
+| A    | laag    | 175 → 131                       | 0.95 → 0.79                   |
+| B    | laag    | 162 → 114                       | 0.73 → 0.62                   |
+| C    | laag    | 44 → 44                         | 0.29 → 0.35                   |
+
+With the cast at A: 284 → 292 calls and 2.86 → 3.18 ms at "auto", 230 → 193 calls and
+3.15 → 2.53 ms at "laag". The façade atlas (every wall of a cell in one call) pays for the
+detail, paint, bike, crown and pool meshes, so "auto" stays within the plan's +30 % draw-call
+budget (−5 %, −2 %, +16 %) and "laag" draws a quarter fewer calls than before. Each vehicle
+draws one call more than before (its lamp flares): 9–11.
+
+Cell builds (Node, not jsdom; all cells within 380 m, second of two passes; same machine and
+load for both rows; mean / p90 / max ms):
+
+| Spot         | basic (first city's geometry) | full            |
+| ------------ | ----------------------------- | --------------- |
+| A (41 cells) | 0.88 / 1.8 / 2.8              | 3.3 / 8.4 / 13  |
+| B (39 cells) | 1.05 / 1.7 / 1.9              | 4.8 / 7.7 / 9.2 |
+| C (42 cells) | 0.20 / 0.3 / 1.3              | 0.3 / 0.6 / 1.1 |
+
+A typical full cell costs about one `WORLD_BUILD_BUDGET_MS` (4 ms); the densest town-centre
+cells take two to three, so streaming one in makes that frame longer (see Known limitations).
 
 ## Characters: the glTF cast
 
@@ -288,6 +438,103 @@ has exactly one credits row.
   machine (Node, no GPU), 40 walking characters cost about 3 ms of CPU a frame (mixers, bone
   matrices, skeleton upload data) against 0.2 ms procedural, about 1.9 ms when all are far.
 
+## Cars: the Kenney Car Kit
+
+Spec: `docs/superpowers/specs/2026-09-28-arena-aim-drive-cars-design.md` §3, §8. The owner found
+the slab-built cars too blocky; seven kinds now draw models from Kenney's
+[Car Kit](https://kenney.nl/assets/car-kit) (version 3.1, CC0 — see
+`public/arena/cars/CREDITS.md`), scaled to the simulation's footprint. The bus, the oldtimer and
+the tank have no Kit counterpart and keep procedural bodies, now rounded.
+
+### Pipeline: `npm run arena:pack-cars`
+
+`scripts/arena/pack-cars.ts` (pure halves and tests: `packCars.ts`, `carSources.ts`,
+`carGeometry.ts`, `carBody.ts`, `carMeasure.ts`, `carAtlas.ts`, `zip.ts`) downloads the one owner-approved archive once into
+`.cache/arena/cars/` (gitignored), pinned by URL and sha256 — an archive whose hash moved is
+refused — reads it with a dependency-free zip reader, and writes `public/arena/cars/`:
+
+- **One file per kind** (`<kind>.glb`, 35–51 KB, 277 KB together; budget 1.5 MB): the model turned
+  into the game's frame (x forward, y up, z to the right; the Kit's is x left, z forward) and
+  recentred on its footprint on the ground. The Kit's one texture — a 16 × 4 atlas of flat and
+  gradient swatches — is **baked into vertex colours**, so the files carry no texture. The body's
+  triangles are split into primitives by role, each role a material of that name: **paint** (the
+  kind's body swatches; its vertex colours hold the swatch's shading as a grey the view multiplies
+  the car's colour by), **detail** (everything else in its own colours, the window glass darkened
+  to `CAR_GLASS`, the Kit's number-plate faces recessed to trim), **head** and **tail** (the
+  yellow and red lamp swatches within 30 % of the length from their end), and on the police car
+  **lens-left** / **lens-right** (its roof lamps). Each wheel is its own node, centred for
+  spinning. Normals and UVs go; dedup merges the wheels on one side, never the role materials.
+- **`manifest.json`** (schema `CarManifestSchema` in `src/lib/cityArena/carManifest.ts`, shared by
+  the script and the view): per kind its file, source model, size, the Kit's own paint colour,
+  each wheel (middle, radius, width, whether it steers), each lamp's face, each plate's face and
+  height, and on the police car the flat door panel between the arches for the livery.
+- **`CREDITS.md`**: one row per file.
+
+`--probe` lists every model in the Kit instead. Findings: every car is a `body` node plus four
+separate wheel nodes (`wheel-front-left` …), the left and right wheels mirror images; one material
+`colormap` over a 512 × 512 PNG atlas outside the GLBs (gltf-transform's `readBinary` refuses
+that, so the pack reads their JSON and buffer with the atlas as a resource); about 700 body
+triangles and 332–428 per wheel. The kind mapping:
+
+| Kind      | Kit model          | Paint swatches             | Notes                                                      |
+| --------- | ------------------ | -------------------------- | ---------------------------------------------------------- |
+| `compact` | `hatchback-sports` | green                      |                                                            |
+| `sedan`   | `sedan`            | red                        |                                                            |
+| `sport`   | `sedan-sports`     | red                        | with its spoiler                                           |
+| `police`  | `police`           | light grey and blue-grey   | white all over (the Kit's is black-and-white); roof lenses |
+| `van`     | `van`              | blue                       | the Kit's one-box van, not its box-bodied `delivery`       |
+| `pickup`  | `truck`            | green                      | the Kit's pickup                                           |
+| `tractor` | `tractor`          | blue-grey (its whole body) | yellow rims; four lamps added (the Kit's tractor has none) |
+
+`npm run arena:check-cars` (CI verify job, next to `arena:check-characters`; both run the shared
+`packAudit.ts`) checks that every manifest file exists, no stray `.glb` sits beside them, the set
+stays within 1.5 MB and every file has exactly one credits row.
+
+### Runtime
+
+| Module            | Responsibility                                                                                  |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| `carAssets.ts`    | Loads the manifest and every kind's file lazily with `GLTFLoader`; fails once, stays procedural |
+| `gltfVehicle.ts`  | `buildGltfVehicleModel`: a `VehicleModel` from a kind's asset, its geometry built once per kind |
+| `vehicleLooks.ts` | Heights, `bodyColour` and the lens materials, shared by the Kit and the procedural builders     |
+| `vehicles3d.ts`   | `createVehicleFactory`: the Kit model once loaded, the procedural one before and for the others |
+
+- **Loading and fallback.** The first vehicle asked for starts the download
+  (`requestCarAssets`). Until it lands — and for the rest of the session if it fails — every
+  vehicle is procedural. A network failure is a Sentry breadcrumb
+  (`isBenignTransientClientFetchError`); a missing or broken file is `captureException` with
+  `area: cars`. When the Kit arrives, each car's pool **variant** changes from `<kind>:<colour>` to
+  `gltf:<kind>:<colour>` (interned, so asking every frame allocates nothing), and the entity sync
+  swaps it once, keeping its steering memory. `disposeSharedAssets` frees the Kit and the geometry
+  built from it.
+- **Scale.** A kind's body is stretched to `lengthOf × widthOf` and its `VEHICLE_HEIGHT_M`
+  (the Kit's cars are stubby: a sedan by 1.65 along, 1.2 across, 1.12 up). The wheels stay round:
+  they grow by the height's scale, across by the width's, sit at the stretched axle positions and
+  touch the ground.
+- **Materials.** The body is one mesh with four draw groups in a fixed order: the paint
+  (`shadedPaintMaterial(bodyColour(kind, colour))`, one per colour, vertex shading kept), the
+  shared vertex-coloured detail, the headlamp glow and the tail lamps' running glow — the slot
+  `rigLamps` finds, so braking lights them exactly as on a procedural car. Flares sit at the
+  manifest's lamp faces. Our yellow Dutch plates (`addPlateAt`) stand on the Kit's plate recesses,
+  and on the police car a band of orange and blue stripes (`addPoliceStripes`) runs along the door
+  panel; both merge into the detail group. The police car's roof lamps are its light-bar lenses
+  and flash blue then red as before. A wreck swaps every material for the char.
+- **Sharing.** The stretched body, wheel and lens geometries are built once per kind and shared by
+  every car of it (`VehicleModel.shared`); a car owns only its mesh objects, material array and
+  flares, so freeing it leaves the kind's geometry alone.
+- **Cost.** Each car draws in exactly as many calls as its procedural model — 9 (the police car
+  11: two lenses) — with about 2 100–2 500 triangles against 700–1 550 (the Kit's tyres and rims
+  are 332–428 triangles a wheel). The whole set is 277 KB to download.
+
+### The rounder bus, oldtimer and tank
+
+`slab` can now round a part's edges and corners (`round`: three's `RoundedBoxGeometry` with two
+facets a quarter turn, welded so it merges with the other parts). The bus has a rounded body (its
+destination board and windscreen moved clear of the rounded roof edge) and bevelled skirt and
+roof units; the oldtimer a rounded body and glass house and sixteen-sided wings; the tank a
+rounded hull over its glacis, bevelled tracks and mantlet, and more sides on its turret (18), road
+wheels, gun and hatch. Footprints and heights are unchanged; vertices grow by 1.2–1.5×.
+
 ## Input
 
 ### Camera-relative movement
@@ -296,18 +543,21 @@ has exactly one credits row.
 `WorldInput.move` into the camera's frame before it reaches the (unchanged) simulation: on foot,
 and for an analog stick in a car, "forward" always means "along the camera", while a keyboard
 driving a car keeps its tank steering (W gas, A/D steer) untouched. The flat sim's `aim` angle is
-replaced by the camera's own look yaw, since 3D gives the player no 2D canvas point to aim at.
+replaced by the heading toward what the crosshair covers (see [Aiming](#aiming)), since 3D gives
+the player no 2D canvas point to aim at.
 `src/lib/cityArena/input/cameraYaw.ts` supplies the camera's own motion besides the mouse: the
 third-person chase eases behind the car after `CHASE_IDLE_S` = 1.2 s of a resting mouse, the
 driver's seat is bolted to the car and only offset by the mouse, and — with no aim stick held — a
 lone movement stick slowly turns the camera toward the walking direction so a touch player without
-a second stick can still look around.
+a second stick can still look around, until the touch look pad has turned the camera (see
+[Touch](#touch)); from then on the camera is the player's to turn.
 
 ### Mouse-look and the lock-free fallback
 
 `src/lib/cityArena/input/mouseLook.ts` (`attachMouseLook`) binds to the 2D canvas: a primary click
 requests the browser's pointer lock, and while locked, pointer movement turns yaw/pitch at
-`MOUSE_SENSITIVITY_RAD_PER_PX` = 0.0024 rad/px. Pointer lock is refused in some embedded browsers
+`MOUSE_SENSITIVITY_RAD_PER_PX` = 0.0024 rad/px, times the player's sensitivity and the sights'
+zoom; the right button aims down the sights (see [Aiming](#aiming)). Pointer lock is refused in some embedded browsers
 and sandboxed frames (`requestPointerLock()` rejecting is expected, not a bug) — that refusal is a
 Sentry breadcrumb, and mouse-look falls back to **lock-free** mode: plain `pointermove` events over
 the canvas turn the camera without any button held, and every click still retries the real lock.
@@ -330,10 +580,140 @@ third person, ±30° in first person; `useView3d` re-applies the limits whenever
 
 ### Touch
 
-The existing camera-relative touch aim stick pushes the camera yaw the same way a gamepad stick
-does (`stickTurnedYaw` in `cameraYaw.ts`); without an aim stick held, the movement stick nudges the
-camera as described above. No new touch controls were added for 3D — the existing twin-stick and
-single-stick layouts (`docs/tech/arena/README.md`, Plan 6) drive it unchanged.
+2D, split screen and the TV controller keep their controls (the twin-stick or single-stick layouts
+of `docs/tech/arena/README.md`, Plan 6). In 3D on a touch device the right-hand side changes, so
+that turning to look never pulls the trigger (aim round §6):
+
+- **Look pad** (`components/cityArena/TouchLookPad.tsx`, `input/touchLook.ts`): the right 55 % of
+  the playfield, where the aim stick sits in 2D, under the buttons and the radar. One finger at a
+  time — a second finger is ignored — and a drag turns the camera at `TOUCH_LOOK_RAD_PER_PX` =
+  0.008 rad/px times **Kijkgevoeligheid** (`touchLookSensitivity`, 0,25–2,5×, default 1; a slider
+  under Besturing in the menu on touch devices). Dragging right turns right, up looks up. It never
+  fires. The turn adds up between frames and `view3d/touchLook3d.ts` takes it once per frame: the
+  yaw goes onto mouse-look's (so the chase camera counts it as a look and waits before easing
+  behind the car), the pitch is a tilt on top of mouse-look's inside the mode's range
+  (`TouchCamera`, whose range `useView3d` updates with the camera mode).
+- **Schieten**: a big round button in the bottom-right corner, under the thumb. Held, it fires (the
+  `buttons` source of `fire`); a drag that starts on it also feeds the look pad, and the pointer is
+  captured, so one thumb can keep firing while it tracks a target and may wander off the button.
+- **Richten** (scope icon, pressed while up): toggles the `buttons` source of the foundation's
+  `ads` button. It goes down, and is disabled, with the fist or the bat, on the death screen and
+  while the menu, the map or a mission offer is open; it also goes down when the page is hidden
+  (the input is cleared then). On a short screen (≤ 480 px tall, a phone held sideways) it sits
+  beside Schieten instead of above it, clear of the radar.
+- Wapen, Instappen/Uitstappen and (in a car) Radio stay, to the left of that pair. In a car the
+  left stick steers as before, the pad turns the camera and Schieten drive-bys.
+- **Aim assist** (`input/aimAssist.ts`, touch only): while the crosshair is within
+  `ASSIST_CONE_RAD` (2°) of a living target's body — other players, officers and pedestrians within
+  `ASSIST_RANGE_M` (60 m); never yourself and never a car, so never your own — the pad's turn is
+  multiplied by `ASSIST_FRICTION` (0.45). No auto-rotate, no auto-fire, and the mouse is never
+  slowed. The look is measured from the player's (or car's) eye along the camera's yaw and pitch;
+  the over-the-shoulder camera's half-metre offset is a few degrees at close range, which the
+  target's own width absorbs.
+- A first-run tip explains the layout ("… rechts slepen om rond te kijken · houd Schieten vast om
+  te schieten · Richten zoomt in"), stored under `h3-arena-touch3d-tip-v1` apart from the 2D tip,
+  and the footer hint names the look pad and Schieten.
+- A stick surface that unmounts mid-drag lets go of its stick, so the 2D aim stick cannot stay
+  aiming and firing when 3D takes over under the thumb.
+
+|                                                                                            |                                                                                                              |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| ![3D on a phone: look pad on the right, Richten over Schieten](img/3d/3d-touch-layout.jpg) | ![The same held sideways: Richten beside Schieten, clear of the radar](img/3d/3d-touch-layout-landscape.jpg) |
+
+## Aiming
+
+Shooter aiming on desktop (aim spec `docs/superpowers/specs/2026-09-28-arena-aim-drive-cars-design.md`
+§5): the crosshair sits at the centre, what is under it is what you shoot, the right mouse button
+aims down the sights, and `M` opens the map.
+
+|                                                                                                               |                                                                                          |
+| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| ![The pistol aimed down the sights: the slide under the crosshair, the view at 50°](img/3d/3d-ads-pistol.jpg) | ![The rifle's scope at 24°: dark tube, duplex reticle, lit dot](img/3d/3d-ads-rifle.jpg) |
+
+Over the shoulder with the sights up, an Uzi burst heading for the crosshair:
+![The camera pulled in to 1.9 m at 45°](img/3d/3d-ads-shoulder.jpg)
+
+### The crosshair and the aim probe
+
+- **Centred crosshair.** `overlay3d.ts` draws the crosshair at the screen's centre in both camera
+  modes, always (nothing while dead). Its old placement on the flat shot line 25 m ahead is gone.
+- **Aim probe** (`aimProbe.ts`, fed by `aimWorld.ts`, run by `frameAim.ts`). Each frame, right
+  after the camera is placed, a ray from the camera through the screen centre is tested against
+  people (upright capsules, 0.4 m radius, 1.8 m tall; bodies as 1 m × 0.35 m boxes), vehicles
+  (boxes turned to their heading, sized by `lengthOf`/`widthOf`/`vehicleHeight`), the standing
+  buildings (footprint prisms up to `buildingHeight(levels)`, walls and flat top; destroyed ones
+  looked through) and the ground plane. Buildings are asked for per 8 m step of the ray
+  (`PROBE_STEP_M`) through each loaded tile's building buckets (`tileIndex.tileBuildingGrid`),
+  never across the whole map; the walk stops at the first step holding a hit, or once the ray has
+  climbed over every roof. Your own body and car are looked through, and over the shoulder a hit
+  between the camera and you is ignored. The reach is the held weapon's range past you, never less
+  than `AIM_PROJECT_DISTANCE_M` (25 m), so a fist still aims where the camera looks; nothing hit
+  within it is the sky, the point at reach along the ray. A ray that meets the ground before it
+  gets to you aims where it passes you. A probe allocates nothing (scalar maths on module
+  scratch, the world's lists reuse their entries, the buildings come through a visitor).
+  `View3dHandle.aimPoint()` hands the point (world x/y, height, distance, what it hit) to the
+  runtime.
+- **The simulation's aim** (`view3d/frame3d.ts`, `crosshairHeading` in `input/cameraInput.ts`) is
+  the flat heading from the player — or the centre of the car they drive — to the aim point. Over
+  the right shoulder that is what makes the round go where the crosshair points: the camera's own
+  line runs past the shoulder offset. With no point (before the first frame, dead) or one within
+  `MIN_AIM_REACH_M` (1 m) of the shooter, the camera yaw. The point is the last frame's: the input
+  is read before the frame renders. A gamepad aim stick still wins.
+- **Rounds head for the aim point** (`aimedHeight` in `muzzleBlend.ts`, `roundAims.ts`). The local
+  shooter's tracers, rockets and their trails are drawn from the muzzle's height straight to the
+  aim point's height at its distance, and on along that slope beyond it, never below the ground; a
+  rocket noses up or down to match. Each round keeps the aim it was fired at, so it does not bend
+  as the crosshair moves on: captured the first frame it is seen, from the point the frame's input
+  read (the last frame's probe, `probeFrame` hands the cast that one before probing anew), so a
+  flick does not tilt the streak away from the shot. Sideways the rounds still settle onto their
+  flat line over `CONVERGE_M`. Everyone else's rounds are drawn as before. At the wheel of a tank
+  the sights and the probe's reach follow its cannon (`localWeapon`), which is what it fires.
+
+### Aiming down the sights
+
+The right mouse button, held, aims down the sights. `mouseLook.ts` writes the button's bit to the
+`pointer` source of the input state's `ads` button — a press or release made while another button
+is held reaches the page as a `pointermove`, and counts too (`pointerAim.ts` likewise fires on a
+left press made while the right is held). It works only while the mouse is in the game (the pointer
+locked, or the lock-free fallback), lets go when the lock is lost or released or the window loses
+focus, and the playfield keeps the browser's context menu away. The simulation slows walking
+(not with fists or the bat, which have no sights: `walkingInput`) and narrows a spraying gun's
+cone (the round's foundation, protocol 5); the view (`cameraRig.ts`, `viewmodel.ts`,
+`overlay3d.ts`):
+
+| Held                                    | First person, `ADS_FOV_DEG` | Over the shoulder          | In a car (chase) |
+| --------------------------------------- | --------------------------- | -------------------------- | ---------------- |
+| pistol, Uzi, shotgun                    | 70 → 50°                    | boom 3.6 → 1.9 m, 60 → 45° | 65 → 45°         |
+| rifle                                   | 70 → 24°, scope on the HUD  | as above (no scope)        | 65 → 45°         |
+| rocket launcher (and the tank's cannon) | 70 → 45°                    | as above                   | 65 → 45°         |
+| fists, bat                              | no sights                   | no sights                  | no sights        |
+
+- The sights come up and go down over `ADS_EASE_S` = 0.15 s (`easeSights`, shaped by a smoothstep
+  in `sightsShare`); a weapon swap drops them, and they lower over a body.
+- In first person the hands bring the gun in until its sight point (`viewmodel.ts`: the top of the
+  pistol's slide, the front sight post, the shotgun's rib, the launcher's sight on the left of its
+  tube) sits on the crosshair, the barrel running straight ahead under it; the bob and the idle
+  sway are stilled and the hands grow from 0.48 to `SIGHTS_SCALE` = 0.75 of their size so the gun
+  reads. The hands keep a lens of their own (`HANDS_FOV_DEG` = 70°) while the city zooms, as
+  shooters draw their view models, so the gun does not swell with the zoom; the muzzle handed to
+  the tracers is moved to where the zoomed city draws the hands' barrel.
+- The rifle's scope fades in over the last 40 % of the ease: a dark tube round a clear circle
+  (0.42 of the screen's shorter side), its rim, a duplex reticle with a lit red dot; the rifle
+  model goes once the scope is fully up. The scope shows only behind the eyes on foot.
+- In a car the camera zooms but the car keeps driving.
+
+### Mouse feel and M for the map
+
+- **Mouse feel.** Mouse-look turns by the raw pointer-lock deltas — no smoothing, no acceleration —
+  × `MOUSE_SENSITIVITY_RAD_PER_PX` (0.0024 rad/px) × the player's **Muisgevoeligheid** (a slider in
+  the menu's 3D group, 0.25–2.5×, default 1; `mouseSensitivity` in the settings, where a stored
+  value out of range falls back on its own and keeps the other settings) × the sights' zoom,
+  `tan(fov / 2)` over the unzoomed `tan(fov / 2)` (`RigPose.zoom`, handed out by
+  `View3dHandle.lookZoom()`), so a zoomed view does not whip.
+- **M — map.** `KeyM` (`keyboard.ts`, `MAP_KEY`) opens the same map as the HUD's map button, in 2D
+  and 3D, and a second M closes it (as Escape does). It reaches its hook although the open map
+  suspends the other game keys, and is ignored while typing and while the menu is open. The
+  controls hint names it ("M kaart"), and in 3D the sights ("rechtermuisknop vizier").
 
 ## Cockpit
 
@@ -371,6 +751,9 @@ In first person at the wheel you look out of the car from the driver's seat (imm
   tank a hatch with a coaming ring, two vision blocks on the deck ahead, its glacis and two grips
   instead of a wheel. The police car's light bar glows blue then red on the windscreen's top while
   its siren runs.
+- **Shooting from the seat.** During a drive-by the right hand leaves the wheel and holds the gun
+  out of the window or over the dash (`cockpitGun.ts`), while the left keeps turning the wheel —
+  see [Drive-bys](#drive-bys).
 - **Cost.** Geometry is merged and cached per kind (the paint per kind and colour) and freed with
   the other shared assets (`disposeCockpitAssets` in `disposeSharedAssets`); the cockpit is about
   ten draw calls and allocates nothing per frame.
@@ -390,9 +773,9 @@ shooter's muzzle instead (immersion spec §5):
 - **Convergence** (`muzzleBlend.ts`). A round is drawn at its point on the flat line plus the
   muzzle's offset from the line's start, and that offset fades out (a smoothstep) over the first
   `CONVERGE_M` = 15 m flown. The round keeps its true speed and direction the whole way — it leaves
-  the barrel, then settles onto the line — so it lands exactly where the flat hit-scan hits and the
-  crosshair (still drawn on the true line) points. A tracer's tail is the same point 3 m back and
-  never reaches behind the muzzle.
+  the barrel, then settles onto the line — so it lands exactly where the flat hit-scan hits. Your
+  own rounds also climb or dip toward what the crosshair covers (see [Aiming](#aiming)). A
+  tracer's tail is the same point 3 m back and never reaches behind the muzzle.
 - **Rockets and shells** (`projectiles3d.ts`) start at the launcher tube or tank barrel and keep the
   muzzle they left from, so a strafing shooter does not swing a rocket already in flight; their
   smoke trails are laid through the same blend.
@@ -400,8 +783,52 @@ shooter's muzzle instead (immersion spec §5):
   go to the nearest shooter's muzzle within `MUZZLE_OWNER_REACH_M` (1.5 m) — your own when the flash
   is yours. In first person your own flame stays with the view model, and the street light now
   comes from the drawn gun.
-- A shooter whose muzzle is unknown — out of draw distance, or seated in a car (a drive-by) — is
-  drawn exactly as before, from the body.
+- A driver's rounds leave the gun held out of the window (see [Drive-bys](#drive-bys)). A shooter
+  whose muzzle is unknown — out of draw distance — is drawn exactly as before, from the body.
+
+## Drive-bys
+
+A player at the wheel who holds a gun shows it while they shoot: the arm and the weapon reach out
+of the window on the aim side (aim spec
+`docs/superpowers/specs/2026-09-28-arena-aim-drive-cars-design.md` §7). The simulation already
+fired drive-bys from the driver's seat (`combat.applyFire`); this is presentation only, with no
+simulation or wire change.
+
+- **Which window** (`driveByPose.ts`). An aim left of the car's heading leans out of the driver's
+  window (Dutch cars: the wheel is on the left), right of it out of the passenger window — the
+  driver reaching across the cabin — and within `FRONT_CONE_RAD` (35°) of ahead over the dashboard,
+  through the (implied) open windscreen. A side is kept `SIDE_HYSTERESIS_RAD` (5°) past its edge, so
+  an aim on the line does not flip it every frame. A bus driver always leans out of the driver's
+  window (the right side is doors); a tank shows no arm (it fires its cannon). The driver always
+  shoots with the right hand, so the left one stays on the wheel.
+- **The pose.** The forearm rests on the sill — `widthOf(kind) / 2 − 0.3 m` out from the centre
+  line, 0.26 m below the driver's eye (`COCKPITS`) and a little ahead of it — or over the
+  dashboard's near edge. It swings toward the aim, at most `ARM_SWING_RAD` (40°) off square to its
+  window and rising a little; the wrist turns the gun the rest of the way, at most 90°, so a bus
+  driver's gun never points back into the bus. The gun is level along the aim; the upper arm (the
+  sleeve) runs back to the driver's right shoulder.
+- **When it shows.** For `SHOWN_AFTER_SHOT_S` (1.2 s) after a shot and, for you, while you aim
+  down the sights (`View3dFrame.ads`, from the input's `ads` flag); never for fists or the bat.
+- **Third person, on every client** (`driveBy3d.ts`, `driveBys.ts`). The arm is an object of its
+  own in the car's frame, stood where the car is and turned to its heading: the car body is left
+  alone, so any body wears it. It is the view model's right forearm (skin tone, bead bracelet)
+  with a sleeve in your skin (you are shirtless) or another player's vest colour, and
+  `createWeaponModel(weapon)` in the fist, kicking up on each shot. `driveBys.ts` keeps one pooled
+  arm per armed driver within the characters' draw distance. A driver's shot is their next-shot
+  tick moving on (else, for another player, a fresh muzzle flash at their seat). Your aim is the
+  frame's; another driver's is their latest muzzle flash's `angle`, since the simulation holds a
+  driver's `facing` on the car's heading.
+- **The shots leave the gun.** The gun's barrel end joins the muzzle map under the driver's id, so
+  the flash (matched to the driver by their seat, as before) and the rounds and rockets leave the
+  gun out of the window.
+- **First person** (`cockpitGun.ts`, `cockpit3d.ts`). In the cockpit the right hand leaves the
+  wheel — the left keeps turning it — and the same arm hangs in the cockpit's car frame, with the
+  view model's muzzle flash at its barrel and a damped kick (`COCKPIT_KICK_SHARE`). Its barrel end
+  is your muzzle in first person (`ViewModelPass.muzzleWorld`), and the world's flame for your own
+  shots stays hidden, as on foot.
+- **Cost.** The forearm and each sleeve colour's upper arm are built once and freed with the shared
+  assets (`disposeDriveByAssets`); an arm is two meshes plus its weapon, and a frame allocates
+  nothing.
 
 ## Destructible buildings
 
@@ -514,12 +941,17 @@ damage sources table above.
   camera is only briefly outside.
 - **Device pixel ratio cap** (`MAX_PIXEL_RATIO`): 1 at "laag", 1.5 at "auto", 2 at "hoog".
 - **Cell build budget**: `WORLD_BUILD_BUDGET_MS` = 4 ms per frame for streaming in new/rebuilt
-  city cells, nearest first; a cell whose build would exceed the budget waits for a later frame.
+  city cells, nearest first; a cell whose build would exceed the budget waits for a later frame
+  (but every frame builds at least one). A full-detail cell takes about 3–5 ms, a basic one about
+  1 ms (see [Measured cost](#measured-cost)).
+- **City detail by quality** (`cityDetail.ts`): "laag" builds the first city's geometry; "auto"
+  and "hoog" add façades, street detail, clutter, tree species, stars, moon and lamp pools.
 - **Particle budget by quality** (`cast3d.ts`, `EFFECT_PARTICLES`): 600 (laag) / 1200 (auto) / 1600
   (hoog) particles alive at once across fire and smoke together, set once by the first frame's
   quality and shared with the destruction system's dust.
-- **Draw calls**: roughly 15–25 per dense city cell (190–290 across a typical view), 8–10 per
-  vehicle, and characters/pickups/weapons each merge to one or two draw calls via shared,
+- **Draw calls**: a dense view draws about 225–240 city calls at "auto" and 115–130 at "laag"
+  (every wall of a cell is one façade-atlas call), 9–11 per vehicle (body groups, four wheels,
+  lamp flares — a Kenney car draws in exactly as many as its procedural model), and characters/pickups/weapons each merge to one or two draw calls via shared,
   vertex-coloured, per-look/per-kind geometry. A glTF character is one draw call plus one per
   accessory (see [Characters: the glTF cast](#characters-the-gltf-cast) for its CPU cost and
   level of detail). The first-person cockpit adds about ten (interior,
@@ -529,13 +961,26 @@ damage sources table above.
 ## Known limitations
 
 - **Bullets stay in the simulation's flat plane.** The 2D simulation has no concept of height, so a
-  bullet's vertical position in 3D is presentation only: rounds are drawn from their shooter's
-  muzzle and converge onto the in-plane line at chest height within 15 m (`CONVERGE_M`); aiming up
-  or down changes where the 3D camera looks, not what the flat hit-scan can actually hit. The
-  crosshair is deliberately drawn on the true in-plane shot line so it never lies about this.
-- **Drive-by shots start at the car's centre.** A player seated in a car has no drawn body, so
-  shots fired from the driver's seat (and a wrecked tank's) are drawn from the chest-height line as
-  before; only a tank's cannon starts at its barrel end.
+  round's height in 3D is presentation only: your rounds climb or dip toward the crosshair's aim
+  point and everyone else's converge onto the chest-height line within 15 m (`CONVERGE_M`). The
+  flat heading does go through the aim point, but the hit-scan stays level: a shot at a
+  first-floor window or up into the sky still flies at chest height through whatever stands in
+  that direction, and a round drawn landing on a roof is not a hit there.
+- **Aiming at the ground just ahead swings the shot over the shoulder.** Looking steeply down in
+  third person puts the aim point on the ground a metre or two in front of you, beside the
+  camera's shoulder-offset line; the flat heading to it then turns noticeably away from the
+  camera's yaw (within 1 m it falls back to the yaw). Such shots mostly go into the street anyway.
+- **The aim point is one frame old.** The input is read before the frame renders, so a fast flick
+  aims the round at what the crosshair covered one frame earlier.
+- **Your own side drive-by sits on the far side of the chase camera.** The third-person camera
+  looks along your aim from behind the car, so an arm out of a side window reaches away from it,
+  mostly behind the roof, and over the dash the roof hides it; the flash and rounds still show.
+  Everyone else sees the arm from where they stand, and you see it in first person — or with a
+  gamepad or touch aim stick, which aims off the camera.
+- **Another driver's gun points along their last shot.** Aim is not on the wire and the
+  simulation holds a driver's `facing` on the car's heading, so a remote drive-by points along
+  their latest muzzle flash until the next one; aiming down the sights without shooting shows the
+  arm on your own screen only.
 - **The cockpit's siren glow shows only for a police-driven car.** The simulation turns a police
   car's lights on only while the police AI drives it (`policeCarIds`), so a player at the wheel of a
   stolen police car sees no glow on the windscreen — as the car's own light bar stays dark for
@@ -564,9 +1009,26 @@ damage sources table above.
 - **Traffic can pop in beyond 80 m.** In 3D the simulation's out-of-sight rect is a square
   `VIEW3D_POPULATION_HALF_M` = 80 m each way around the player, while the fog closes at 260–520 m,
   so cars and pedestrians may visibly spawn or despawn between 80 m and the fog.
-- **Phones at "laag" still need a smoke test.** A dense view draws roughly 190–290 calls (see
-  Performance notes), above spec §8's budget; 30 fps on a mid-range phone at "laag" is unverified
-  on real hardware.
+- **Phones at "laag" still need a smoke test.** A dense view draws roughly 115–130 city calls, 190
+  with the cast (see Performance notes), above spec §8's budget; 30 fps on a mid-range phone at
+  "laag" is unverified on real hardware.
+- **Dense full-detail cells build over the budget.** A town-centre cell at "auto" or "hoog" takes
+  8–13 ms to build on the dev machine (the budget is 4 ms a frame, and every frame builds at least
+  one cell), so streaming one in costs one long frame. Most cells take one budget or less.
+- **Vehicle detail is not quality-gated.** Bevels, trim, plates and lamp flares show at every
+  quality, "laag" included; the flares cost one draw call per vehicle. The Kenney cars draw at
+  every quality too: the same calls as the procedural cars, about twice their triangles.
+- **The Kenney cars are stretched.** The Kit's cars are stubby, so their bodies stretch more along
+  than up (a sedan 1.65× against 1.12×); the wheels stay round at the height's scale, which leaves
+  a gap in front of and behind each wheel in its stretched arch on the sedan and the sports car,
+  and the tractor, whose big rear wheels are its back end, about 10 cm short of its 4 m.
+- **The cockpit is still the procedural one.** First person at the wheel draws the cockpit from
+  `cockpitSpecs.ts` (read off the procedural shapes), not the Kit's interior; your own car hides in
+  first person, so the two never show together.
+- **The Kit's quirks show through.** The Kit's plate recess is a little taller than a Dutch plate,
+  so a dark rim shows above and below it; the police car's push bar turns white with its body (both
+  are the atlas's blue-grey) and its livery is a short band of stripes on the doors, between the
+  arches; the van is the Kit's one-box van, with windows all along.
 - **The glTF cast holds long guns like a pistol.** The packs' gun clips are one-handed, so the
   shotgun, rifle and rocket launcher sit in the right hand with the left arm free; officers wear
   the SWAT helmet, so there is no cap or light-blue shirt as on the procedural officer.

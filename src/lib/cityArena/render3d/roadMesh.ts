@@ -42,8 +42,13 @@ type Station = { point: Point; direction: Point };
 /** A street lamp's position and the heading of its arm, toward the road. */
 export type LampPlacement = { x: number; y: number; heading: number };
 
-/** The polyline without zero-length segments. */
-function distinctPoints(points: readonly Point[]): Point[] {
+/**
+ * The polyline without zero-length segments.
+ *
+ * @param points - The polyline.
+ * @returns Its points, repeats dropped.
+ */
+export function distinctPoints(points: readonly Point[]): Point[] {
   return points.filter(
     (point, index) =>
       index === 0 ||
@@ -65,8 +70,15 @@ function perpendicular([x, y]: Point): Point {
   return [-y, x];
 }
 
-/** The mitred offset at vertex `index`: a unit direction across the ribbon and its stretch. */
-function mitre(
+/**
+ * The mitred offset at vertex `index` of a polyline: the unit direction across it (to its left in
+ * (x, y)) and how far to stretch an offset there so the edges stay parallel, clamped at sharp bends.
+ *
+ * @param points - The polyline, without repeated points.
+ * @param index - The vertex.
+ * @returns The direction across and its stretch.
+ */
+export function mitre(
   points: readonly Point[],
   index: number,
 ): { across: Point; stretch: number } {
@@ -102,8 +114,17 @@ function pushFlatVertex(
   );
 }
 
-/** A flat disc of `radius` around a world point, facing up. */
-function pushDisc(
+/**
+ * A flat disc of `radius` around a world point, facing up.
+ *
+ * @param buffers - The layer's buffers.
+ * @param centre - The disc's centre, world metres.
+ * @param radius - Its radius, metres.
+ * @param height - Metres above the ground.
+ * @param origin - The world point that is the buffers' local zero.
+ * @param uvOf - The UV at a world point.
+ */
+export function pushDisc(
   buffers: MeshBuffers,
   centre: Point,
   radius: number,

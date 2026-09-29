@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Point } from "../world/projection";
 import {
+  ADS_WALK_FACTOR,
   PLAYER_RADIUS_M,
   WALK_ACCEL_MPS2,
   WALK_SPEED_MPS,
@@ -24,6 +25,21 @@ describe("stepPlayer", () => {
     );
     expect(halfSpeed.y).toBeCloseTo(2.75);
     expect(halfSpeed.facing).toBeCloseTo(Math.PI / 2);
+  });
+
+  it("walks slower while aiming down the sights, and at full pace again after", () => {
+    let walker = start;
+    for (let tick = 0; tick < 30; tick++)
+      walker = stepPlayer(
+        walker,
+        createInput({ move: [1, 0], ads: true }),
+        1 / 30,
+        free,
+      );
+    expect(walker.speed).toBeCloseTo(WALK_SPEED_MPS * ADS_WALK_FACTOR);
+    for (let tick = 0; tick < 30; tick++)
+      walker = stepPlayer(walker, createInput({ move: [1, 0] }), 1 / 30, free);
+    expect(walker.speed).toBeCloseTo(WALK_SPEED_MPS);
   });
 
   it("ramps up to the walking speed instead of teleporting", () => {

@@ -175,6 +175,8 @@ describe("ArenaSettingsSchema", () => {
       quality: "auto",
       view: "2d",
       camera3d: "third",
+      mouseSensitivity: 1,
+      touchLookSensitivity: 1,
     });
     expect(
       ArenaSettingsSchema.safeParse({ forceLayout: "tablet" }).success,
@@ -191,6 +193,21 @@ describe("ArenaSettingsSchema", () => {
     expect(ArenaSettingsSchema.parse({}).radioStation).toBeUndefined();
   });
 
+  it("keeps a mouse sensitivity within 0.25–2.5×; out of range, only it falls back", () => {
+    expect(
+      ArenaSettingsSchema.parse({ mouseSensitivity: 1.5 }).mouseSensitivity,
+    ).toBe(1.5);
+    expect(
+      ArenaSettingsSchema.parse({ mouseSensitivity: 3, sound: false }),
+    ).toMatchObject({ mouseSensitivity: 1, sound: false });
+    expect(
+      ArenaSettingsSchema.parse({ mouseSensitivity: 0.1 }).mouseSensitivity,
+    ).toBe(1);
+    expect(
+      ArenaSettingsSchema.parse({ mouseSensitivity: "snel" }).mouseSensitivity,
+    ).toBe(1);
+  });
+
   it("accepts the view and 3D-camera choices, and rejects anything else", () => {
     expect(
       ArenaSettingsSchema.parse({ view: "3d", camera3d: "first" }),
@@ -201,5 +218,20 @@ describe("ArenaSettingsSchema", () => {
     expect(
       ArenaSettingsSchema.safeParse({ camera3d: "over-the-hood" }).success,
     ).toBe(false);
+  });
+
+  it("keeps the Kijkgevoeligheid between 0.25 and 2.5, resetting only that one when out of range", () => {
+    expect(
+      ArenaSettingsSchema.parse({ touchLookSensitivity: 1.75 })
+        .touchLookSensitivity,
+    ).toBe(1.75);
+    for (const outOfRange of [0.2, 3, "fast"]) {
+      const parsed = ArenaSettingsSchema.parse({
+        touchLookSensitivity: outOfRange,
+        sound: false,
+      });
+      expect(parsed.touchLookSensitivity).toBe(1);
+      expect(parsed.sound).toBe(false);
+    }
   });
 });

@@ -8,13 +8,16 @@ export function clampToUnit(vector: [number, number]): [number, number] {
   return [vector[0] / length, vector[1] / length];
 }
 
-/** Buttons a device can hold down. */
-export type ButtonName = "fire" | "enter" | "weaponNext";
+/**
+ * Buttons a device can hold down. `ads` is aiming down the sights: the right mouse button, or the
+ * touch sights toggle (held for as long as it is switched on).
+ */
+export type ButtonName = "fire" | "enter" | "weaponNext" | "ads";
 
 /** Where a button press comes from (keys, the mouse, or the on-screen buttons); the sources are OR-ed together. */
 export type InputSource = "keyboard" | "pointer" | "buttons";
 
-/** Held state of the three buttons. */
+/** Held state of the buttons. */
 export type ButtonState = Record<ButtonName, boolean>;
 
 /**
@@ -41,7 +44,12 @@ export type InputState = {
   snapshot(): WorldInput;
 };
 
-const RELEASED: ButtonState = { fire: false, enter: false, weaponNext: false };
+const RELEASED: ButtonState = {
+  fire: false,
+  enter: false,
+  weaponNext: false,
+  ads: false,
+};
 
 /** Creates an empty input state. */
 export function createInputState(): InputState {
@@ -114,6 +122,7 @@ export function createInputState(): InputState {
       fire: held("fire"),
       enter: held("enter"),
       weaponNext: held("weaponNext"),
+      ...(held("ads") ? { ads: true } : {}),
     }),
   };
 }

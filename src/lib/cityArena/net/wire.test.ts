@@ -82,10 +82,16 @@ describe("input wire format", () => {
       "enter",
       "weaponNext",
       "moveIsAnalog",
+      "ads",
     ] as const) {
       const back = decodeInput(encodeInput(1, createInput({ [key]: true })));
       expect({ key, value: back.input[key] }).toEqual({ key, value: true });
     }
+  });
+
+  it("leaves aiming down the sights off when the flag is not set", () => {
+    const back = decodeInput(encodeInput(1, createInput({ fire: true })));
+    expect(back.input.ads).toBeUndefined();
   });
 
   it("clamps a move outside the unit range instead of overflowing the frame", () => {
@@ -257,6 +263,16 @@ describe("snapshot wire format", () => {
   it("clamps over-max vehicle health when decoding a snapshot row", () => {
     const snapshot = encodeSnapshot(boot(), 0, {});
     snapshot.v = [[199, 1, 0, 0, 0, 0, 0, 200, 0, 0]];
+    expect(decodeSnapshot(snapshot).vehicles[0]!.health).toBe(180);
+  });
+
+  it("clamps over-max vehicle health when encoding a snapshot row", () => {
+    const state = {
+      ...boot(),
+      vehicles: [{ ...createVehicle(201, "sedan", [0, 0], 0, 0), health: 230 }],
+    };
+    const snapshot = encodeSnapshot(state, 0, {});
+    expect(snapshot.v[0]![7]).toBe(180);
     expect(decodeSnapshot(snapshot).vehicles[0]!.health).toBe(180);
   });
 

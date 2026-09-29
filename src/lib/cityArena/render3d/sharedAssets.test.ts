@@ -1,6 +1,11 @@
 import { Mesh, type BufferGeometry, type Material } from "three";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  carAssetsReady,
+  loadCarAssets,
+  resetCarAssetsForTests,
+} from "./carAssets";
+import {
   characterAssetsReady,
   loadCharacterAssets,
   resetCharacterAssetsForTests,
@@ -8,6 +13,7 @@ import {
 import { buildCharacterMesh, characterMaterials } from "./characterRig";
 import { LOOKS } from "./characterLooks";
 import { createCockpit3d } from "./cockpit3d";
+import { createDriveBy3d } from "./driveBy3d";
 import { createPickup3d } from "./pickups3d";
 import { disposeSharedAssets } from "./sharedAssets";
 import {
@@ -22,6 +28,8 @@ import {
   fixtureRigGltf,
 } from "./testing/gltfFixture";
 import { createWeaponModel } from "./weapons3d";
+import { fixtureCarManifest, fixtureCarScene } from "./testing/carFixture";
+import { createVehicle3d } from "./vehicles3d";
 
 /** Every mesh's geometry and material under a pickup's object. */
 function pickupParts(): (BufferGeometry | Material)[] {
@@ -58,6 +66,14 @@ function cockpitParts(): (BufferGeometry | Material)[] {
   return parts;
 }
 
+/** A drive-by arm's shared forearm and sleeve. */
+function driveByParts(): BufferGeometry[] {
+  const arm = createDriveBy3d(0x3a7bd5).object;
+  return ["drive-by-forearm", "drive-by-sleeve"].map(
+    (name) => (arm.getObjectByName(name) as Mesh).geometry as BufferGeometry,
+  );
+}
+
 /** One of every shared asset, as the first view to use it builds it. */
 function sharedAssets(): (BufferGeometry | Material)[] {
   const materials = characterMaterials();
@@ -71,6 +87,7 @@ function sharedAssets(): (BufferGeometry | Material)[] {
     matteMaterial(0x222222),
     ...pickupParts(),
     ...cockpitParts(),
+    ...driveByParts(),
     pistolGeometry(),
   ];
 }
@@ -123,5 +140,22 @@ describe("disposeSharedAssets", () => {
     disposeSharedAssets();
     expect(characterAssetsReady()).toBeNull();
     resetCharacterAssetsForTests();
+  });
+
+  it("frees the loaded Kenney cars and the geometry built from them", async () => {
+    resetCarAssetsForTests();
+    const manifest = JSON.stringify(fixtureCarManifest());
+    const cars = await loadCarAssets({
+      fetch: async (url) =>
+        new Response(url.endsWith("manifest.json") ? manifest : url),
+      parse: async () => ({ scene: fixtureCarScene() }),
+    });
+    const vehicle = createVehicle3d("sedan", 0, cars);
+    const body = vehicle.object.getObjectByName("body") as Mesh;
+    const free = vi.spyOn(body.geometry, "dispose");
+    disposeSharedAssets();
+    expect(carAssetsReady()).toBeNull();
+    expect(free).toHaveBeenCalledTimes(1);
+    resetCarAssetsForTests();
   });
 });

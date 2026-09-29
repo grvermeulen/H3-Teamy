@@ -153,6 +153,34 @@ describe("attachPointerAim", () => {
     aim.detach();
   });
 
+  it("fires on a left press made while the right button holds the sights up", () => {
+    const canvas = document.createElement("canvas");
+    const state = createInputState();
+    const aim = attachPointerAim(canvas, state);
+    fireEvent.pointerDown(canvas, {
+      pointerType: "mouse",
+      button: 2,
+      buttons: 2,
+    });
+    expect(state.snapshot().fire).toBe(false);
+
+    // Pressed while another button is down, the left button reports a `pointermove`, never a
+    // `pointerdown`.
+    fireEvent.pointerMove(canvas, {
+      pointerType: "mouse",
+      button: 0,
+      buttons: 3,
+    });
+    expect(state.snapshot().fire).toBe(true);
+    fireEvent.pointerMove(canvas, {
+      pointerType: "mouse",
+      button: 0,
+      buttons: 2,
+    });
+    expect(state.snapshot().fire).toBe(false);
+    aim.detach();
+  });
+
   it("keeps fire held on pointermove while the primary button is still down", () => {
     const canvas = document.createElement("canvas");
     const state = createInputState();
