@@ -101,6 +101,11 @@ export type EntityFactories = {
     who: CharacterWho,
   ): void;
   vehicle(kind: VehicleKind, colour: number): Vehicle3d;
+  /**
+   * The pool variant a vehicle built now would be (say, a Kit model once they have loaded); a kept
+   * vehicle of another variant is rebuilt. Called every frame: must not allocate.
+   */
+  vehicleVariant?(kind: VehicleKind, colour: number): string;
   pickup(kind: PickupKind): Pickup3d;
 };
 
@@ -501,20 +506,26 @@ function syncCop(frame: Frame, scene: Scene, cop: CopState): void {
   slot.item.object.visible = true;
 }
 
-/** A car's slot, rebuilt when its kind or colour changed under the same id. */
+/**
+ * A car's slot, rebuilt when its kind or colour changed under the same id, or when the factory
+ * would now build it as another variant (the Kit's models have landed) — then it keeps its
+ * steering memory.
+ */
 function vehicleSlot(
   frame: Frame,
   car: VehicleState,
 ): PoolSlot<Vehicle3d, VehicleSlotState> {
-  const kept = frame.pools.vehicles.keep(car.id);
-  if (kept && kept.state.kind === car.kind && kept.state.colour === car.colour)
-    return kept;
   const { kind, colour } = car;
+  const kept = frame.pools.vehicles.keep(car.id);
+  const variant = frame.factories.vehicleVariant?.(kind, colour);
+  const same = kept?.state.kind === kind && kept.state.colour === colour;
+  if (kept && same && (variant === undefined || kept.variant === variant))
+    return kept;
   return frame.pools.vehicles.claim(
     car.id,
-    `${kind}:${colour}`,
+    variant ?? `${kind}:${colour}`,
     () => frame.factories.vehicle(kind, colour),
-    { kind, colour, steer: createSteerMemory() },
+    { kind, colour, steer: same ? kept.state.steer : createSteerMemory() },
   );
 }
 

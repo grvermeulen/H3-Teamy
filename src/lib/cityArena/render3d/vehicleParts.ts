@@ -22,7 +22,11 @@ import {
   PointsMaterial,
   type Material,
 } from "three";
-import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import {
+  mergeGeometries,
+  mergeVertices,
+} from "three/addons/utils/BufferGeometryUtils.js";
 import { bevelledBoxPositions } from "./lowPoly";
 
 /** The charred black every part of a wreck turns to (spec §6.7). */
@@ -31,6 +35,10 @@ export const CHARRED_COLOUR = 0x1a1512;
 const GLOSS_SHININESS = 60;
 /** Specular tint of that glint, a soft grey so it never outshines the paint. */
 const GLOSS_SPECULAR = 0x3a3a3a;
+/** Facets in a rounded slab's quarter-turn edge: enough to read as round, few enough to stay low-poly. */
+export const ROUND_SEGMENTS = 2;
+/** A rounded slab's radius stays this share under half its thinnest side, so its faces keep a flat middle. */
+const ROUND_LIMIT_SHARE = 0.98;
 /** Sides of a cylinder unless a part asks for more or fewer: faceted, as low-poly art is. */
 const DEFAULT_SEGMENTS = 12;
 /** Vertex colour of parts whose material carries the colour itself. */
@@ -58,6 +66,11 @@ export type SlabSpec = {
   shear?: Shear;
   /** Cuts every edge back by this much, metres, so the body catches the light on its edges. */
   bevel?: number;
+  /**
+   * Rounds every edge and corner to this radius, metres, in {@link ROUND_SEGMENTS} flat facets a
+   * quarter turn: rounder than a bevel, for the big shells of the bus, the oldtimer and the tank.
+   */
+  round?: number;
 };
 
 /** A cylinder lying along `axis`, centred `at`; its top end points along +axis. */
@@ -108,6 +121,24 @@ export const paintMaterial: (hex: number) => MeshPhongMaterial = memoise(
   (hex: number) =>
     new MeshPhongMaterial({
       color: hex,
+      shininess: GLOSS_SHININESS,
+      specular: GLOSS_SPECULAR,
+      flatShading: true,
+    }),
+);
+
+/**
+ * The paint of a Kit model in one body colour, shared by every such vehicle painted in it: the
+ * vertices carry the Kit's shading as a grey the colour is multiplied by.
+ *
+ * @param hex - The colour, `0xrrggbb`.
+ * @returns The shared material.
+ */
+export const shadedPaintMaterial: (hex: number) => MeshPhongMaterial = memoise(
+  (hex: number) =>
+    new MeshPhongMaterial({
+      color: hex,
+      vertexColors: true,
       shininess: GLOSS_SHININESS,
       specular: GLOSS_SPECULAR,
       flatShading: true,
@@ -226,6 +257,25 @@ function bevelledBox(
   return geometry;
 }
 
+/** A box centred on the origin with every edge rounded, indexed and with UVs so it merges. */
+function roundedBox(
+  size: readonly [number, number, number],
+  radius: number,
+): BufferGeometry {
+  const limit = (Math.min(...size) / 2) * ROUND_LIMIT_SHARE;
+  const rounded = new RoundedBoxGeometry(
+    size[0],
+    size[1],
+    size[2],
+    ROUND_SEGMENTS,
+    Math.min(radius, limit),
+  );
+  // three builds it unindexed; welding its shared corners indexes it for merging.
+  const welded = mergeVertices(rounded);
+  rounded.dispose();
+  return welded;
+}
+
 /** Leans a box centred on the origin forward by `shear`. */
 function shearAlong(geometry: BufferGeometry, shear: Shear): void {
   const position = geometry.getAttribute("position");
@@ -247,9 +297,11 @@ export function slab(spec: SlabSpec): BufferGeometry {
   const [x0, x1] = spec.x;
   const [y0, y1] = spec.y;
   const size: [number, number, number] = [x1 - x0, y1 - y0, spec.width];
-  const geometry = spec.bevel
-    ? bevelledBox(size, spec.bevel)
-    : new BoxGeometry(...size);
+  const geometry = spec.round
+    ? roundedBox(size, spec.round)
+    : spec.bevel
+      ? bevelledBox(size, spec.bevel)
+      : new BoxGeometry(...size);
   if (spec.taper) pullInTop(geometry, spec.taper, size[1]);
   if (spec.shear) shearAlong(geometry, spec.shear);
   if (spec.taper || spec.shear) geometry.computeVertexNormals();
@@ -277,8 +329,13 @@ export function cylinder(spec: CylinderSpec): BufferGeometry {
   return geometry;
 }
 
-/** Writes one colour into every vertex, in three's working colour space. */
-function tintVertices(geometry: BufferGeometry, hex: number): void {
+/**
+ * Writes one colour into every vertex, in three's working colour space.
+ *
+ * @param geometry - The geometry; its `color` attribute is replaced.
+ * @param hex - The colour, `0xrrggbb`.
+ */
+export function tintVertices(geometry: BufferGeometry, hex: number): void {
   const colour = new Color(hex);
   const count = geometry.getAttribute("position").count;
   const data = new Float32Array(count * 3);

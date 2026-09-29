@@ -30,6 +30,26 @@ export type Lamp = {
 };
 
 /**
+ * A lamp whose face is known: its flare sits just in front of it.
+ *
+ * @param face - The middle of the lamp's face, in the vehicle's frame.
+ * @param facing - The end it faces: forward (1) or backward (−1).
+ * @param tail - Whether it is a tail lamp.
+ * @returns The lamp.
+ */
+export function lampAt(
+  face: readonly [number, number, number],
+  facing: 1 | -1,
+  tail: boolean,
+): Lamp {
+  return {
+    at: [face[0] + facing * FLARE_PROUD_M, face[1], face[2]],
+    facing,
+    tail,
+  };
+}
+
+/**
  * The lamp a glowing part makes, when it is a head or tail lamp.
  *
  * @param geometry - The part, in the vehicle's frame.

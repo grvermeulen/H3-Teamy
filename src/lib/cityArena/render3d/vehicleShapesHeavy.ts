@@ -1,6 +1,8 @@
 /**
  * The shapes of the working vehicles — city bus, tractor and tank — built with the same kit and
- * part tables as the passenger kinds (see `vehicleShapes.ts` for the frame and conventions).
+ * part tables as the passenger kinds (see `vehicleShapes.ts` for the frame and conventions). The
+ * bus and the tank stay procedural when the Kenney cars load, so their shells are rounded: the
+ * bus's roof and corners, the tank's hull; the tank's turret, wheels and gun have more sides.
  */
 import { Group } from "three";
 import {
@@ -27,7 +29,14 @@ const BUS_ROOF_UNIT = 0xa3a6a8;
 /** The destination board's amber LEDs. */
 const SIGN_AMBER = 0xffae1a;
 
-/** The bus's white box, blue skirt and roof units (12 × 2.5 m, 3.1 m tall). */
+/** How round the bus's body is at its roof and its corners, metres. */
+const BUS_ROUND_M = 0.15;
+/** The bevel on its skirt, which stands just proud of the rounded body. */
+const BUS_SKIRT_BEVEL_M = 0.1;
+/** The bevel on its roof-top units. */
+const BUS_UNIT_BEVEL_M = 0.05;
+
+/** The bus's white body, blue skirt and roof units (12 × 2.5 m, 3.1 m tall), all rounded off. */
 const BUS_SHELL: readonly Part[] = [
   // Body, skirt, then the two roof units.
   {
@@ -37,21 +46,40 @@ const BUS_SHELL: readonly Part[] = [
       y: [0.32, 2.95],
       width: 2.4,
       taper: { side: 0.03, front: 0.04, rear: 0.03 },
+      round: BUS_ROUND_M,
     },
   },
   {
     colour: BUS_BLUE,
-    shape: { x: [-5.985, 5.985], y: [0.32, 0.8], width: 2.44 },
+    shape: {
+      x: [-5.985, 5.985],
+      y: [0.32, 0.8],
+      width: 2.44,
+      bevel: BUS_SKIRT_BEVEL_M,
+    },
   },
   {
     colour: BUS_ROOF_UNIT,
-    shape: { x: [2.0, 3.6], y: [2.95, 3.1], width: 1.3 },
+    shape: {
+      x: [2.0, 3.6],
+      y: [2.92, 3.1],
+      width: 1.3,
+      bevel: BUS_UNIT_BEVEL_M,
+    },
   },
   {
     colour: BUS_ROOF_UNIT,
-    shape: { x: [-3.9, -2.3], y: [2.95, 3.1], width: 1.3 },
+    shape: {
+      x: [-3.9, -2.3],
+      y: [2.92, 3.1],
+      width: 1.3,
+      bevel: BUS_UNIT_BEVEL_M,
+    },
   },
 ];
+
+/** The bevel round the windscreen, metres. */
+const BUS_GLASS_BEVEL_M = 0.02;
 
 /** The window band down both sides, the screens at each end and the doors on the kerb side. */
 const BUS_GLAZING: readonly Part[] = [
@@ -61,7 +89,15 @@ const BUS_GLAZING: readonly Part[] = [
     mirror: true,
     shape: { x: [-5.5, 5.1], y: [1.25, 2.5], width: 0.05, z: 1.195 },
   },
-  { colour: GLASS, shape: { x: [5.94, 5.99], y: [0.95, 2.6], width: 2.2 } },
+  {
+    colour: GLASS,
+    shape: {
+      x: [5.94, 5.99],
+      y: [0.95, 2.52],
+      width: 2.1,
+      bevel: BUS_GLASS_BEVEL_M,
+    },
+  },
   { colour: GLASS, shape: { x: [-5.99, -5.94], y: [1.9, 2.6], width: 1.8 } },
   {
     colour: GLASS,
@@ -88,7 +124,7 @@ const BUS_ENDS: readonly Part[] = [
     mirror: true,
     shape: { x: [-5.998, -5.93], y: [0.95, 1.55], width: 0.16, z: 1.11 },
   },
-  { colour: TRIM, shape: { x: [5.94, 5.988], y: [2.62, 2.9], width: 1.7 } },
+  { colour: TRIM, shape: { x: [5.94, 5.988], y: [2.55, 2.81], width: 1.7 } },
   {
     colour: TRIM,
     mirror: true,
@@ -136,7 +172,7 @@ const SIGN_ROWS = 5;
 /** Size of one LED cell. */
 const SIGN_CELL_M = 0.05;
 /** Middle of the destination board's face. */
-const SIGN_CENTRE_Y_M = 2.76;
+const SIGN_CENTRE_Y_M = 2.68;
 /** The lettering stands from here to the bus's nose, just proud of the board. */
 const SIGN_FACE_X: readonly [number, number] = [5.985, 6.0];
 
@@ -319,6 +355,15 @@ const TANK_DARK_OLIVE = 0x3a4628;
 /** A lighter olive on the sprocket rims, so the dark hub cross shows them turning. */
 const TANK_SPROCKET_RIM = 0x5b6b3c;
 
+/** How round the tank's hull is, and the bevel on its tracks (the sprockets round their ends), metres. */
+const TANK_HULL_ROUND_M = 0.14;
+const TANK_TRACK_BEVEL_M = 0.12;
+/** Sides of the turret's shell, road wheels, gun and hatch: many, so they read round. */
+const TURRET_SEGMENTS = 18;
+const ROAD_WHEEL_SEGMENTS = 14;
+const GUN_SEGMENTS = 12;
+const HATCH_SEGMENTS = 14;
+
 /** The tank's hull with a sloped glacis, its tracks, engine deck and lamps (7 × 3.4 m). */
 const TANK_HULL: readonly Part[] = [
   // Hull, tracks, engine deck grille, headlights, tail lights.
@@ -329,12 +374,19 @@ const TANK_HULL: readonly Part[] = [
       y: [0.32, 1.38],
       width: 1.9,
       taper: { front: 0.95, rear: 0.1, side: 0.08 },
+      round: TANK_HULL_ROUND_M,
     },
   },
   {
     colour: TANK_TRACK,
     mirror: true,
-    shape: { x: [-2.95, 1.75], y: [0.02, 1.0], width: 0.8, z: 1.28 },
+    shape: {
+      x: [-2.95, 1.75],
+      y: [0.02, 1.0],
+      width: 0.8,
+      z: 1.28,
+      bevel: TANK_TRACK_BEVEL_M,
+    },
   },
   {
     colour: TANK_DARK_OLIVE,
@@ -367,10 +419,13 @@ function roadWheel(x: number): Part {
       length: 0.02,
       axis: "z",
       at: [x, 0.4, 1.69],
-      segments: 10,
+      segments: ROAD_WHEEL_SEGMENTS,
     },
   };
 }
+
+/** The bevel on the gun's mantlet, metres. */
+const MANTLET_BEVEL_M = 0.06;
 
 /** Turret shell, mantlet, barrel with fume extractor and muzzle, and the commander's hatch. */
 const TURRET_PARTS: readonly Part[] = [
@@ -383,7 +438,7 @@ const TURRET_PARTS: readonly Part[] = [
       length: 0.66,
       axis: "y",
       at: [0, 0.33, 0],
-      segments: 10,
+      segments: TURRET_SEGMENTS,
       stretchX: 1.25,
     },
   },
@@ -394,6 +449,7 @@ const TURRET_PARTS: readonly Part[] = [
       y: [0.14, 0.56],
       width: 0.72,
       taper: { front: 0.08 },
+      bevel: MANTLET_BEVEL_M,
     },
   },
   {
@@ -403,7 +459,7 @@ const TURRET_PARTS: readonly Part[] = [
       length: 2.17,
       axis: "x",
       at: [2.535, 0.35, 0],
-      segments: 8,
+      segments: GUN_SEGMENTS,
     },
   },
   {
@@ -413,7 +469,7 @@ const TURRET_PARTS: readonly Part[] = [
       length: 0.45,
       axis: "x",
       at: [2.5, 0.35, 0],
-      segments: 8,
+      segments: GUN_SEGMENTS,
     },
   },
   {
@@ -423,7 +479,7 @@ const TURRET_PARTS: readonly Part[] = [
       length: 0.33,
       axis: "x",
       at: [3.785, 0.35, 0],
-      segments: 8,
+      segments: GUN_SEGMENTS,
     },
   },
   {
@@ -433,7 +489,7 @@ const TURRET_PARTS: readonly Part[] = [
       length: 0.21,
       axis: "y",
       at: [-0.3, 0.765, 0.38],
-      segments: 10,
+      segments: HATCH_SEGMENTS,
     },
   },
 ];

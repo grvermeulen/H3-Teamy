@@ -7,6 +7,9 @@
  * The caller places and turns `object` (position from the simulation, `rotation.y` from
  * `headingToRotationY(heading)`) and then calls `update`; the turret reads the hull's heading from
  * that rotation.
+ *
+ * {@link createVehicleFactory} builds each vehicle from the Kenney Car Kit once it has loaded, and
+ * procedurally until then (and always for the bus, the oldtimer and the tank).
  */
 import {
   Mesh,
@@ -15,9 +18,12 @@ import {
   type Material,
   type Object3D,
 } from "three";
+import { isCarKind } from "../carManifest";
 import type { VehicleKind } from "../sim/types";
 import { SIM_STEP_S } from "../sim/player";
+import { carAssetsReady, requestCarAssets, type CarAssets } from "./carAssets";
 import { headingToRotationY } from "./coords";
+import type { EntityFactories } from "./entities";
 import { charredMaterial } from "./vehicleParts";
 import { showBraking, showFlares, type LampRig } from "./vehicleLamps";
 import {
@@ -187,9 +193,15 @@ function aimTurret(model: VehicleModel, turretYaw: number | null): void {
       : headingToRotationY(turretYaw) - model.root.rotation.y;
 }
 
-/** Frees each geometry under `root` once; wheels on an axle share theirs. */
-function disposeGeometries(root: Object3D): void {
-  const released = new Set<BufferGeometry>();
+/**
+ * Frees each geometry under `root` once (wheels on an axle share theirs), leaving what the model
+ * shares with the other vehicles of its kind.
+ */
+function disposeGeometries(
+  root: Object3D,
+  shared: ReadonlySet<BufferGeometry> | undefined,
+): void {
+  const released = new Set<BufferGeometry>(shared);
   root.traverse((node) => {
     if (!(node instanceof Mesh || node instanceof Points)) return;
     if (released.has(node.geometry)) return;
@@ -226,10 +238,15 @@ function showLamps(
  *
  * @param kind - The vehicle kind.
  * @param colour - `VehicleState.colour`; ignored by kinds with a fixed livery.
+ * @param cars - The loaded Kenney Car Kit, or null (the default) for a procedural model.
  * @returns The vehicle; call `update` every frame after placing and turning its `object`.
  */
-export function createVehicle3d(kind: VehicleKind, colour: number): Vehicle3d {
-  const model = buildVehicleModel(kind, colour);
+export function createVehicle3d(
+  kind: VehicleKind,
+  colour: number,
+  cars: CarAssets | null = null,
+): Vehicle3d {
+  const model = buildVehicleModel(kind, colour, cars);
   const intact = intactMaterials(model.root);
   const watch = createBrakeWatch();
   const shown: LampState = { wrecked: false, braking: false };
@@ -247,7 +264,72 @@ export function createVehicle3d(kind: VehicleKind, colour: number): Vehicle3d {
       aimTurret(model, input.turretYaw);
     },
     dispose() {
-      disposeGeometries(model.root);
+      disposeGeometries(model.root, model.shared);
     },
+  };
+}
+
+/** Where the vehicle factory gets the Kit's models from; tests pass fakes. */
+export type CarAssetSource = {
+  /** The loaded models, or `null` while loading, after a failure or before a request. */
+  ready(): CarAssets | null;
+  /** Starts loading if nothing has yet; must not allocate once it has. */
+  request(): void;
+};
+
+/** The session's Kit models. */
+const LOADED_CARS: CarAssetSource = {
+  ready: carAssetsReady,
+  request: requestCarAssets,
+};
+
+/** Each kind's pool variants by colour index: procedural, then built from the Kit. */
+const VARIANTS = {
+  procedural: new Map<VehicleKind, string[]>(),
+  kit: new Map<VehicleKind, string[]>(),
+};
+
+/** A kind and colour's pool variant, interned so asking again allocates nothing. */
+function variantOf(kind: VehicleKind, colour: number, kit: boolean): string {
+  const byKind = kit ? VARIANTS.kit : VARIANTS.procedural;
+  let byColour = byKind.get(kind);
+  if (!byColour) {
+    byColour = [];
+    byKind.set(kind, byColour);
+  }
+  byColour[colour] ??= `${kit ? "gltf:" : ""}${kind}:${colour}`;
+  return byColour[colour];
+}
+
+/** The loaded Kit when a vehicle of `kind` should be built from it; asks for it to load otherwise. */
+function carsFor(source: CarAssetSource, kind: VehicleKind): CarAssets | null {
+  const cars = source.ready();
+  if (!cars) source.request();
+  return cars && isCarKind(kind) ? cars : null;
+}
+
+/** The vehicle hooks of {@link EntityFactories}. */
+export type VehicleFactory = Pick<
+  EntityFactories,
+  "vehicle" | "vehicleVariant"
+>;
+
+/**
+ * The vehicle factory (spec §8): Kenney Car Kit models once they have loaded, for the kinds the
+ * Kit covers; procedural models otherwise — before the files arrive, after they fail, and for the
+ * bus, oldtimer and tank. Asking for a vehicle starts the loading; when it lands, each car's pool
+ * variant changes (`gltf:<kind>:<colour>`) and the entity sync swaps it once.
+ *
+ * @param source - The Kit's models; the session's by default.
+ * @returns The hooks for {@link EntityFactories}.
+ */
+export function createVehicleFactory(
+  source: CarAssetSource = LOADED_CARS,
+): VehicleFactory {
+  return {
+    vehicle: (kind, colour) =>
+      createVehicle3d(kind, colour, carsFor(source, kind)),
+    vehicleVariant: (kind, colour) =>
+      variantOf(kind, colour, carsFor(source, kind) !== null),
   };
 }

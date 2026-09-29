@@ -47,6 +47,21 @@ The glTF cast (see [Characters: the glTF cast](#characters-the-gltf-cast)):
 | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | ![A street of pedestrians, each dressed differently](img/3d/3d-characters-street.jpg) | ![The player: bald, red shades, mint shorts, pistol raised](img/3d/3d-characters-player.jpg) |
 
+The Kenney cars (see [Cars: the Kenney Car Kit](#cars-the-kenney-car-kit)):
+
+|                                                                                                   |                                                                                            |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| ![Traffic: an orange pickup, a red and a blue car, a rounded oldtimer](img/3d/3d-cars-street.jpg) | ![A white police car with its light bar on, three stars wanted](img/3d/3d-cars-police.jpg) |
+| ![Before: the procedural sedan from the chase camera](img/3d/3d-cars-before.jpg)                  | ![After: the Kit sedan from the chase camera](img/3d/3d-cars-after.jpg)                    |
+
+Every Kit kind, procedural above and Kit below, and the rounded bus, oldtimer and tank (before,
+after):
+
+![The seven Kit kinds, procedural and from the Kit](img/3d/3d-cars-gallery.jpg)
+
+| ![Bus, oldtimer and tank before](img/3d/3d-heavy-before.jpg) | ![The same, rounded](img/3d/3d-heavy-after.jpg) |
+| ------------------------------------------------------------ | ----------------------------------------------- |
+
 ## Architecture
 
 ### A second renderer, not a replacement
@@ -99,21 +114,21 @@ Grouped by responsibility; every exported symbol carries its own JSDoc.
 
 **Entry point, renderer and shared plumbing**
 
-| File              | Responsibility                                                                                                                      |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `index.ts`        | `createView3d(canvas)`: wires every layer together, places the camera, drives one frame                                             |
-| `frameAim.ts`     | The local player's aim per frame: the sights' ease, the aim probe's run, the scope's opacity                                        |
-| `renderer3d.ts`   | WebGL renderer, three.js scene, camera, evening lights, fog; `RenderQuality`, view distance and pixel-ratio tables                  |
-| `cameraRig.ts`    | Third- and first-person rigs (the driver's eye per kind), pitch limits, chase, death orbit, the sights' zoom                        |
-| `cameraFeel.ts`   | The 2D feedback's screen shake (`SHAKE_METRES_PER_PX`) and drunk sway, as a camera nudge and roll                                   |
-| `sharedAssets.ts` | `disposeSharedAssets`: frees the module-level character (procedural and glTF), vehicle, pickup, weapon, cockpit and drive-by caches |
-| `coords.ts`       | The one world ↔ three.js mapping (`(x, y)` metres → `(x, height, y)`) and angle helpers                                             |
-| `idHash.ts`       | Deterministic per-id "randomness" (façade choice, tree size/turn) so every device builds the same town                              |
-| `disposal.ts`     | `disposeObject`: frees geometries, materials and textures of a whole `Object3D` subtree                                             |
-| `meshBuffers.ts`  | Growable vertex/index buffers the city builders fill, turned into one indexed `BufferGeometry`                                      |
-| `lowPoly.ts`      | Bevelled/tapered block and faceted-rod primitives, vertex-coloured and flat-shaded                                                  |
-| `footprint.ts`    | Footprint measurements (centre, longest edge) shared by roofs, landmark dressing and ruins                                          |
-| `testing/`        | Shared test doubles/helpers for render3d's own test suite (`gltfFixture.ts`: in-code glTF characters)                               |
+| File              | Responsibility                                                                                                                                           |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts`        | `createView3d(canvas)`: wires every layer together, places the camera, drives one frame                                                                  |
+| `frameAim.ts`     | The local player's aim per frame: the sights' ease, the aim probe's run, the scope's opacity                                                             |
+| `renderer3d.ts`   | WebGL renderer, three.js scene, camera, evening lights, fog; `RenderQuality`, view distance and pixel-ratio tables                                       |
+| `cameraRig.ts`    | Third- and first-person rigs (the driver's eye per kind), pitch limits, chase, death orbit, the sights' zoom                                             |
+| `cameraFeel.ts`   | The 2D feedback's screen shake (`SHAKE_METRES_PER_PX`) and drunk sway, as a camera nudge and roll                                                        |
+| `sharedAssets.ts` | `disposeSharedAssets`: frees the module-level character (procedural and glTF), vehicle (procedural and Kit), pickup, weapon, cockpit and drive-by caches |
+| `coords.ts`       | The one world ↔ three.js mapping (`(x, y)` metres → `(x, height, y)`) and angle helpers                                                                  |
+| `idHash.ts`       | Deterministic per-id "randomness" (façade choice, tree size/turn) so every device builds the same town                                                   |
+| `disposal.ts`     | `disposeObject`: frees geometries, materials and textures of a whole `Object3D` subtree                                                                  |
+| `meshBuffers.ts`  | Growable vertex/index buffers the city builders fill, turned into one indexed `BufferGeometry`                                                           |
+| `lowPoly.ts`      | Bevelled/tapered block and faceted-rod primitives, vertex-coloured and flat-shaded                                                                       |
+| `footprint.ts`    | Footprint measurements (centre, longest edge) shared by roofs, landmark dressing and ruins                                                               |
+| `testing/`        | Test doubles for render3d's own suite (`gltfFixture.ts` / `carFixture.ts`: in-code glTF characters, cars)                                                |
 
 **The streamed city**
 
@@ -158,27 +173,30 @@ Grouped by responsibility; every exported symbol carries its own JSDoc.
 
 **Characters and vehicles**
 
-| File                                         | Responsibility                                                                                                   |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `characters.ts`                              | The character factory (glTF cast, procedural fallback, LOD) and the procedural person                            |
-| `characterAssets.ts`                         | Lazily loaded glTF cast: manifest, models, rig clips split per layer                                             |
-| `characterAppearance.ts`                     | Pure: look + id → model, palette colours, hidden slots, scale, accessories                                       |
-| `characterAnimation.ts`                      | Pure: pose → clip weights and gait pace (`clipMix`)                                                              |
-| `gltfCharacter.ts` / `gltfAnimator.ts`       | A glTF `Character3d` and its layered `AnimationMixer`                                                            |
-| `characterPalette.ts`                        | The palette-slot Lambert material the glTF cast draws with                                                       |
-| `characterAccessories.ts`                    | Accessories on the glTF cast's bones (cap, glasses, shades, bracelet, backpack, badge)                           |
-| `characterRig.ts`                            | The shared 17-bone rig and per-look merged geometry                                                              |
-| `characterPose.ts`                           | Pure procedural poses: idle, walk/run (phased by distance), aim, death                                           |
-| `characterLooks.ts`                          | The cast's looks, translated from the 2D sprites' sampled colours                                                |
-| `characterParts.ts`                          | Body/face/hair as rigid low-poly parts bound to one bone each                                                    |
-| `characterExtras.ts`                         | Accessories (shades, caps, hoods, backpack, hi-vis) layered over a look                                          |
-| `vehicles3d.ts`                              | A live vehicle: wheel roll, brake lamps (`watchBrakes`), light bar, tank turret follow, wreck look, over a model |
-| `vehicleModels.ts`                           | Procedural low-poly model per vehicle kind, one merged body mesh + wheels + lamp flares                          |
-| `vehicleParts.ts`                            | Shared material cache and primitive shapes vehicles are cut from                                                 |
-| `vehicleShapes.ts` / `vehicleShapesHeavy.ts` | Per-kind shape builders (passenger kinds; bus/tractor/tank)                                                      |
-| `vehicleTrim.ts`                             | Wheel arches, door shut lines and Dutch number plates (yellow; classic blue on the oldtimer)                     |
-| `vehicleLamps.ts`                            | Head and tail lamps as lamps: the tail lamps' running/brake glow and one additive flare per lamp                 |
-| `vehicleSmoke.ts`                            | Wreck column smoke and bonnet smoke below the 2D `smokeHealthOf` threshold                                       |
+| File                                         | Responsibility                                                                                            |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `characters.ts`                              | The character factory (glTF cast, procedural fallback, LOD) and the procedural person                     |
+| `characterAssets.ts`                         | Lazily loaded glTF cast: manifest, models, rig clips split per layer                                      |
+| `characterAppearance.ts`                     | Pure: look + id → model, palette colours, hidden slots, scale, accessories                                |
+| `characterAnimation.ts`                      | Pure: pose → clip weights and gait pace (`clipMix`)                                                       |
+| `gltfCharacter.ts` / `gltfAnimator.ts`       | A glTF `Character3d` and its layered `AnimationMixer`                                                     |
+| `characterPalette.ts`                        | The palette-slot Lambert material the glTF cast draws with                                                |
+| `characterAccessories.ts`                    | Accessories on the glTF cast's bones (cap, glasses, shades, bracelet, backpack, badge)                    |
+| `characterRig.ts`                            | The shared 17-bone rig and per-look merged geometry                                                       |
+| `characterPose.ts`                           | Pure procedural poses: idle, walk/run (phased by distance), aim, death                                    |
+| `characterLooks.ts`                          | The cast's looks, translated from the 2D sprites' sampled colours                                         |
+| `characterParts.ts`                          | Body/face/hair as rigid low-poly parts bound to one bone each                                             |
+| `characterExtras.ts`                         | Accessories (shades, caps, hoods, backpack, hi-vis) layered over a look                                   |
+| `vehicles3d.ts`                              | A live vehicle (wheel roll, brake lamps, light bar, turret, wreck look) and the Kit-or-procedural factory |
+| `vehicleModels.ts`                           | `buildVehicleModel`: the Kit model once loaded, else a procedural body mesh + wheels + flares             |
+| `vehicleLooks.ts`                            | What both builders share: each kind's height, `bodyColour`, the light-bar lens materials                  |
+| `carAssets.ts`                               | Lazily loaded Kenney Car Kit: manifest and one file per kind                                              |
+| `gltfVehicle.ts`                             | A `VehicleModel` from a Kit model: shared scaled body, tinted paint, round wheels, lamps, plates          |
+| `vehicleParts.ts`                            | Shared material cache and primitive shapes vehicles are cut from (bevelled or rounded slabs)              |
+| `vehicleShapes.ts` / `vehicleShapesHeavy.ts` | Per-kind shape builders (passenger kinds; bus/tractor/tank)                                               |
+| `vehicleTrim.ts`                             | Wheel arches, door shut lines and Dutch number plates (yellow; classic blue on the oldtimer)              |
+| `vehicleLamps.ts`                            | Head and tail lamps as lamps: the tail lamps' running/brake glow and one additive flare per lamp          |
+| `vehicleSmoke.ts`                            | Wreck column smoke and bonnet smoke below the 2D `smokeHealthOf` threshold                                |
 
 **Weapons, view model and projectiles**
 
@@ -275,7 +293,9 @@ What `full` adds:
   Dutch plates; head and tail lamps with a flare that only shows from in front of its lamp; tail
   lamps that brighten while the car slows faster than coasting (`watchBrakes` measures the
   deceleration over the time since the speed last changed, so a frame rate above the simulation's
-  30 Hz never fakes a stop); a wreck's lamps go dark.
+  30 Hz never fakes a stop); a wreck's lamps go dark. Since the aim round, seven kinds draw the
+  Kenney Car Kit's models instead (see [Cars: the Kenney Car Kit](#cars-the-kenney-car-kit)),
+  keeping all of this.
 
 Everything is seeded by map ids (`idHash.ts`), so every device builds the same town, and all of it
 is presentation only: no simulation, collision or wire change.
@@ -417,6 +437,103 @@ has exactly one credits row.
   accessory), about 6 000 triangles against 1 600 for a procedural one. Measured on the dev
   machine (Node, no GPU), 40 walking characters cost about 3 ms of CPU a frame (mixers, bone
   matrices, skeleton upload data) against 0.2 ms procedural, about 1.9 ms when all are far.
+
+## Cars: the Kenney Car Kit
+
+Spec: `docs/superpowers/specs/2026-09-28-arena-aim-drive-cars-design.md` §3, §8. The owner found
+the slab-built cars too blocky; seven kinds now draw models from Kenney's
+[Car Kit](https://kenney.nl/assets/car-kit) (version 3.1, CC0 — see
+`public/arena/cars/CREDITS.md`), scaled to the simulation's footprint. The bus, the oldtimer and
+the tank have no Kit counterpart and keep procedural bodies, now rounded.
+
+### Pipeline: `npm run arena:pack-cars`
+
+`scripts/arena/pack-cars.ts` (pure halves and tests: `packCars.ts`, `carSources.ts`,
+`carGeometry.ts`, `carBody.ts`, `carMeasure.ts`, `carAtlas.ts`, `zip.ts`) downloads the one owner-approved archive once into
+`.cache/arena/cars/` (gitignored), pinned by URL and sha256 — an archive whose hash moved is
+refused — reads it with a dependency-free zip reader, and writes `public/arena/cars/`:
+
+- **One file per kind** (`<kind>.glb`, 35–51 KB, 277 KB together; budget 1.5 MB): the model turned
+  into the game's frame (x forward, y up, z to the right; the Kit's is x left, z forward) and
+  recentred on its footprint on the ground. The Kit's one texture — a 16 × 4 atlas of flat and
+  gradient swatches — is **baked into vertex colours**, so the files carry no texture. The body's
+  triangles are split into primitives by role, each role a material of that name: **paint** (the
+  kind's body swatches; its vertex colours hold the swatch's shading as a grey the view multiplies
+  the car's colour by), **detail** (everything else in its own colours, the window glass darkened
+  to `CAR_GLASS`, the Kit's number-plate faces recessed to trim), **head** and **tail** (the
+  yellow and red lamp swatches within 30 % of the length from their end), and on the police car
+  **lens-left** / **lens-right** (its roof lamps). Each wheel is its own node, centred for
+  spinning. Normals and UVs go; dedup merges the wheels on one side, never the role materials.
+- **`manifest.json`** (schema `CarManifestSchema` in `src/lib/cityArena/carManifest.ts`, shared by
+  the script and the view): per kind its file, source model, size, the Kit's own paint colour,
+  each wheel (middle, radius, width, whether it steers), each lamp's face, each plate's face and
+  height, and on the police car the flat door panel between the arches for the livery.
+- **`CREDITS.md`**: one row per file.
+
+`--probe` lists every model in the Kit instead. Findings: every car is a `body` node plus four
+separate wheel nodes (`wheel-front-left` …), the left and right wheels mirror images; one material
+`colormap` over a 512 × 512 PNG atlas outside the GLBs (gltf-transform's `readBinary` refuses
+that, so the pack reads their JSON and buffer with the atlas as a resource); about 700 body
+triangles and 332–428 per wheel. The kind mapping:
+
+| Kind      | Kit model          | Paint swatches             | Notes                                                      |
+| --------- | ------------------ | -------------------------- | ---------------------------------------------------------- |
+| `compact` | `hatchback-sports` | green                      |                                                            |
+| `sedan`   | `sedan`            | red                        |                                                            |
+| `sport`   | `sedan-sports`     | red                        | with its spoiler                                           |
+| `police`  | `police`           | light grey and blue-grey   | white all over (the Kit's is black-and-white); roof lenses |
+| `van`     | `van`              | blue                       | the Kit's one-box van, not its box-bodied `delivery`       |
+| `pickup`  | `truck`            | green                      | the Kit's pickup                                           |
+| `tractor` | `tractor`          | blue-grey (its whole body) | yellow rims; four lamps added (the Kit's tractor has none) |
+
+`npm run arena:check-cars` (CI verify job, next to `arena:check-characters`; both run the shared
+`packAudit.ts`) checks that every manifest file exists, no stray `.glb` sits beside them, the set
+stays within 1.5 MB and every file has exactly one credits row.
+
+### Runtime
+
+| Module            | Responsibility                                                                                  |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| `carAssets.ts`    | Loads the manifest and every kind's file lazily with `GLTFLoader`; fails once, stays procedural |
+| `gltfVehicle.ts`  | `buildGltfVehicleModel`: a `VehicleModel` from a kind's asset, its geometry built once per kind |
+| `vehicleLooks.ts` | Heights, `bodyColour` and the lens materials, shared by the Kit and the procedural builders     |
+| `vehicles3d.ts`   | `createVehicleFactory`: the Kit model once loaded, the procedural one before and for the others |
+
+- **Loading and fallback.** The first vehicle asked for starts the download
+  (`requestCarAssets`). Until it lands — and for the rest of the session if it fails — every
+  vehicle is procedural. A network failure is a Sentry breadcrumb
+  (`isBenignTransientClientFetchError`); a missing or broken file is `captureException` with
+  `area: cars`. When the Kit arrives, each car's pool **variant** changes from `<kind>:<colour>` to
+  `gltf:<kind>:<colour>` (interned, so asking every frame allocates nothing), and the entity sync
+  swaps it once, keeping its steering memory. `disposeSharedAssets` frees the Kit and the geometry
+  built from it.
+- **Scale.** A kind's body is stretched to `lengthOf × widthOf` and its `VEHICLE_HEIGHT_M`
+  (the Kit's cars are stubby: a sedan by 1.65 along, 1.2 across, 1.12 up). The wheels stay round:
+  they grow by the height's scale, across by the width's, sit at the stretched axle positions and
+  touch the ground.
+- **Materials.** The body is one mesh with four draw groups in a fixed order: the paint
+  (`shadedPaintMaterial(bodyColour(kind, colour))`, one per colour, vertex shading kept), the
+  shared vertex-coloured detail, the headlamp glow and the tail lamps' running glow — the slot
+  `rigLamps` finds, so braking lights them exactly as on a procedural car. Flares sit at the
+  manifest's lamp faces. Our yellow Dutch plates (`addPlateAt`) stand on the Kit's plate recesses,
+  and on the police car a band of orange and blue stripes (`addPoliceStripes`) runs along the door
+  panel; both merge into the detail group. The police car's roof lamps are its light-bar lenses
+  and flash blue then red as before. A wreck swaps every material for the char.
+- **Sharing.** The stretched body, wheel and lens geometries are built once per kind and shared by
+  every car of it (`VehicleModel.shared`); a car owns only its mesh objects, material array and
+  flares, so freeing it leaves the kind's geometry alone.
+- **Cost.** Each car draws in exactly as many calls as its procedural model — 9 (the police car
+  11: two lenses) — with about 2 100–2 500 triangles against 700–1 550 (the Kit's tyres and rims
+  are 332–428 triangles a wheel). The whole set is 277 KB to download.
+
+### The rounder bus, oldtimer and tank
+
+`slab` can now round a part's edges and corners (`round`: three's `RoundedBoxGeometry` with two
+facets a quarter turn, welded so it merges with the other parts). The bus has a rounded body (its
+destination board and windscreen moved clear of the rounded roof edge) and bevelled skirt and
+roof units; the oldtimer a rounded body and glass house and sixteen-sided wings; the tank a
+rounded hull over its glacis, bevelled tracks and mantlet, and more sides on its turret (18), road
+wheels, gun and hatch. Footprints and heights are unchanged; vertices grow by 1.2–1.5×.
 
 ## Input
 
@@ -834,7 +951,7 @@ damage sources table above.
   quality and shared with the destruction system's dust.
 - **Draw calls**: a dense view draws about 225–240 city calls at "auto" and 115–130 at "laag"
   (every wall of a cell is one façade-atlas call), 9–11 per vehicle (body groups, four wheels,
-  lamp flares), and characters/pickups/weapons each merge to one or two draw calls via shared,
+  lamp flares — a Kenney car draws in exactly as many as its procedural model), and characters/pickups/weapons each merge to one or two draw calls via shared,
   vertex-coloured, per-look/per-kind geometry. A glTF character is one draw call plus one per
   accessory (see [Characters: the glTF cast](#characters-the-gltf-cast) for its CPU cost and
   level of detail). The first-person cockpit adds about ten (interior,
@@ -899,7 +1016,19 @@ damage sources table above.
   8–13 ms to build on the dev machine (the budget is 4 ms a frame, and every frame builds at least
   one cell), so streaming one in costs one long frame. Most cells take one budget or less.
 - **Vehicle detail is not quality-gated.** Bevels, trim, plates and lamp flares show at every
-  quality, "laag" included; the flares cost one draw call per vehicle.
+  quality, "laag" included; the flares cost one draw call per vehicle. The Kenney cars draw at
+  every quality too: the same calls as the procedural cars, about twice their triangles.
+- **The Kenney cars are stretched.** The Kit's cars are stubby, so their bodies stretch more along
+  than up (a sedan 1.65× against 1.12×); the wheels stay round at the height's scale, which leaves
+  a gap in front of and behind each wheel in its stretched arch on the sedan and the sports car,
+  and the tractor, whose big rear wheels are its back end, about 10 cm short of its 4 m.
+- **The cockpit is still the procedural one.** First person at the wheel draws the cockpit from
+  `cockpitSpecs.ts` (read off the procedural shapes), not the Kit's interior; your own car hides in
+  first person, so the two never show together.
+- **The Kit's quirks show through.** The Kit's plate recess is a little taller than a Dutch plate,
+  so a dark rim shows above and below it; the police car's push bar turns white with its body (both
+  are the atlas's blue-grey) and its livery is a short band of stripes on the doors, between the
+  arches; the van is the Kit's one-box van, with windows all along.
 - **The glTF cast holds long guns like a pistol.** The packs' gun clips are one-handed, so the
   shotgun, rifle and rocket launcher sit in the right hand with the left arm free; officers wear
   the SWAT helmet, so there is no cap or light-blue shirt as on the procedural officer.

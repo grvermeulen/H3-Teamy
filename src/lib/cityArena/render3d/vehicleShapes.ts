@@ -194,6 +194,8 @@ type CarProfile = {
   bodyInset: number;
   wheel: WheelLook;
   axleInset: number;
+  /** Rounds the body and the glass house to this radius instead of bevelling them: the oldtimer's curves. */
+  round?: number;
 };
 
 /** Body ends stop this far short of the bumpers' faces. */
@@ -307,6 +309,7 @@ const OLDTIMER: CarProfile = {
   bodyInset: 0.25,
   wheel: { radius: 0.36, width: 0.16, tyre: TYRE, rim: 0xece6d6, hub: CHROME },
   axleInset: 0.85,
+  round: 0.14,
 };
 
 /** Front and rear axle `inset` from each end, the front one steering. */
@@ -315,7 +318,15 @@ function axlesInset(kit: Kit, wheel: WheelLook, inset: number): Axle[] {
   return [axle(kit, x, wheel, true), axle(kit, -x, wheel, false)];
 }
 
-/** The lower body: a bevelled slab sloping at nose and tail and leaning in at the shoulders. */
+/** A shell's edges: rounded to `round` when the profile asks for it, else bevelled. */
+function shellEdges(
+  round: number | undefined,
+  bevel: number,
+): Pick<SlabSpec, "round" | "bevel"> {
+  return round ? { round } : { bevel };
+}
+
+/** The lower body: a bevelled (or rounded) slab sloping at nose and tail and leaning in at the shoulders. */
 function addCarBody(kit: Kit, profile: CarProfile): void {
   const end = kit.length / 2 - BODY_END_M;
   kit.paint(
@@ -324,7 +335,7 @@ function addCarBody(kit: Kit, profile: CarProfile): void {
       y: [profile.sill, profile.belt],
       width: kit.width - 2 * profile.bodyInset,
       taper: { front: NOSE_SLOPE_M, rear: TAIL_SLOPE_M, side: SHOULDER_M },
-      bevel: BODY_BEVEL_M,
+      ...shellEdges(profile.round, BODY_BEVEL_M),
     }),
   );
 }
@@ -341,7 +352,7 @@ function addGreenhouse(kit: Kit, profile: CarProfile, roof: number): void {
       y: [belt, top],
       width: glassWidth,
       taper,
-      bevel: GLASS_BEVEL_M,
+      ...shellEdges(profile.round && profile.round / 2, GLASS_BEVEL_M),
     }),
     GLASS,
   );
@@ -355,7 +366,7 @@ function addGreenhouse(kit: Kit, profile: CarProfile, roof: number): void {
       x: roofSpan,
       y: [top, roof],
       width: roofWidth,
-      bevel: ROOF_BEVEL_M,
+      ...shellEdges(profile.round && ROOF_THICKNESS_M / 2, ROOF_BEVEL_M),
     }),
   );
   const pillarX = (roofSpan[0] + roofSpan[1]) / 2;
@@ -486,27 +497,49 @@ function stripeColour(index: number): number {
   return index % 2 === 0 ? POLICE_ORANGE : POLICE_BLUE;
 }
 
+/** Height of the police livery's band of leaning stripes. */
+export const POLICE_STRIPE_HEIGHT_M = STRIPE_BAND[1] - STRIPE_BAND[0];
+
+/** Where a band of livery stripes runs: along the body, up the flank, and the flank's distance out. */
+export type StripeBand = { x: Span; y: Span; side: number };
+
+/**
+ * A band of leaning orange and blue stripes on both flanks, half sunk into a flank `band.side`
+ * from the centre line so it never floats off it.
+ *
+ * @param kit - Where its parts go.
+ * @param band - Where it runs.
+ */
+export function addPoliceStripes(
+  kit: Pick<Kit, "tint">,
+  band: StripeBand,
+): void {
+  const z = band.side - LIVERY_DEPTH_M / 2 + LIVERY_PROUD_M;
+  const panel = { y: band.y, width: LIVERY_DEPTH_M, z };
+  const count = Math.floor((band.x[1] - band.x[0]) / SIDE_STRIPE_PITCH_M);
+  const shear = { axis: "y", perMetre: SIDE_STRIPE_LEAN } as const;
+  for (let index = 0; index < count; index++) {
+    const from = band.x[0] + index * SIDE_STRIPE_PITCH_M;
+    mirrored({ ...panel, x: [from, from + SIDE_STRIPE_PITCH_M], shear }, (g) =>
+      kit.tint(g, stripeColour(index)),
+    );
+  }
+}
+
 /** A blue sill band and a band of leaning orange and blue stripes along both sides. */
 function addPoliceSides(kit: Kit, profile: CarProfile): void {
-  const z =
-    kit.width / 2 - profile.bodyInset - LIVERY_DEPTH_M / 2 + LIVERY_PROUD_M;
+  const side = kit.width / 2 - profile.bodyInset;
+  const z = side - LIVERY_DEPTH_M / 2 + LIVERY_PROUD_M;
   const reach = kit.length / 2 - STRIPE_END_MARGIN_M;
   const band = (span: Span): Span => [
     profile.sill + span[0],
     profile.sill + span[1],
   ];
-  const panel = { y: band(STRIPE_BAND), width: LIVERY_DEPTH_M, z };
-  mirrored({ ...panel, x: [-reach, reach], y: band(SILL_BAND) }, (g) =>
-    kit.tint(g, POLICE_BLUE),
+  mirrored(
+    { x: [-reach, reach], y: band(SILL_BAND), width: LIVERY_DEPTH_M, z },
+    (g) => kit.tint(g, POLICE_BLUE),
   );
-  const count = Math.floor((2 * reach) / SIDE_STRIPE_PITCH_M);
-  for (let index = 0; index < count; index++) {
-    const from = -reach + index * SIDE_STRIPE_PITCH_M;
-    const shear = { axis: "y", perMetre: SIDE_STRIPE_LEAN } as const;
-    mirrored({ ...panel, x: [from, from + SIDE_STRIPE_PITCH_M], shear }, (g) =>
-      kit.tint(g, stripeColour(index)),
-    );
-  }
+  addPoliceStripes(kit, { x: [-reach, reach], y: band(STRIPE_BAND), side });
 }
 
 /** Diagonal orange and blue stripes across the bonnet, as on the 2D sprite. */
@@ -714,7 +747,7 @@ const FENDER_LENGTH_M = 1.05;
 /** How far a fender's axis sits above its wheel's axle. */
 const FENDER_RISE_M = 0.34;
 /** Sides of a fender: round enough to read as a curve. */
-const FENDER_SEGMENTS = 10;
+const FENDER_SEGMENTS = 16;
 /** The running boards reach this far under each fender. */
 const BOARD_OVERLAP_M = 0.05;
 /** Thickness of a running board under the sill. */

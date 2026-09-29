@@ -897,6 +897,30 @@ describe("createEntitySync: vehicles", () => {
     expect(vehicles[1]!.input!.steer).toBe(-0.3);
   });
 
+  it("swaps a car once when the Kit's models land, keeping how it steers", () => {
+    const { sync, factories, vehicles } = syncOf();
+    const loaded = { value: false };
+    factories.vehicleVariant = (kind, colour) =>
+      loaded.value ? `gltf:${kind}:${colour}` : `${kind}:${colour}`;
+    const rate = VEHICLE_SPECS.sedan.steerRateRadS * 0.5;
+    const turning = (frame: number): Scene => {
+      const heading = frame * rate * FRAME_S;
+      const velocity = {
+        velocityX: 10 * Math.cos(heading),
+        velocityY: 10 * Math.sin(heading),
+      };
+      return sceneOf({ vehicles: [car(50, 0, 0, { heading, ...velocity })] });
+    };
+    for (let frame = 0; frame <= 60; frame += 1)
+      sync.update(turning(frame), FRAME_S, ORIGIN, THIRD);
+    loaded.value = true;
+    sync.update(turning(61), FRAME_S, ORIGIN, THIRD);
+    sync.update(turning(62), FRAME_S, ORIGIN, THIRD);
+    expect(factories.vehicle).toHaveBeenCalledTimes(2);
+    expect(vehicles[0]!.object.parent).toBeNull();
+    expect(vehicles[1]!.input!.steer).toBeCloseTo(0.5, 2);
+  });
+
   it("aims a tank's turret along your aim, another driver's facing, or straight ahead", () => {
     const { sync, vehicles } = syncOf();
     const view: EntityView = { firstPerson: false, aim: 2.2 };

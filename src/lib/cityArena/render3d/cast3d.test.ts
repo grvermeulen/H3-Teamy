@@ -14,7 +14,6 @@ import { createDestruction3d } from "./destruction3d";
 import { createEffects3d } from "./effects3d";
 import type { EntityFactories } from "./entities";
 import { createPickup3d } from "./pickups3d";
-import { createVehicle3d } from "./vehicles3d";
 import type { ViewModelPass } from "./viewModelPass";
 
 const effectsMade = vi.hoisted(
@@ -142,7 +141,8 @@ describe("createCast3d", () => {
       character: expect.any(Function),
       characterVariant: expect.any(Function),
       dressCharacter: expect.any(Function),
-      vehicle: createVehicle3d,
+      vehicle: expect.any(Function),
+      vehicleVariant: expect.any(Function),
       pickup: createPickup3d,
     });
   });
