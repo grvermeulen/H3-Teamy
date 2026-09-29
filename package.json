@@ -70,7 +70,7 @@
     "@tailwindcss/postcss": "^4.3.3",
     "@vercel/speed-insights": "^2.0.0",
     "ably": "^2.29.0",
-    "ai": "^7.0.114",
+    "ai": "^7.0.116",
     "bcryptjs": "^3.0.3",
     "braintrust": "^3.35.0",
     "dotenv": "^18.0.4",
