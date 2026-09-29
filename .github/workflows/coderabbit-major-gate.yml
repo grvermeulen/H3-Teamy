@@ -12,9 +12,12 @@ on:
   # de gate daarom niet zelf; de push met de bijbehorende fix doet dat via
   # `pull_request_target: synchronize` (of handmatig "Re-run jobs").
 
-concurrency:
-  group: coderabbit-major-gate-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
-  cancel-in-progress: true
+# Bewust geen `concurrency`-blok: een push plus een reeks bot-reviews start binnen
+# seconden meerdere runs. Met `cancel-in-progress: true` worden die geannuleerd,
+# en ook met `false` vervangt (en annuleert) GitHub een wachtende run in dezelfde
+# groep. Geannuleerde check-runs blijven op de head-commit staan en maken de PR
+# rood. De job leest alleen de actuele threadstatus en duurt ~4 s, dus parallelle
+# runs zijn onschadelijk.
 
 permissions:
   contents: read
