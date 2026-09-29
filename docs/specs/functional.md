@@ -110,6 +110,7 @@ This document reflects the features that exist in the code today. Planned or fut
 - /arena/controller
 - /arena/scherm
 - /arena/spelen
+- /arena/staal
 - /attendance
 - /docs
 - /login
