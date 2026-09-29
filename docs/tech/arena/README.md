@@ -3,6 +3,8 @@
 For the full-screen map and road guidance in **0.3.4**, see [Kaart en navigatie](NAVIGATION.md).
 For the optional third-/first-person 3D view, destructible buildings and the rocket launcher added
 in **0.5.0**, see [3D mode](3D-MODE.md).
+For the Staal vs. Trump fight animation (`/arena/staal`) added in **0.6.1**, see
+[Staal vs. Trump](STAAL-FIGHT.md).
 
 ## Summary
 

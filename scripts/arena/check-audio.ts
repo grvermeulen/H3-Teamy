@@ -1,14 +1,16 @@
 /**
  * `npm run arena:check-audio` — every clip in the clip table has a file under
  * `public/arena/audio/`, the file is under the size cap, and `CREDITS.md` has a row for it
- * (Plan 6, Task 2); and the same for the radio's tracks and their manifest (Plan 7, Task 5,
- * `check-radio.ts`). Exits non-zero listing what is missing; the repo is public, so an
+ * (Plan 6, Task 2); the same for the radio's tracks and their manifest (Plan 7, Task 5,
+ * `check-radio.ts`); and the same for the Staal vs. Trump fight's clips under
+ * `public/arena/fight/`. Exits non-zero listing what is missing; the repo is public, so an
  * unattributed clip is a licence problem, not a nit.
  */
 
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { AUDIO_CLIPS, CLIP_NAMES } from "../../src/lib/cityArena/audio/clips";
+import { FIGHT_CLIPS, FIGHT_CLIP_NAMES } from "../../src/lib/staalFight/clips";
 import {
   RadioManifestSchema,
   type RadioManifest,
@@ -28,6 +30,11 @@ const AUDIO_DIR = path.join("public", "arena", "audio");
 const CREDITS_FILE = path.join(AUDIO_DIR, "CREDITS.md");
 /** The most one clip may weigh; a guardrail against an uncompressed export, not a design limit. */
 export const MAX_CLIP_BYTES = 200 * 1024;
+/** Where the fight's clips live, and their credits. */
+const FIGHT_DIR = path.join("public", "arena", "fight");
+const FIGHT_CREDITS_FILE = path.join(FIGHT_DIR, "CREDITS.md");
+/** The fight's music is a minute long, so it gets a bigger cap than a one-shot. */
+export const MAX_FIGHT_MUSIC_BYTES = 800 * 1024;
 
 /** One problem with one clip. */
 export type AudioProblem = { file: string; problem: string };
@@ -53,6 +60,41 @@ export async function auditAudio(
         problems.push({
           file,
           problem: `${Math.round(info.size / 1024)} KB, over the ${MAX_CLIP_BYTES / 1024} KB cap`,
+        });
+    } catch (error: unknown) {
+      if (!isMissing(error)) throw error;
+      problems.push({ file, problem: "no such file" });
+    }
+    if (!credited.has(file))
+      problems.push({ file, problem: "no row in CREDITS.md" });
+  }
+  for (const file of creditedTwice(credits))
+    problems.push({ file, problem: "credited twice in CREDITS.md" });
+  return problems;
+}
+
+/**
+ * Checks the fight's clips and their credits, like {@link auditAudio}.
+ *
+ * @param dir - The fight audio directory.
+ * @param credits - The contents of its `CREDITS.md`, or null when it does not exist.
+ * @returns The problems, empty when everything is in order.
+ */
+export async function auditFight(
+  dir: string,
+  credits: string | null,
+): Promise<AudioProblem[]> {
+  const problems: AudioProblem[] = [];
+  const credited = creditedFiles(credits);
+  for (const clip of FIGHT_CLIP_NAMES) {
+    const file = FIGHT_CLIPS[clip];
+    const cap = clip === "music" ? MAX_FIGHT_MUSIC_BYTES : MAX_CLIP_BYTES;
+    try {
+      const info = await stat(path.join(dir, file));
+      if (info.size > cap)
+        problems.push({
+          file,
+          problem: `${Math.round(info.size / 1024)} KB, over the ${cap / 1024} KB cap`,
         });
     } catch (error: unknown) {
       if (!isMissing(error)) throw error;
@@ -100,10 +142,11 @@ async function main(): Promise<void> {
       radio.credits,
       radio.files,
     )),
+    ...(await auditFight(FIGHT_DIR, await readIfPresent(FIGHT_CREDITS_FILE))),
   ];
   if (problems.length === 0) {
     console.log(
-      `arena audio: ${CLIP_NAMES.length} clips and ${tracks} radio tracks present and credited.`,
+      `arena audio: ${CLIP_NAMES.length} clips, ${tracks} radio tracks and ${FIGHT_CLIP_NAMES.length} fight clips present and credited.`,
     );
     return;
   }

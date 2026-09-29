@@ -194,6 +194,22 @@ export default function CityArenaLauncher(): React.JSX.Element {
             focusOnOpen
           />
         ) : null}
+        <Link
+          href="/arena/staal"
+          className="arena-card mt-3 flex min-h-11 items-center justify-between gap-3 px-3 py-2 text-[var(--arena-text)] transition hover:text-[var(--arena-amber)]"
+        >
+          <span className="min-w-0">
+            <span className="arena-label block text-[var(--arena-amber)]">
+              Bonus · arcadegevecht
+            </span>
+            <span className="arena-display block text-lg leading-tight">
+              Staal vs. Trump
+            </span>
+          </span>
+          <span aria-hidden="true" className="text-xl">
+            ▶
+          </span>
+        </Link>
         <div className="mt-3 flex flex-wrap gap-3 text-sm">
           <Link
             className="min-h-11 py-2 underline text-[var(--arena-amber)]"

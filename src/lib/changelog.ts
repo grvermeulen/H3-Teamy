@@ -24,6 +24,19 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.6.1": {
+    title: "Staal vs. Trump",
+    steps: [
+      {
+        title: "Een arcadegevecht op de boulevard",
+        body: "Op de GTA H3-kaart staat een bonus: Staal tegen Trump in Street Fighter-stijl. Een parry, combo's van twintig klappen, een super en een finisher in slow motion. Na de knock-out wacht er een welverdiend biertje.",
+      },
+      {
+        title: "Zet je geluid aan",
+        body: "Elke stoot, trap en blokkade heeft zijn eigen geluid, met arcademuziek eronder. Draai je telefoon voor het grootste beeld.",
+      },
+    ],
+  },
   "0.6.0": {
     title: "GTA H3 komt tot leven",
     steps: [
