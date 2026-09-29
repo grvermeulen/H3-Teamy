@@ -224,12 +224,4 @@ describe("CityArenaLauncher", () => {
       screen.getByText("Kaart © OpenStreetMap-bijdragers"),
     ).toBeInTheDocument();
   });
-
-  it("links everyone to the Staal vs. Trump fight", () => {
-    sessionState.loggedIn = false;
-    render(<CityArenaLauncher />);
-    expect(
-      screen.getByRole("link", { name: /Staal vs\. Trump/ }),
-    ).toHaveAttribute("href", "/arena/staal");
-  });
 });

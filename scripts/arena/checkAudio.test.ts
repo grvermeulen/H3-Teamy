@@ -3,13 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AUDIO_CLIPS, CLIP_NAMES } from "../../src/lib/cityArena/audio/clips";
-import { FIGHT_CLIPS, FIGHT_CLIP_NAMES } from "../../src/lib/staalFight/clips";
-import {
-  MAX_CLIP_BYTES,
-  MAX_FIGHT_MUSIC_BYTES,
-  auditAudio,
-  auditFight,
-} from "./check-audio";
+import { MAX_CLIP_BYTES, auditAudio } from "./check-audio";
 
 /** A credits table naming every clip in the table. */
 function creditsFor(files: string[]): string {
@@ -87,60 +81,5 @@ describe("auditAudio", () => {
     expect(
       problems.filter((p) => p.problem === "no row in CREDITS.md"),
     ).toHaveLength(CLIP_NAMES.length);
-  });
-});
-
-describe("auditFight", () => {
-  let dir = "";
-  const files = FIGHT_CLIP_NAMES.map((clip) => FIGHT_CLIPS[clip]);
-
-  beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), "fight-audio-"));
-  });
-
-  afterEach(async () => {
-    await rm(dir, { recursive: true, force: true });
-  });
-
-  it("is quiet when every clip is present, small enough and credited", async () => {
-    for (const file of files) await writeFile(path.join(dir, file), "ID3");
-    await writeFile(
-      path.join(dir, FIGHT_CLIPS.music),
-      Buffer.alloc(MAX_CLIP_BYTES + 1),
-    );
-    expect(await auditFight(dir, creditsFor(files))).toEqual([]);
-  });
-
-  it("names a missing, an uncredited and an oversized clip", async () => {
-    for (const file of files)
-      if (file !== FIGHT_CLIPS.bell)
-        await writeFile(path.join(dir, file), "ID3");
-    await writeFile(
-      path.join(dir, FIGHT_CLIPS.kick),
-      Buffer.alloc(MAX_CLIP_BYTES + 1),
-    );
-    await writeFile(
-      path.join(dir, FIGHT_CLIPS.music),
-      Buffer.alloc(MAX_FIGHT_MUSIC_BYTES + 1),
-    );
-    const credited = files.filter((file) => file !== FIGHT_CLIPS.gulp);
-    const problems = await auditFight(dir, creditsFor(credited));
-    expect(problems).toContainEqual({
-      file: "bell.mp3",
-      problem: "no such file",
-    });
-    expect(problems).toContainEqual({
-      file: "gulp.mp3",
-      problem: "no row in CREDITS.md",
-    });
-    expect(problems).toContainEqual({
-      file: "kick.mp3",
-      problem: expect.stringContaining("over the"),
-    });
-    expect(problems).toContainEqual({
-      file: "music.mp3",
-      problem: expect.stringContaining("over the 800 KB cap"),
-    });
-    expect(problems).toHaveLength(4);
   });
 });

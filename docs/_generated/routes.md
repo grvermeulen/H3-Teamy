@@ -63,7 +63,6 @@
 - /arena/controller
 - /arena/scherm
 - /arena/spelen
-- /arena/staal
 - /attendance
 - /docs
 - /login
