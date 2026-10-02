@@ -1,3 +1,4 @@
+import { localPlayer } from "./players";
 import { describe, expect, it } from "vitest";
 import type { MapIndex } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
@@ -8,10 +9,12 @@ import {
   POLICE_REPATH_TICKS,
   createPoliceCar,
   managePoliceCars,
+  policeCarIds,
   policeChase,
   policeDrivers,
   policeSpawnPoints,
   replanPolice,
+  sirenWithin,
 } from "./police";
 import { createRng } from "./rng";
 import type { ArenaState, DriverState } from "./types";
@@ -48,7 +51,7 @@ function playerWithHeat(heat: number): ArenaState {
     { index: emptyIndex, graph, seed: 3, zone: null },
     createRng(3),
   );
-  return { ...state, player: { ...state.player, heat, heatTick: 0 } };
+  return { ...state, players: [{ ...localPlayer(state), heat, heatTick: 0 }] };
 }
 
 function driverOf(vehicleId: number): DriverState {
@@ -151,7 +154,7 @@ describe("managePoliceCars", () => {
       2 + POLICE_REPATH_TICKS,
     );
     const threeStars = managePoliceCars(
-      { ...routed, player: { ...routed.player, heat: 120 } },
+      { ...routed, players: [{ ...localPlayer(routed), heat: 120 }] },
       { graph },
       3,
       createRng(2),
@@ -193,7 +196,7 @@ describe("managePoliceCars", () => {
     const stolen: ArenaState = {
       ...patrol,
       traffic: [],
-      player: { ...patrol.player, vehicleId: 900 },
+      players: [{ ...localPlayer(patrol), vehicleId: 900 }],
     };
     expect(managePoliceCars(stolen, { graph }, 1, createRng(2))).toBe(stolen);
   });
@@ -204,10 +207,36 @@ describe("managePoliceCars", () => {
       ...playerWithHeat(80),
       vehicles: [police.vehicle],
       traffic: [],
-      player: { ...playerWithHeat(80).player, vehicleId: police.vehicle.id },
+      players: [
+        { ...localPlayer(playerWithHeat(80)), vehicleId: police.vehicle.id },
+      ],
     };
     const managed = managePoliceCars(stolen, { graph }, 1, createRng(2));
     expect(managed.vehicles).toHaveLength(1);
     expect(managed.traffic).toEqual([]);
+  });
+});
+
+describe("policeCarIds and sirenWithin", () => {
+  it("names the cars police drivers hold, wrecks excluded, and hears them within range", () => {
+    const state: ArenaState = {
+      ...playerWithHeat(0),
+      vehicles: [
+        createVehicle(1, "police", [50, 0], 0, POLICE_COLOUR),
+        createVehicle(2, "sedan", [10, 0], 0, 0),
+        {
+          ...createVehicle(3, "police", [20, 0], 0, POLICE_COLOUR),
+          wrecked: true,
+        },
+        createVehicle(4, "police", [500, 0], 0, POLICE_COLOUR),
+      ],
+      traffic: [driverOf(1), { ...driverOf(2), role: "traffic" }, driverOf(3)],
+    };
+    expect([...policeCarIds(state)]).toEqual([1]);
+    expect(sirenWithin(state, [0, 0])).toBe(true);
+    expect(sirenWithin(state, [0, 0], 40)).toBe(false);
+    expect(sirenWithin({ ...state, traffic: [driverOf(4)] }, [0, 0])).toBe(
+      false,
+    );
   });
 });

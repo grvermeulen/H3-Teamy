@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { defaultSeasonWindow, generateTrainingDates } from "../../../../lib/training";
+import {
+  defaultSeasonWindow,
+  generateTrainingDates,
+} from "../../../../lib/training";
 
 export async function GET(req: NextRequest) {
   const from = req.nextUrl.searchParams.get("from");
@@ -10,6 +13,3 @@ export async function GET(req: NextRequest) {
   const dates = generateTrainingDates(fromDate, toDate);
   return NextResponse.json({ sessions: dates.map((d) => ({ date: d })) });
 }
-
-
-

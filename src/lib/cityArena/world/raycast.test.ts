@@ -3,7 +3,13 @@ import { boundsOf } from "../mapBuild/geometry";
 import { createCollisionGrid } from "./collisionGrid";
 import type { DecodedTile } from "./decode";
 import type { Point } from "./projection";
-import { firstBuildingHit, firstRingHit, segmentIntersection } from "./raycast";
+import {
+  firstBuildingHit,
+  firstBuildingHitDetail,
+  firstRingHit,
+  segmentIntersection,
+} from "./raycast";
+import { structureIdOf } from "./structureId";
 
 const square: Point[] = [
   [10, -5],
@@ -22,8 +28,11 @@ function tileWith(buildings: Point[][], water: Point[][] = []): DecodedTile {
     x: 0,
     y: 0,
     rect: { minX: -100, minY: -100, maxX: 1900, maxY: 1900 },
+    trees: [],
+    furniture: [],
     roads: [],
-    buildings: buildings.map((ring) => ({
+    buildings: buildings.map((ring, index) => ({
+      structureId: structureIdOf(0, 0, index),
       ring,
       bounds: boundsOf(ring),
       levels: 2,
@@ -53,5 +62,15 @@ describe("raycast", () => {
     grid.insertTile(tileWith([square], [pond]));
     expect(firstBuildingHit(grid, [0, 0], [30, 0])).toEqual([10, 0]);
     expect(firstBuildingHit(grid, [0, 100], [30, 100])).toBeNull();
+  });
+
+  it("reports the structure id of the building it hits, and never water", () => {
+    const grid = createCollisionGrid();
+    grid.insertTile(tileWith([square], [pond]));
+    expect(firstBuildingHitDetail(grid, [0, 0], [30, 0])).toEqual({
+      point: [10, 0],
+      structureId: structureIdOf(0, 0, 0),
+    });
+    expect(firstBuildingHitDetail(grid, [0, 100], [30, 100])).toBeNull();
   });
 });

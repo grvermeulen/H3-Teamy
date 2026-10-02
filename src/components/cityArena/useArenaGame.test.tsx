@@ -1,16 +1,31 @@
+import { localPlayer } from "@/lib/cityArena/sim/players";
 import * as Sentry from "@sentry/nextjs";
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCamera } from "@/lib/cityArena/render/camera";
+import { RUBBLE_FILL } from "@/lib/cityArena/render/drawStructures";
 import { CROSSHAIR_STROKE } from "@/lib/cityArena/render/palette";
+import { NO_SPRITES } from "@/lib/cityArena/render/sprites";
+import type { View3dFrame } from "@/lib/cityArena/render3d";
 import { createStaticRaster } from "@/lib/cityArena/render/staticRaster";
 import {
   createFakeContext,
   createFakeTarget,
+  fakeGetContext,
   type FakeContext,
 } from "@/lib/cityArena/render/testing/fakeContext";
 import { createArenaState } from "@/lib/cityArena/sim/arena";
+import { HOST_TICK_HZ, createHostLoop } from "@/lib/cityArena/net/hostLoop";
+import {
+  createMemoryHub,
+  createMemoryTransport,
+} from "@/lib/cityArena/net/memoryTransport";
+import {
+  decodeSnapshot,
+  type Snapshot,
+} from "@/lib/cityArena/net/snapshotWire";
+import type { RealtimeTransport } from "@/lib/cityArena/net/transport";
 import {
   PLAYER_MAX_HEALTH,
   RESPAWN_DELAY_TICKS,
@@ -18,11 +33,15 @@ import {
 import { createRng } from "@/lib/cityArena/sim/rng";
 import { createVehicle } from "@/lib/cityArena/sim/vehicle";
 import { nextWeapon, SPAWN_AMMO } from "@/lib/cityArena/sim/weapons";
+import { boundsOf } from "@/lib/cityArena/mapBuild/geometry";
+import type { StructureState } from "@/lib/cityArena/sim/types";
 import { createCollisionGrid } from "@/lib/cityArena/world/collisionGrid";
+import type { DecodedTile } from "@/lib/cityArena/world/decode";
 import type { LoadProgress } from "@/lib/cityArena/world/mapLoader";
 import type { MapIndex, MapLandmark } from "@/lib/cityArena/world/mapTypes";
 import type { Point } from "@/lib/cityArena/world/projection";
 import { decodeRoadGraph } from "@/lib/cityArena/world/roadGraph";
+import { structureIdOf } from "@/lib/cityArena/world/structureId";
 import type {
   WorldReady,
   WorldSession,
@@ -40,11 +59,19 @@ vi.mock("@sentry/nextjs", () => ({
   captureMessage: vi.fn(),
 }));
 
+/** jsdom has no WebGL: the lazily imported 3D view is a stand-in the tests inspect. */
+const mockCreateView3d = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/cityArena/render3d", () => ({
+  createView3d: mockCreateView3d,
+  pitchLimitsFor: () => [-0.6, 0.7],
+}));
+
 import {
   aimAngle,
   computeHud,
   nearestLandmarkTo,
   useArenaGame,
+  type ArenaNetplayOptions,
 } from "./useArenaGame";
 
 /** Wall-clock step (ms) between manually driven frames; matches `MAX_FRAME_S` so each is a full 0.1 s step. */
@@ -114,7 +141,9 @@ function createControllableSession(): {
     raster: createStaticRaster((width, height) =>
       createFakeTarget(width, height),
     ),
+    overhead: createStaticRaster(() => null),
     landmarks: () => new Map(),
+    sprites: () => NO_SPRITES,
     update: vi.fn(async () => ({ loaded: 0, total: 0 })),
     tiles: () => [],
     loadedTileRects: () => [],
@@ -180,7 +209,10 @@ function renderArenaGame() {
 }
 
 /** Options for {@link renderArenaGameWithCanvas}; omitted fields keep the pre-existing defaults. */
-type RenderWithCanvasOptions = { debug?: boolean };
+type RenderWithCanvasOptions = {
+  debug?: boolean;
+  netplay?: ArenaNetplayOptions;
+};
 
 /**
  * Renders the hook with a real (if unattached-to-the-DOM) canvas, and fakes its 2D context —
@@ -193,8 +225,8 @@ type RenderWithCanvasOptions = { debug?: boolean };
  */
 function renderArenaGameWithCanvas(options: RenderWithCanvasOptions = {}) {
   const fakeContext = createFakeContext();
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
-    fakeContext as unknown as CanvasRenderingContext2D,
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    fakeGetContext(() => fakeContext),
   );
   const canvas = document.createElement("canvas");
   // `canvasRef` must keep one stable identity across re-renders: `useArenaBoot` and
@@ -206,6 +238,7 @@ function renderArenaGameWithCanvas(options: RenderWithCanvasOptions = {}) {
       zoneKey: "wageningen",
       canvasRef,
       debug: options.debug ?? false,
+      netplay: options.netplay,
     }),
   );
   return { ...hook, canvas, fakeContext };
@@ -225,6 +258,14 @@ async function bootArenaWithCanvas(
   return rendered;
 }
 
+/** Stubs `document.pointerLockElement`, which jsdom does not implement. */
+function stubPointerLock(target: Element | null): void {
+  Object.defineProperty(document, "pointerLockElement", {
+    configurable: true,
+    get: () => target,
+  });
+}
+
 /** Grabs the frame-loop's `tick` callback handed to the mocked `requestAnimationFrame`. */
 function getTick(): (timestamp: number) => void {
   return vi.mocked(window.requestAnimationFrame).mock.calls[0][0];
@@ -238,20 +279,104 @@ function hasCrosshairStroke(fakeContext: FakeContext): boolean {
 
 /**
  * Calls `tick` with timestamps `FRAME_STEP_MS` apart, starting after `fromMs`, until `isDone`
- * reports true or `MAX_RESPAWN_FRAMES` frames have run — whichever comes first, so a regression
- * that stops the state from ever satisfying `isDone` fails the caller's own assertion instead of
+ * reports true or `maxFrames` frames have run — whichever comes first, so a regression that
+ * stops the state from ever satisfying `isDone` fails the caller's own assertion instead of
  * hanging the test.
  */
 function driveFramesUntil(
   tick: (timestamp: number) => void,
   fromMs: number,
   isDone: () => boolean,
+  maxFrames = MAX_RESPAWN_FRAMES,
 ): void {
   let timestamp = fromMs;
-  for (let frame = 0; frame < MAX_RESPAWN_FRAMES && !isDone(); frame++) {
+  for (let frame = 0; frame < maxFrames && !isDone(); frame++) {
     timestamp += FRAME_STEP_MS;
     act(() => tick(timestamp));
   }
+}
+
+/** Half the side of the square shed the destruction tests shoot down, metres. */
+const SHED_HALF_M = 2;
+/** How far ahead of the player the shed's centre stands, metres: well inside pistol range. */
+const SHED_DISTANCE_M = 8;
+/** The shed's structure id: the first building of tile (0, 0). */
+const SHED_ID = structureIdOf(0, 0, 0);
+/**
+ * Frames the destruction tests may shoot for. A pistol round brings a quarter of its 20 damage to
+ * a building, 2.5 times a second, and the smallest building has 120 health: 24 hits, about 96
+ * frames of 0.1 s.
+ */
+const MAX_SHOOTING_FRAMES = 200;
+/** Simulation ticks in one 0.1 s frame. */
+const TICKS_PER_FRAME = 3;
+/** Ticks the trigger is held for: every one of {@link MAX_SHOOTING_FRAMES} frames' worth. */
+const SHOOTING_TICKS = MAX_SHOOTING_FRAMES * TICKS_PER_FRAME;
+
+/**
+ * Stands a one-storey shed {@link SHED_DISTANCE_M} ahead of the local player, on the line they
+ * face, in both the session's collision grid (which the simulation's rounds hit) and its tiles
+ * (which the renderers draw footprints from).
+ */
+function placeShedAhead(session: WorldSession): void {
+  const player = hookedPlayer()!;
+  const centreX = player.x + Math.cos(player.facing) * SHED_DISTANCE_M;
+  const centreY = player.y + Math.sin(player.facing) * SHED_DISTANCE_M;
+  const ring: Point[] = [
+    [centreX - SHED_HALF_M, centreY - SHED_HALF_M],
+    [centreX + SHED_HALF_M, centreY - SHED_HALF_M],
+    [centreX + SHED_HALF_M, centreY + SHED_HALF_M],
+    [centreX - SHED_HALF_M, centreY + SHED_HALF_M],
+  ];
+  const tile: DecodedTile = {
+    x: 0,
+    y: 0,
+    rect: { minX: -2000, minY: -2000, maxX: 2000, maxY: 2000 },
+    roads: [],
+    buildings: [
+      { structureId: SHED_ID, ring, bounds: boundsOf(ring), levels: 1 },
+    ],
+    ground: [],
+    water: [],
+    trees: [],
+    furniture: [],
+  };
+  session.collision.insertTile(tile);
+  session.tiles = () => [tile];
+}
+
+/** True when `structures` lists the shed as destroyed. */
+function shedDestroyed(
+  structures:
+    readonly Pick<StructureState, "id" | "destroyedAtTick">[] | undefined,
+): boolean {
+  return (structures ?? []).some(
+    (entry) => entry.id === SHED_ID && entry.destroyedAtTick !== null,
+  );
+}
+
+/**
+ * Holds the trigger through the debug seam — with no aim, the rounds fly along the player's
+ * facing, straight at the shed — and drives frames from `fromMs` until the simulation has brought
+ * it down.
+ */
+function shootDownShed(
+  tick: (timestamp: number) => void,
+  fromMs: number,
+): void {
+  window.__arena?.dispatch({ fire: true }, SHOOTING_TICKS);
+  driveFramesUntil(
+    tick,
+    fromMs,
+    () => shedDestroyed(window.__arena?.getState()?.structures),
+    MAX_SHOOTING_FRAMES,
+  );
+}
+
+/** The local player behind the test hook, or undefined when the hook is not installed. */
+function hookedPlayer() {
+  const state = window.__arena?.getState();
+  return state ? localPlayer(state) : undefined;
 }
 
 describe("useArenaGame", () => {
@@ -317,7 +442,9 @@ describe("useArenaGame", () => {
       raster: createStaticRaster((width, height) =>
         createFakeTarget(width, height),
       ),
+      overhead: createStaticRaster(() => null),
       landmarks: () => new Map(),
+      sprites: () => NO_SPRITES,
       update: vi.fn(async () => ({ loaded: 0, total: 0 })),
       tiles: () => [],
       loadedTileRects: () => [],
@@ -410,6 +537,28 @@ describe("useArenaGame", () => {
     });
     expect(result.current.failed).toBe(false);
   });
+
+  it("flips camera3d with V only while the view is 3d", () => {
+    localStorage.clear();
+    const { session } = createControllableSession();
+    mockCreateWorldSession.mockReturnValue(session);
+    const { result } = renderArenaGame();
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyV" }));
+    });
+    expect(result.current.settings.camera3d).toBe("third");
+    act(() => {
+      result.current.updateSettings({ view: "3d" });
+    });
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyV" }));
+    });
+    expect(result.current.settings.camera3d).toBe("first");
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyV" }));
+    });
+    expect(result.current.settings.camera3d).toBe("third");
+  });
 });
 
 describe("nearestLandmarkTo", () => {
@@ -445,7 +594,7 @@ describe("computeHud and aimAngle", () => {
       createRng(1),
     );
     const session = { index: () => testIndex, tiles: () => [] };
-    expect(computeHud(session, state)).toMatchObject({
+    expect(computeHud(session, state, localPlayer(state))).toMatchObject({
       zoneName: null,
       health: 100,
       weapon: "pistol",
@@ -456,9 +605,9 @@ describe("computeHud and aimAngle", () => {
     const driving = {
       ...state,
       vehicles: [car],
-      player: { ...state.player, vehicleId: 9 },
+      players: [{ ...localPlayer(state), vehicleId: 9 }],
     };
-    expect(computeHud(session, driving)).toMatchObject({
+    expect(computeHud(session, driving, localPlayer(driving))).toMatchObject({
       speedMps: 10,
       inVehicle: true,
     });
@@ -478,14 +627,34 @@ describe("computeHud and aimAngle", () => {
 describe("debug hooks", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Every test starts from the default (2D) settings, whatever an earlier one stored.
+    localStorage.clear();
+    stubPointerLock(null);
+    document.exitPointerLock = vi.fn();
     vi.stubGlobal("requestAnimationFrame", vi.fn());
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
   });
 
   afterEach(() => {
+    stubPointerLock(null);
     cleanup();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("preserves the latest radar position when a held destination gesture completes", async () => {
+    const { result } = await bootArenaWithCanvas({ debug: true });
+    const selectDestination = result.current.setDestination;
+    const before = result.current.radar.player;
+    window.__arena?.dispatch({ move: [1, 0] }, 6);
+    const tick = getTick();
+    act(() => tick(0));
+    act(() => tick(FRAME_STEP_MS));
+    const latest = result.current.radar.player;
+    expect(latest[0]).toBeGreaterThan(before[0]);
+    act(() => selectDestination([100, 0]));
+    expect(result.current.radar.player).toEqual(latest);
+    expect(result.current.radar.navigation?.destination).toEqual([100, 0]);
   });
 
   it("installs window.__arena in debug mode and removes it on unmount", async () => {
@@ -506,8 +675,21 @@ describe("debug hooks", () => {
       await Promise.resolve();
     });
     expect(window.__arena?.getState()?.tick).toBe(0);
+    expect(window.__arena?.getMetrics()).toMatchObject({
+      fps: 0,
+      samples: 0,
+      sessionFrames: 0,
+    });
     window.__arena?.dispatch({ fire: true }, 2);
     expect(window.__arena?.getViolations()).toBe(0);
+    expect(window.__arena?.audio.levels()).toMatchObject({
+      "amb-traffic": 0,
+      "amb-birds": 0,
+    });
+    expect(window.__arena?.audio.voices()).toMatchObject({
+      ambience: true,
+      oneShots: 0,
+    });
     unmount();
     expect(window.__arena).toBeUndefined();
   });
@@ -532,16 +714,14 @@ describe("debug hooks", () => {
     window.__arena?.dispatch({ weaponNext: true }, 3);
     act(() => tick(0));
     act(() => tick(FRAME_STEP_MS));
-    expect(window.__arena?.getState()?.player.weapon).toBe(
-      nextWeapon("pistol", SPAWN_AMMO),
-    );
+    expect(hookedPlayer()?.weapon).toBe(nextWeapon("pistol", SPAWN_AMMO));
     expect(hasCrosshairStroke(fakeContext)).toBe(true);
     fakeContext.calls.length = 0;
 
     // (b) damage() stamps the death on the very next frame, at that frame's clock, and hides
     // the crosshair; (c) it clears once the tick passes the respawn delay (damage.ts).
     window.__arena?.damage(PLAYER_MAX_HEALTH);
-    const diedAtTick = window.__arena?.getState()?.player.diedAtTick ?? 0;
+    const diedAtTick = hookedPlayer()?.diedAtTick ?? 0;
     act(() => tick(2 * FRAME_STEP_MS));
     expect(result.current.death).toEqual({ diedAtMs: 2 * FRAME_STEP_MS });
     expect(hasCrosshairStroke(fakeContext)).toBe(false);
@@ -575,8 +755,336 @@ describe("debug hooks", () => {
     expect(window.__arena?.getViolations()).toBeGreaterThan(0);
     expect(vi.mocked(Sentry.captureMessage)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(Sentry.captureMessage)).toHaveBeenCalledWith(
-      "Arena invariant: player position is not finite",
+      "Arena invariant: player 0 position is not finite",
       { level: "warning", tags: { area: "arena", kind: "invariant" } },
     );
+  });
+
+  it("in 3D paints through the 3D view and aims where the mouse turned the camera", async () => {
+    const handle = {
+      render: vi.fn(),
+      aimPoint: vi.fn(() => null),
+      lookZoom: vi.fn(() => 1),
+      dispose: vi.fn(),
+    };
+    mockCreateView3d.mockReturnValue(handle);
+    const { result, canvas, fakeContext } = await bootArenaWithCanvas({
+      debug: true,
+    });
+    canvas.requestPointerLock = vi.fn(() => Promise.resolve());
+    result.current.view3d.layerRef.current = document.createElement("div");
+    await act(async () => {
+      result.current.updateSettings({ view: "3d" });
+    });
+    await waitFor(() => expect(mockCreateView3d).toHaveBeenCalledTimes(1));
+    const facing = hookedPlayer()!.facing;
+    // The click that takes the pointer lock aims but does not shoot.
+    canvas.dispatchEvent(
+      new PointerEvent("pointerdown", { pointerType: "mouse", button: 0 }),
+    );
+    expect(canvas.requestPointerLock).toHaveBeenCalledTimes(1);
+    stubPointerLock(canvas);
+    canvas.dispatchEvent(new MouseEvent("pointermove", { movementX: 200 }));
+    fakeContext.calls.length = 0;
+    const tick = getTick();
+    act(() => tick(0));
+    act(() => tick(FRAME_STEP_MS));
+    expect(window.__arena?.getState()?.bullets).toHaveLength(0);
+    const [frame, overlay] = handle.render.mock.calls.at(-1)!;
+    expect(overlay).toBe(fakeContext);
+    expect(frame.yaw).toBeCloseTo(facing + 0.48);
+    expect(frame.aim).toBeCloseTo(facing + 0.48);
+    expect(frame.scene.localPlayerId).toBe(0);
+    expect(hookedPlayer()!.facing).toBeCloseTo(facing + 0.48);
+    // The 2D renderer stood down: the HUD canvas was only cleared, never filled with the world.
+    expect(fakeContext.calls.some((call) => call.startsWith("fill("))).toBe(
+      false,
+    );
+  });
+
+  it("in 3D hands the view a building the player shot down, as destroyed", async () => {
+    const handle = {
+      render: vi.fn(),
+      aimPoint: vi.fn(() => null),
+      lookZoom: vi.fn(() => 1),
+      dispose: vi.fn(),
+    };
+    mockCreateView3d.mockReturnValue(handle);
+    const { session, resolveReady } = createControllableSession();
+    mockCreateWorldSession.mockReturnValue(session);
+    const { result } = renderArenaGameWithCanvas({ debug: true });
+    await bootReady(resolveReady);
+    result.current.view3d.layerRef.current = document.createElement("div");
+    await act(async () => {
+      result.current.updateSettings({ view: "3d" });
+    });
+    await waitFor(() => expect(mockCreateView3d).toHaveBeenCalledTimes(1));
+    placeShedAhead(session);
+    const tick = getTick();
+    act(() => tick(0));
+    const [before] = handle.render.mock.calls.at(-1)! as [View3dFrame];
+    expect(shedDestroyed(before.structures)).toBe(false);
+
+    shootDownShed(tick, 0);
+    expect(shedDestroyed(window.__arena?.getState()?.structures)).toBe(true);
+    act(() => tick((MAX_SHOOTING_FRAMES + 1) * FRAME_STEP_MS));
+
+    const [after] = handle.render.mock.calls.at(-1)! as [View3dFrame];
+    expect(shedDestroyed(after.structures)).toBe(true);
+    expect(after.structures).toBe(window.__arena?.getState()?.structures);
+    expect(window.__arena?.getViolations()).toBe(0);
+  });
+
+  it("in 2D draws the rubble of a building the player shot down", async () => {
+    const { session, resolveReady } = createControllableSession();
+    mockCreateWorldSession.mockReturnValue(session);
+    const { canvas, fakeContext } = renderArenaGameWithCanvas({
+      debug: true,
+    });
+    // jsdom lays nothing out; a 0 × 0 canvas would show no world at all.
+    vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    await bootReady(resolveReady);
+    placeShedAhead(session);
+    const tick = getTick();
+    act(() => tick(0));
+    expect(fakeContext.calls).not.toContain(`fill(${RUBBLE_FILL})`);
+
+    shootDownShed(tick, 0);
+    expect(shedDestroyed(window.__arena?.getState()?.structures)).toBe(true);
+    fakeContext.calls.length = 0;
+    act(() => tick((MAX_SHOOTING_FRAMES + 1) * FRAME_STEP_MS));
+
+    expect(fakeContext.calls).toContain(`fill(${RUBBLE_FILL})`);
+  });
+});
+
+/** The room the netplay tests play in. */
+const ROOM = "7K4M2Q";
+
+/** Netplay options for "me" over `transport`, connected and ready unless overridden. */
+function netplayFor(
+  transport: RealtimeTransport,
+  overrides: Partial<ArenaNetplayOptions> = {},
+): ArenaNetplayOptions {
+  return {
+    transport: () => transport,
+    ready: true,
+    connected: true,
+    roomCode: ROOM,
+    clientId: "me",
+    clockOffsetMs: 0,
+    hostClientId: overrides.isHost ? "me" : "host",
+    isHost: false,
+    memberIds: ["me"],
+    onHostLost: vi.fn(),
+    ...overrides,
+  };
+}
+
+/** A host loop on `hub`, driven by the test rather than a runtime, with itself seated as player 0. */
+function createTestHost(hub: ReturnType<typeof createMemoryHub>) {
+  const host = createHostLoop({
+    transport: createMemoryTransport(hub, "host"),
+    roomCode: ROOM,
+    world: {
+      collision: createCollisionGrid(),
+      index: testIndex,
+      graph: testGraph,
+    },
+    state: createArenaState(
+      { index: testIndex, graph: testGraph, seed: 1, zone: null },
+      createRng(1),
+    ),
+    random: createRng(2),
+    serverTimeMs: () => 0,
+  });
+  host.claim("host", 0);
+  return host;
+}
+
+describe("netplay", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("requestAnimationFrame", vi.fn());
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("hosts the room once booted: frames step the host loop and publish the world", async () => {
+    const hub = createMemoryHub();
+    const published: Snapshot[] = [];
+    createMemoryTransport(hub, "watcher")
+      .channel(`arena:room:${ROOM}`)
+      .subscribe("state", (message) => {
+        published.push(message.data as Snapshot);
+      });
+    const { result } = await bootArenaWithCanvas({
+      debug: true,
+      netplay: netplayFor(createMemoryTransport(hub, "me"), {
+        isHost: true,
+        memberIds: ["me", "other"],
+      }),
+    });
+    expect(result.current.phase).toBe("playing");
+    const tick = getTick();
+    act(() => tick(0));
+    for (let frame = 1; frame <= 3; frame += 1) {
+      act(() => tick(frame * FRAME_STEP_MS));
+      hub.flush();
+    }
+    expect(published.length).toBeGreaterThan(0);
+    const seats = decodeSnapshot(published[0]!).seats;
+    expect(seats.get("me")).toBe(0);
+    expect(seats.has("other")).toBe(true);
+    expect(result.current.peek()?.youId).toBe(0);
+    expect(window.__arena?.getState()?.players).toHaveLength(2);
+    expect(window.__arena?.getViolations()).toBe(0);
+  });
+
+  it("joins as a client: the seat the host names becomes the player this runtime drives", async () => {
+    const hub = createMemoryHub();
+    const host = createTestHost(hub);
+    const seat = host.addMember("me");
+    const { result } = await bootArenaWithCanvas({
+      debug: true,
+      netplay: netplayFor(createMemoryTransport(hub, "me"), {
+        memberIds: ["host", "me"],
+      }),
+    });
+    const tick = getTick();
+    act(() => tick(0));
+    // Alone until the host's first snapshot names this client's seat.
+    expect(result.current.peek()?.youId).toBe(0);
+    host.advance(FRAME_STEP_MS);
+    hub.flush();
+    act(() => tick(FRAME_STEP_MS));
+    expect(result.current.peek()?.youId).toBe(seat);
+    expect(
+      window.__arena?.getState()?.players.map((player) => player.id),
+    ).toEqual([0, seat]);
+    host.stop();
+  });
+
+  it("survives being unseated: reports it, roams alone, and takes the next seat it is given", async () => {
+    const hub = createMemoryHub();
+    const host = createTestHost(hub);
+    const seat = host.addMember("me");
+    const { result } = await bootArenaWithCanvas({
+      debug: true,
+      netplay: netplayFor(createMemoryTransport(hub, "me"), {
+        memberIds: ["host", "me"],
+      }),
+    });
+    const tick = getTick();
+    act(() => tick(0));
+    host.advance(FRAME_STEP_MS);
+    hub.flush();
+    act(() => tick(FRAME_STEP_MS));
+    expect(result.current.peek()?.youId).toBe(seat);
+
+    // The host drops this client; its next snapshot no longer carries the player. Without the
+    // recovery the frame would throw looking for it and the loop would never run again.
+    host.removeMember("me");
+    host.advance(FRAME_STEP_MS);
+    hub.flush();
+    act(() => tick(2 * FRAME_STEP_MS));
+    const alone = result.current.peek();
+    expect(alone?.seats.size).toBe(0);
+    expect(
+      window.__arena?.getState()?.players.map((player) => player.id),
+    ).toContain(alone?.youId);
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      { tags: { area: "arena", kind: "netplay-unseated" } },
+    );
+
+    // The host changes its mind: the next snapshot naming this client seats it again.
+    const again = host.addMember("me");
+    for (let index = 3; index <= 13; index++) {
+      host.advance(FRAME_STEP_MS);
+      hub.flush();
+      act(() => tick(index * FRAME_STEP_MS));
+    }
+    expect(result.current.peek()?.youId).toBe(again);
+    expect(result.current.peek()?.seats.get("me")).toBe(again);
+    host.stop();
+  });
+});
+
+describe("hidden tab", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("requestAnimationFrame", vi.fn());
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  });
+
+  afterEach(() => {
+    cleanup();
+    Reflect.deleteProperty(document, "hidden");
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  /** Makes `document.hidden` report `hidden` and tells the page so. */
+  function setHidden(hidden: boolean): void {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => hidden,
+    });
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+  }
+
+  it("does no simulation or canvas work while hidden and resumes without catching up", async () => {
+    const { result, fakeContext } = await bootArenaWithCanvas({ debug: true });
+    const tick = getTick();
+    act(() => tick(0));
+    const framesRequested = vi.mocked(window.requestAnimationFrame).mock.calls
+      .length;
+    const tickBefore = window.__arena?.getState()?.tick ?? 0;
+    const paintedBefore = fakeContext.calls.length;
+
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    // The interval clocks the world by performance.now(), the frame clock's own timeline.
+    vi.spyOn(performance, "now").mockImplementation(() => Date.now());
+    setHidden(true);
+    act(() => {
+      vi.advanceTimersByTime((1000 / HOST_TICK_HZ) * 6);
+    });
+    act(() => tick(5000));
+    expect(window.__arena?.getState()?.tick ?? 0).toBe(tickBefore);
+    expect(fakeContext.calls.length).toBe(paintedBefore);
+    expect(vi.mocked(window.requestAnimationFrame).mock.calls).toHaveLength(
+      framesRequested,
+    );
+
+    setHidden(false);
+    expect(vi.mocked(window.requestAnimationFrame).mock.calls).toHaveLength(
+      framesRequested + 1,
+    );
+    expect(result.current.phase).toBe("playing");
+    act(() => tick(6000));
+    expect(fakeContext.calls.length).toBeGreaterThan(paintedBefore);
+    expect(
+      (window.__arena?.getState()?.tick ?? 0) - tickBefore,
+    ).toBeLessThanOrEqual(2);
+  });
+
+  it("records a 500 ms frame stall separately from the simulation clamp", async () => {
+    const { result } = await bootArenaWithCanvas({ debug: true });
+    const tick = getTick();
+    act(() => tick(0));
+    act(() => tick(500));
+    expect(result.current.debugSnapshot?.metrics.frameP95Ms).toBe(500);
+    expect(result.current.debugSnapshot?.metrics.sessionWorstFrameMs).toBe(500);
   });
 });

@@ -1,0 +1,650 @@
+{
+  "commit": "18cee84",
+  "tests": 934,
+  "passed": 934,
+  "failed": 0,
+  "files": 128,
+  "results": [
+    {
+      "file": "src/lib/activeUser.test.ts",
+      "status": "passed",
+      "passed": 5
+    },
+    {
+      "file": "src/components/cityArena/ArenaDebugOverlay.test.tsx",
+      "status": "passed",
+      "passed": 1
+    },
+    {
+      "file": "src/components/cityArena/arenaFeel.test.ts",
+      "status": "passed",
+      "passed": 2
+    },
+    {
+      "file": "src/components/cityArena/arenaHud.test.ts",
+      "status": "passed",
+      "passed": 4
+    },
+    {
+      "file": "src/components/cityArena/ArenaLoadingScreen.test.tsx",
+      "status": "passed",
+      "passed": 2
+    },
+    {
+      "file": "src/components/cityArena/ArenaLobby.test.tsx",
+      "status": "passed",
+      "passed": 14
+    },
+    {
+      "file": "src/components/cityArena/ArenaRadar.test.tsx",
+      "status": "passed",
+      "passed": 1
+    },
+    {
+      "file": "src/components/cityArena/arenaRuntime.test.ts",
+      "status": "passed",
+      "passed": 3
+    },
+    {
+      "file": "src/components/cityArena/ArenaScoreboard.test.tsx",
+      "status": "passed",
+      "passed": 12
+    },
+    {
+      "file": "src/components/cityArena/ArenaSettingsSheet.test.tsx",
+      "status": "passed",
+      "passed": 6
+    },
+    {
+      "file": "src/components/cityArena/ArenaSoundToggle.test.tsx",
+      "status": "passed",
+      "passed": 1
+    },
+    {
+      "file": "src/components/cityArena/ArenaTouchButtons.test.tsx",
+      "status": "passed",
+      "passed": 7
+    },
+    {
+      "file": "src/components/cityArena/ArenaTouchTip.test.tsx",
+      "status": "passed",
+      "passed": 1
+    },
+    {
+      "file": "src/components/cityArena/ArenaVitals.test.tsx",
+      "status": "passed",
+      "passed": 2
+    },
+    {
+      "file": "src/components/cityArena/ArenaWanted.test.tsx",
+      "status": "passed",
+      "passed": 1
+    },
+    {
+      "file": "src/components/cityArena/ArenaZoneWarning.test.tsx",
+      "status": "passed",
+      "passed": 1
+    },
+    {
+      "file": "src/components/cityArena/CityArenaLauncher.test.tsx",
+      "status": "passed",
+      "passed": 11
+    },
+    {
+      "file": "src/components/cityArena/CityArenaLaunchIcon.test.tsx",
+      "status": "passed",
+      "passed": 4
+    },
+    {
+      "file": "src/components/cityArena/CityArenaOverlay.test.tsx",
+      "status": "passed",
+      "passed": 9
+    },
+    {
+      "file": "src/components/cityArena/ConnectionBanner.test.tsx",
+      "status": "passed",
+      "passed": 6
+    },
+    {
+      "file": "src/components/cityArena/DeathOverlay.test.tsx",
+      "status": "passed",
+      "passed": 2
+    },
+    {
+      "file": "src/components/cityArena/HostToast.test.tsx",
+      "status": "passed",
+      "passed": 4
+    },
+    {
+      "file": "src/components/cityArena/TouchStick.test.tsx",
+      "status": "passed",
+      "passed": 3
+    },
+    {
+      "file": "src/components/cityArena/useArenaGame.test.tsx",
+      "status": "passed",
+      "passed": 16
+    },
+    {
+      "file": "src/components/cityArena/useArenaRoom.test.tsx",
+      "status": "passed",
+      "passed": 4
+    },
+    {
+      "file": "src/components/cityArena/useDialogFocusTrap.test.tsx",
+      "status": "passed",
+      "passed": 5
+    },
+    {
+      "file": "src/components/cityArena/useMatchClock.test.ts",
+      "status": "passed",
+      "passed": 7
+    },
+    {
+      "file": "src/components/cityArena/useNetplay.test.ts",
+      "status": "passed",
+      "passed": 15
+    },
+    {
+      "file": "src/lib/cityArena/debugFlag.test.ts",
+      "status": "passed",
+      "passed": 1
+    },
+    {
+      "file": "src/lib/cityArena/debugMetrics.test.ts",
+      "status": "passed",
+      "passed": 2
+    },
+    {
+      "file": "src/lib/cityArena/schemas.test.ts",
+      "status": "passed",
+      "passed": 9
+    },
+    {
+      "file": "src/lib/cityArena/storage.test.ts",
+      "status": "passed",
+      "passed": 10
+    },
+    {
+      "file": "src/lib/services/arenaMatchService.test.ts",
+      "status": "passed",
+      "passed": 21
+    },
+    {
+      "file": "src/components/cityArena/launcher/RoomList.test.tsx",
+      "status": "passed",
+      "passed": 8
+    },
+    {
+      "file": "src/components/cityArena/launcher/useActiveRooms.test.ts",
+      "status": "passed",
+      "passed": 6
+    },
+    {
+      "file": "src/lib/cityArena/audio/samples.test.ts",
+      "status": "passed",
+      "passed": 8
+    },
+    {
+      "file": "src/lib/cityArena/audio/sound.test.ts",
+      "status": "passed",
+      "passed": 12
+    },
+    {
+      "file": "src/lib/cityArena/input/haptics.test.ts",
+      "status": "passed",
+      "passed": 9
+    },
+    {
+      "file": "src/lib/cityArena/input/inputState.test.ts",
+      "status": "passed",
+      "passed": 7
+    },
+    {
+      "file": "src/lib/cityArena/input/keyboard.test.ts",
+      "status": "passed",
+      "passed": 12
+    },
+    {
+      "file": "src/lib/cityArena/input/pointerAim.test.ts",
+      "status": "passed",
+      "passed": 7
+    },
+    {
+      "file": "src/lib/cityArena/input/touchStick.test.ts",
+      "status": "passed",
+      "passed": 7
+    },
+    {
+      "file": "src/lib/cityArena/input/weaponSelect.test.ts",
+      "status": "passed",
+      "passed": 5
+    },
+    {
+      "file": "src/lib/cityArena/mapBuild/areas.test.ts",
+      "status": "passed",
+      "passed": 4
+    },
+    {
+      "file": "src/lib/cityArena/mapBuild/assemble.test.ts",
+      "status": "passed",
+      "passed": 8
+    },
+    {
+      "file": "src/lib/cityArena/mapBuild/geometry.test.ts",
+      "status": "passed",
+      "passed": 16
+    },
+    {
+      "file": "src/lib/cityArena/mapBuild/landmarks.test.ts",
+      "status": "passed",
+      "passed": 11
+    },
+    {
+      "file": "src/lib/cityArena/mapBuild/overpassQueries.test.ts",
+      "status": "passed",
+      "passed": 5
+    },
+    {
+      "file": "src/lib/cityArena/mapBuild/roads.test.ts",
+      "status": "passed",
+      "passed": 10
+    },
+    {
+      "file": "src/lib/cityArena/mapBuild/tiles.test.ts",
+      "status": "passed",
+      "passed": 11
+    },
+    {
+      "file": "src/lib/cityArena/mapBuild/zones.test.ts",
+      "status": "passed",
+      "passed": 8
+    },
+    {
+      "file": "src/lib/cityArena/render/camera.test.ts",
+      "status": "passed",
+      "passed": 5
+    },
+    {
+      "file": "src/lib/cityArena/render/canvasTypes.test.ts",
+      "status": "passed",
+      "passed": 2
+    },
+    {
+      "file": "src/lib/cityArena/render/deathScreen.test.ts",
+      "status": "passed",
+      "passed": 4
+    },
+    {
+      "file": "src/lib/cityArena/render/drawEntities.test.ts",
+      "status": "passed",
+      "passed": 7
+    },
+    {
+      "file": "src/lib/cityArena/render/drawPeople.test.ts",
+      "status": "passed",
+      "passed": 2
+    },
+    {
+      "file": "src/lib/cityArena/render/drawPickups.test.ts",
+      "status": "passed",
+      "passed": 2
+    },
+    {
+      "file": "src/lib/cityArena/render/drawProjectiles.test.ts",
+      "status": "passed",
+      "passed": 3
+    },
+    {
+      "file": "src/lib/cityArena/render/drawStatic.test.ts",
+      "status": "passed",
+      "passed": 7
+    },
+    {
+      "file": "src/lib/cityArena/render/drawVehicles.test.ts",
+      "status": "passed",
+      "passed": 7
+    },
+    {
+      "file": "src/lib/cityArena/render/drawWorld.test.ts",
+      "status": "passed",
+      "passed": 4
+    },
+    {
+      "file": "src/lib/cityArena/render/feedback.test.ts",
+      "status": "passed",
+      "passed": 13
+    },
+    {
+      "file": "src/lib/cityArena/render/loadSprites.test.ts",
+      "status": "passed",
+      "passed": 8
+    },
+    {
+      "file": "src/lib/cityArena/render/radar.test.ts",
+      "status": "passed",
+      "passed": 3
+    },
+    {
+      "file": "src/lib/cityArena/render/renderScene.test.ts",
+      "status": "passed",
+      "passed": 4
+    },
+    {
+      "file": "src/lib/cityArena/render/sprites.test.ts",
+      "status": "passed",
+      "passed": 10
+    },
+    {
+      "file": "src/lib/cityArena/render/staticRaster.test.ts",
+      "status": "passed",
+      "passed": 10
+    },
+    {
+      "file": "src/lib/cityArena/render/streetLabels.test.ts",
+      "status": "passed",
+      "passed": 3
+    },
+    {
+      "file": "src/lib/cityArena/net/ablyTransport.test.ts",
+      "status": "passed",
+      "passed": 13
+    },
+    {
+      "file": "src/lib/cityArena/net/botMatch.test.ts",
+      "status": "passed",
+      "passed": 9
+    },
+    {
+      "file": "src/lib/cityArena/net/clientLoop.test.ts",
+      "status": "passed",
+      "passed": 17
+    },
+    {
+      "file": "src/lib/cityArena/net/election.test.ts",
+      "status": "passed",
+      "passed": 24
+    },
+    {
+      "file": "src/lib/cityArena/net/hostLoop.test.ts",
+      "status": "passed",
+      "passed": 20
+    },
+    {
+      "file": "src/lib/cityArena/net/interpolate.test.ts",
+      "status": "passed",
+      "passed": 10
+    },
+    {
+      "file": "src/lib/cityArena/net/lobbyPresence.test.ts",
+      "status": "passed",
+      "passed": 12
+    },
+    {
+      "file": "src/lib/cityArena/net/matchPhase.test.ts",
+      "status": "passed",
+      "passed": 11
+    },
+    {
+      "file": "src/lib/cityArena/net/memoryTransport.test.ts",
+      "status": "passed",
+      "passed": 15
+    },
+    {
+      "file": "src/lib/cityArena/net/messages.test.ts",
+      "status": "passed",
+      "passed": 6
+    },
+    {
+      "file": "src/lib/cityArena/net/room.test.ts",
+      "status": "passed",
+      "passed": 12
+    },
+    {
+      "file": "src/lib/cityArena/net/roomHost.test.ts",
+      "status": "passed",
+      "passed": 7
+    },
+    {
+      "file": "src/lib/cityArena/net/scoreboard.test.ts",
+      "status": "passed",
+      "passed": 16
+    },
+    {
+      "file": "src/lib/cityArena/net/snapshotApply.test.ts",
+      "status": "passed",
+      "passed": 9
+    },
+    {
+      "file": "src/lib/cityArena/net/wire.test.ts",
+      "status": "passed",
+      "passed": 15
+    },
+    {
+      "file": "src/lib/cityArena/test/hooks.test.ts",
+      "status": "passed",
+      "passed": 1
+    },
+    {
+      "file": "src/lib/cityArena/sim/arena.test.ts",
+      "status": "passed",
+      "passed": 34
+    },
+    {
+      "file": "src/lib/cityArena/sim/bullets.test.ts",
+      "status": "passed",
+      "passed": 8
+    },
+    {
+      "file": "src/lib/cityArena/sim/collisions.test.ts",
+      "status": "passed",
+      "passed": 7
+    },
+    {
+      "file": "src/lib/cityArena/sim/cops.test.ts",
+      "status": "passed",
+      "passed": 4
+    },
+    {
+      "file": "src/lib/cityArena/sim/damage.test.ts",
+      "status": "passed",
+      "passed": 4
+    },
+    {
+      "file": "src/lib/cityArena/sim/driveInput.test.ts",
+      "status": "passed",
+      "passed": 13
+    },
+    {
+      "file": "src/lib/cityArena/sim/driver.test.ts",
+      "status": "passed",
+      "passed": 3
+    },
+    {
+      "file": "src/lib/cityArena/sim/effects.test.ts",
+      "status": "passed",
+      "passed": 2
+    },
+    {
+      "file": "src/lib/cityArena/sim/events.test.ts",
+      "status": "passed",
+      "passed": 2
+    },
+    {
+      "file": "src/lib/cityArena/sim/freeRoam.test.ts",
+      "status": "passed",
+      "passed": 2
+    },
+    {
+      "file": "src/lib/cityArena/sim/hits.test.ts",
+      "status": "passed",
+      "passed": 3
+    },
+    {
+      "file": "src/lib/cityArena/sim/invariants.test.ts",
+      "status": "passed",
+      "passed": 5
+    },
+    {
+      "file": "src/lib/cityArena/sim/multiplayer.test.ts",
+      "status": "passed",
+      "passed": 9
+    },
+    {
+      "file": "src/lib/cityArena/sim/peds.test.ts",
+      "status": "passed",
+      "passed": 6
+    },
+    {
+      "file": "src/lib/cityArena/sim/pickups.test.ts",
+      "status": "passed",
+      "passed": 5
+    },
+    {
+      "file": "src/lib/cityArena/sim/player.test.ts",
+      "status": "passed",
+      "passed": 7
+    },
+    {
+      "file": "src/lib/cityArena/sim/players.test.ts",
+      "status": "passed",
+      "passed": 2
+    },
+    {
+      "file": "src/lib/cityArena/sim/police.test.ts",
+      "status": "passed",
+      "passed": 7
+    },
+    {
+      "file": "src/lib/cityArena/sim/populate.test.ts",
+      "status": "passed",
+      "passed": 5
+    },
+    {
+      "file": "src/lib/cityArena/sim/rng.test.ts",
+      "status": "passed",
+      "passed": 2
+    },
+    {
+      "file": "src/lib/cityArena/sim/spawn.test.ts",
+      "status": "passed",
+      "passed": 7
+    },
+    {
+      "file": "src/lib/cityArena/sim/traffic.test.ts",
+      "status": "passed",
+      "passed": 3
+    },
+    {
+      "file": "src/lib/cityArena/sim/vehicle.test.ts",
+      "status": "passed",
+      "passed": 10
+    },
+    {
+      "file": "src/lib/cityArena/sim/wanted.test.ts",
+      "status": "passed",
+      "passed": 4
+    },
+    {
+      "file": "src/lib/cityArena/sim/weapons.test.ts",
+      "status": "passed",
+      "passed": 5
+    },
+    {
+      "file": "src/lib/cityArena/sim/zoneRule.test.ts",
+      "status": "passed",
+      "passed": 4
+    },
+    {
+      "file": "src/lib/cityArena/world/binaryHeap.test.ts",
+      "status": "passed",
+      "passed": 2
+    },
+    {
+      "file": "src/lib/cityArena/world/collisionGrid.test.ts",
+      "status": "passed",
+      "passed": 21
+    },
+    {
+      "file": "src/lib/cityArena/world/decode.test.ts",
+      "status": "passed",
+      "passed": 3
+    },
+    {
+      "file": "src/lib/cityArena/world/lru.test.ts",
+      "status": "passed",
+      "passed": 3
+    },
+    {
+      "file": "src/lib/cityArena/world/mapLoader.test.ts",
+      "status": "passed",
+      "passed": 15
+    },
+    {
+      "file": "src/lib/cityArena/world/nearestRoad.test.ts",
+      "status": "passed",
+      "passed": 1
+    },
+    {
+      "file": "src/lib/cityArena/world/pathFollow.test.ts",
+      "status": "passed",
+      "passed": 3
+    },
+    {
+      "file": "src/lib/cityArena/world/pavements.test.ts",
+      "status": "passed",
+      "passed": 6
+    },
+    {
+      "file": "src/lib/cityArena/world/projection.test.ts",
+      "status": "passed",
+      "passed": 5
+    },
+    {
+      "file": "src/lib/cityArena/world/raycast.test.ts",
+      "status": "passed",
+      "passed": 3
+    },
+    {
+      "file": "src/lib/cityArena/world/roadCorridor.test.ts",
+      "status": "passed",
+      "passed": 7
+    },
+    {
+      "file": "src/lib/cityArena/world/roadGraph.test.ts",
+      "status": "passed",
+      "passed": 13
+    },
+    {
+      "file": "src/lib/cityArena/world/worldSession.test.ts",
+      "status": "passed",
+      "passed": 7
+    },
+    {
+      "file": "src/lib/cityArena/world/zone.test.ts",
+      "status": "passed",
+      "passed": 5
+    },
+    {
+      "file": "src/app/api/arena/rooms/route.test.ts",
+      "status": "passed",
+      "passed": 13
+    },
+    {
+      "file": "src/app/api/arena/realtime-token/route.test.ts",
+      "status": "passed",
+      "passed": 12
+    },
+    {
+      "file": "src/lib/cityArena/audio/radio/radio.test.ts",
+      "status": "passed",
+      "passed": 10
+    },
+    {
+      "file": "src/lib/cityArena/audio/radio/stations.test.ts",
+      "status": "passed",
+      "passed": 5
+    }
+  ],
+  "coverageAnalysis": false
+}

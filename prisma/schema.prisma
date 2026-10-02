@@ -7,26 +7,31 @@ generator client {
 }
 
 model User {
-  id        String  @id @default(cuid())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  firstName String
-  lastName  String
-  email     String? @unique
-  passwordHash String?
-  /** Laatst gezien app-versie (wat is er nieuw / rondleiding); optioneel. */
-  lastVersionSeen String?
+  id                  String               @id @default(cuid())
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  firstName           String
+  lastName            String
+  email               String?              @unique
+  passwordHash        String?
+  /**
+   * Laatst gezien app-versie (wat is er nieuw / rondleiding); optioneel.
+   */
+  lastVersionSeen     String?
   // Optional: link to sessions/devices in future
-  rsvps     Rsvp[]
-  identities Identity[]
-  attendances Attendance[]
-  feedback  Feedback[]
-  passkeys  Passkey[]
+  rsvps               Rsvp[]
+  identities          Identity[]
+  attendances         Attendance[]
+  feedback            Feedback[]
+  passkeys            Passkey[]
   passwordResetTokens PasswordResetToken[]
-  userRole  UserRole?
+  arenaResults        ArenaMatchResult[]
+  userRole            UserRole?
 }
 
-/** Admin/trainer/player flags from the admin panel (KV + Postgres fallback). */
+/**
+ * Admin/trainer/player flags from the admin panel (KV + Postgres fallback).
+ */
 model UserRole {
   userId    String   @id
   admin     Boolean  @default(false)
@@ -37,7 +42,9 @@ model UserRole {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-/** Short-lived wachtwoord-reset token (KV-fallback in Postgres). */
+/**
+ * Short-lived wachtwoord-reset token (KV-fallback in Postgres).
+ */
 model PasswordResetToken {
   token     String   @id
   userId    String
@@ -50,19 +57,27 @@ model PasswordResetToken {
   @@index([expiresAt])
 }
 
-/** WebAuthn-passkey (Touch ID, Face ID, Windows Hello, enz.) gekoppeld aan een gebruiker. */
+/**
+ * WebAuthn-passkey (Touch ID, Face ID, Windows Hello, enz.) gekoppeld aan een gebruiker.
+ */
 model Passkey {
   id           String   @id @default(cuid())
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   userId       String
-  /** Base64url credential-id (WebAuthn). */
+  /**
+   * Base64url credential-id (WebAuthn).
+   */
   credentialId String   @unique
   publicKey    Bytes
   counter      Int      @default(0)
-  /** JSON-array van transports, zoals door de browser gerapporteerd. */
+  /**
+   * JSON-array van transports, zoals door de browser gerapporteerd.
+   */
   transports   String?
-  /** Optionele korte weergavenaam voor de gebruiker. */
+  /**
+   * Optionele korte weergavenaam voor de gebruiker.
+   */
   label        String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -73,7 +88,7 @@ model Passkey {
 model Event {
   id          String    @id
   createdAt   DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  updatedAt   DateTime  @updatedAt
   title       String?
   description String?
   startDate   DateTime?
@@ -115,12 +130,12 @@ model MvpVote {
 }
 
 model Rsvp {
-  id        String  @id @default(cuid())
+  id        String   @id @default(cuid())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   userId    String
   eventId   String
-  status    String  // "yes" | "no" | "maybe"
+  status    String // "yes" | "no" | "maybe"
 
   user  User  @relation(fields: [userId], references: [id])
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -130,18 +145,18 @@ model Rsvp {
 }
 
 model LinkCode {
-  code      String  @id
+  code      String   @id
   userId    String
   createdAt DateTime @default(now())
   // Expiry handled at app layer (TTL); can be pruned later
 }
 
 model Identity {
-  id              String  @id @default(cuid())
-  createdAt       DateTime @default(now())
-  userId          String
-  provider        String   // "cookie" | "email" | other providers
-  providerUserId  String
+  id             String   @id @default(cuid())
+  createdAt      DateTime @default(now())
+  userId         String
+  provider       String // "cookie" | "email" | other providers
+  providerUserId String
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -200,10 +215,138 @@ model Feedback {
   @@index([status])
 }
 
-/** Admin-controlled feature flag (see `src/lib/featureFlags.ts`); hidden by default until set. */
+/**
+ * Admin-controlled feature flag (see `src/lib/featureFlags.ts`); hidden by default until set.
+ */
 model FeatureFlag {
   key       String   @id
   enabled   Boolean  @default(false)
   updatedAt DateTime @updatedAt
   updatedBy String
+}
+
+/**
+ * One finished GTA H3 potje (spec §9.1).
+ * `roomCode` plus `startedAt` is unique, which is what makes posting a result idempotent: a host
+ * that retries after a dropped response cannot record the same potje twice.
+ */
+model ArenaMatch {
+  id         String             @id @default(cuid())
+  createdAt  DateTime           @default(now())
+  roomCode   String
+  zone       String
+  startedAt  DateTime
+  endedAt    DateTime
+  /**
+   * Who hosted, kept for support questions; null once that account is gone.
+   */
+  hostUserId String?
+  /** The server-issued lifecycle ID; historical results predate this field. */
+  roundId    String?            @unique
+  verification String           @default("host-reported")
+  scoringVersion Int            @default(1)
+  results    ArenaMatchResult[]
+
+  @@unique([roomCode, startedAt])
+  @@index([createdAt])
+}
+
+/** Durable authority for one room; public codes never serve as credentials. */
+model ArenaRoom {
+  id             String            @id @default(uuid())
+  code           String            @unique
+  zone           String
+  protocolVersion Int              @default(2)
+  createdAt      DateTime          @default(now())
+  expiresAt      DateTime
+  hostMemberId   String?
+  hostEpoch      Int               @default(1)
+  hostLeaseUntil DateTime
+  members        ArenaRoomMember[]
+  rounds         ArenaRound[]
+  hostChanges    ArenaHostChange[]
+
+  @@index([expiresAt])
+}
+
+/** A session-approved seat. Disconnected members remain as participant history. */
+model ArenaRoomMember {
+  id           String    @id @default(uuid())
+  roomId       String
+  userId       String?
+  role         String    @default("player")
+  device       String    @default("desktop")
+  displayKeyHash String?
+  joinNonce    String    @unique
+  displayName  String
+  joinedAt     DateTime  @default(now())
+  seenAt       DateTime
+  leftAt       DateTime?
+  visible      Boolean   @default(true)
+  room         ArenaRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, userId])
+  @@index([roomId, seenAt])
+  @@index([displayKeyHash])
+}
+
+/** Server times and a retained roster establish exactly one casual match lifecycle. */
+model ArenaRound {
+  id           String                  @id @default(uuid())
+  roomId       String
+  startedAt    DateTime
+  finishesAt   DateTime
+  completedAt  DateTime?
+  scoringVersion Int                   @default(1)
+  room         ArenaRoom               @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  participants ArenaRoundParticipant[]
+
+  @@index([roomId, completedAt])
+}
+
+/** A player eligible for a result even after leaving the live room. */
+model ArenaRoundParticipant {
+  roundId  String
+  memberId String
+  userId   String
+  round    ArenaRound @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@id([roundId, memberId])
+  @@unique([roundId, userId])
+}
+
+/** Every host grant is recorded with its channel epoch for migration diagnostics. */
+model ArenaHostChange {
+  id        String    @id @default(uuid())
+  roomId    String
+  memberId  String?
+  epoch     Int
+  createdAt DateTime  @default(now())
+  room      ArenaRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, epoch])
+}
+
+/**
+ * One player's line in a finished potje (spec §9.1).
+ */
+model ArenaMatchResult {
+  id      String  @id @default(cuid())
+  matchId String
+  userId  String
+  kills   Int
+  deaths  Int
+  won     Boolean
+  cashEarned Int @default(0)
+  missionsCompleted Int @default(0)
+  score Int @default(0)
+  scoringVersion Int @default(1)
+  receipts Json @default("[]")
+
+  match ArenaMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, userId])
+  @@index([scoringVersion])
+  @@index([userId])
 }

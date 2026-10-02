@@ -1,3 +1,4 @@
+import { drawHeldItem, drawPersonStrip, walkFrameAt } from "./drawPersonSprite";
 import { isDead, isInvulnerable } from "../sim/damage";
 import { PLAYER_RADIUS_M } from "../sim/player";
 import type { ArenaPlayerState, PlayerState } from "../sim/types";
@@ -5,10 +6,14 @@ import type { MapZone } from "../world/mapTypes";
 import { zoneCentreMetres, zoneRadiusMetres } from "../world/zone";
 import { worldToScreen, type Camera, type Viewport } from "./camera";
 import type { RasterContext } from "./canvasTypes";
+import type { PersonSprite } from "./sprites";
+import type { ItemArt } from "./vectorItems";
 import {
   PLAYER_DEAD_FILL,
   PLAYER_DEAD_RING,
   PLAYER_FILL,
+  PLAYER_OTHER_FILL,
+  PLAYER_OTHER_RING,
   PLAYER_RING,
   ZONE_RING,
 } from "./palette";
@@ -31,6 +36,11 @@ export const DEFAULT_PLAYER_STYLE: PlayerStyle = {
   fill: PLAYER_FILL,
   ring: PLAYER_RING,
 };
+/** Somebody else in the same match. */
+export const OTHER_PLAYER_STYLE: PlayerStyle = {
+  fill: PLAYER_OTHER_FILL,
+  ring: PLAYER_OTHER_RING,
+};
 /** A body waiting to respawn. */
 export const DEAD_PLAYER_STYLE: PlayerStyle = {
   fill: PLAYER_DEAD_FILL,
@@ -50,13 +60,58 @@ export function playerLook(player: ArenaPlayerState, tick: number): PlayerLook {
   return "normal";
 }
 
-/** Draws the local player: a filled circle, a coloured outline ring and a facing tick, in the given style. */
+/**
+ * The strip cell to draw this tick; see {@link walkFrameAt}.
+ *
+ * @param player - The player, whose speed decides between standing and walking.
+ * @param tick - The simulation tick.
+ * @param frames - Cells in the strip.
+ * @returns The cell index.
+ */
+export function walkFrame(
+  player: PlayerState,
+  tick: number,
+  frames: number,
+): number {
+  return walkFrameAt(player.speed, tick, frames);
+}
+
+/** Draws the character art over the player's collision circle, turned to face where they face. */
+function drawPlayerSprite(
+  context: RasterContext,
+  sprite: PersonSprite,
+  x: number,
+  y: number,
+  radius: number,
+  player: PlayerState,
+  tick: number,
+): void {
+  drawPersonStrip(
+    context,
+    sprite,
+    x,
+    y,
+    radius,
+    player.facing,
+    walkFrame(player, tick, sprite.frames),
+  );
+}
+
+/**
+ * Draws the local player: a filled circle and a coloured outline ring in the given style, with
+ * the character sprite over it once the art has loaded, and the weapon he holds in his hand
+ * over that. Without the sprite the circle carries a facing tick instead, which is what the
+ * player read before the art existed.
+ */
 export function drawPlayer(
   context: RasterContext,
   camera: Camera,
   viewport: Viewport,
   player: PlayerState,
   style: PlayerStyle = DEFAULT_PLAYER_STYLE,
+  sprite?: PersonSprite,
+  tick = 0,
+  held?: ItemArt,
 ): void {
   const [x, y] = worldToScreen(camera, viewport, [player.x, player.y]);
   const radius = Math.max(MIN_PLAYER_RADIUS_PX, PLAYER_RADIUS_M * camera.zoom);
@@ -68,6 +123,11 @@ export function drawPlayer(
   context.lineWidth = PLAYER_RING_WIDTH_PX;
   context.setLineDash([]);
   context.stroke();
+  if (sprite) {
+    drawPlayerSprite(context, sprite, x, y, radius, player, tick);
+    if (held) drawHeldItem(context, held, x, y, radius, player.facing);
+    return;
+  }
   context.beginPath();
   context.moveTo(x, y);
   context.lineTo(

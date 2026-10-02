@@ -2,18 +2,25 @@ import { describe, expect, it } from "vitest";
 import type { DecodedTile } from "../world/decode";
 import { paintChunk, type LandmarkLookup } from "./drawStatic";
 import {
+  FURNITURE_FILL,
   GROUND_FILL,
   LANDMARK_FILL,
+  PAVEMENT_FILL,
   ROAD_CENTRE_LINE,
   ROAD_FILL,
+  TREE_CANOPY_FILL,
+  TREE_SHADOW,
   WATER_FILL,
 } from "./palette";
+import type { ArenaSprites } from "./sprites";
 import { createFakeContext } from "./testing/fakeContext";
 
 const tile: DecodedTile = {
   x: 0,
   y: 0,
   rect: { minX: 0, minY: 0, maxX: 2000, maxY: 2000 },
+  trees: [],
+  furniture: [],
   roads: [
     {
       points: [
@@ -76,6 +83,8 @@ const farTile: DecodedTile = {
   x: 3,
   y: 3,
   rect: { minX: 6000, minY: 6000, maxX: 8000, maxY: 8000 },
+  trees: [],
+  furniture: [],
   roads: [],
   buildings: [],
   ground: [
@@ -94,6 +103,37 @@ const farTile: DecodedTile = {
 const landmarks: LandmarkLookup = new Map([
   ["cunerakerk", { name: "Cunerakerk", style: "church" }],
 ]);
+/** The first tile with two trees and a bench beside the church (Plan 9b). */
+const sceneryTile: DecodedTile = {
+  ...tile,
+  trees: [
+    {
+      point: [40, 40],
+      size: 0,
+      bounds: { minX: 37, minY: 37, maxX: 43, maxY: 43 },
+    },
+    {
+      point: [60, 60],
+      size: 1,
+      bounds: { minX: 55, minY: 55, maxX: 65, maxY: 65 },
+    },
+    {
+      point: [500, 500],
+      size: 1,
+      bounds: { minX: 495, minY: 495, maxX: 505, maxY: 505 },
+    },
+    // Just past the chunk's west edge: its shadow reaches in, so it paints too.
+    {
+      point: [-3.5, 64],
+      size: 0,
+      bounds: { minX: -6.5, minY: 61, maxX: -0.5, maxY: 67 },
+    },
+  ],
+  furniture: [
+    { point: [35, 12], kind: "bench", heading: Math.PI / 2 },
+    { point: [700, 12], kind: "lamp", heading: 0 },
+  ],
+};
 
 // Fixtures for the "keeps the layer order across two touching tiles" test below: tileWest only
 // has water near the border, tileEast only has ground there. Painting "per tile" (tileWest's
@@ -104,6 +144,8 @@ const tileWest: DecodedTile = {
   x: 0,
   y: 0,
   rect: { minX: 0, minY: 0, maxX: 100, maxY: 100 },
+  trees: [],
+  furniture: [],
   roads: [
     {
       points: [
@@ -132,6 +174,8 @@ const tileEast: DecodedTile = {
   x: 1,
   y: 0,
   rect: { minX: 100, minY: 0, maxX: 200, maxY: 100 },
+  trees: [],
+  furniture: [],
   roads: [
     {
       points: [
@@ -190,6 +234,147 @@ describe("paintChunk", () => {
     ).toBe(false);
   });
 
+  it("paints furniture after the buildings and the tree shadows after that, the canopies left to the overhead layer", () => {
+    const context = createFakeContext();
+    paintChunk(
+      context,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [sceneryTile],
+      landmarks,
+    );
+    const calls = context.calls;
+    const church = calls.indexOf(`fill(${LANDMARK_FILL.church})`);
+    const bench = calls.indexOf("fillRect(-0.9,-0.3,1.8,0.6)");
+    const shadows = calls
+      .map((call, index) => (call === `fill(${TREE_SHADOW})` ? index : -1))
+      .filter((index) => index >= 0);
+    const label = calls.indexOf("fillText(Cunerakerk,0,0)");
+    expect(church).toBeGreaterThan(-1);
+    expect(bench).toBeGreaterThan(church);
+    expect(shadows).toHaveLength(3);
+    expect(Math.min(...shadows)).toBeGreaterThan(bench);
+    expect(label).toBeGreaterThan(Math.max(...shadows));
+    expect(calls).toContain("rotate(1.57)");
+    expect(calls).not.toContain(`fill(${TREE_CANOPY_FILL[0]})`);
+    expect(calls).not.toContain(`fill(${TREE_CANOPY_FILL[1]})`);
+    expect(
+      calls.some((call) => call.startsWith(`fill(${FURNITURE_FILL.lamp})`)),
+    ).toBe(false);
+    expect(calls.filter((call) => call.startsWith("arc(")).length).toBe(3);
+    expect(calls).toContain("arc(-2.3,65.2,3,0,6.28)");
+  });
+
+  it("draws the furniture art over its footprint once it has loaded, and no canopy", () => {
+    const context = createFakeContext();
+    const image = document.createElement("canvas");
+    const sprites: ArenaSprites = {
+      props: {
+        treeSmall: { image, lengthMetres: 6, widthMetres: 6 },
+        treeLarge: { image, lengthMetres: 10, widthMetres: 10 },
+        bench: { image, lengthMetres: 1.8, widthMetres: 0.6 },
+      },
+    };
+    paintChunk(
+      context,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [sceneryTile],
+      landmarks,
+      sprites,
+    );
+    const images = context.calls.filter((call) =>
+      call.startsWith("drawImage("),
+    );
+    expect(images).toEqual([`drawImage(${String(image)},-0.9,-0.3,1.8,0.6)`]);
+    expect(context.calls.filter((call) => call.startsWith("arc(")).length).toBe(
+      3,
+    );
+  });
+
+  it("lays a landmark's own art over its footprint once it has loaded, over the flat style colour", () => {
+    const image = document.createElement("canvas");
+    const brewery: DecodedTile = {
+      ...tile,
+      buildings: [
+        {
+          // A 4 × 15 m house running north–south, like Cuneralaan 42.
+          ring: [
+            [70, 10],
+            [74, 10],
+            [74, 25],
+            [70, 25],
+          ],
+          bounds: { minX: 70, minY: 10, maxX: 74, maxY: 25 },
+          levels: 2,
+          landmark: "klein-zwitserland",
+        },
+      ],
+    };
+    const lookup: LandmarkLookup = new Map([
+      [
+        "klein-zwitserland",
+        { name: "Brouwerij Klein Zwitserland", style: "brewery" },
+      ],
+    ]);
+    const flat = createFakeContext();
+    paintChunk(
+      flat,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [brewery],
+      lookup,
+    );
+    expect(flat.calls).toContain(`fill(${LANDMARK_FILL.brewery})`);
+    expect(flat.calls.some((call) => call.startsWith("drawImage("))).toBe(
+      false,
+    );
+    expect(flat.calls).toContain("fillText(Brouwerij Klein Zwitserland,0,0)");
+
+    const painted = createFakeContext();
+    paintChunk(
+      painted,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [brewery],
+      lookup,
+      {
+        landmarks: { brewery: { image, lengthMetres: 16, widthMetres: 8 } },
+      },
+    );
+    // 15 m plus the half-metre overhang each end, half as wide as it is long.
+    expect(painted.calls).toContain(`drawImage(${String(image)},-8,-4,16,8)`);
+    expect(
+      painted.calls.indexOf(`fill(${LANDMARK_FILL.brewery})`),
+    ).toBeLessThan(
+      painted.calls.findIndex((call) => call.startsWith("drawImage(")),
+    );
+  });
+
+  it("lays the roof textures along each building's longest edge, the landmark kept in its colour", () => {
+    const context = createFakeContext();
+    const texture = {
+      image: document.createElement("canvas"),
+      tileMetres: 8,
+      tilePixels: 128,
+    };
+    paintChunk(
+      context,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [tile],
+      landmarks,
+      { roofs: { tiles: texture, flat: texture } },
+    );
+    // The small two-floor block at (50, 10) is tiled, anchored at its first corner.
+    expect(context.calls).toContain("patternTransform(pattern(#0),0.0625)");
+    expect(context.calls).toContain("fill(pattern(#0))");
+    expect(context.calls).toContain(`fill(${LANDMARK_FILL.church})`);
+    expect(
+      context.calls.filter((call) => call.startsWith("createPattern(")),
+    ).toHaveLength(2);
+  });
+
   it("sets the world transform for the chunk", () => {
     const context = createFakeContext();
     paintChunk(
@@ -230,5 +415,124 @@ describe("paintChunk", () => {
     expect(Math.max(...roadFillStrokeIndices)).toBeLessThan(
       centreLineStrokeIndex,
     );
+  });
+  it("fills ground and water with their own textures once the art has loaded", () => {
+    const context = createFakeContext();
+    const texture = {
+      image: document.createElement("canvas"),
+      tileMetres: 8,
+      tilePixels: 128,
+    };
+    const sprites: ArenaSprites = {
+      ground: {
+        grass: texture,
+        field: texture,
+        forest: texture,
+        urban: texture,
+      },
+      water: texture,
+    };
+    paintChunk(
+      context,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [tile],
+      landmarks,
+      sprites,
+    );
+    // The four ground kinds are built in palette order, then water, so grass is #0 and water #4.
+    expect(context.calls).toContain("fill(pattern(#0))");
+    expect(context.calls).toContain("fill(pattern(#4))");
+    expect(context.calls).not.toContain(`fill(${GROUND_FILL.grass})`);
+    expect(context.calls).not.toContain(`fill(${WATER_FILL})`);
+    expect(
+      context.calls.filter((call) => call.startsWith("createPattern(")),
+    ).toHaveLength(5);
+  });
+
+  it("anchors the ground pattern on the world so neighbouring chunks line up", () => {
+    const texture = {
+      image: document.createElement("canvas"),
+      tileMetres: 8,
+      tilePixels: 128,
+    };
+    const sprites: ArenaSprites = {
+      ground: {
+        grass: texture,
+        field: texture,
+        forest: texture,
+        urban: texture,
+      },
+    };
+    const calls = (minX: number): string[] => {
+      const context = createFakeContext();
+      paintChunk(
+        context,
+        { minX, minY: 0, maxX: minX + 128, maxY: 128 },
+        6,
+        [tile],
+        landmarks,
+        sprites,
+      );
+      return context.calls;
+    };
+    // Each chunk rasters onto its own canvas, so the chunk's world offset has to reach the
+    // pattern somehow or the 8 m repeat would restart at every canvas origin. It reaches it
+    // through the canvas transform: the painter works in world metres and the pattern matrix
+    // stays pure scale, which makes the repeat a function of world position alone.
+    expect(calls(0)).toContain("setTransform(6,0,0,6,0,0)");
+    expect(calls(128)).toContain("setTransform(6,0,0,6,-768,0)");
+    expect(calls(128)).toContain("patternTransform(pattern(#0),0.0625)");
+    expect(calls(0)).toContain("patternTransform(pattern(#0),0.0625)");
+  });
+
+  it("strokes road and pavement with a repeating texture, leaving every other layer flat", () => {
+    const context = createFakeContext();
+    const image = document.createElement("canvas");
+    const sprites: ArenaSprites = {
+      pavement: { image, tileMetres: 8, tilePixels: 128 },
+      road: { image, tileMetres: 8, tilePixels: 128 },
+    };
+    paintChunk(
+      context,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [tile],
+      landmarks,
+      sprites,
+    );
+    // Pavement is filled first, so it takes the first pattern; the primary road is 9 m wide and
+    // its pavement adds 2 m on each side.
+    expect(context.calls).toContain("stroke(pattern(#0),13)");
+    expect(context.calls).toContain("stroke(pattern(#1),9)");
+    expect(context.calls).toContain("patternTransform(pattern(#1),0.0625)");
+    expect(context.calls).not.toContain(`stroke(${ROAD_FILL},9)`);
+    expect(context.calls).not.toContain(`stroke(${PAVEMENT_FILL},13)`);
+    expect(context.calls).toContain(`fill(${WATER_FILL})`);
+    expect(context.calls).toContain(`stroke(${ROAD_CENTRE_LINE},0.3)`);
+  });
+
+  it("keeps the flat road colour when only the pavement texture has loaded", () => {
+    const context = createFakeContext();
+    const sprites: ArenaSprites = {
+      pavement: {
+        image: document.createElement("canvas"),
+        tileMetres: 8,
+        tilePixels: 128,
+      },
+    };
+    paintChunk(
+      context,
+      { minX: 0, minY: 0, maxX: 128, maxY: 128 },
+      6,
+      [tile],
+      landmarks,
+      sprites,
+    );
+    expect(context.calls).toContain("stroke(pattern(#0),13)");
+    expect(context.calls).toContain(`stroke(${ROAD_FILL},9)`);
+    expect(
+      context.calls.filter((call) => call.startsWith("createPattern(")),
+    ).toHaveLength(1);
   });
 });

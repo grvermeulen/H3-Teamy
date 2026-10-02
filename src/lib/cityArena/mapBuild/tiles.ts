@@ -14,6 +14,7 @@ import {
   type Rect,
 } from "./geometry";
 import type { RenderRoad } from "./roads";
+import type { TreeBed } from "./vegetation";
 
 /** Tile edge length in metres. */
 export const TILE_SIZE_M = 2000;
@@ -31,10 +32,11 @@ export type ProjectedBuilding = {
   landmark?: string;
 };
 
-/** Ground polygon in metres. */
+/** Ground polygon in metres, with the tree bed its tags call for (Plan 9b), if any. */
 export type ProjectedGround = {
   ring: Point[];
   kind: Exclude<GroundKind, "urban">;
+  bed?: TreeBed | null;
 };
 
 /** Water polygon in metres. */
@@ -131,6 +133,20 @@ export function tileFileName(coord: TileCoord): string {
   return `tile_${coord.x}_${coord.y}.json`;
 }
 
+/** A tile with nothing in it yet. */
+export function createEmptyTile(coord: TileCoord): MapTile {
+  return {
+    x: coord.x,
+    y: coord.y,
+    roads: [],
+    buildings: [],
+    ground: [],
+    water: [],
+    trees: [],
+    furniture: [],
+  };
+}
+
 /** Flattens points to `[x0, y0, x1, y1, …]` in integer units. */
 export function flattenUnits(points: Point[]): number[] {
   const flat: number[] = [];
@@ -181,14 +197,7 @@ export function buildTiles(
     const key = `${coord.x}:${coord.y}`;
     const existing = tiles.get(key);
     if (existing) return existing;
-    const created: MapTile = {
-      x: coord.x,
-      y: coord.y,
-      roads: [],
-      buildings: [],
-      ground: [],
-      water: [],
-    };
+    const created = createEmptyTile(coord);
     tiles.set(key, created);
     return created;
   };

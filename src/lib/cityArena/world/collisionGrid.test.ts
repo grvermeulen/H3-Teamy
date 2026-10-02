@@ -2,14 +2,17 @@ import { describe, expect, it } from "vitest";
 import type { Point } from "./projection";
 import type { DecodedTile } from "./decode";
 import {
+  TRUNK_M,
   createCollisionGrid,
   nearestPointOnRing,
   nearestPointOnSegment,
   pushCircleOutOfRing,
+  type Obstacle,
 } from "./collisionGrid";
 import { HULL_CIRCLE_OFFSET_M, HULL_CIRCLE_RADIUS_M } from "../sim/vehicle";
 import { createRoadCorridors } from "./roadCorridor";
 import type { RoadGraph } from "./roadGraph";
+import { structureIdOf } from "./structureId";
 
 const square: Point[] = [
   [10, 10],
@@ -34,8 +37,13 @@ function tileWith(
     x,
     y,
     rect: { minX: 0, minY: 0, maxX: 2000, maxY: 2000 },
+    trees: [],
+    furniture: [],
     roads: [],
-    buildings: buildings.map((ring) => ({
+    // Tile coordinates here can go negative (to exercise the grid's cell math), which
+    // `structureIdOf` rejects; the fixture's building identity does not depend on them.
+    buildings: buildings.map((ring, index) => ({
+      structureId: structureIdOf(0, 0, index),
       ring,
       bounds: bounds(ring),
       levels: 2,
@@ -163,6 +171,30 @@ describe("createCollisionGrid", () => {
     ).toEqual(["building"]);
   });
 
+  it("blocks a tree's trunk, not its canopy, and leaves furniture walkable", () => {
+    const grid = createCollisionGrid();
+    grid.insertTile({
+      ...tileWith([]),
+      trees: [
+        {
+          point: [50, 50],
+          size: 1,
+          bounds: { minX: 45, minY: 45, maxX: 55, maxY: 55 },
+        },
+      ],
+      furniture: [{ point: [60, 50], kind: "bench", heading: 0 }],
+    });
+    expect(grid.obstacleCount()).toBe(1);
+    expect(
+      grid.query({ minX: 49, minY: 49, maxX: 51, maxY: 51 }).map((o) => o.kind),
+    ).toEqual(["tree"]);
+    const pushed = grid.resolveCircle([50.3, 50], 0.4);
+    expect(pushed[0]).toBeCloseTo(50 + TRUNK_M / 2 + 0.4);
+    expect(pushed[1]).toBeCloseTo(50);
+    expect(grid.resolveCircle([53, 50], 0.4)).toEqual([53, 50]);
+    expect(grid.resolveCircle([60, 50], 0.4)).toEqual([60, 50]);
+  });
+
   it.each([0, -1, NaN, Infinity])(
     "throws a descriptive error for cellMetres = %s",
     (invalidCellMetres) => {
@@ -171,6 +203,47 @@ describe("createCollisionGrid", () => {
       );
     },
   );
+
+  it("tags a building obstacle with its structure id and max health", () => {
+    const grid = createCollisionGrid();
+    grid.insertTile(tileWith([square]));
+    const [obstacle] = grid.query({ minX: 0, minY: 0, maxX: 30, maxY: 30 });
+    // 10x10 footprint, 2 levels: 100 * 2 * 1.2 = 240.
+    expect(obstacle.structure).toEqual({
+      id: structureIdOf(0, 0, 0),
+      maxHealth: 240,
+    });
+  });
+
+  it("does not tag water or tree obstacles as structures", () => {
+    const grid = createCollisionGrid();
+    grid.insertTile(
+      tileWith(
+        [],
+        [
+          [
+            [100, 100],
+            [110, 100],
+            [110, 110],
+          ],
+        ],
+      ),
+    );
+    const [water] = grid.query({ minX: 95, minY: 95, maxX: 120, maxY: 120 });
+    expect(water.structure).toBeUndefined();
+  });
+
+  it("resolveCircleSkipping lets a circle pass through obstacles the predicate marks", () => {
+    const grid = createCollisionGrid();
+    grid.insertTile(tileWith([square]));
+    const skipBuildings = (obstacle: Obstacle): boolean =>
+      obstacle.kind === "building";
+    expect(grid.resolveCircleSkipping([20.1, 15], 0.4, skipBuildings)).toEqual([
+      20.1, 15,
+    ]);
+    const pushed = grid.resolveCircleSkipping([20.1, 15], 0.4, () => false);
+    expect(pushed[0]).toBeCloseTo(20.4);
+  });
 });
 
 /** A river band y ∈ [−6, 6] spanning x ∈ [−100, 100]. */

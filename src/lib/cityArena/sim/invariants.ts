@@ -1,3 +1,4 @@
+import { playersOf } from "./players";
 import { MAX_BULLETS } from "./bullets";
 import { COP_BODY_TICKS, COP_MAX_HEALTH } from "./cops";
 import { PLAYER_MAX_HEALTH } from "./damage";
@@ -10,9 +11,11 @@ import {
   MAX_TRAFFIC,
   MAX_VEHICLES,
 } from "./limits";
-import type { ArenaState } from "./types";
-import { VEHICLE_MAX_HEALTH } from "./vehicle";
+import type { ArenaPlayerState, ArenaState } from "./types";
+import { healthMaxOf } from "./vehicle";
 import { PICKUP_RESPAWN_TICKS } from "./pickups";
+import { MAX_STRUCTURES } from "./structures";
+import { MAGAZINE_WEAPONS } from "./weapons";
 
 /** Records `message` when `condition` is false. */
 function check(
@@ -28,28 +31,36 @@ function finite(...values: number[]): boolean {
   return values.every((value) => Number.isFinite(value));
 }
 
-/** Player health, ammo, position and car reference. */
-function checkPlayer(state: ArenaState, violations: string[]): void {
-  const { player } = state;
+/**
+ * One player's health, ammo, position and car reference. Every message names the player, because
+ * with several of them a bare "player position is not finite" says nothing about who broke, and
+ * `recordViolations` deduplicates on the message text before it reaches Sentry.
+ */
+function checkPlayer(
+  state: ArenaState,
+  player: ArenaPlayerState,
+  violations: string[],
+): void {
+  const who = `player ${player.id}`;
   check(
     violations,
     finite(player.x, player.y, player.facing, player.speed),
-    "player position is not finite",
+    `${who} position is not finite`,
   );
   check(
     violations,
     player.health >= 0 && player.health <= PLAYER_MAX_HEALTH,
-    `player.health ${player.health} out of range`,
+    `${who} health ${player.health} out of range`,
   );
   check(
     violations,
-    player.ammo.uzi >= 0 && player.ammo.shotgun >= 0,
-    "player ammo negative",
+    MAGAZINE_WEAPONS.every((kind) => player.ammo[kind] >= 0),
+    `${who} ammo negative`,
   );
   check(
     violations,
     Number.isFinite(player.heat) && player.heat >= 0,
-    "player heat negative or not finite",
+    `${who} heat negative or not finite`,
   );
   check(
     violations,
@@ -57,25 +68,30 @@ function checkPlayer(state: ArenaState, violations: string[]): void {
       state.vehicles.some(
         (vehicle) => vehicle.id === player.vehicleId && !vehicle.wrecked,
       ),
-    "player.vehicleId points to a missing or wrecked car",
+    `${who} vehicleId points to a missing or wrecked car`,
   );
   check(
     violations,
     player.diedAtTick === null ||
       (player.vehicleId === null && player.health === 0),
-    "dead player must be on foot with zero health",
+    `dead ${who} must be on foot with zero health`,
   );
   check(
     violations,
     player.diedAtTick === null || player.diedAtTick <= state.tick,
-    "diedAtTick lies in the future",
+    `${who} diedAtTick lies in the future`,
   );
   check(
     violations,
     Number.isFinite(player.driveSteer) &&
       Math.abs(player.driveSteer) <= 1 &&
       (player.vehicleId !== null || player.driveSteer === 0),
-    `player.driveSteer ${player.driveSteer} out of range or set on foot`,
+    `${who} driveSteer ${player.driveSteer} out of range or set on foot`,
+  );
+  check(
+    violations,
+    Number.isFinite(player.drunk) && player.drunk >= 0 && player.drunk <= 1,
+    `${who} drunk ${player.drunk} out of range`,
   );
 }
 
@@ -100,8 +116,13 @@ function checkVehicles(
     );
     check(
       violations,
-      vehicle.health >= 0 && vehicle.health <= VEHICLE_MAX_HEALTH,
-      `vehicle ${vehicle.id} health out of range`,
+      Number.isFinite(vehicle.health),
+      `vehicle ${vehicle.id} health is not finite`,
+    );
+    check(
+      violations,
+      vehicle.health >= 0 && vehicle.health <= healthMaxOf(vehicle.kind),
+      `vehicle ${vehicle.id} health ${vehicle.health} out of range (max ${healthMaxOf(vehicle.kind)})`,
     );
     check(
       violations,
@@ -209,7 +230,9 @@ function checkPopulation(
     check(
       violations,
       !driven.has(driver.vehicleId) &&
-        driver.vehicleId !== state.player.vehicleId,
+        !playersOf(state).some(
+          (player) => player.vehicleId === driver.vehicleId,
+        ),
       `vehicle ${driver.vehicleId} has more than one driver`,
     );
     driven.add(driver.vehicleId);
@@ -234,6 +257,17 @@ function checkProjectiles(state: ArenaState, violations: string[]): void {
     );
 }
 
+/** The sparse structure list: capped, and every id unique. */
+function checkStructures(state: ArenaState, violations: string[]): void {
+  const structures = state.structures ?? [];
+  check(violations, structures.length <= MAX_STRUCTURES, "too many structures");
+  check(
+    violations,
+    new Set(structures.map((entry) => entry.id)).size === structures.length,
+    "two structures share an id",
+  );
+}
+
 /** Every broken invariant of a state (empty when healthy); pure, so tests run it after each step. */
 export function checkInvariants(state: ArenaState): string[] {
   const violations: string[] = [];
@@ -242,11 +276,28 @@ export function checkInvariants(state: ArenaState): string[] {
     Number.isInteger(state.tick) && state.tick >= 0,
     "tick must be a non-negative integer",
   );
-  checkPlayer(state, violations);
+  for (const player of playersOf(state)) checkPlayer(state, player, violations);
+  check(
+    violations,
+    new Set(playersOf(state).map((player) => player.id)).size ===
+      playersOf(state).length,
+    "two players share an id",
+  );
+  check(
+    violations,
+    playersOf(state).every(
+      (player) =>
+        player.vehicleId === null ||
+        playersOf(state).filter((other) => other.vehicleId === player.vehicleId)
+          .length === 1,
+    ),
+    "two players are driving the same car",
+  );
   const ids = new Set<number>();
   checkVehicles(state, violations, ids);
   checkProjectiles(state, violations);
   checkPeople(state, violations, ids);
   checkPopulation(state, violations, ids);
+  checkStructures(state, violations);
   return violations;
 }

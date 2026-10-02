@@ -180,9 +180,9 @@ describe("elementFootprint", () => {
   });
 });
 
-describe("ten configured landmarks", () => {
-  it("ships the ten configured landmarks with four zone anchors", () => {
-    expect(LANDMARKS).toHaveLength(10);
+describe("eleven configured landmarks", () => {
+  it("ships the eleven configured landmarks with four zone anchors", () => {
+    expect(LANDMARKS).toHaveLength(11);
     const anchors = LANDMARKS.filter((landmark) => landmark.zoneAnchor).map(
       (landmark) => landmark.zoneAnchor,
     );

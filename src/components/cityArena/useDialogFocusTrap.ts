@@ -6,10 +6,17 @@ import { useEffect, useLayoutEffect, type RefObject } from "react";
 const FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-/** Focuses the dialog on mount, keeps Tab inside it, closes on Escape and restores focus on unmount. */
+/**
+ * Focuses the dialog on mount, keeps Tab inside it, closes on Escape and restores focus on unmount.
+ *
+ * `enabled` false stands the key handling down — for a dialog that has opened a dialog of its
+ * own: two traps on one document would both act on the same Tab, and the outer one, registered
+ * first, would pull focus out of the inner one.
+ */
 export function useDialogFocusTrap(
   dialogRef: RefObject<HTMLDivElement | null>,
   onClose: () => void,
+  enabled = true,
 ): void {
   useLayoutEffect(() => {
     const previouslyFocused =
@@ -23,6 +30,7 @@ export function useDialogFocusTrap(
   }, [dialogRef]);
 
   useEffect(() => {
+    if (!enabled) return undefined;
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.code === "Escape" || event.key === "Escape") {
         event.preventDefault();
@@ -52,5 +60,5 @@ export function useDialogFocusTrap(
     };
     document.addEventListener("keydown", onKeyDown, true);
     return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [dialogRef, onClose]);
+  }, [dialogRef, onClose, enabled]);
 }

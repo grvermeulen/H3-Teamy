@@ -5,10 +5,10 @@ import type { RoadGraph } from "../world/roadGraph";
 import { CAR_BODY_RADIUS_M } from "./collisions";
 import type { VehicleState } from "./types";
 import {
-  VEHICLE_LENGTH_M,
   forwardSpeed,
-  worldToLocal,
+  lengthOf,
   type VehicleControls,
+  worldToLocal,
 } from "./vehicle";
 
 /** Gap between a lane centre and the car-body circle of oncoming traffic. */
@@ -70,7 +70,7 @@ export function obstacleAhead(
   lookAheadM: number,
   halfWidthM: number,
 ): boolean {
-  const bumper = VEHICLE_LENGTH_M / 2;
+  const bumper = lengthOf(vehicle.kind) / 2;
   return points.some((point) => {
     const [forward, right] = worldToLocal(vehicle, point);
     return (

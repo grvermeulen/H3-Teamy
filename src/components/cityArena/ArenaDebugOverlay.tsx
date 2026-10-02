@@ -1,6 +1,10 @@
 "use client";
 
-import type { MetricsSnapshot } from "@/lib/cityArena/debugMetrics";
+import {
+  formatFixed,
+  type MetricsSnapshot,
+} from "@/lib/cityArena/debugMetrics";
+import { wireDiagnostics } from "@/lib/cityArena/net/wireValidation";
 import type { Camera } from "@/lib/cityArena/render/camera";
 import type { ArenaPlayerState } from "@/lib/cityArena/sim/types";
 
@@ -46,18 +50,21 @@ function debugLines({
   routeMetres,
   entities,
 }: ArenaDebugOverlayProps): string[] {
-  const chunkSizeMb = (chunks.bytes / BYTES_PER_MEBIBYTE).toFixed(1);
+  const chunkSizeMb = formatFixed(chunks.bytes / BYTES_PER_MEBIBYTE, 1);
   const zoneTimer =
     entities.zoneSecondsLeft === null
       ? "zone onbekend"
       : `${entities.zoneSecondsLeft}s`;
   const route = routeMetres === null ? "—" : `${Math.round(routeMetres)} m`;
   return [
-    `fps ${metrics.fps} · frame p95 ${metrics.frameP95Ms.toFixed(1)} ms`,
-    `tekenen p95 ${metrics.drawP95Ms.toFixed(1)} ms · simulatie p95 ${metrics.simP95Ms.toFixed(1)} ms`,
+    `fps ${metrics.fps} · frame p95 ${formatFixed(metrics.frameP95Ms, 1)} ms`,
+    `frame p50 ${formatFixed(metrics.frameP50Ms, 1)} · p99 ${formatFixed(metrics.frameP99Ms, 1)} · max ${formatFixed(metrics.worstFrameMs, 1)} ms`,
+    `sessie ${formatFixed(metrics.sessionSeconds, 0)} s · ${metrics.sessionFps} fps · max ${formatFixed(metrics.sessionWorstFrameMs, 1)} ms · traag ${metrics.sessionLongFrames}`,
+    `tekenen p95 ${formatFixed(metrics.drawP95Ms, 1)} ms · simulatie p95 ${formatFixed(metrics.simP95Ms, 1)} ms`,
+    `raster p95 ${formatFixed(metrics.rasterP95Ms, 1)} ms · ontbrekend ${metrics.missingChunks} · geweigerd ${JSON.stringify(wireDiagnostics())}`,
     `blokken ${chunks.chunks} (${chunkSizeMb} MB) · tegels ${tiles}`,
-    `camera ${camera.x.toFixed(1)}, ${camera.y.toFixed(1)} · zoom ${camera.zoom}`,
-    `speler ${player.x.toFixed(1)}, ${player.y.toFixed(1)} · ${player.speed.toFixed(1)} m/s`,
+    `camera ${formatFixed(camera.x, 1)}, ${formatFixed(camera.y, 1)} · zoom ${camera.zoom}`,
+    `speler ${formatFixed(player.x, 1)}, ${formatFixed(player.y, 1)} · ${formatFixed(player.speed, 1)} m/s`,
     `route ${route}`,
     `verkeer ${entities.traffic} · voetgangers ${entities.peds} · agenten ${entities.cops}`,
     `pickups ${entities.pickups} · wanted ${entities.wantedLevel} · zone ${zoneTimer} · events ${entities.eventCount}`,

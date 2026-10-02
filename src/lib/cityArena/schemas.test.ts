@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   ArenaSettingsSchema,
@@ -5,6 +7,20 @@ import {
   isMapTile,
   parseMapIndex,
 } from "./schemas";
+import { LANDMARK_STYLES } from "./world/mapTypes";
+
+/** The map asset the browser actually downloads, read straight from `public/`. */
+function shippedMapIndex(): unknown {
+  const path = join(
+    process.cwd(),
+    "public",
+    "arena",
+    "map",
+    "v3",
+    "index.json",
+  );
+  return JSON.parse(readFileSync(path, "utf8")) as unknown;
+}
 
 const validIndex = {
   version: 1,
@@ -46,6 +62,22 @@ describe("parseMapIndex", () => {
       parseMapIndex({ ...validIndex, zones: [{ key: "mars" }] }),
     ).toThrow();
   });
+
+  it("accepts every style the renderer knows, including the brewery", () => {
+    for (const style of LANDMARK_STYLES) {
+      const index = {
+        ...validIndex,
+        landmarks: [{ ...validIndex.landmarks[0], style }],
+      };
+      expect(parseMapIndex(index).landmarks[0].style).toBe(style);
+    }
+  });
+
+  it("accepts the map asset that ships in public/", () => {
+    // A landmark style present in the asset but missing from the schema throws here instead of
+    // in the browser, where it fails the whole world boot and reads as a connection error.
+    expect(() => parseMapIndex(shippedMapIndex())).not.toThrow();
+  });
 });
 
 describe("isMapTile", () => {
@@ -66,6 +98,29 @@ describe("isMapTile", () => {
 
   it("rejects non-object primitives", () => {
     expect(isMapTile(42)).toBe(false);
+  });
+
+  it("takes trees and furniture as tuples, absent or well-formed, and nothing else", () => {
+    const tile = {
+      x: 1,
+      y: 2,
+      roads: [],
+      buildings: [],
+      ground: [],
+      water: [],
+    };
+    expect(
+      isMapTile({
+        ...tile,
+        trees: [[4, 8, 1]],
+        furniture: [[4, 8, "lamp", 90]],
+      }),
+    ).toBe(true);
+    expect(isMapTile({ ...tile, trees: [[4, 8]] })).toBe(false);
+    expect(isMapTile({ ...tile, trees: [[4, 8, 2]] })).toBe(false);
+    expect(isMapTile({ ...tile, furniture: [[4, 8, 3, 90]] })).toBe(false);
+    expect(isMapTile({ ...tile, furniture: [[4, 8, "bin", 90]] })).toBe(false);
+    expect(isMapTile({ ...tile, furniture: "lamp" })).toBe(false);
   });
 
   it("rejects geometry entries without numeric points arrays", () => {
@@ -112,9 +167,71 @@ describe("ArenaSettingsSchema", () => {
     expect(ArenaSettingsSchema.parse({})).toEqual({
       lastZone: "wageningen",
       sound: true,
+      vibrate: true,
+      twinStick: true,
+      radio: true,
+      ambience: true,
+      dynamicCamera: true,
+      quality: "auto",
+      view: "2d",
+      camera3d: "third",
+      mouseSensitivity: 1,
+      touchLookSensitivity: 1,
     });
+    expect(
+      ArenaSettingsSchema.safeParse({ forceLayout: "tablet" }).success,
+    ).toBe(false);
     expect(ArenaSettingsSchema.safeParse({ lastZone: "mars" }).success).toBe(
       false,
     );
+  });
+
+  it("keeps the radio settings, with the station optional", () => {
+    expect(
+      ArenaSettingsSchema.parse({ radio: false, radioStation: "rijn" }),
+    ).toMatchObject({ radio: false, radioStation: "rijn" });
+    expect(ArenaSettingsSchema.parse({}).radioStation).toBeUndefined();
+  });
+
+  it("keeps a mouse sensitivity within 0.25–2.5×; out of range, only it falls back", () => {
+    expect(
+      ArenaSettingsSchema.parse({ mouseSensitivity: 1.5 }).mouseSensitivity,
+    ).toBe(1.5);
+    expect(
+      ArenaSettingsSchema.parse({ mouseSensitivity: 3, sound: false }),
+    ).toMatchObject({ mouseSensitivity: 1, sound: false });
+    expect(
+      ArenaSettingsSchema.parse({ mouseSensitivity: 0.1 }).mouseSensitivity,
+    ).toBe(1);
+    expect(
+      ArenaSettingsSchema.parse({ mouseSensitivity: "snel" }).mouseSensitivity,
+    ).toBe(1);
+  });
+
+  it("accepts the view and 3D-camera choices, and rejects anything else", () => {
+    expect(
+      ArenaSettingsSchema.parse({ view: "3d", camera3d: "first" }),
+    ).toMatchObject({ view: "3d", camera3d: "first" });
+    expect(ArenaSettingsSchema.safeParse({ view: "isometric" }).success).toBe(
+      false,
+    );
+    expect(
+      ArenaSettingsSchema.safeParse({ camera3d: "over-the-hood" }).success,
+    ).toBe(false);
+  });
+
+  it("keeps the Kijkgevoeligheid between 0.25 and 2.5, resetting only that one when out of range", () => {
+    expect(
+      ArenaSettingsSchema.parse({ touchLookSensitivity: 1.75 })
+        .touchLookSensitivity,
+    ).toBe(1.75);
+    for (const outOfRange of [0.2, 3, "fast"]) {
+      const parsed = ArenaSettingsSchema.parse({
+        touchLookSensitivity: outOfRange,
+        sound: false,
+      });
+      expect(parsed.touchLookSensitivity).toBe(1);
+      expect(parsed.sound).toBe(false);
+    }
   });
 });

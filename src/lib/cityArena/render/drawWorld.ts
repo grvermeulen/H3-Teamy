@@ -1,6 +1,7 @@
 import { rectsIntersect, type Rect } from "../mapBuild/geometry";
 import type { DecodedTile } from "../world/decode";
 import {
+  rasterZoomFor,
   visibleRect,
   worldToScreen,
   type Camera,
@@ -17,19 +18,27 @@ import {
 } from "./staticRaster";
 
 /**
- * Everything the world painter reads: the chunk raster cache, the decoded tiles chunks are
- * painted from, the landmark lookup for labels/fills, and the world areas that already have a
- * tile loaded (so an unrasterised chunk can be told apart from one with no data at all).
+ * Everything the world painter reads: the ground chunk raster cache, the overhead one (the tree
+ * canopies, drawn over the moving things), the decoded tiles chunks are painted from, the
+ * landmark lookup for labels/fills, and the world areas that already have a tile loaded (so an
+ * unrasterised chunk can be told apart from one with no data at all).
  */
 export type WorldDrawSource = {
   raster: StaticRaster;
+  overhead: StaticRaster;
   tiles: DecodedTile[];
   landmarks: LandmarkLookup;
   loadedTileRects: Rect[];
+  /** Soft CPU budget; one non-preemptible chunk may exceed it. */
+  rasterBudgetMs?: number;
 };
 
 /** Outcome of one world draw: chunks still without a cached raster, and whether one was rasterised this call. */
-export type DrawStats = { missing: number; rasterised: boolean };
+export type DrawStats = {
+  missing: number;
+  rasterised: boolean;
+  rasterMs: number;
+};
 
 /** Spacing between diagonal hatch lines, in screen pixels. */
 const HATCH_SPACING_PX = 16;
@@ -87,8 +96,8 @@ function chunkHasTile(coord: ChunkCoord, loadedTileRects: Rect[]): boolean {
 }
 
 /**
- * Blits the chunks covering the view (rasterising at most one missing chunk this call, and only
- * among chunks that already have a loaded tile behind them), and hatches areas that have no
+ * Blits the chunks covering the view, rasterising within the supplied CPU budget and only
+ * where a loaded tile is available, and hatches areas that have no
  * loaded tile behind them instead of rasterising and caching a blank placeholder for them.
  */
 export function drawVisibleChunks(
@@ -97,15 +106,36 @@ export function drawVisibleChunks(
   viewport: Viewport,
   source: WorldDrawSource,
 ): DrawStats {
-  const needed = chunksCovering(visibleRect(camera, viewport), camera.zoom);
+  const needed = chunksCovering(
+    visibleRect(camera, viewport),
+    camera.rasterZoom ?? rasterZoomFor(camera.zoom),
+  );
   const rasterisable = needed.filter((coord) =>
     chunkHasTile(coord, source.loadedTileRects),
   );
-  const rasterised = source.raster.rasterizeNext(
-    rasterisable,
-    source.tiles,
-    source.landmarks,
-  );
+  const rasterStart = performance.now();
+  let rasterised = false;
+  const maxChunks =
+    source.rasterBudgetMs === undefined
+      ? 1
+      : source.rasterBudgetMs <= 0
+        ? 0
+        : 4;
+  for (let count = 0; count < maxChunks; count += 1) {
+    if (
+      count > 0 &&
+      performance.now() - rasterStart >= (source.rasterBudgetMs ?? 0)
+    )
+      break;
+    const built = source.raster.rasterizeNext(
+      rasterisable,
+      source.tiles,
+      source.landmarks,
+    );
+    if (!built) break;
+    rasterised = true;
+  }
+  const rasterMs = performance.now() - rasterStart;
   const sizePx = CHUNK_METRES * camera.zoom;
   let missing = 0;
   for (const coord of needed) {
@@ -115,7 +145,19 @@ export function drawVisibleChunks(
     ]);
     const chunk = source.raster.getChunk(coord);
     if (chunk) {
-      context.drawImage(chunk.target.canvas, x, y, sizePx, sizePx);
+      if (chunk.target) {
+        const [paintX, paintY] = worldToScreen(camera, viewport, [
+          chunk.rect.minX,
+          chunk.rect.minY,
+        ]);
+        context.drawImage(
+          chunk.target.canvas,
+          paintX,
+          paintY,
+          (chunk.rect.maxX - chunk.rect.minX) * camera.zoom,
+          (chunk.rect.maxY - chunk.rect.minY) * camera.zoom,
+        );
+      }
       continue;
     }
     missing += 1;
@@ -123,5 +165,44 @@ export function drawVisibleChunks(
       fillChunkArea(context, x, y, sizePx, PLACEHOLDER_FILL);
     else hatchChunkArea(context, x, y, sizePx);
   }
-  return { missing, rasterised };
+  return { missing, rasterised, rasterMs };
+}
+
+/**
+ * Blits the overhead layer — the tree canopies — over everything drawn before it, rasterising
+ * at most one missing chunk per call among the chunks with a tile behind them. A chunk the
+ * layer has nothing in costs neither a canvas nor a draw, and a missing one is simply not there
+ * yet: the ground shows through until its turn comes.
+ *
+ * @returns Whether a chunk was rasterised this call.
+ */
+export function drawOverheadChunks(
+  context: RasterContext,
+  camera: Camera,
+  viewport: Viewport,
+  source: WorldDrawSource,
+): boolean {
+  const needed = chunksCovering(
+    visibleRect(camera, viewport),
+    camera.rasterZoom ?? rasterZoomFor(camera.zoom),
+  );
+  const rasterised =
+    source.rasterBudgetMs === 0
+      ? false
+      : source.overhead.rasterizeNext(
+          needed.filter((coord) => chunkHasTile(coord, source.loadedTileRects)),
+          source.tiles,
+          source.landmarks,
+        );
+  const sizePx = CHUNK_METRES * camera.zoom;
+  for (const coord of needed) {
+    const chunk = source.overhead.getChunk(coord);
+    if (!chunk?.target) continue;
+    const [x, y] = worldToScreen(camera, viewport, [
+      coord.chunkX * CHUNK_METRES,
+      coord.chunkY * CHUNK_METRES,
+    ]);
+    context.drawImage(chunk.target.canvas, x, y, sizePx, sizePx);
+  }
+  return rasterised;
 }

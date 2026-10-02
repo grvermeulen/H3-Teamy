@@ -6,6 +6,7 @@ import { createRng } from "./rng";
 import {
   TRAFFIC_MAX_SPEED_MPS,
   TRAFFIC_MIN_SPEED_MPS,
+  TRAFFIC_SPAWN_RADIUS_M,
   advanceDriver,
   createTrafficCar,
   driverTarget,
@@ -17,9 +18,11 @@ import {
   spawnTraffic,
   stepDrivers,
   trafficEdgesWithin,
+  pickTrafficKind,
 } from "./traffic";
 import type { ArenaState, DriverState, PedState } from "./types";
 import { createVehicle, forwardSpeed } from "./vehicle";
+import type { RoadClass } from "../world/mapTypes";
 
 const graph = decodeRoadGraph({
   nodes: [0, 0, 400, 0, 400, 400, 0, 400, 800, 0],
@@ -118,6 +121,34 @@ describe("traffic drivers", () => {
     ).toEqual(cars);
   });
 
+  it("spawns traffic around the players when asked", () => {
+    /** A 2 km tertiary road: 0–1000 m and 1000–2000 m. */
+    const road = decodeRoadGraph({
+      nodes: [0, 0, 4000, 0, 8000, 0],
+      edges: [0, 1, 0, -1, 0, 4000, 1, 2, 0, -1, 0, 4000],
+      classes: ["tertiary"],
+      names: [],
+    });
+    const wide: MapZone = { ...zone, center: [4000, 0], radius: 8000 };
+    const cars = spawnTraffic(
+      wide,
+      road,
+      createRng(6),
+      [[1000, 0]],
+      [],
+      null,
+      700,
+      6,
+      [[1000, 0]],
+    );
+    expect(cars).toHaveLength(6);
+    for (const car of cars) {
+      const distance = Math.hypot(car.vehicle.x - 1000, car.vehicle.y);
+      expect(distance).toBeGreaterThanOrEqual(30);
+      expect(distance).toBeLessThanOrEqual(TRAFFIC_SPAWN_RADIUS_M + 5);
+    }
+  });
+
   it("lists obstacles and produces controls for active drivers", () => {
     const base = createArenaState(
       { index: emptyIndex, graph, seed: 3, zone: null },
@@ -144,5 +175,33 @@ describe("traffic drivers", () => {
       throttle: -1,
       steer: 0,
     });
+  });
+});
+
+describe("pickTrafficKind", () => {
+  const kindsOn = (roadClass: RoadClass): Set<string> =>
+    new Set(
+      Array.from({ length: 200 }, (_, index) =>
+        pickTrafficKind(roadClass, () => (index % 100) / 100),
+      ),
+    );
+
+  it("keeps buses to through-roads and never sends a sport car out as traffic", () => {
+    expect(kindsOn("primary").has("bus")).toBe(true);
+    expect(kindsOn("tertiary").has("bus")).toBe(true);
+    expect(kindsOn("unclassified").has("bus")).toBe(false);
+    for (const roadClass of [
+      "primary",
+      "secondary",
+      "tertiary",
+      "unclassified",
+    ] as const)
+      expect(kindsOn(roadClass).has("sport")).toBe(false);
+  });
+
+  it("sends a tractor down an unclassified road three times in ten, and nowhere else", () => {
+    expect(pickTrafficKind("unclassified", () => 0.29)).toBe("tractor");
+    expect(pickTrafficKind("unclassified", () => 0.3)).not.toBe("tractor");
+    expect(pickTrafficKind("primary", () => 0.1)).not.toBe("tractor");
   });
 });

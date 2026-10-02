@@ -3,7 +3,6 @@ import {
   damagePlayer,
   damageVehicle,
   impactDamage,
-  inBlastRadius,
   isDead,
   isInvulnerable,
 } from "./damage";
@@ -18,7 +17,7 @@ const walker: ArenaPlayerState = {
   speed: 0,
   health: 100,
   weapon: "pistol",
-  ammo: { uzi: 60, shotgun: 8 },
+  ammo: { uzi: 60, shotgun: 8, rifle: 0, bat: 0, rocket: 0 },
   vehicleId: null,
   boardingTicksLeft: 0,
   nextShotTick: 0,
@@ -27,6 +26,7 @@ const walker: ArenaPlayerState = {
   heat: 0,
   heatTick: 0,
   outsideSinceTick: null,
+  drunk: 0,
 };
 
 describe("damage", () => {
@@ -53,13 +53,16 @@ describe("damage", () => {
     expect(isInvulnerable(shielded, 50)).toBe(false);
   });
 
-  it("damages cars down to zero, leaves wrecks alone and tests the blast radius", () => {
+  it("damages cars down to zero and leaves wrecks alone", () => {
     const car = createVehicle(1, "sedan", [0, 0], 0, 0);
-    expect(damageVehicle(car, 78).health).toBe(22);
+    expect(damageVehicle(car, 78).health).toBe(102);
     expect(damageVehicle({ ...car, health: 22 }, 78).health).toBe(0);
     const wreck = { ...car, wrecked: true, health: 0 };
     expect(damageVehicle(wreck, 10)).toBe(wreck);
-    expect(inBlastRadius(car, [2, 2])).toBe(true);
-    expect(inBlastRadius(car, [3, 1])).toBe(false);
+  });
+
+  it("clamps a car's health to its kind's maximum after damage", () => {
+    const bus = createVehicle(1, "bus", [0, 0], 0, 0);
+    expect(damageVehicle({ ...bus, health: 400 }, 1).health).toBe(350);
   });
 });

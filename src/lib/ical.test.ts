@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Sentry from "@sentry/nextjs";
 import { fetchTeamEvents } from "./ical";
 import { kvGetJson, kvSetJson } from "./kv";
+import { formatEventTime } from "./datetime";
 
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
@@ -22,14 +23,20 @@ const isoEnd =
     .replace(/[-:]/g, "")
     .split(".")[0] + "Z";
 
-function buildMockICS(dtStart: string, dtEnd: string, summary = "Match 1") {
+function buildMockICS(
+  dtStart: string,
+  dtEnd: string,
+  summary = "Match 1",
+  timeZone?: string,
+) {
+  const tzParam = timeZone ? `;TZID=${timeZone}` : "";
   return `BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//Sportlink//NONSGML//NL
 BEGIN:VEVENT
 UID:12345
-DTSTART:${dtStart}
-DTEND:${dtEnd}
+DTSTART${tzParam}:${dtStart}
+DTEND${tzParam}:${dtEnd}
 SUMMARY:${summary}
 LOCATION:Pool A
 END:VEVENT
@@ -48,6 +55,7 @@ describe("fetchTeamEvents", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
@@ -60,8 +68,72 @@ describe("fetchTeamEvents", () => {
     expect(events).toHaveLength(1);
     expect(events[0].title).toBe("Match 1");
     expect(events[0].location).toBe("Pool A");
+    expect(events[0].start).toBe(
+      futureDate.toISOString().replace(/\.\d{3}Z$/, ".000Z"),
+    );
     expect(kvSetJson).toHaveBeenCalled();
   });
+
+  it.each([
+    [
+      "20261010T184000",
+      "20261010T204000",
+      "2026-10-10T16:40:00.000Z",
+      "2026-10-10T18:40:00.000Z",
+      "18:40 – 20:40",
+    ],
+    [
+      "20261107T185000",
+      "20261107T205000",
+      "2026-11-07T17:50:00.000Z",
+      "2026-11-07T19:50:00.000Z",
+      "18:50 – 20:50",
+    ],
+    [
+      "20270320T184500",
+      "20270320T204500",
+      "2027-03-20T17:45:00.000Z",
+      "2027-03-20T19:45:00.000Z",
+      "18:45 – 20:45",
+    ],
+    [
+      "20270403T173000",
+      "20270403T193000",
+      "2027-04-03T15:30:00.000Z",
+      "2027-04-03T17:30:00.000Z",
+      "17:30 – 19:30",
+    ],
+  ])(
+    "honours Amsterdam TZID for %s and replaces the cached time",
+    async (start, end, expectedStart, expectedEnd, expectedDisplay) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-09-17T12:00:00Z"));
+      const id = `${start.slice(0, 8)}--match-1`;
+      vi.mocked(kvGetJson).mockResolvedValue([
+        { id, title: "Match 1", start: expectedEnd },
+      ]);
+      vi.mocked(global.fetch).mockResolvedValue({
+        ok: true,
+        text: () =>
+          Promise.resolve(
+            buildMockICS(start, end, "Match 1", "Europe/Amsterdam"),
+          ),
+      } as Response);
+
+      const events = await fetchTeamEvents();
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        id,
+        start: expectedStart,
+        end: expectedEnd,
+      });
+      expect(formatEventTime(events[0].start, events[0].end)).toBe(
+        expectedDisplay,
+      );
+      expect(kvSetJson).toHaveBeenCalledWith("calendar:events:v1", events);
+    },
+  );
 
   it("falls back to cache if fetch fails", async () => {
     vi.useFakeTimers();

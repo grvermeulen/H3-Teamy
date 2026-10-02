@@ -36,6 +36,18 @@ describe("input state", () => {
     expect(state.snapshot()).toMatchObject({ fire: false, enter: true });
   });
 
+  it("aims down the sights while the mouse or the on-screen toggle holds it, and not after", () => {
+    const state = createInputState();
+    expect(state.snapshot().ads).toBeUndefined();
+    state.setButton("pointer", "ads", true);
+    expect(state.snapshot().ads).toBe(true);
+    state.setButton("pointer", "ads", false);
+    state.setButton("buttons", "ads", true);
+    expect(state.snapshot().ads).toBe(true);
+    state.clearAll();
+    expect(state.snapshot().ads).toBeUndefined();
+  });
+
   it("clears keyboard movement and buttons together on blur", () => {
     const state = createInputState();
     state.setKeyboard([1, 0]);

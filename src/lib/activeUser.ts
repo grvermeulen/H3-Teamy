@@ -7,6 +7,7 @@ import { prisma } from "./db";
 import { authOptions } from "./authOptions";
 import { withPgConnectRetry } from "./prismaConnectRetry";
 import { USER_CORE_SELECT } from "./userPrismaSelect";
+import { isAnonCookieId } from "./anonCookieId";
 
 export type ActiveUserResult = {
   userId: string;
@@ -14,52 +15,29 @@ export type ActiveUserResult = {
 };
 
 /**
- * Bepaalt hoe `anon_id` voor Identity-lookups gebruikt wordt.
- * Oude clients kregen na accountkoppeling een user-cuid in `anon_id`; dat is geen geldige
- * `providerUserId` voor `provider: "cookie"` en veroorzaakte Prisma-fouten op composite keys.
- *
- * @param raw - Ruwe cookiewaarde of `null`.
- * @returns `identityProviderUserId` voor cookie-identities, of `legacyResolvedUserId` wanneer de waarde een bestaand user-id is.
+ * Accepts only opaque UUID guest identities. A public account ID is never a credential.
  */
-async function resolveAnonCookieContext(raw: string | null): Promise<{
+function resolveAnonCookieContext(raw: string | null): {
   identityProviderUserId: string | null;
-  legacyResolvedUserId: string | null;
-}> {
+} {
   if (!raw) {
-    return { identityProviderUserId: null, legacyResolvedUserId: null };
+    return { identityProviderUserId: null };
   }
   const trimmed = raw.trim();
   if (!trimmed) {
-    return { identityProviderUserId: null, legacyResolvedUserId: null };
+    return { identityProviderUserId: null };
   }
-  const looksLikeRandomUuid =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      trimmed,
-    );
-  if (looksLikeRandomUuid) {
-    return { identityProviderUserId: trimmed, legacyResolvedUserId: null };
+  if (isAnonCookieId(trimmed)) {
+    return { identityProviderUserId: trimmed };
   }
-  const userRow = await prisma.user.findUnique({
-    where: { id: trimmed },
-    select: { id: true },
-  });
-  if (userRow) {
-    Sentry.addBreadcrumb({
-      category: "auth",
-      message: "anon_id is legacy user-id cookie; skipping cookie identity key",
-      level: "info",
-    });
-    return { identityProviderUserId: null, legacyResolvedUserId: userRow.id };
-  }
-  return { identityProviderUserId: trimmed, legacyResolvedUserId: null };
+  return { identityProviderUserId: null };
 }
 
 async function resolveActiveUser(
   cookieId: string | null,
   session: Session | null,
 ): Promise<ActiveUserResult> {
-  const { identityProviderUserId, legacyResolvedUserId } =
-    await resolveAnonCookieContext(cookieId);
+  const { identityProviderUserId } = resolveAnonCookieContext(cookieId);
   async function ensureCookieIdentityUser(cookie: string): Promise<string> {
     // Create identity and user atomically; handle races by falling back to existing identity
     try {
@@ -296,9 +274,6 @@ async function resolveActiveUser(
   }
 
   // Anonymous path
-  if (legacyResolvedUserId) {
-    return { userId: legacyResolvedUserId, needsLink: false };
-  }
   if (identityProviderUserId) {
     const cookieIdentity = await prisma.identity.findUnique({
       where: {

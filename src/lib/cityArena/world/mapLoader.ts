@@ -337,7 +337,7 @@ type LoaderState = {
 function createLoaderState(options: MapLoaderOptions): LoaderState {
   const baseUrl = options.baseUrl ?? MAP_BASE_PATH;
   const retryOptions: RetryOptions = {
-    fetchImpl: options.fetchImpl ?? fetch,
+    fetchImpl: options.fetchImpl ?? globalThis.fetch.bind(globalThis),
     retries: options.retries ?? DEFAULT_TILE_RETRIES,
     backoffMs: options.backoffMs ?? DEFAULT_BACKOFF_MS,
     sleep: options.sleep ?? defaultSleep,

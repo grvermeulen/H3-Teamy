@@ -1,0 +1,133 @@
+import { z } from "zod";
+/**
+ * Mission actors and receipts require the same wire/content version on every participant.
+ *
+ * Bumped to 4 for Task 5 (structures and rockets on the wire): the player row widens from 22 to
+ * 23 columns. The snapshot decoder itself stays tolerant of both widths (`wireValidation.ts`), but
+ * a stale tab's own outdated validator does not know width 23 or the new `z` key — it would reject
+ * every snapshot it *receives* from an updated host. Refusing the stale tab cleanly at join/create
+ * is better than letting it into a room where it silently rejects everything once inside.
+ *
+ * Bumped to 5 for aiming down the sights: the input frame's flags gain `ads`, which narrows a
+ * spraying gun's cone and slows walking. An old host would ignore the flag while a new client
+ * predicts the slower walk, so the two must not share a room.
+ */
+export const ARENA_PROTOCOL_VERSION = 5;
+
+/** Server time windows for room liveness and channel authorization. */
+export const ROOM_RULES = {
+  heartbeatMs: 3000,
+  memberTtlMs: 60_000,
+  hostLeaseMs: 12_000,
+  tokenTtlMs: 60_000,
+  roomTtlMs: 2 * 60 * 60 * 1000,
+  countdownMs: 3000,
+  matchMs: 180_000,
+  missionMatchMs: 720_000,
+  completionGraceMs: 5 * 60 * 1000,
+  capacity: 8,
+  displayCapacity: 2,
+} as const;
+
+/** Codes are locators; membership and host authority are checked separately. */
+export const ArenaRoomCodeSchema = z
+  .string()
+  .regex(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/);
+/** Supported arena districts. */
+export const ArenaZoneSchema = z.enum([
+  "rhenen",
+  "wageningen",
+  "campus",
+  "bennekom",
+]);
+const member = { memberId: z.uuid() };
+/** A controller has input but no world; a hybrid renders the TV view and plays. */
+export const ArenaPlayRoleSchema = z.enum(["player", "controller", "hybrid"]);
+/** Server-approved participation mode. */
+export type ArenaRole = z.infer<typeof ArenaPlayRoleSchema> | "display";
+const mode = {
+  role: ArenaPlayRoleSchema.optional(),
+  device: z.enum(["mobile", "desktop"]).optional(),
+};
+
+/** Every mutation is scoped to a verified account or a cookie-owned display on the server. */
+export const ArenaRoomCommandSchema = z.discriminatedUnion("action", [
+  z
+    .object({
+      action: z.literal("create"),
+      zone: ArenaZoneSchema,
+      joinNonce: z.uuid(),
+      ...mode,
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("join"),
+      roomCode: ArenaRoomCodeSchema,
+      joinNonce: z.uuid(),
+      ...mode,
+    })
+    .strict(),
+  z
+    .object({ action: z.literal("heartbeat"), ...member, visible: z.boolean() })
+    .strict(),
+  z.object({ action: z.literal("leave"), ...member }).strict(),
+  z
+    .object({
+      action: z.literal("start"),
+      ...member,
+      epoch: z.number().int().positive(),
+    })
+    .strict(),
+]);
+
+/** Validated commands accepted by the room service. */
+export type ArenaRoomCommand = z.infer<typeof ArenaRoomCommandSchema>;
+
+/** The authoritative room view returned to an authenticated member. */
+export const ArenaRoomTicketSchema = z.object({
+  roomId: z.uuid(),
+  roomCode: ArenaRoomCodeSchema,
+  zone: ArenaZoneSchema,
+  memberId: z.uuid(),
+  hostClientId: z.uuid().nullable(),
+  epoch: z.number().int().positive(),
+  leaseUntil: z.number(),
+  serverTime: z.number(),
+  members: z
+    .array(
+      z.object({
+        clientId: z.uuid(),
+        name: z.string().max(40),
+        joinedAt: z.number(),
+        role: z.enum(["player", "controller", "hybrid", "display"]).optional(),
+        device: z.enum(["mobile", "desktop"]).optional(),
+      }),
+    )
+    .max(ROOM_RULES.capacity + ROOM_RULES.displayCapacity),
+  round: z
+    .object({
+      id: z.uuid(),
+      startedAt: z.number(),
+      finishesAt: z.number(),
+      completedAt: z.number().nullable(),
+      scoringVersion: z.union([z.literal(1), z.literal(2)]).optional(),
+    })
+    .nullable(),
+});
+
+/** Client identity and the epoch in which it may exchange state. */
+export type ArenaRoomTicket = z.infer<typeof ArenaRoomTicketSchema>;
+
+/** Physical Ably channels; old arena:room:* credentials cannot address this namespace. */
+export function arenaChannels(
+  roomId: string,
+  epoch: number,
+): { state: string; inputs: string; presence: string } {
+  const prefix = `arena:v2:${roomId}`;
+  return {
+    state: `${prefix}:${epoch}:state`,
+    inputs: `${prefix}:${epoch}:inputs`,
+    presence: `${prefix}:presence`,
+  };
+}

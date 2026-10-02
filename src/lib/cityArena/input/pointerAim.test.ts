@@ -35,6 +35,24 @@ describe("attachPointerAim", () => {
     expect(state.snapshot().fire).toBe(false);
   });
 
+  it("does not shoot on a click another binding claims, such as the one taking the pointer lock", () => {
+    const canvas = document.createElement("canvas");
+    const state = createInputState();
+    let claimed = true;
+    const aim = attachPointerAim(canvas, state, undefined, () => claimed);
+    const press = (): void => {
+      canvas.dispatchEvent(
+        new PointerEvent("pointerdown", { pointerType: "mouse", button: 0 }),
+      );
+    };
+    press();
+    expect(state.snapshot().fire).toBe(false);
+    claimed = false;
+    press();
+    expect(state.snapshot().fire).toBe(true);
+    aim.detach();
+  });
+
   it("does not preventDefault on a primary-button pointerdown, so focus can leave other elements", () => {
     const canvas = document.createElement("canvas");
     const state = createInputState();
@@ -130,6 +148,34 @@ describe("attachPointerAim", () => {
       buttons: 2,
       clientX: 10,
       clientY: 20,
+    });
+    expect(state.snapshot().fire).toBe(false);
+    aim.detach();
+  });
+
+  it("fires on a left press made while the right button holds the sights up", () => {
+    const canvas = document.createElement("canvas");
+    const state = createInputState();
+    const aim = attachPointerAim(canvas, state);
+    fireEvent.pointerDown(canvas, {
+      pointerType: "mouse",
+      button: 2,
+      buttons: 2,
+    });
+    expect(state.snapshot().fire).toBe(false);
+
+    // Pressed while another button is down, the left button reports a `pointermove`, never a
+    // `pointerdown`.
+    fireEvent.pointerMove(canvas, {
+      pointerType: "mouse",
+      button: 0,
+      buttons: 3,
+    });
+    expect(state.snapshot().fire).toBe(true);
+    fireEvent.pointerMove(canvas, {
+      pointerType: "mouse",
+      button: 0,
+      buttons: 2,
     });
     expect(state.snapshot().fire).toBe(false);
     aim.detach();

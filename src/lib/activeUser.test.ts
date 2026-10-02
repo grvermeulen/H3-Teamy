@@ -78,7 +78,7 @@ describe("getActiveUser", () => {
     await expect(getActiveUser(req)).rejects.toThrow("unique");
   });
 
-  it("treats anon_id equal to an existing user id as legacy cookie and skips cookie identity lookup", async () => {
+  it("never authenticates a raw user ID from an unsigned anonymous cookie", async () => {
     const legacyUserId = "clxxxxxxxxxxxxxxxxxxxxxxxxx";
     vi.mocked(prisma.user.findUnique).mockImplementation(({ where }) => {
       if ("id" in where && where.id === legacyUserId) {
@@ -86,13 +86,15 @@ describe("getActiveUser", () => {
       }
       return Promise.resolve(null);
     });
+    vi.mocked(prisma.user.create).mockResolvedValue({ id: "new-guest" });
 
     const req = new NextRequest("https://example.com/", {
       headers: { cookie: `anon_id=${legacyUserId}` },
     });
 
     const result = await getActiveUser(req);
-    expect(result).toEqual({ userId: legacyUserId, needsLink: false });
+    expect(result).toEqual({ userId: "new-guest", needsLink: false });
+    expect(vi.mocked(prisma.user.findUnique)).not.toHaveBeenCalled();
     expect(vi.mocked(prisma.identity.findUnique)).not.toHaveBeenCalled();
   });
 

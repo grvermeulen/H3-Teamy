@@ -1,4 +1,5 @@
-import type { Rect } from "../mapBuild/geometry";
+import { pointInRect, type Rect } from "../mapBuild/geometry";
+import { missionEntityIds } from "../missions/actors";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import type { Point } from "../world/projection";
 import { MAX_PEDS, MAX_TRAFFIC, MAX_VEHICLES } from "./limits";
@@ -7,21 +8,27 @@ import {
   PED_RESPAWN_BATCH,
   PED_RESPAWN_INTERVAL_TICKS,
   alivePeds,
+  recyclePeds,
   spawnPeds,
 } from "./peds";
 import { placePickups } from "./pickups";
-import { playersOf } from "./players";
-import { nearestZone, type SpawnGraph } from "./spawn";
+import { orderedPlayers, playersOf } from "./players";
+import { farFromAll, nearestZone, type SpawnGraph } from "./spawn";
+import { findZoneByKey } from "../world/zone";
 import {
   TRAFFIC_MAX_PER_ZONE,
   TRAFFIC_MIN_PER_ZONE,
+  TRAFFIC_RECYCLE_DISTANCE_M,
   spawnTraffic,
   type DrivenCar,
 } from "./traffic";
 import type { ArenaState } from "./types";
 
-/** Ticks between ambient traffic top-ups. */
-export const TRAFFIC_TOP_UP_INTERVAL_TICKS = 150;
+/**
+ * Ticks between ambient traffic top-ups. One second: a car that drove out of range is recycled
+ * and must be back near the players before the street looks empty.
+ */
+export const TRAFFIC_TOP_UP_INTERVAL_TICKS = 30;
 
 /** World data needed to populate one active zone. */
 export type PopulationWorld = {
@@ -30,24 +37,61 @@ export type PopulationWorld = {
   viewRect?: Rect;
 };
 
+/** Where every player stands, dead or alive: what fresh spawns keep their distance from. */
 function playerPoints(state: ArenaState): Point[] {
   return playersOf(state).map((player) => [player.x, player.y]);
 }
 
+/**
+ * Where the population is kept: around the living players, or around everybody while all of them
+ * are dead, so a respawn lands in a street that is already populated.
+ */
+function anchorPoints(state: ArenaState): Point[] {
+  const living = playersOf(state).filter(
+    (player) => player.diedAtTick === null,
+  );
+  return (living.length > 0 ? living : playersOf(state)).map((player) => [
+    player.x,
+    player.y,
+  ]);
+}
+
+/** Where every car sits, so fresh traffic is not spawned into one. */
 function vehiclePoints(state: ArenaState): Point[] {
   return state.vehicles.map((vehicle) => [vehicle.x, vehicle.y]);
 }
 
+/** Drops the old zone's people, traffic and pickups, keeping parked cars and any car a player drives. */
 function clearPopulation(state: ArenaState): ArenaState {
+  const protectedIds = missionEntityIds(state);
   const driven = new Set(state.traffic.map((driver) => driver.vehicleId));
+  // Any car with a player at the wheel survives the clear-out, not just the local player's:
+  // clearing a zone must never delete the car somebody else is driving out of it.
+  const occupied = new Set(
+    playersOf(state)
+      .map((player) => player.vehicleId)
+      .filter((id): id is number => id !== null),
+  );
   const vehicles = state.vehicles.filter(
     (vehicle) =>
-      vehicle.id === state.player.vehicleId ||
+      protectedIds.has(vehicle.id) ||
+      vehicle.boarding ||
+      occupied.has(vehicle.id) ||
       (!driven.has(vehicle.id) && !vehicle.wrecked),
   );
-  return { ...state, vehicles, peds: [], cops: [], pickups: [], traffic: [] };
+  return {
+    ...state,
+    vehicles,
+    peds: state.peds.filter((ped) => protectedIds.has(ped.id)),
+    cops: [],
+    pickups: [],
+    traffic: state.traffic.filter((driver) =>
+      protectedIds.has(driver.vehicleId),
+    ),
+  };
 }
 
+/** Appends spawned cars and their drivers, advancing the id counter. */
 function addDrivenCars(state: ArenaState, cars: DrivenCar[]): ArenaState {
   if (cars.length === 0) return state;
   return {
@@ -58,6 +102,7 @@ function addDrivenCars(state: ArenaState, cars: DrivenCar[]): ArenaState {
   };
 }
 
+/** Spawns a seeded number of ambient cars, between the zone minimum and maximum, around the players. */
 function spawnZoneTraffic(
   state: ArenaState,
   zone: MapZone,
@@ -77,7 +122,8 @@ function spawnZoneTraffic(
       vehiclePoints(state),
       null,
       state.nextId,
-      count,
+      Math.min(count, MAX_TRAFFIC - state.traffic.length),
+      anchorPoints(state),
     ),
   );
 }
@@ -107,88 +153,178 @@ export function populateZone(
     avoid,
     null,
     cleared.nextId + pickups.length,
-    PEDS_PER_ZONE,
+    Math.max(
+      0,
+      Math.min(
+        PEDS_PER_ZONE - cleared.peds.length,
+        MAX_PEDS - cleared.peds.length,
+      ),
+    ),
+    anchorPoints(cleared),
   );
   const populated: ArenaState = {
     ...cleared,
     activeZoneKey: zone.key,
     pickups,
-    peds,
+    peds: [...cleared.peds, ...peds],
     nextId: cleared.nextId + pickups.length + peds.length,
   };
   return spawnZoneTraffic(populated, zone, graph, random);
 }
 
-/** Replaces missing pedestrians in small deterministic batches. */
+/**
+ * Recycles pedestrians the players left behind and replaces missing ones near them, in small
+ * deterministic batches.
+ */
 export function topUpPeds(
   state: ArenaState,
   zone: MapZone,
   world: PopulationWorld,
   random: () => number,
 ): ArenaState {
+  const anchors = anchorPoints(state);
+  const protectedIds = missionEntityIds(state);
+  const retained = new Set(
+    recyclePeds(state.peds, anchors, world.viewRect ?? null).map(
+      (ped) => ped.id,
+    ),
+  );
+  const peds = state.peds.filter(
+    (ped) => retained.has(ped.id) || protectedIds.has(ped.id),
+  );
+  const recycled =
+    peds.length === state.peds.length ? state : { ...state, peds };
   const room = Math.min(
-    PEDS_PER_ZONE - alivePeds(state.peds).length,
-    MAX_PEDS - state.peds.length,
+    PEDS_PER_ZONE - alivePeds(recycled.peds).length,
+    MAX_PEDS - recycled.peds.length,
     PED_RESPAWN_BATCH,
   );
-  if (room <= 0) return state;
+  if (room <= 0) return recycled;
   const fresh = spawnPeds(
     zone,
     world.graph,
     random,
-    playerPoints(state),
+    playerPoints(recycled),
     world.viewRect ?? null,
-    state.nextId,
+    recycled.nextId,
     room,
+    anchors,
   );
-  if (fresh.length === 0) return state;
+  if (fresh.length === 0) return recycled;
   return {
-    ...state,
-    peds: [...state.peds, ...fresh],
-    nextId: state.nextId + fresh.length,
+    ...recycled,
+    peds: [...recycled.peds, ...fresh],
+    nextId: recycled.nextId + fresh.length,
   };
 }
 
-/** Replaces missing ambient traffic one car at a time, up to the zone minimum. */
+/**
+ * Removes ambient cars, driver and all, that are farther than {@link TRAFFIC_RECYCLE_DISTANCE_M}
+ * from every anchor and off screen. Police cars, wrecks and anything a player sits in stay.
+ */
+function recycleTraffic(
+  state: ArenaState,
+  anchors: Point[],
+  world: PopulationWorld,
+): ArenaState {
+  if (anchors.length === 0) return state;
+  const viewRect = world.viewRect ?? null;
+  const occupied = new Set(
+    playersOf(state)
+      .map((player) => player.vehicleId)
+      .filter((id): id is number => id !== null),
+  );
+  const gone = new Set<number>();
+  for (const driver of state.traffic) {
+    if (driver.role !== "traffic" || occupied.has(driver.vehicleId)) continue;
+    const vehicle = state.vehicles.find(
+      (candidate) => candidate.id === driver.vehicleId,
+    );
+    if (
+      !vehicle ||
+      vehicle.wrecked ||
+      vehicle.boarding ||
+      missionEntityIds(state).has(vehicle.id)
+    )
+      continue;
+    const point: Point = [vehicle.x, vehicle.y];
+    if (viewRect && pointInRect(point, viewRect)) continue;
+    if (farFromAll(point, anchors, TRAFFIC_RECYCLE_DISTANCE_M))
+      gone.add(vehicle.id);
+  }
+  if (gone.size === 0) return state;
+  return {
+    ...state,
+    vehicles: state.vehicles.filter((vehicle) => !gone.has(vehicle.id)),
+    traffic: state.traffic.filter((driver) => !gone.has(driver.vehicleId)),
+  };
+}
+
+/**
+ * Recycles ambient cars the players left behind and replaces missing ones near them, one car at
+ * a time up to the zone minimum.
+ */
 export function topUpTraffic(
   state: ArenaState,
   zone: MapZone,
   world: PopulationWorld,
   random: () => number,
 ): ArenaState {
-  const ambient = state.traffic.filter(
+  const anchors = anchorPoints(state);
+  const recycled = recycleTraffic(state, anchors, world);
+  const ambient = recycled.traffic.filter(
     (driver) => driver.role === "traffic",
   ).length;
   if (
     ambient >= TRAFFIC_MIN_PER_ZONE ||
-    state.traffic.length >= MAX_TRAFFIC ||
-    state.vehicles.length >= MAX_VEHICLES
+    recycled.traffic.length >= MAX_TRAFFIC ||
+    recycled.vehicles.length >= MAX_VEHICLES
   )
-    return state;
+    return recycled;
   return addDrivenCars(
-    state,
+    recycled,
     spawnTraffic(
       zone,
       world.graph,
       random,
-      playerPoints(state),
-      vehiclePoints(state),
+      playerPoints(recycled),
+      vehiclePoints(recycled),
       world.viewRect ?? null,
-      state.nextId,
+      recycled.nextId,
       1,
+      anchors,
     ),
   );
 }
 
-/** Re-populates when the zone nearest the player changes. */
+/**
+ * The zone the NPC population is kept around.
+ *
+ * While a match is running the zone rule pins it: spec §6.4 has the host simulate NPCs inside
+ * the zone disc, and anchoring on a player instead would let one person who wandered off drag
+ * the whole crowd across the map. In free roam there is no match zone, so it follows the
+ * lowest-id living player — which is exactly today's behaviour when there is only one.
+ */
+export function populationAnchorZone(
+  state: ArenaState,
+  index: MapIndex,
+): MapZone | null {
+  if (state.zoneEnforced && state.enforcedZoneKey)
+    return findZoneByKey(index, state.enforcedZoneKey);
+  const players = orderedPlayers(state);
+  const anchor =
+    players.find((player) => player.diedAtTick === null) ?? players[0];
+  return anchor ? nearestZone(index, [anchor.x, anchor.y]) : null;
+}
+
+/** Re-populates when the anchor zone changes, and tops up pedestrians and traffic on schedule. */
 export function applyPopulation(
   state: ArenaState,
   world: PopulationWorld,
   tick: number,
   random: () => number,
 ): ArenaState {
-  const [player] = playersOf(state);
-  const zone = nearestZone(world.index, [player.x, player.y]);
+  const zone = populationAnchorZone(state, world.index);
   if (!zone) return state;
   if (zone.key !== state.activeZoneKey)
     return populateZone(state, zone, world.index, world.graph, random);

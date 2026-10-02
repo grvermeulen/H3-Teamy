@@ -3,6 +3,7 @@ import type { CanvasFactory } from "./canvasTypes";
 import type { LandmarkLookup } from "./drawStatic";
 import {
   CHUNK_METRES,
+  EMPTY_CHUNK_BYTES,
   RASTER_BUDGET_BYTES,
   RASTER_BUDGET_MAX_BYTES,
   chunkKey,
@@ -10,6 +11,7 @@ import {
   chunksCovering,
   createStaticRaster,
   rasterBudgetForViewport,
+  type ChunkLayer,
 } from "./staticRaster";
 import { createFakeTarget } from "./testing/fakeContext";
 
@@ -49,16 +51,22 @@ describe("createStaticRaster", () => {
       [],
       landmarks,
     );
-    expect(chunk?.target.width).toBe(CHUNK_METRES * 8);
-    expect(chunk?.bytes).toBe(1024 * 1024 * 4);
+    expect(chunk?.target.width).toBe(CHUNK_METRES * 8 + 4);
+    expect(chunk?.rect).toEqual({
+      minX: -0.25,
+      minY: -0.25,
+      maxX: 128.25,
+      maxY: 128.25,
+    });
+    expect(chunk?.bytes).toBe(1028 * 1028 * 4);
     expect(
       raster.ensureChunk({ zoom: 8, chunkX: 0, chunkY: 0 }, [], landmarks),
     ).toBe(chunk);
-    expect(raster.stats()).toEqual({ chunks: 1, bytes: 4194304 });
+    expect(raster.stats()).toEqual({ chunks: 1, bytes: 1028 * 1028 * 4 });
   });
 
   it("evicts the least recently used chunks beyond the byte budget", () => {
-    const raster = createStaticRaster(factory, 2 * 512 * 512 * 4);
+    const raster = createStaticRaster(factory, 2 * 516 * 516 * 4);
     raster.ensureChunk({ zoom: 4, chunkX: 0, chunkY: 0 }, [], landmarks);
     raster.ensureChunk({ zoom: 4, chunkX: 1, chunkY: 0 }, [], landmarks);
     raster.getChunk({ zoom: 4, chunkX: 0, chunkY: 0 });
@@ -89,11 +97,72 @@ describe("createStaticRaster", () => {
     ).toBe(false);
   });
 
+  it("invalidates a chunk when new map data touches only its painted overlap", () => {
+    const raster = createStaticRaster(factory);
+    const coord = { zoom: 8, chunkX: 0, chunkY: 0 };
+    raster.ensureChunk(coord, [], landmarks);
+    raster.invalidateRect({ minX: 128.1, minY: 20, maxX: 130, maxY: 30 });
+    expect(raster.getChunk(coord)).toBeUndefined();
+  });
+
+  it("paints another layer at its own resolution and caches an empty chunk without a canvas", () => {
+    const painted: number[] = [];
+    const layer: ChunkLayer = {
+      resolution: 0.5,
+      covers: (rect) => rect.minX >= 0,
+      paint: (context, _rect, zoom) => {
+        painted.push(zoom);
+        context.fillRect(0, 0, 1, 1);
+      },
+    };
+    const raster = createStaticRaster(factory, undefined, undefined, layer);
+    const full = raster.ensureChunk(
+      { zoom: 8, chunkX: 0, chunkY: 0 },
+      [],
+      landmarks,
+    );
+    expect(full?.target?.width).toBe(CHUNK_METRES * 4);
+    expect(full?.bytes).toBe(CHUNK_METRES * 4 * CHUNK_METRES * 4 * 4);
+    expect(painted).toEqual([4]);
+    const empty = raster.ensureChunk(
+      { zoom: 8, chunkX: -1, chunkY: 0 },
+      [],
+      landmarks,
+    );
+    expect(empty?.target).toBeNull();
+    expect(empty?.bytes).toBe(EMPTY_CHUNK_BYTES);
+    expect(painted).toEqual([4]);
+    expect(raster.stats()).toEqual({
+      chunks: 2,
+      bytes: (full?.bytes ?? 0) + EMPTY_CHUNK_BYTES,
+    });
+    expect(
+      raster.rasterizeNext([{ zoom: 8, chunkX: -1, chunkY: 0 }], [], landmarks),
+    ).toBe(false);
+  });
+
   it("disposes everything", () => {
     const raster = createStaticRaster(factory);
     raster.ensureChunk({ zoom: 4, chunkX: 0, chunkY: 0 }, [], landmarks);
     raster.dispose();
     expect(raster.stats()).toEqual({ chunks: 0, bytes: 0 });
+  });
+
+  it("rebuilds scaled chunks after a quality change and bounds traversal after resize", () => {
+    const raster = createStaticRaster(factory);
+    const coord = { zoom: 8, chunkX: 0, chunkY: 0 };
+    raster.ensureChunk(coord, [], landmarks);
+    const budget = 2 * 772 * 772 * 4;
+    raster.configure!(budget, 0.75);
+    expect(raster.stats().chunks).toBe(0);
+    expect(raster.ensureChunk(coord, [], landmarks)?.target.width).toBe(772);
+    for (let i = 1; i <= 100; i++)
+      raster.ensureChunk({ ...coord, chunkX: i }, [], landmarks);
+    expect(raster.stats().bytes).toBeLessThanOrEqual(budget);
+    expect(raster.stats().chunks).toBe(2);
+    raster.configure!(772 * 772 * 4, 0.75);
+    expect(raster.stats().chunks).toBe(1);
+    raster.dispose();
   });
 });
 
@@ -110,8 +179,8 @@ describe("rasterBudgetForViewport", () => {
     const workingSetBytes =
       (Math.ceil(2560 / chunkPx) + 1) *
       (Math.ceil(1440 / chunkPx) + 1) *
-      chunkPx *
-      chunkPx *
+      (chunkPx + 4) *
+      (chunkPx + 4) *
       4;
 
     const budget = rasterBudgetForViewport({ width: 2560, height: 1440 }, zoom);
@@ -126,8 +195,8 @@ describe("rasterBudgetForViewport", () => {
     const ultraWideWorkingSet =
       (Math.ceil(3840 / chunkPx) + 1) *
       (Math.ceil(2160 / chunkPx) + 1) *
-      chunkPx *
-      chunkPx *
+      (chunkPx + 4) *
+      (chunkPx + 4) *
       4;
 
     expect(rasterBudgetForViewport({ width: 2560, height: 1440 }, zoom)).toBe(

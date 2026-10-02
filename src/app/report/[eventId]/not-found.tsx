@@ -18,7 +18,11 @@ export default function ReportNotFound() {
           (productie vs. test).
         </p>
         <div style={{ marginTop: 24 }}>
-          <Link href="/" className="muted" style={{ textDecoration: "underline" }}>
+          <Link
+            href="/"
+            className="muted"
+            style={{ textDecoration: "underline" }}
+          >
             ← Terug naar programma
           </Link>
         </div>

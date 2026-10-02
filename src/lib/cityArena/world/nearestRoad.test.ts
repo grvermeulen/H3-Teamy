@@ -6,6 +6,8 @@ const tile: DecodedTile = {
   x: 0,
   y: 0,
   rect: { minX: 0, minY: 0, maxX: 2000, maxY: 2000 },
+  trees: [],
+  furniture: [],
   roads: [
     {
       points: [

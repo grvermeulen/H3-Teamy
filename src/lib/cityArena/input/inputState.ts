@@ -1,4 +1,5 @@
 import { EMPTY_INPUT, type WorldInput } from "../sim/types";
+import type { MissionCommand } from "../missions/types";
 
 /** Scales a vector down to unit length when it is longer. */
 export function clampToUnit(vector: [number, number]): [number, number] {
@@ -7,13 +8,16 @@ export function clampToUnit(vector: [number, number]): [number, number] {
   return [vector[0] / length, vector[1] / length];
 }
 
-/** Buttons a device can hold down. */
-export type ButtonName = "fire" | "enter" | "weaponNext";
+/**
+ * Buttons a device can hold down. `ads` is aiming down the sights: the right mouse button, or the
+ * touch sights toggle (held for as long as it is switched on).
+ */
+export type ButtonName = "fire" | "enter" | "weaponNext" | "ads";
 
 /** Where a button press comes from (keys, the mouse, or the on-screen buttons); the sources are OR-ed together. */
 export type InputSource = "keyboard" | "pointer" | "buttons";
 
-/** Held state of the three buttons. */
+/** Held state of the buttons. */
 export type ButtonState = Record<ButtonName, boolean>;
 
 /**
@@ -26,24 +30,37 @@ export type ButtonState = Record<ButtonName, boolean>;
  * centre instead of snapping it to the keyboard's digital mapping in a single tick.
  */
 export type InputState = {
+  setMissionCommand(command: MissionCommand): void;
+  acknowledgeMission(sequence: number): void;
   setKeyboard(vector: [number, number]): void;
   setStick(vector: [number, number] | null): void;
   setButton(source: InputSource, name: ButtonName, pressed: boolean): void;
   setAim(angle: number | null): void;
+  /** Aim from the touch aim stick; while it is held it wins over the mouse. */
+  setStickAim(angle: number | null): void;
   clearKeyboard(): void;
+  /** Releases every input source when focus or visibility is lost. */
+  clearAll(): void;
   snapshot(): WorldInput;
 };
 
-const RELEASED: ButtonState = { fire: false, enter: false, weaponNext: false };
+const RELEASED: ButtonState = {
+  fire: false,
+  enter: false,
+  weaponNext: false,
+  ads: false,
+};
 
 /** Creates an empty input state. */
 export function createInputState(): InputState {
+  let missionCommand: MissionCommand | undefined;
   let keyboard: [number, number] = [0, 0];
   let stick: [number, number] | null = null;
   // Which source last moved the player, independent of whether a finger is down right now (see
   // the `InputState` doc comment above) — a released stick must keep taking the analog path.
   let stickIsSource = false;
   let aim: number | null = null;
+  let stickAim: number | null = null;
   const buttons: Record<InputSource, ButtonState> = {
     keyboard: { ...RELEASED },
     pointer: { ...RELEASED },
@@ -57,6 +74,13 @@ export function createInputState(): InputState {
     return stick ?? [0, 0];
   };
   return {
+    setMissionCommand(command) {
+      missionCommand = command;
+    },
+    acknowledgeMission(sequence) {
+      if (missionCommand && missionCommand.sequence <= sequence)
+        missionCommand = undefined;
+    },
     setKeyboard(vector) {
       keyboard = vector;
       stickIsSource = false;
@@ -72,18 +96,33 @@ export function createInputState(): InputState {
     setAim(angle) {
       aim = angle;
     },
+    setStickAim(angle) {
+      stickAim = angle;
+    },
     clearKeyboard() {
       keyboard = [0, 0];
       buttons.keyboard = { ...RELEASED };
     },
+    clearAll() {
+      keyboard = [0, 0];
+      stick = null;
+      stickIsSource = false;
+      aim = null;
+      stickAim = null;
+      buttons.keyboard = { ...RELEASED };
+      buttons.pointer = { ...RELEASED };
+      buttons.buttons = { ...RELEASED };
+    },
     snapshot: () => ({
       ...EMPTY_INPUT,
+      ...(missionCommand ? { missionCommand } : {}),
       move: clampToUnit(movement()),
       moveIsAnalog: stickIsSource,
-      aim,
+      aim: stickAim ?? aim,
       fire: held("fire"),
       enter: held("enter"),
       weaponNext: held("weaponNext"),
+      ...(held("ads") ? { ads: true } : {}),
     }),
   };
 }

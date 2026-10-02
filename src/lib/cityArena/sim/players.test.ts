@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { MapIndex } from "../world/mapTypes";
 import { decodeRoadGraph } from "../world/roadGraph";
 import { createArenaState } from "./arena";
-import { driverPlayer, playerById, playersOf, replacePlayer } from "./players";
+import {
+  driverPlayer,
+  localPlayer,
+  playerById,
+  playersOf,
+  replacePlayer,
+} from "./players";
 import { createRng } from "./rng";
 
 const index: MapIndex = {
@@ -24,12 +30,14 @@ describe("player accessors", () => {
       { index, graph, seed: 1, zone: null },
       createRng(1),
     );
-    expect(playersOf(state)).toEqual([state.player]);
-    expect(playerById(state, 0)).toBe(state.player);
+    expect(playersOf(state)).toEqual([localPlayer(state)]);
+    expect(playerById(state, 0)).toBe(localPlayer(state));
     expect(playerById(state, 7)).toBeNull();
-    const moved = replacePlayer(state, { ...state.player, x: 42 });
-    expect(moved.player.x).toBe(42);
-    expect(replacePlayer(state, { ...state.player, id: 9, x: 1 })).toBe(state);
+    const moved = replacePlayer(state, { ...localPlayer(state), x: 42 });
+    expect(localPlayer(moved).x).toBe(42);
+    expect(replacePlayer(state, { ...localPlayer(state), id: 9, x: 1 })).toBe(
+      state,
+    );
   });
 
   it("finds the player driving a car", () => {
@@ -37,8 +45,11 @@ describe("player accessors", () => {
       { index, graph, seed: 1, zone: null },
       createRng(1),
     );
-    const seated = replacePlayer(state, { ...state.player, vehicleId: 5 });
-    expect(driverPlayer(seated, 5)).toBe(seated.player);
+    const seated = replacePlayer(state, {
+      ...localPlayer(state),
+      vehicleId: 5,
+    });
+    expect(driverPlayer(seated, 5)).toBe(localPlayer(seated));
     expect(driverPlayer(seated, 6)).toBeNull();
     expect(driverPlayer(state, 5)).toBeNull();
   });

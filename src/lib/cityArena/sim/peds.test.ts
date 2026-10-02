@@ -1,16 +1,22 @@
+import { localPlayer } from "./players";
 import { describe, expect, it } from "vitest";
 import type { MapIndex, MapZone } from "../world/mapTypes";
 import type { Point } from "../world/projection";
 import { decodeRoadGraph } from "../world/roadGraph";
 import { createArenaState } from "./arena";
+import { CAR_BLAST, blastPeds } from "./blast";
 import {
   PED_BODY_TICKS,
   PED_FLEE_TICKS,
+  PED_RECYCLE_DISTANCE_M,
+  PED_SPAWN_RADIUS_M,
   alivePeds,
-  blastPeds,
   createPed,
   damagePed,
+  pedLook,
+  pedLookName,
   frightenPeds,
+  recyclePeds,
   spawnPeds,
   stepPed,
   stepPeds,
@@ -101,6 +107,48 @@ describe("pedestrian spawning and movement", () => {
     ]);
   });
 
+  it("spawns around the players when asked, and recycles the ones they left behind", () => {
+    /** A 2 km residential street: 0–1000 m and 1000–2000 m. */
+    const street = decodeRoadGraph({
+      nodes: [0, 0, 4000, 0, 8000, 0],
+      edges: [0, 1, 0, -1, 0, 4000, 1, 2, 0, -1, 0, 4000],
+      classes: ["residential"],
+      names: [],
+    });
+    const wide: MapZone = { ...zone, center: [4000, 0], radius: 8000 };
+    const anchor: Point = [1000, 0];
+    const peds = spawnPeds(
+      wide,
+      street,
+      createRng(3),
+      [anchor],
+      null,
+      100,
+      20,
+      [anchor],
+    );
+    expect(peds).toHaveLength(20);
+    for (const ped of peds) {
+      const distance = Math.hypot(ped.x - anchor[0], ped.y - anchor[1]);
+      expect(distance).toBeGreaterThanOrEqual(30);
+      expect(distance).toBeLessThanOrEqual(PED_SPAWN_RADIUS_M + 5);
+    }
+    const near = walkerAt(100, 4);
+    const far = walkerAt(PED_RECYCLE_DISTANCE_M + 50, 4);
+    const body: PedState = { ...walkerAt(900, 4), mode: "dead" };
+    const onScreen = walkerAt(600, 4);
+    const view = { minX: 550, minY: -50, maxX: 650, maxY: 50 };
+    expect(recyclePeds([near, far, body, onScreen], [[0, 0]], view)).toEqual([
+      near,
+      body,
+      onScreen,
+    ]);
+    const all = [near, far];
+    expect(recyclePeds(all, [], null)).toBe(all);
+    const close = [near];
+    expect(recyclePeds(close, [[0, 0]], null)).toBe(close);
+  });
+
   it("flees from nearby gunfire, then rejoins a rail", () => {
     const [scared] = frightenPeds([walkerAt(10, 4)], [[0, 4]], 50);
     expect(scared).toMatchObject({
@@ -158,13 +206,20 @@ describe("pedestrian contacts", () => {
     };
     const hit = stepPeds(state, world, step, 5, () => 0);
     expect(hit.peds[0]).toMatchObject({ mode: "dead", health: 0 });
-    expect(hit.peds[0].x).toBeCloseTo(2.5);
+    expect(hit.peds[0].x).toBeCloseTo(3);
     expect(hit.events).toEqual([
-      { kind: "kill", victim: "ped", killerId: null, x: 1.5, y: 0 },
+      {
+        kind: "kill",
+        victim: "ped",
+        victimId: 70,
+        killerId: null,
+        x: 1.5,
+        y: 0,
+      },
     ]);
     expect(
       stepPeds(
-        { ...state, player: { ...state.player, vehicleId: 40 } },
+        { ...state, players: [{ ...localPlayer(state), vehicleId: 40 }] },
         world,
         step,
         5,
@@ -176,11 +231,22 @@ describe("pedestrian contacts", () => {
   it("kills pedestrians in an explosion but leaves distant ones alone", () => {
     const blast = blastPeds(
       [standingAt(72, 1, 0), standingAt(73, 5, 0)],
-      { x: 0, y: 0 },
+      { ...CAR_BLAST, x: 0, y: 0, ownerId: null },
       3,
     );
     expect(blast.peds[0]).toMatchObject({ mode: "dead", modeUntilTick: 243 });
     expect(blast.peds[1].mode).toBe("walk");
     expect(blast.killed).toEqual([blast.peds[0]]);
+  });
+});
+
+describe("pedLook", () => {
+  it("derives a look in 0..5 from the id, every id included, and names its art", () => {
+    expect(pedLook(0)).toBe(0);
+    expect(pedLook(7)).toBe(1);
+    expect(pedLook(-1)).toBe(5);
+    expect(pedLookName(8)).toBe("ped3");
+    const looks = new Set(Array.from({ length: 60 }, (_, id) => pedLook(id)));
+    expect([...looks].sort()).toEqual([0, 1, 2, 3, 4, 5]);
   });
 });

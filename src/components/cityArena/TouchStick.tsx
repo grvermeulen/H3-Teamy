@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import {
   STICK_RADIUS_PX,
@@ -12,7 +12,21 @@ import {
 type TouchStickProps = {
   stick: StickController;
   onVector: (vector: [number, number] | null) => void;
+  /** The left 45 % moves; the right 55 % aims (spec §7). Defaults to the left. */
+  side?: "left" | "right";
 };
+
+/** Where each surface sits and what a test finds it by. */
+const SURFACES = {
+  left: {
+    className: "absolute inset-y-0 left-0 w-[45%] touch-none select-none",
+    testId: "touch-stick-surface",
+  },
+  right: {
+    className: "absolute inset-y-0 right-0 w-[55%] touch-none select-none",
+    testId: "touch-aim-surface",
+  },
+} as const;
 
 /** Radius of the knob circle: half the stick's travel radius. */
 const STICK_KNOB_RADIUS_PX = STICK_RADIUS_PX / 2;
@@ -25,8 +39,12 @@ function localPoint(
   return [event.clientX - rect.left, event.clientY - rect.top];
 }
 
-/** Captures the pointer on the surface so a drag past its edge keeps tracking. */
-function capturePointer(event: ReactPointerEvent<HTMLDivElement>): void {
+/**
+ * Captures the pointer on the element it went down on, so a drag past its edge keeps tracking.
+ *
+ * @param event - The pointer-down event.
+ */
+export function capturePointer(event: ReactPointerEvent<Element>): void {
   if (typeof event.currentTarget.setPointerCapture === "function") {
     event.currentTarget.setPointerCapture(event.pointerId);
   }
@@ -80,7 +98,32 @@ function useStickHandlers(
     [onVector, stick],
   );
 
+  useReleaseOnUnmount(stick, onVector);
   return { state, onPointerDown, onPointerMove, onPointerEnd };
+}
+
+/**
+ * Lets go of a stick still held when its surface goes away (the aim stick gives way to the 3D look
+ * pad mid-drag): otherwise its aim and fire would stay on and the stale finger would keep the next
+ * one from taking it.
+ */
+function useReleaseOnUnmount(
+  stick: StickController,
+  onVector: (vector: [number, number] | null) => void,
+): void {
+  const onVectorRef = useRef(onVector);
+  useEffect(() => {
+    onVectorRef.current = onVector;
+  }, [onVector]);
+  useEffect(
+    () => () => {
+      const owner = stick.state().pointerId;
+      if (owner === null) return;
+      stick.end(owner);
+      onVectorRef.current(null);
+    },
+    [stick],
+  );
 }
 
 /** Props for {@link StickGraphic}. */
@@ -114,7 +157,7 @@ function StickGraphic({ state }: StickGraphicProps): React.JSX.Element {
 }
 
 /**
- * Floating joystick surface on the left part of the screen. The base and knob are SVG circles
+ * Floating joystick surface: on the left it moves, on the right it aims. The base and knob are SVG circles
  * whose `cx`/`cy` attributes track the finger — not inline styles, and not the CSS-custom-property
  * idiom either, because Space Invaders' touch controls (`src/components/spaceInvaders/`) are static
  * buttons with no moving part to mirror; SVG geometry attributes are the closest existing pattern
@@ -124,15 +167,16 @@ function StickGraphic({ state }: StickGraphicProps): React.JSX.Element {
 export default function TouchStick({
   stick,
   onVector,
+  side = "left",
 }: TouchStickProps): React.JSX.Element {
   const { state, onPointerDown, onPointerMove, onPointerEnd } =
     useStickHandlers(stick, onVector);
 
   return (
     <div
-      data-testid="touch-stick-surface"
+      data-testid={SURFACES[side].testId}
       aria-hidden="true"
-      className="absolute inset-y-0 left-0 w-[45%] touch-none select-none"
+      className={SURFACES[side].className}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerEnd}

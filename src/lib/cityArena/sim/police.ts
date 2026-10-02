@@ -248,3 +248,47 @@ export function managePoliceCars(
   const routed = replanAll(state, target, world.graph, tick);
   return spawnMissingPoliceCars(routed, target, level, world, tick, random);
 }
+
+/** How far a siren carries: a car the police are driving within this distance of a player is heard. */
+export const SIREN_RANGE_M = 120;
+
+/**
+ * Ids of the cars the police are driving right now — the ones whose lights flash and whose siren
+ * sounds. A wrecked car has neither, driver or not, and a police car a player stole is just a car.
+ *
+ * @param state - The simulation state.
+ * @returns The vehicle ids.
+ */
+export function policeCarIds(state: ArenaState): Set<number> {
+  const wrecked = new Set(
+    state.vehicles
+      .filter((vehicle) => vehicle.wrecked)
+      .map((vehicle) => vehicle.id),
+  );
+  return new Set(
+    policeDrivers(state.traffic)
+      .map((driver) => driver.vehicleId)
+      .filter((id) => !wrecked.has(id)),
+  );
+}
+
+/**
+ * True when a car the police are driving is within `rangeM` of `point`.
+ *
+ * @param state - The simulation state.
+ * @param point - Where the listener is, in metres.
+ * @param rangeM - How far the siren carries.
+ * @returns Whether the siren is heard there.
+ */
+export function sirenWithin(
+  state: ArenaState,
+  point: Point,
+  rangeM = SIREN_RANGE_M,
+): boolean {
+  const ids = policeCarIds(state);
+  return state.vehicles.some(
+    (vehicle) =>
+      ids.has(vehicle.id) &&
+      Math.hypot(vehicle.x - point[0], vehicle.y - point[1]) <= rangeM,
+  );
+}

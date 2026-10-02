@@ -5,5 +5,3 @@ export async function GET(req: NextRequest) {
   const { isAdmin, me } = await isAdminUser(req);
   return NextResponse.json({ isAdmin, me });
 }
-
-

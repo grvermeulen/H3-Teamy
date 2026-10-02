@@ -1,9 +1,21 @@
 import { PLAYER_RADIUS_M } from "./player";
 import type { ArenaPlayerState, VehicleState } from "./types";
-import { RESTITUTION } from "./vehicle";
+import {
+  RESTITUTION,
+  hullCircles,
+  hullLayout,
+  lengthOf,
+  localToWorld,
+  massOf,
+  widthOf,
+  worldToLocal,
+} from "./vehicle";
 import type { Point } from "../world/projection";
 
-/** Radius of the single circle that stands in for a car in car–car and car–player contacts. */
+/**
+ * Radius of the circle that stood in for every car before the hulls took over contacts; still the
+ * clearance the traffic AI, the spawns and the exit keep around one.
+ */
 export const CAR_BODY_RADIUS_M = 1.6;
 /** Cars slower than this do not hurt people (spec §5). */
 export const RUN_OVER_MIN_SPEED_MPS = 5;
@@ -22,37 +34,80 @@ type PairResolution = {
   impactSpeed: number;
 };
 
-/** Separates two overlapping cars equally and exchanges their approach velocity with restitution. */
+/** The contact between two cars: the normal from the first to the second and how deep they overlap. */
+type HullContact = { normalX: number; normalY: number; overlap: number };
+
+/** Cars further apart than their reaches cannot touch: the cheap reject before the circle loop. */
+function beyondReach(first: VehicleState, second: VehicleState): boolean {
+  const reach =
+    (lengthOf(first.kind) +
+      widthOf(first.kind) +
+      lengthOf(second.kind) +
+      widthOf(second.kind)) /
+    2;
+  return Math.hypot(second.x - first.x, second.y - first.y) >= reach;
+}
+
+/**
+ * The contact between two cars, if any. The normal runs centre to centre; the overlap is how far
+ * along it the deepest pair of touching hull circles has to be pulled apart, which also handles a
+ * pair that has crossed (a circle already behind the other car's) without pushing the wrong way.
+ */
+function hullContact(
+  first: VehicleState,
+  second: VehicleState,
+): HullContact | null {
+  if (beyondReach(first, second)) return null;
+  const dx = second.x - first.x;
+  const dy = second.y - first.y;
+  const distance = Math.hypot(dx, dy);
+  const normalX = distance === 0 ? 1 : dx / distance;
+  const normalY = distance === 0 ? 0 : dy / distance;
+  const minimum =
+    hullLayout(first.kind).radiusM + hullLayout(second.kind).radiusM;
+  let overlap = 0;
+  for (const a of hullCircles(first))
+    for (const b of hullCircles(second)) {
+      const gapX = b[0] - a[0];
+      const gapY = b[1] - a[1];
+      if (Math.hypot(gapX, gapY) >= minimum) continue;
+      overlap = Math.max(overlap, minimum - (gapX * normalX + gapY * normalY));
+    }
+  return overlap > 0 ? { normalX, normalY, overlap } : null;
+}
+
+/**
+ * Separates two overlapping cars — the lighter one moves more — and exchanges their approach
+ * velocity with restitution, again by mass: a bus shoves a compact, not the reverse.
+ */
 function resolvePair(
   first: VehicleState,
   second: VehicleState,
 ): PairResolution | null {
-  const dx = second.x - first.x;
-  const dy = second.y - first.y;
-  const distance = Math.hypot(dx, dy);
-  const minimum = CAR_BODY_RADIUS_M * 2;
-  if (distance >= minimum) return null;
-  const normalX = distance === 0 ? 1 : dx / distance;
-  const normalY = distance === 0 ? 0 : dy / distance;
-  const shift = (minimum - distance) / 2;
+  const contact = hullContact(first, second);
+  if (!contact) return null;
+  const { normalX, normalY, overlap } = contact;
+  const total = massOf(first.kind) + massOf(second.kind);
+  const firstShare = massOf(second.kind) / total;
+  const secondShare = massOf(first.kind) / total;
   const approach =
     (first.velocityX - second.velocityX) * normalX +
     (first.velocityY - second.velocityY) * normalY;
-  const impulse = approach > 0 ? ((1 + RESTITUTION) * approach) / 2 : 0;
+  const impulse = approach > 0 ? (1 + RESTITUTION) * approach : 0;
   return {
     first: {
       ...first,
-      x: first.x - normalX * shift,
-      y: first.y - normalY * shift,
-      velocityX: first.velocityX - normalX * impulse,
-      velocityY: first.velocityY - normalY * impulse,
+      x: first.x - normalX * overlap * firstShare,
+      y: first.y - normalY * overlap * firstShare,
+      velocityX: first.velocityX - normalX * impulse * firstShare,
+      velocityY: first.velocityY - normalY * impulse * firstShare,
     },
     second: {
       ...second,
-      x: second.x + normalX * shift,
-      y: second.y + normalY * shift,
-      velocityX: second.velocityX + normalX * impulse,
-      velocityY: second.velocityY + normalY * impulse,
+      x: second.x + normalX * overlap * secondShare,
+      y: second.y + normalY * overlap * secondShare,
+      velocityX: second.velocityX + normalX * impulse * secondShare,
+      velocityY: second.velocityY + normalY * impulse * secondShare,
     },
     impactSpeed: Math.max(0, approach),
   };
@@ -81,29 +136,34 @@ export function resolveVehiclePairs(vehicles: VehicleState[]): {
 /** Contact of a car with a person-sized circle: push-out point, damage and whether they touched. */
 export type CircleContact = { point: Point; damage: number; touched: boolean };
 
-/** Pushes a person-sized circle clear of a car and reports run-over damage. */
+/**
+ * Pushes a person-sized circle clear of a car's body and reports run-over damage. The body is the
+ * kind's rectangle grown by the person's radius, and the way out is through the nearer face, so
+ * someone clipped at the side steps aside and someone hit head-on is carried in front — and
+ * nobody is ever pushed the length of a bus.
+ */
 export function resolveVehicleAgainstCircle(
   vehicle: VehicleState,
   point: Point,
 ): CircleContact {
-  const dx = point[0] - vehicle.x;
-  const dy = point[1] - vehicle.y;
-  const distance = Math.hypot(dx, dy);
-  const minimum = CAR_BODY_RADIUS_M + PLAYER_RADIUS_M;
-  if (distance >= minimum) return { point, damage: 0, touched: false };
-  const normalX = distance === 0 ? 1 : dx / distance;
-  const normalY = distance === 0 ? 0 : dy / distance;
+  const [forward, right] = worldToLocal(vehicle, point);
+  const halfLength = lengthOf(vehicle.kind) / 2 + PLAYER_RADIUS_M;
+  const halfWidth = widthOf(vehicle.kind) / 2 + PLAYER_RADIUS_M;
+  if (Math.abs(forward) >= halfLength || Math.abs(right) >= halfWidth)
+    return { point, damage: 0, touched: false };
   const speed = Math.hypot(vehicle.velocityX, vehicle.velocityY);
   const damage =
     speed > RUN_OVER_MIN_SPEED_MPS ? RUN_OVER_DAMAGE_PER_MPS * speed : 0;
-  // A parked/slow car pushes the player to exactly `minimum` so the next tick starts
-  // contact-free without oscillating; a moving car that hurt them gets the extra clearance.
-  const clearance = damage > 0 ? minimum + RUN_OVER_CLEARANCE_M : minimum;
-  return {
-    point: [vehicle.x + normalX * clearance, vehicle.y + normalY * clearance],
-    damage,
-    touched: true,
-  };
+  // A parked/slow car pushes the person to exactly the face so the next tick starts contact-free
+  // without oscillating; a moving car that hurt them gets the extra clearance.
+  const clearance = damage > 0 ? RUN_OVER_CLEARANCE_M : 0;
+  const forwardEscape = halfLength - Math.abs(forward);
+  const rightEscape = halfWidth - Math.abs(right);
+  const local: Point =
+    forwardEscape < rightEscape
+      ? [Math.sign(forward || 1) * (halfLength + clearance), right]
+      : [forward, Math.sign(right || 1) * (halfWidth + clearance)];
+  return { point: localToWorld(vehicle, local), damage, touched: true };
 }
 
 /** Pushes a player on foot clear of a car and reports run-over damage. */

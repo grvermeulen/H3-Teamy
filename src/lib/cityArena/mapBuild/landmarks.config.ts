@@ -25,6 +25,8 @@ const isUniversity = (tags: OsmTags): boolean =>
   tags.amenity === "university" || tags.building === "university";
 const isCafe = (tags: OsmTags): boolean =>
   ["cafe", "bar", "pub", "restaurant"].includes(tags.amenity ?? "");
+const isCuneralaan42 = (tags: OsmTags): boolean =>
+  tags["addr:street"] === "Cuneralaan" && tags["addr:housenumber"] === "42";
 
 const WAGENINGEN_MARKT: LatLon = { lat: 51.9693, lon: 5.6656 };
 const BENNEKOM_DORPSSTRAAT: LatLon = { lat: 51.9993, lon: 5.676 };
@@ -38,6 +40,17 @@ export const LANDMARKS: LandmarkConfig[] = [
     style: "church",
     matchesTags: isPlaceOfWorship,
     zoneAnchor: "rhenen",
+  },
+  {
+    key: "klein-zwitserland",
+    name: "Brouwerij Klein Zwitserland",
+    // Cuneralaan 42, Rhenen is an address node in OSM with no name of its own, so it is pinned
+    // by id (a pinned element needs no name match) and the query fetches it by that id. The
+    // node lies inside the house's footprint, which is what attaches the landmark to it.
+    nameMatch: "Cuneralaan",
+    style: "brewery",
+    matchesTags: isCuneralaan42,
+    osmId: "node/2783521256",
   },
   {
     key: "gastland",

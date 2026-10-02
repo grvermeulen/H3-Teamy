@@ -43,7 +43,7 @@ describe("runBuild", () => {
       now: () => new Date("2026-09-03T12:00:00.000Z"),
       log: () => {},
     });
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
     const files = await readdir(outDir);
     expect(files).toContain("index.json");
     expect(files).toContain("roads.json");

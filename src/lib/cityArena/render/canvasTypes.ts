@@ -24,6 +24,7 @@ export type RasterContext = Pick<
   | "drawImage"
   | "arc"
   | "setLineDash"
+  | "createPattern"
 > & {
   fillStyle: string | CanvasGradient | CanvasPattern;
   strokeStyle: string | CanvasGradient | CanvasPattern;
@@ -34,6 +35,7 @@ export type RasterContext = Pick<
   textAlign: CanvasTextAlign;
   textBaseline: CanvasTextBaseline;
   globalAlpha: number;
+  globalCompositeOperation: GlobalCompositeOperation;
 };
 
 /** A drawable surface plus its context. */

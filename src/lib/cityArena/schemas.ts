@@ -1,5 +1,13 @@
 import { z } from "zod";
-import type { MapIndex, MapRoads, MapTile, ZoneKey } from "./world/mapTypes";
+import {
+  FURNITURE_KINDS,
+  LANDMARK_STYLES,
+  type FurnitureKind,
+  type MapIndex,
+  type MapRoads,
+  type MapTile,
+  type ZoneKey,
+} from "./world/mapTypes";
 
 const zoneKeys = ["rhenen", "wageningen", "campus", "bennekom"] as const;
 const unitPoint = z.tuple([z.number().int(), z.number().int()]);
@@ -42,7 +50,7 @@ export const MapIndexSchema = z.object({
     z.object({
       key: z.string(),
       name: z.string(),
-      style: z.enum(["church", "pool", "campus", "cafe"]),
+      style: z.enum(LANDMARK_STYLES),
       center: unitPoint,
       tile: z.object({ x: z.number().int(), y: z.number().int() }),
     }),
@@ -77,6 +85,46 @@ function isStringArray(value: unknown): boolean {
   );
 }
 
+/** True for `[x, y, size]` tree rows, or for the field's absence (a tile built before Plan 9b). */
+function isTreeList(value: unknown): boolean {
+  if (value === undefined) return true;
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        Array.isArray(entry) &&
+        entry.length === 3 &&
+        isFlatNumberArray(entry) &&
+        (entry[2] === 0 || entry[2] === 1),
+    )
+  );
+}
+
+/** True when the value names one of the furniture kinds. */
+function isFurnitureKind(value: unknown): value is FurnitureKind {
+  return (
+    typeof value === "string" &&
+    (FURNITURE_KINDS as readonly string[]).includes(value)
+  );
+}
+
+/** True for `[x, y, kind, heading]` furniture rows of a known kind, or for the field's absence. */
+function isFurnitureList(value: unknown): boolean {
+  if (value === undefined) return true;
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        Array.isArray(entry) &&
+        entry.length === 4 &&
+        typeof entry[0] === "number" &&
+        typeof entry[1] === "number" &&
+        isFurnitureKind(entry[2]) &&
+        typeof entry[3] === "number",
+    )
+  );
+}
+
 /** Cheap structural guard for a tile payload (full Zod validation would be too slow at 10 Hz loads). */
 export function isMapTile(value: unknown): value is MapTile {
   if (!isRecord(value)) return false;
@@ -86,7 +134,9 @@ export function isMapTile(value: unknown): value is MapTile {
     isGeometryList(value.roads) &&
     isGeometryList(value.buildings) &&
     isGeometryList(value.ground) &&
-    isGeometryList(value.water)
+    isGeometryList(value.water) &&
+    isTreeList(value.trees) &&
+    isFurnitureList(value.furniture)
   );
 }
 
@@ -101,17 +151,86 @@ export function isMapRoads(value: unknown): value is MapRoads {
   );
 }
 
-/** Persisted player preferences (extended by later plans). */
+/** The two control layouts (spec §7); the device picks unless one is forced. */
+const layouts = ["mobile", "desktop"] as const;
+
+/**
+ * "Muisgevoeligheid" (aim spec §5): mouse-look's turn per pixel as a multiple, its range, default
+ * and the slider's step.
+ */
+export const MOUSE_SENSITIVITY = {
+  min: 0.25,
+  max: 2.5,
+  default: 1,
+  step: 0.05,
+} as const;
+/** "Kijkgevoeligheid": the range and default of the touch look pad's speed factor (aim round §6). */
+export const TOUCH_LOOK_SENSITIVITY_MIN = 0.25;
+export const TOUCH_LOOK_SENSITIVITY_MAX = 2.5;
+export const TOUCH_LOOK_SENSITIVITY_DEFAULT = 1;
+
+/** Persisted player preferences (spec §9.3). */
 export const ArenaSettingsSchema = z.object({
   lastZone: z.enum(zoneKeys).default(DEFAULT_ZONE),
   sound: z.boolean().default(true),
+  /** "Trillen": haptics on hits, deaths and pickups. */
+  vibrate: z.boolean().default(true),
+  /** Twin-stick touch layout; off is "Enkele stick", a fire button instead of an aim stick. */
+  twinStick: z.boolean().default(true),
+  /** A forced layout; absent, the device decides. */
+  forceLayout: z.enum(layouts).optional(),
+  /** Raster resolution and visual effects; automatic follows the viewport. */
+  quality: z.enum(["auto", "low", "high"]).default("auto"),
+  /** Speed-dependent camera framing; reduced-motion preferences still take precedence. */
+  dynamicCamera: z.boolean().default(true),
+  /** "Radio": music in the car (Plan 7). */
+  radio: z.boolean().default(true),
+  /** The station tuned in, by id; absent or unknown, the first station plays. */
+  radioStation: z.string().optional(),
+  /** "Omgevingsgeluid": the city's ambient bed and spot sounds; Geluid off still mutes all. */
+  ambience: z.boolean().default(true),
+  /** "Weergave": the flat top-down sim, or the three.js view over it (spec §7). */
+  view: z.enum(["2d", "3d"]).default("2d"),
+  /** "3D-camera": third person (over the shoulder) or first person; irrelevant in 2D. */
+  camera3d: z.enum(["third", "first"]).default("third"),
+  /**
+   * "Muisgevoeligheid": how fast the mouse turns the 3D view, as a multiple. A stored value out of
+   * range falls back to the default on its own, keeping every other setting.
+   */
+  mouseSensitivity: z
+    .number()
+    .min(MOUSE_SENSITIVITY.min)
+    .max(MOUSE_SENSITIVITY.max)
+    .default(MOUSE_SENSITIVITY.default)
+    .catch(MOUSE_SENSITIVITY.default),
+  /** "Kijkgevoeligheid": scales how far a drag on the 3D touch look pad turns the camera. */
+  // Out of range resets this setting alone, not every other one with it.
+  touchLookSensitivity: z
+    .number()
+    .min(TOUCH_LOOK_SENSITIVITY_MIN)
+    .max(TOUCH_LOOK_SENSITIVITY_MAX)
+    .default(TOUCH_LOOK_SENSITIVITY_DEFAULT)
+    .catch(TOUCH_LOOK_SENSITIVITY_DEFAULT),
 });
 
 /** Parsed settings type, inferred from {@link ArenaSettingsSchema} so the two cannot drift. */
 export type ArenaSettings = z.infer<typeof ArenaSettingsSchema>;
 
+/** A control layout. */
+export type ArenaLayout = (typeof layouts)[number];
+
 /** Defaults used when nothing valid is stored. */
 export const DEFAULT_ARENA_SETTINGS: ArenaSettings = {
+  dynamicCamera: true,
+  quality: "auto",
   lastZone: DEFAULT_ZONE,
   sound: true,
+  vibrate: true,
+  twinStick: true,
+  radio: true,
+  ambience: true,
+  view: "2d",
+  camera3d: "third",
+  mouseSensitivity: MOUSE_SENSITIVITY.default,
+  touchLookSensitivity: TOUCH_LOOK_SENSITIVITY_DEFAULT,
 };

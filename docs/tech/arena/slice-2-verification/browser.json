@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "code": "GZH7JK",
+  "controllerMapRequests": [0, 0],
+  "controllerSnapshots": [100, 100],
+  "movementObserved": true,
+  "renderedColours": 840,
+  "hostTakeover": true,
+  "browserErrors": []
+}

@@ -50,7 +50,8 @@ The repository is public (relevant for ODbL).
 
 - TV mode UI (Scherm page, split-screen compositor, Controller UI, display token route) — slice 2.
 - Missions/jobs, gangs, more weapons, garages, "busted", wanted levels 4–6, team modes,
-  persistent cash/unlocks — slice 3+.
+  persistent cash/unlocks — slice 3+ (amended 2026-09-10: Plan 9 added a bat and a rifle,
+  nine vehicle kinds and six pedestrian looks; the rest stays out).
 - Anti-cheat beyond host-side input clamping. This is a private team app; the trust model
   is "teammates".
 - Mouse-free desktop fallback beyond keyboard-only movement + facing-direction fire.
@@ -108,13 +109,14 @@ public repository.
 Overpass API, bbox `51.94,5.53,52.02,5.72`, converted to GeoJSON with `osm2geojson-lite`
 (dev dependency; handles multipolygon relations such as the Nederrijn).
 
-| Layer     | OSM filter                                                                                                                                                             | Notes                                                                                   |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Roads     | `highway` ∈ motorway, trunk, primary, secondary, tertiary, unclassified, residential, living_street, pedestrian (+ `_link` variants); `service` only inside zone discs | Cycle/foot paths dropped. Keep `name`, `oneway` when present                            |
-| Buildings | `building=*`, footprint area ≥ 40 m², centroid within 1.2 km of any zone centre; landmark buildings always kept                                                        | Keep `building:levels` (default 2)                                                      |
-| Water     | `natural=water` polygons (plus `landuse` ∈ reservoir, basin); waterway _lines_ are not used                                                                            | Impassable                                                                              |
-| Ground    | `landuse` ∈ grass, meadow, farmland, forest; `leisure` ∈ park, pitch; `natural` ∈ wood, scrub                                                                          | Mapped to `grass`, `field`, `forest`; `urban` is the implicit default and is not stored |
-| Landmarks | from `landmarks.config.ts` (below)                                                                                                                                     | Matching is case-insensitive substring on `name` plus tag filter                        |
+| Layer     | OSM filter                                                                                                                                                              | Notes                                                                                                                                                                |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Roads     | `highway` ∈ motorway, trunk, primary, secondary, tertiary, unclassified, residential, living_street, pedestrian (+ `_link` variants); `service` only inside zone discs  | Cycle/foot paths dropped. Keep `name`, `oneway` when present                                                                                                         |
+| Buildings | `building=*`, footprint area ≥ 40 m², centroid within 1.2 km of any zone centre; landmark buildings always kept                                                         | Keep `building:levels` (default 2)                                                                                                                                   |
+| Water     | `natural=water` polygons (plus `landuse` ∈ reservoir, basin); waterway _lines_ are not used                                                                             | Impassable                                                                                                                                                           |
+| Ground    | `landuse` ∈ grass, meadow, farmland, forest; `leisure` ∈ park, pitch; `natural` ∈ wood, scrub                                                                           | Mapped to `grass`, `field`, `forest`; `urban` is the implicit default and is not stored                                                                              |
+| Landmarks | from `landmarks.config.ts` (below)                                                                                                                                      | Matching is case-insensitive substring on `name` plus tag filter                                                                                                     |
+| Scenery   | `natural=tree` nodes, `natural=tree_row` ways, `highway=street_lamp`, `amenity=bench`, `highway=bus_stop` nodes within 1500 m of each zone centre (Plan 9b, 2026-09-10) | Trees are also scattered over forest/wood (1 per 80 m²), scrub (1 per 160 m², small) and park (1 per 400 m²) polygons; capped at 4000 trees and 1500 pieces per tile |
 
 Real-build note (gzip budget, §3.4): the shipped build uses `MIN_BUILDING_AREA_M2 = 40`,
 `BUILDING_KEEP_RADIUS_M = 1200`, and simplification tolerances of 0.5 m for buildings /
@@ -131,25 +133,29 @@ grid.
 
 ### 3.2 Landmark config (`src/lib/cityArena/mapBuild/landmarks.config.ts`)
 
-| key                     | Name match        | Tag filter                                                            | Style    | Zone anchor        |
-| ----------------------- | ----------------- | --------------------------------------------------------------------- | -------- | ------------------ |
-| `cunerakerk`            | "Cunera"          | `amenity=place_of_worship` or `building=church`                       | `church` | Rhenen centrum     |
-| `gastland`              | "Feel Fit"        | `leisure` ∈ sports_centre, swimming_pool                              | `pool`   | —                  |
-| `grote-kerk-wageningen` | "Grote Kerk"      | `amenity=place_of_worship`, within 800 m of Wageningen Markt          | `church` | Wageningen centrum |
-| `onder-de-linden`       | "Onder de Linden" | `amenity` ∈ cafe, bar, pub, restaurant                                | `cafe`   | —                  |
-| `de-bongerd`            | "Bongerd"         | `leisure` ∈ sports_centre, swimming_pool; pinned to `node/3014133762` | `pool`   | —                  |
-| `wur-forum`             | "Forum"           | `amenity=university` or `building=university`                         | `campus` | WUR-campus         |
-| `wur-orion`             | "Orion"           | same                                                                  | `campus` | —                  |
-| `wur-atlas`             | "Atlas"           | same                                                                  | `campus` | —                  |
-| `oude-kerk-bennekom`    | "Alexanderkerk"   | `amenity=place_of_worship`, within 800 m of Bennekom Dorpsstraat      | `church` | Bennekom           |
-| `vrije-slag`            | "Vrije Slag"      | `leisure` ∈ swimming_pool, sports_centre                              | `pool`   | —                  |
+| key                     | Name match        | Tag filter                                                                   | Style     | Zone anchor        |
+| ----------------------- | ----------------- | ---------------------------------------------------------------------------- | --------- | ------------------ |
+| `cunerakerk`            | "Cunera"          | `amenity=place_of_worship` or `building=church`                              | `church`  | Rhenen centrum     |
+| `gastland`              | "Feel Fit"        | `leisure` ∈ sports_centre, swimming_pool                                     | `pool`    | —                  |
+| `grote-kerk-wageningen` | "Grote Kerk"      | `amenity=place_of_worship`, within 800 m of Wageningen Markt                 | `church`  | Wageningen centrum |
+| `onder-de-linden`       | "Onder de Linden" | `amenity` ∈ cafe, bar, pub, restaurant                                       | `cafe`    | —                  |
+| `de-bongerd`            | "Bongerd"         | `leisure` ∈ sports_centre, swimming_pool; pinned to `node/3014133762`        | `pool`    | —                  |
+| `wur-forum`             | "Forum"           | `amenity=university` or `building=university`                                | `campus`  | WUR-campus         |
+| `wur-orion`             | "Orion"           | same                                                                         | `campus`  | —                  |
+| `wur-atlas`             | "Atlas"           | same                                                                         | `campus`  | —                  |
+| `oude-kerk-bennekom`    | "Alexanderkerk"   | `amenity=place_of_worship`, within 800 m of Bennekom Dorpsstraat             | `church`  | Bennekom           |
+| `vrije-slag`            | "Vrije Slag"      | `leisure` ∈ swimming_pool, sports_centre                                     | `pool`    | —                  |
+| `klein-zwitserland`     | (pinned)          | `addr:street=Cuneralaan`, `addr:housenumber=42`; pinned to `node/2783521256` | `brewery` | —                  |
 
 Naming notes: OSM tags the Rhenen `gastland` complex (mid-rebuild) under its current
 operator's brand, "Feel Fit Center Rhenen" — "Gastland" is absent from its `name` tag — and
 the Bennekom church as "Oude of Sint-Alexanderkerk", not "Oude Kerk"; both name matches
 above target the distinctive substring that is actually present. `de-bongerd` is pinned by
 `osmId` because "Bongerd" also matches the WUR multi-sport complex around the pool
-(`way/826591321`, "Sports Centre de Bongerd").
+(`way/826591321`, "Sports Centre de Bongerd"). `klein-zwitserland` — Brouwerij Klein
+Zwitserland at Cuneralaan 42, Rhenen (2026-09-12) — is an address node with no `name`, so it
+is pinned by id and the landmark query fetches pinned ids alongside the name matches; the
+node lies inside the house's footprint, which attaches it. It serves beer (`sim/beer.ts`).
 
 Rules: each entry must match **exactly one** element; zero or multiple matches fail the
 build with the candidate list, resolved by adding an explicit `osmId` to the entry. Zone
@@ -189,8 +195,15 @@ containing or nearby building render as labels only.
   brief's decision rule allows 85 % as the floor.
 - **Spawn nodes:** per zone, road-graph nodes inside the disc, ≥ 8 m from any building and
   ≥ 6 m from water.
+- **Scenery (Plan 9b, 2026-09-10):** scattered trees sit one per grid cell of the bed's area,
+  jittered by a hash of the cell (deterministic, world-anchored), a row gets a tree every 8 m;
+  every tree keeps off roads (surface + 3 m for a scattered one), buildings and water, and no two
+  stand within 3 m (mapped trees win, then the ones nearest a zone centre). Trees and furniture
+  are points stored in the one tile whose own rectangle holds them; furniture takes the heading of
+  the nearest road within 30 m. Canopies are 6 m (size 0) and 10 m (size 1); a trunk is a solid
+  0.35 m square at runtime.
 
-### 3.4 Output (`public/arena/map/v1/`)
+### 3.4 Output (`public/arena/map/v2/`; v1 until Plan 9b)
 
 - `index.json` — version, generation timestamp, origin, bounds, tile grid, zones
   (`key, name, center, radius, spawnNodes, landmarks`), landmarks
@@ -198,8 +211,10 @@ containing or nearby building render as labels only.
 - `roads.json` — road graph (nodes, edges, names). Shipped at 183.4 KB gz (13 756 nodes,
   15 101 edges) — higher than the original ≈ 100–150 KB estimate; the region's real
   drivable network is denser than assumed pre-build.
-- `tile_x_y.json` — `{ roads, buildings, ground, water }` with flat integer coordinate
-  arrays; buildings carry `levels` and optional `landmark`. The region's real bounds (a
+- `tile_x_y.json` — `{ roads, buildings, ground, water, trees, furniture }` with flat integer
+  coordinate arrays; buildings carry `levels` and optional `landmark`; `trees` are
+  `[x, y, size]` and `furniture` `[x, y, kind, headingDeg]` tuples (Plan 9b; absent in older
+  tiles, read as none). The region's real bounds (a
   ~52 km² box covering Rhenen, Wageningen, the WUR campus and Bennekom, most of it open
   countryside) tile into a 7 × 5 grid — 35 tiles, `tilesCovering` clamped to that grid
   (`tileGridSize`) so geometry outside the region never spawns extra tiles. Fringe tiles
@@ -213,11 +228,16 @@ containing or nearby building render as labels only.
   `type=building` relation outlines (review finding 1) and attaching/footprinting landmark
   buildings that used to be dropped (findings 2–3) tipped the balance.
 - Polygons store their outer ring only; holes (courtyards, river islands) are dropped.
-- Budget: total ≤ 1.2 MB gzipped (shipped at 1138.6 KB) and no single tile above 256 KB
-  gzipped; the build fails otherwise (owner decision 2026-09-04: the total is a repo/CDN
+- Budget (historical v1 limits, superseded below): total ≤ 1.2 MB gzipped (shipped at
+  1138.6 KB) and no single tile above 256 KB gzipped; the build failed otherwise (owner
+  decision 2026-09-04: the total is a repo/CDN
   figure — a player only downloads the ≤ 9 tiles around them, so the per-tile cap is what
   bounds download time). See §3.1's real-build note for the constants that got the shipped
-  build under both.
+  build under both. **Live limits:** raised on 2026-09-07 to 4 MB total and 512 KB per tile
+  (`GZIP_BUDGET_BYTES`, `TILE_GZIP_BUDGET_BYTES` in `scripts/arena/buildMap.ts`) as
+  runaway-build guardrails, which is what the build enforces today; the v2 build with scenery
+  (2026-09-10) sits at 1529.2 KB total with `tile_4_2.json` the largest at
+  223.7 KB.
 - `next.config.js` `headers()` adds `Cache-Control: public, max-age=31536000, immutable`
   for `/arena/map/:path*`. Any regeneration bumps the path version (`v1` → `v2`) via a
   constant in `src/lib/cityArena/constants.ts`. The service worker only caches
@@ -275,20 +295,26 @@ Player colours from an 8-colour palette by join order; name label above the spri
 
 **Weapons.**
 
-| Weapon  | Source  | Ammo | Damage         | Rate  | Range | Projectile          |
-| ------- | ------- | ---- | -------------- | ----- | ----- | ------------------- |
-| Pistool | default | ∞    | 20             | 2.5/s | 40 m  | 120 m/s             |
-| Uzi     | pickup  | 60   | 10             | 10/s  | 35 m  | 110 m/s, ±4° spread |
-| Shotgun | pickup  | 8    | 5 pellets × 12 | 1.2/s | 15 m  | 90 m/s, 20° cone    |
+| Weapon  | Source  | Ammo      | Damage         | Rate  | Range | Projectile                   |
+| ------- | ------- | --------- | -------------- | ----- | ----- | ---------------------------- |
+| Pistool | default | ∞         | 20             | 2.5/s | 40 m  | 120 m/s                      |
+| Uzi     | pickup  | 60        | 10             | 10/s  | 35 m  | 110 m/s, ±4° spread          |
+| Shotgun | pickup  | 8         | 5 pellets × 12 | 1.2/s | 15 m  | 90 m/s, 20° cone             |
+| Knuppel | pickup  | 20 swings | 30             | 1.5/s | 1.6 m | melee (Plan 9, 2026-09-10)   |
+| Geweer  | pickup  | 10        | 45             | 0.8/s | 70 m  | 160 m/s (Plan 9, 2026-09-10) |
 
 Fire rate enforced host-side. Bullets are swept segments; they stop at buildings, hit
 people (circle), cars (OBB — damage goes to the car; the driver dies only when the car
 explodes), and despawn at max range.
 
 **Cars.** Kinds: compact (accel 6 m/s², max 22 m/s), sedan (8, 28), sport (11, 36),
-police (9, 30). Parked cars spawn along residential roads inside the zone at ≈ 1 per 40 m,
-offset to the kerb; 6–10 ambient traffic cars follow the road graph at 8–12 m/s and stop
-for obstacles. Enter within 1.5 m of a car (**Instappen**) → 0.6 s → driving; exit
+police (9, 30); Plan 9 (2026-09-10) adds van (5, 24; 5 × 2 m; 140 health; 2.2 t), pickup
+(7, 27; 5.2 × 1.9 m; 120; 2 t), bus (3, 18; 12 × 2.5 m; 220; 12 t; through-roads only),
+oldtimer (5, 20; 4.4 × 1.7 m; 70; 1.1 t) and tractor (2, 8; 4 × 2.2 m; 180; 4 t; one car in
+three on an unclassified road), each with its own steer rate, a hull of circles along the
+body, and collisions that split push and damage by mass. Parked cars spawn along residential
+roads inside the zone at ≈ 1 per 40 m, offset to the kerb; 10–16 ambient traffic cars (6–10
+before Plan 9) follow the road graph at 8–12 m/s and stop for obstacles. Enter within 1.5 m of a car (**Instappen**) → 0.6 s → driving; exit
 (**Uitstappen**) places you beside the car. Physics: throttle/brake along heading, brake
 14 m/s², reverse ≤ 8 m/s; angular velocity = steer × 2.6 rad/s × grip × (1 − 0.5·v/vmax)
 where grip = 0 below 0.5 m/s and 0.45 + 0.55·min(1, v/6) above it (amended 2026-09-06:
@@ -298,8 +324,8 @@ decays 90 %/s. Collisions: restitution 0.3, damage
 < 40 → explosion at 0 (3 m radius, 80 damage, kills the occupant). Firing in a car is a
 drive-by toward the aim direction. Running over people at > 5 m/s: damage = 5 × speed.
 
-**Pedestrians.** ≈ 25 inside the zone disc + 100 m (fewer in lobby free-roam: 12 near
-each player). States: walk (pavement polylines, random turns), flee (5.5 m/s away from
+**Pedestrians.** ≈ 35 inside the zone disc + 100 m (25 before Plan 9; fewer in lobby
+free-roam: 12 near each player), in six looks derived from their id. States: walk (pavement polylines, random turns), flee (5.5 m/s away from
 gunfire/explosions within 25 m for 4 s), dead (body persists 8 s). Killing one scores
 nothing and adds heat.
 
@@ -307,11 +333,14 @@ nothing and adds heat.
 15 m of a cop +10, ramming a police car +20; decays 5/s after 8 quiet seconds;
 level = min(3, ⌊heat / 40⌋). Level 1: two cops on foot spawn 60–120 m away out of view
 and A\* to you, pistol at ≤ 20 m (1.5/s, 15° inaccuracy). Level 2: plus one police car
-that chases and rams. Level 3: four cops, two cars, shotguns. Cops target the wanted
+that chases and rams, lights flashing and siren sounding within 120 m of a player for as
+long as a police driver holds it (a stolen or wrecked police car shows neither; the siren
+is an American-style wail — 2026-09-10). Level 3: four cops, two cars, shotguns. Cops target the wanted
 player; other players who kill cops gain heat. Your death resets your heat to 0.
 
 **Pickups.** Per zone at match start: 6 weapon spots (up to 4 at landmarks, rest at seeded
-spawn nodes; alternating Uzi/Shotgun) and 4 health spots (+50). Respawn 20 s after taken.
+spawn nodes; rotating Uzi/Shotgun/Geweer since Plan 9), 4 health spots (+50) and, where
+spots remain, 2 bats. Respawn 20 s after taken.
 
 **Zone.** 500 m disc. Outside during a match: HUD _"Terug naar het strijdgebied! 5…"_
 countdown, then 10 damage/s until back. No zone in the lobby.
@@ -432,6 +461,11 @@ the zone disc + 100 m (lobby: within 150 m of any player).
   `arena:lobby` presence.
 - Host tick exceptions: log to Sentry, skip the tick; 5 consecutive failures → stop
   publishing so the silence rule re-elects.
+- **Server side (amended 2026-09-10).** `GET /api/arena/rooms` and match recording take the
+  **acting host**: the best-ranked present member heard from within 10 s — a lower-ranked one only
+  while everyone above it is silent — read from the room channel's history through Ably REST (`net/roomHost.ts`), with the presence
+  election as the fallback for a room that has not started stepping. An old host's presence entry
+  can linger for minutes, so presence alone named the wrong host after a migration.
 
 ### 6.7 Rooms
 
@@ -487,6 +521,15 @@ piggyback on the player's own touch input; never relied upon.
 (4 px hits, 10 px explosions), hit-marker flash when your shots land, low-health heartbeat
 throb below 25. Setting **"Trillen"** (default on).
 
+**Car radio (Plan 7, added 2026-09-09).** Cars have a radio: three stations of instrumental
+music generated with Eleven Music (Grebbe FM, Rijn FM, Cunera Klassiek), one `<audio>` element
+behind the sound layer's master gain, so **Geluid** mutes it and shots duck it. It plays while the
+player sits in a working car, pauses — keeping its place — on the way out, and switches station on
+**R**, a **Radio** touch button in the car, or the menu's **Zender** select; a **Radio** switch in
+the menu turns it off. Settings: `radio: true`, `radioStation?: id`. The tracks live in the repo
+under a size budget, with their credits; the dial is a manifest, so a run of the generator adds
+tracks without touching the game.
+
 **Death screen (`render/deathOverlay.ts`, `components/cityArena/DeathOverlay.tsx`).**
 Replaces the "Wasted!" convention with the owner's artwork
 `public/branding/wasted-screen.{webp,jpg}` (source `assets/branding/wasted-screen.png`,
@@ -515,7 +558,9 @@ accepted that trade-off (see §15).
 - **Camera:** follows the local player with 0.4 s velocity look-ahead (≤ 15 m), eased;
   zoom level chosen from viewport width so phones show ≈ 45 m across, desktops ≈ 120 m,
   and dropped one step while moving faster than 12 m/s (back at 9 m/s) — amended
-  2026-09-06 from ≈ 60 m.
+  2026-09-06 from ≈ 60 m. A seat in the host's world, a zone teleport or a lost seat **cuts** —
+  the camera snaps and the scene fades in from black over 0.4 s — rather than easing across the
+  map (amended 2026-09-10).
 - **Frame:** blit visible chunks → pickups → cars (rounded body, windows, roof stripe,
   smoke when damaged) → peds/cops/players (head + shoulders, colour ring, name) → bullets
   and muzzle flashes → pooled particles (≤ 200). HUD is React DOM updated at 10 Hz from a
@@ -580,7 +625,7 @@ Errors follow the house pattern: `Sentry.captureException(err, { tags: { compone
 
 ### 9.3 Client storage (Zod-validated, Space Invaders `storage.ts` pattern)
 
-- `h3-arena-settings-v1`: `{ vibrate: true, sound: true, twinStick: true, lastZone, forceLayout?: "mobile" | "desktop" }`.
+- `h3-arena-settings-v1`: `{ vibrate: true, sound: true, twinStick: true, lastZone, forceLayout?: "mobile" | "desktop", radio: true, radioStation?: string }`.
 - `h3-arena-pending-results-v1`: results whose POST failed after 3 retries; retried on the
   next launcher mount; toast _"Uitslag wordt later opgeslagen"_.
 - `h3-arena-touch-tip-v1`: first-run touch tip dismissed.
@@ -822,18 +867,18 @@ docs/tech/arena/README.md · docs/tech/arena/TESTING.md
 
 ## 15. Risks and accepted trade-offs
 
-| Risk                                        | Mitigation                                                                                                 |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Host on a phone backgrounds or dies         | Priority election prefers desktops; 3 s silence rule; full-state snapshots make takeover cheap             |
-| Ably free-plan limits                       | Section 6.4 budget; message counters in metrics; host-only inputs channel                                  |
-| Map data size on 4G                         | Tiles streamed by proximity, immutable caching, 1.2 MB total / 256 KB per-tile gzipped build ceilings      |
-| Real streets are irregular (not a GTA grid) | Zoom tuned to ≈ 45 m across on phones; radar; street labels                                                |
-| iOS haptics                                 | Opportunistic only; universal visual/audio feedback                                                        |
-| Cheating                                    | Accepted (teammates); host clamps inputs and fire rates                                                    |
-| ODbL / trademark                            | Attribution footer, derived asset in public repo; the "GTA H3" name and artwork are an accepted owner risk |
-| Overpass availability                       | Build is manual and committed; nightly freshness check only alerts                                         |
-| Floating-point determinism                  | Replays compared exactly on V8, with tolerance elsewhere                                                   |
-| Tested bundle ≠ production bundle           | One hook module differs; real-Ably lane covers integration                                                 |
+| Risk                                        | Mitigation                                                                                                                |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Host on a phone backgrounds or dies         | Priority election prefers desktops; 3 s silence rule; full-state snapshots make takeover cheap                            |
+| Ably free-plan limits                       | Section 6.4 budget; message counters in metrics; host-only inputs channel                                                 |
+| Map data size on 4G                         | Tiles streamed by proximity, immutable caching, 4 MB total / 512 KB per-tile gzipped build ceilings (v1: 1.2 MB / 256 KB) |
+| Real streets are irregular (not a GTA grid) | Zoom tuned to ≈ 45 m across on phones; radar; street labels                                                               |
+| iOS haptics                                 | Opportunistic only; universal visual/audio feedback                                                                       |
+| Cheating                                    | Accepted (teammates); host clamps inputs and fire rates                                                                   |
+| ODbL / trademark                            | Attribution footer, derived asset in public repo; the "GTA H3" name and artwork are an accepted owner risk                |
+| Overpass availability                       | Build is manual and committed; nightly freshness check only alerts                                                        |
+| Floating-point determinism                  | Replays compared exactly on V8, with tolerance elsewhere                                                                  |
+| Tested bundle ≠ production bundle           | One hook module differs; real-Ably lane covers integration                                                                |
 
 ---
 
@@ -848,4 +893,6 @@ meer · Potje is vol · Kaart laden… · Kaart kon niet volledig laden · Uitsl
 opgeslagen · Geluid · Trillen · Enkele stick · Besturing · Potje verlaten · Kaart ©
 OpenStreetMap-bijdragers. PR 2 additions: Startpunt · Ga naar · Spel laden… · Sluiten. PR 3 additions:
 Gezondheid · Vuist · Pistool · Uzi · Shotgun · Compact · Sedan · Sportwagen · Politieauto · km/u · Je bent
-uitgeschakeld · Vrij rondlopen.
+uitgeschakeld · Vrij rondlopen. PR 7 additions: Radio · Zender · Grebbe FM · Rijn FM · Cunera
+Klassiek. PR 8 additions: Kopieer · Gekopieerd. PR 9 additions: Bestelbus · Pick-up ·
+Stadsbus · Oldtimer · Trekker · Knuppel · Geweer.

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createArenaPlayer } from "../sim/arena";
 import type { BulletState } from "../sim/types";
 import { createVehicle } from "../sim/vehicle";
+import { structureIdOf } from "../world/structureId";
 import { createCamera } from "./camera";
 import type { LandmarkLookup } from "./drawStatic";
 import {
@@ -10,11 +11,22 @@ import {
   MUZZLE_FILL,
   PED_FILL,
   PICKUP_UZI,
+  PLACEHOLDER_FILL,
   PLAYER_FILL,
+  PLAYER_OTHER_FILL,
+  POLICE_LIGHT_BLUE,
 } from "./palette";
-import { renderScene, type Scene } from "./renderScene";
+import {
+  DRUNK_BREATHE,
+  DRUNK_SWAY_RAD,
+  drunkSway,
+  renderScene,
+  type Scene,
+} from "./renderScene";
+import { CANOPY_LAYER } from "./drawScenery";
+import { RUBBLE_FILL } from "./drawStructures";
 import { createStaticRaster } from "./staticRaster";
-import { createFakeContext } from "./testing/fakeContext";
+import { createFakeContext, createFakeTarget } from "./testing/fakeContext";
 
 const bullet: BulletState = {
   id: 2,
@@ -35,12 +47,14 @@ function sceneWith(partial: Partial<Scene>): Scene {
   return {
     world: {
       raster: createStaticRaster(() => null),
+      overhead: createStaticRaster(() => null),
       tiles: [],
       landmarks,
       loadedTileRects: [],
     },
     zone: null,
-    player: createArenaPlayer([0, 0], 0),
+    players: [createArenaPlayer([0, 0], 0)],
+    localPlayerId: 0,
     peds: [],
     cops: [],
     pickups: [],
@@ -62,6 +76,26 @@ const viewport = {
 };
 
 describe("renderScene", () => {
+  it("anchors navigation to the street before drawing the player and entities", () => {
+    const context = createFakeContext();
+    renderScene(
+      context,
+      viewport,
+      sceneWith({
+        navigation: [
+          [0, 0],
+          [10, 0],
+          [10, 10],
+        ],
+      }),
+    );
+    const ribbon = context.calls.indexOf("stroke(rgba(34,211,238,0.28),9.6)");
+    const player = context.calls.indexOf(`fill(${PLAYER_FILL})`);
+    expect(ribbon).toBeGreaterThan(-1);
+    expect(ribbon).toBeLessThan(player);
+    expect(context.calls).toContain("rotate(0)");
+    expect(context.calls).toContain("rotate(1.57)");
+  });
   it("clips, pushes in, draws world → cars → bullets → effects → player → crosshair and restores", () => {
     const context = createFakeContext();
     const stats = renderScene(context, viewport, sceneWith({}));
@@ -83,13 +117,52 @@ describe("renderScene", () => {
     expect(stats.missing).toBeGreaterThan(0);
   });
 
+  it("sways the world by drunkenness, and holds it steady sober", () => {
+    expect(drunkSway(0, 24)).toEqual({ tilt: 0, scale: 1 });
+    const full = drunkSway(1, 24);
+    expect(Math.abs(full.tilt)).toBeLessThanOrEqual(DRUNK_SWAY_RAD);
+    expect(Math.abs(full.tilt)).toBeGreaterThan(0);
+    expect(Math.abs(full.scale - 1)).toBeLessThanOrEqual(DRUNK_BREATHE);
+    expect(drunkSway(0.5, 24).tilt).toBeCloseTo(full.tilt / 2, 9);
+    expect(drunkSway(1, 24)).toEqual(full);
+    // The cars and the player turn by heading anyway; the sway is one more turn, of the world.
+    const rotations = (calls: string[]): number =>
+      calls.filter((call) => call.startsWith("rotate(")).length;
+    const sober = createFakeContext();
+    renderScene(sober, viewport, sceneWith({ tick: 24 }));
+    const drunk = createFakeContext();
+    renderScene(drunk, viewport, sceneWith({ tick: 24, drunk: 1 }));
+    expect(rotations(drunk.calls)).toBe(rotations(sober.calls) + 1);
+    expect(drunk.calls).toContain(
+      `rotate(${Math.round(full.tilt * 100) / 100})`,
+    );
+  });
+
+  it("draws every player, your own last and in your own colours", () => {
+    const context = createFakeContext();
+    const mine = createArenaPlayer([0, 0], 0);
+    const theirs = { ...createArenaPlayer([8, 0], 0), id: 4 };
+    renderScene(
+      context,
+      viewport,
+      sceneWith({ players: [theirs, mine], localPlayerId: mine.id }),
+    );
+    const fills = context.calls.filter((call) => call.startsWith("fill("));
+    expect(fills).toContain(`fill(${PLAYER_OTHER_FILL})`);
+    expect(fills).toContain(`fill(${PLAYER_FILL})`);
+    // Yours is painted after theirs, so nobody can stand on top of you.
+    expect(fills.lastIndexOf(`fill(${PLAYER_FILL})`)).toBeGreaterThan(
+      fills.lastIndexOf(`fill(${PLAYER_OTHER_FILL})`),
+    );
+  });
+
   it("hides the player inside a car and skips the push-in at 1", () => {
     const context = createFakeContext();
     const player = { ...createArenaPlayer([5, 0], 0), vehicleId: 1 };
     renderScene(
       context,
       viewport,
-      sceneWith({ player, pushIn: 1, aimScreen: null }),
+      sceneWith({ players: [player], pushIn: 1, aimScreen: null }),
     );
     expect(context.calls).not.toContain(`fill(${PLAYER_FILL})`);
     expect(context.calls.some((call) => call.startsWith("scale("))).toBe(false);
@@ -131,5 +204,135 @@ describe("renderScene", () => {
     ];
     expect(order.every((index) => index >= 0)).toBe(true);
     expect([...order].sort((left, right) => left - right)).toEqual(order);
+  });
+});
+
+describe("renderScene police lights", () => {
+  it("lights the cars the scene says the police are driving", () => {
+    const context = createFakeContext();
+    renderScene(
+      context,
+      viewport,
+      sceneWith({
+        vehicles: [
+          createVehicle(1, "police", [5, 0], 0, 5),
+          createVehicle(2, "police", [-5, 0], 0, 5),
+        ],
+        sirenVehicleIds: new Set([1]),
+      }),
+    );
+    expect(context.calls).toContain(`fill(${POLICE_LIGHT_BLUE})`);
+    expect(
+      context.calls.filter((call) => call === `fill(${POLICE_LIGHT_BLUE})`),
+    ).toHaveLength(1);
+  });
+});
+
+describe("renderScene structures", () => {
+  it("draws ruins right after the ground chunks, before entities", () => {
+    // The id must decode back to this building's own slot — tile (0, 0), index 0.
+    const structureId = structureIdOf(0, 0, 0);
+    const tile = {
+      x: 0,
+      y: 0,
+      rect: { minX: -1000, minY: -1000, maxX: 1000, maxY: 1000 },
+      roads: [],
+      buildings: [
+        {
+          structureId,
+          ring: [
+            [-5, -5],
+            [5, -5],
+            [5, 5],
+            [-5, 5],
+          ] as [number, number][],
+          bounds: { minX: -5, minY: -5, maxX: 5, maxY: 5 },
+          levels: 1,
+        },
+      ],
+      ground: [],
+      water: [],
+      trees: [],
+      furniture: [],
+    };
+    const context = createFakeContext();
+    renderScene(
+      context,
+      viewport,
+      sceneWith({
+        world: {
+          raster: createStaticRaster(() => null),
+          overhead: createStaticRaster(() => null),
+          tiles: [tile],
+          landmarks: new Map(),
+          loadedTileRects: [tile.rect],
+        },
+        structures: [
+          {
+            id: structureId,
+            damage: 200,
+            destroyedAtTick: 5,
+            lastHitTick: 5,
+            x: 0,
+            y: 0,
+            radius: 7,
+          },
+        ],
+      }),
+    );
+    const chunkFill = context.calls.indexOf(`fill(${PLACEHOLDER_FILL})`);
+    const rubble = context.calls.indexOf(`fill(${RUBBLE_FILL})`);
+    const player = context.calls.indexOf(`fill(${PLAYER_FILL})`);
+    expect(chunkFill).toBeGreaterThan(-1);
+    expect(rubble).toBeGreaterThan(chunkFill);
+    expect(rubble).toBeLessThan(player);
+  });
+});
+
+describe("renderScene canopies", () => {
+  it("draws the tree canopies after the player, so a walker under a tree is under it", () => {
+    const tile = {
+      x: 0,
+      y: 0,
+      rect: { minX: -1000, minY: -1000, maxX: 1000, maxY: 1000 },
+      roads: [],
+      buildings: [],
+      ground: [],
+      water: [],
+      trees: [
+        {
+          point: [0, 0] as [number, number],
+          size: 1 as const,
+          bounds: { minX: -5, minY: -5, maxX: 5, maxY: 5 },
+        },
+      ],
+      furniture: [],
+    };
+    const overhead = createStaticRaster(
+      (width, height) => createFakeTarget(width, height),
+      undefined,
+      undefined,
+      CANOPY_LAYER,
+    );
+    const scene = sceneWith({
+      world: {
+        raster: createStaticRaster(() => null),
+        overhead,
+        tiles: [tile],
+        landmarks: new Map(),
+        loadedTileRects: [tile.rect],
+      },
+    });
+    for (let frame = 0; frame < 12; frame++)
+      renderScene(createFakeContext(), viewport, scene);
+    const context = createFakeContext();
+    renderScene(context, viewport, scene);
+    const player = context.calls.indexOf(`fill(${PLAYER_FILL})`);
+    const canopies = context.calls
+      .map((call, index) => (call.startsWith("drawImage(") ? index : -1))
+      .filter((index) => index >= 0);
+    expect(player).toBeGreaterThan(-1);
+    expect(canopies.length).toBeGreaterThan(0);
+    expect(Math.min(...canopies)).toBeGreaterThan(player);
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   STICK_AXIS_DEAD_ZONE,
   STICK_RADIUS_PX,
+  aimFromVector,
   createStick,
 } from "./touchStick";
 
@@ -71,5 +72,15 @@ describe("createStick", () => {
     stick.move(1, 34, -34);
     expect(stick.state().vector[0]).toBeCloseTo(Math.SQRT1_2, 4);
     expect(stick.state().vector[1]).toBeCloseTo(-Math.SQRT1_2, 4);
+  });
+});
+
+describe("aimFromVector", () => {
+  it("aims where the thumb points and not at all while the stick rests", () => {
+    expect(aimFromVector(null)).toBeNull();
+    expect(aimFromVector([0, 0])).toBeNull();
+    expect(aimFromVector([1, 0])).toBeCloseTo(0);
+    expect(aimFromVector([0, 1])).toBeCloseTo(Math.PI / 2);
+    expect(aimFromVector([-0.5, 0])).toBeCloseTo(Math.PI);
   });
 });

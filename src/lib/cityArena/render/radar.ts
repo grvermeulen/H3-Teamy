@@ -1,14 +1,14 @@
 import type { MapRoads } from "../world/mapTypes";
 import { fromUnits, type Point } from "../world/projection";
 import type { RoadGraph } from "../world/roadGraph";
+import type { NavigationSnapshot } from "../world/navigation";
 import type { PickupKind } from "../sim/types";
+import { pickupColour } from "./drawPickups";
 import {
-  PICKUP_HEALTH,
-  PICKUP_SHOTGUN,
-  PICKUP_UZI,
   RADAR_BACKGROUND,
   RADAR_PLAYER,
   RADAR_POLICE,
+  RADAR_TANK,
   RADAR_ROAD,
   RADAR_ZONE,
 } from "./palette";
@@ -24,16 +24,20 @@ export const EMPTY_RADAR_SNAPSHOT: RadarSnapshot = {
   roads: [],
   pickups: [],
   police: [],
+  tanks: [],
   zoneCentre: null,
   zoneRadiusM: null,
 };
 
 /** Immutable render data for the north-up radar. */
 export type RadarSnapshot = {
+  navigation?: NavigationSnapshot | null;
   player: Point;
   roads: Array<readonly [Point, Point]>;
   pickups: Array<{ point: Point; kind: PickupKind }>;
   police: Array<Point>;
+  /** Tanks in range, wrecks excluded: the prize, marked so it can be found. */
+  tanks: Array<Point>;
   zoneCentre: Point | null;
   zoneRadiusM: number | null;
 };
@@ -145,11 +149,6 @@ export function radarRoads(
   return nearbyRadarRoads(createRadarRoadIndex(nodes, edges), centre, rangeM);
 }
 
-function pickupRadarColour(kind: PickupKind): string {
-  if (kind === "health") return PICKUP_HEALTH;
-  return kind === "uzi" ? PICKUP_UZI : PICKUP_SHOTGUN;
-}
-
 function radarPoint(
   point: Point,
   centre: Point,
@@ -188,6 +187,28 @@ export function drawRadar(
     context.stroke();
   }
 
+  if (snapshot.navigation) {
+    context.strokeStyle = "#22d3ee";
+    context.lineWidth = 2.5;
+    context.beginPath();
+    snapshot.navigation.points.forEach((point, index) => {
+      const [x, y] = radarPoint(point, snapshot.player, size, RADAR_RANGE_M);
+      if (index === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    context.stroke();
+    const [x, y] = radarPoint(
+      snapshot.navigation.destination,
+      snapshot.player,
+      size,
+      RADAR_RANGE_M,
+    );
+    context.fillStyle = "#22d3ee";
+    context.beginPath();
+    context.arc(x, y, 4, 0, Math.PI * 2);
+    context.fill();
+  }
+
   if (snapshot.zoneCentre && snapshot.zoneRadiusM !== null) {
     const centre = radarPoint(
       snapshot.zoneCentre,
@@ -216,7 +237,7 @@ export function drawRadar(
       size,
       RADAR_RANGE_M,
     );
-    context.fillStyle = pickupRadarColour(pickup.kind);
+    context.fillStyle = pickupColour(pickup.kind);
     context.beginPath();
     context.moveTo(x, y - 3);
     context.lineTo(x + 3, y);
@@ -231,6 +252,17 @@ export function drawRadar(
     const [x, y] = radarPoint(police, snapshot.player, size, RADAR_RANGE_M);
     context.beginPath();
     context.arc(x, y, 2, 0, Math.PI * 2, false);
+    context.fill();
+  }
+
+  context.fillStyle = RADAR_TANK;
+  for (const tank of snapshot.tanks) {
+    const [x, y] = radarPoint(tank, snapshot.player, size, RADAR_RANGE_M);
+    context.beginPath();
+    context.moveTo(x, y - 4);
+    context.lineTo(x + 4, y + 3);
+    context.lineTo(x - 4, y + 3);
+    context.closePath();
     context.fill();
   }
 

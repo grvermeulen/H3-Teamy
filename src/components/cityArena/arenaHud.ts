@@ -1,4 +1,5 @@
 import type { WorldSession } from "@/lib/cityArena/world/worldSession";
+import { missionHud, type MissionHud } from "@/lib/cityArena/missions/hud";
 import type { MapZone, ZoneKey } from "@/lib/cityArena/world/mapTypes";
 import {
   zoneCentreMetres,
@@ -8,9 +9,13 @@ import {
 } from "@/lib/cityArena/world/zone";
 import { nearestRoadName } from "@/lib/cityArena/world/nearestRoad";
 import { currentWantedLevel } from "@/lib/cityArena/sim/wanted";
-import { occupiedVehicle } from "@/lib/cityArena/sim/arena";
-import { forwardSpeed } from "@/lib/cityArena/sim/vehicle";
+import { boardableVehicle, occupiedVehicle } from "@/lib/cityArena/sim/arena";
+import { canOrderBeer } from "@/lib/cityArena/sim/beer";
+import { nearbyLandmarkActivity } from "@/lib/cityArena/world/landmarkActivities";
+import { activeBonus, BONUS_INFO } from "@/lib/cityArena/sim/landmarkBonuses";
+import { firesCannon, forwardSpeed } from "@/lib/cityArena/sim/vehicle";
 import type {
+  ArenaPlayerState,
   AmmoState,
   ArenaState,
   PickupKind,
@@ -23,6 +28,7 @@ import {
 
 /** Pure data consumed by the arena HUD. */
 export type ArenaHud = {
+  mission?: MissionHud;
   zoneName: string | null;
   zoneKey: ZoneKey | null;
   street: string | null;
@@ -35,24 +41,58 @@ export type ArenaHud = {
   zoneSecondsLeft: number | null;
   zoneWarning: boolean;
   soundEnabled: boolean;
+  /** The station playing in the car, or `null` while the radio is silent. */
+  radioStation: string | null;
+  /** How drunk the player is, 0..1; the vitals show a meter while it is above 0. */
+  drunk: number;
+  /**
+   * True while a press of the Instappen button orders a beer: on foot at the brewery's tap with
+   * no car in reach, because the same press boards a car when there is one.
+   */
+  canOrderBeer: boolean;
+  /** Nearby activity and cooldown, shown above the controls. */
+  landmark?: {
+    name: string;
+    action: string;
+    description: string;
+    reward: string;
+    cooldown: number;
+  } | null;
+  /** Active reward, with remaining seconds based on the simulation clock. */
+  bonus?: {
+    name: string;
+    detail: string;
+    seconds: number;
+    colour: string;
+    borderClass: string;
+    textClass: string;
+  } | null;
 };
 
 /** Computes the current pure HUD projection. */
 export function computeHud(
-  session: Pick<WorldSession, "index" | "tiles">,
+  session: Pick<WorldSession, "index" | "tiles"> &
+    Partial<Pick<WorldSession, "collision">>,
   state: ArenaState,
+  player: ArenaPlayerState,
   soundEnabled = true,
+  radioStation: string | null = null,
 ): ArenaHud {
-  const { player } = state;
   const zone = findZone(session.index(), [player.x, player.y]);
-  const car = occupiedVehicle(state);
-  const zoneSecondsLeft = zoneWarningSeconds(state);
+  const car = occupiedVehicle(state, player);
+  const zoneSecondsLeft = zoneWarningSeconds(state, player);
+  const place =
+    boardableVehicle(state, player) === null
+      ? nearbyLandmarkActivity(session.index(), player, session.collision)
+      : null;
+  const bonus = activeBonus(player, state.tick);
   return {
+    mission: missionHud(session.index(), state, player),
     zoneName: zone?.name ?? null,
     zoneKey: zone?.key ?? null,
     street: nearestRoadName(session.tiles(), [player.x, player.y]),
     health: player.health,
-    weapon: player.weapon,
+    weapon: car && firesCannon(car.kind) ? "cannon" : player.weapon,
     ammo: player.ammo,
     speedMps: car ? Math.abs(forwardSpeed(car)) : null,
     inVehicle: car !== null,
@@ -60,16 +100,39 @@ export function computeHud(
     zoneSecondsLeft,
     zoneWarning: state.zoneEnforced && zoneSecondsLeft !== null,
     soundEnabled,
+    radioStation,
+    drunk: player.drunk,
+    landmark: place
+      ? {
+          name: place.name,
+          action: place.activity.action,
+          description: place.activity.description,
+          reward: `${BONUS_INFO[place.activity.bonus].detail} · ${place.activity.seconds} s`,
+          cooldown: Math.max(
+            0,
+            Math.ceil(((player.bonus?.readyAtTick ?? 0) - state.tick) / 30),
+          ),
+        }
+      : null,
+    bonus: bonus
+      ? {
+          ...BONUS_INFO[bonus],
+          seconds: Math.ceil((player.bonus!.untilTick - state.tick) / 30),
+        }
+      : null,
+    canOrderBeer:
+      canOrderBeer(session.index(), player) &&
+      boardableVehicle(state, player) === null,
   };
 }
 
-function zoneWarningSeconds(state: ArenaState): number | null {
-  if (!state.zoneEnforced || state.player.outsideSinceTick === null)
-    return null;
-  return Math.max(
-    0,
-    Math.ceil((state.player.outsideSinceTick + 150 - state.tick) / 30),
-  );
+function zoneWarningSeconds(
+  state: ArenaState,
+  player: ArenaPlayerState,
+): number | null {
+  const outsideSinceTick = player.outsideSinceTick;
+  if (!state.zoneEnforced || outsideSinceTick === null) return null;
+  return Math.max(0, Math.ceil((outsideSinceTick + 150 - state.tick) / 30));
 }
 
 function withinRadar(
@@ -85,9 +148,9 @@ function withinRadar(
 export function radarZone(
   index: Parameters<typeof findZone>[0],
   state: ArenaState,
+  player: ArenaPlayerState,
 ): MapZone | null {
-  if (!state.zoneEnforced)
-    return findZone(index, [state.player.x, state.player.y]);
+  if (!state.zoneEnforced) return findZone(index, [player.x, player.y]);
   const key = state.enforcedZoneKey ?? state.activeZoneKey;
   return key === null ? null : findZoneByKey(index, key);
 }
@@ -95,10 +158,11 @@ export function radarZone(
 /** Builds the radar projection; optional road segments are supplied by the runtime world boundary. */
 export function buildRadarSnapshot(
   state: ArenaState,
+  me: ArenaPlayerState,
   zone: MapZone | null,
   roads: RadarSnapshot["roads"] = [],
 ): RadarSnapshot {
-  const player: [number, number] = [state.player.x, state.player.y];
+  const player: [number, number] = [me.x, me.y];
   return {
     player,
     roads,
@@ -127,9 +191,24 @@ export function buildRadarSnapshot(
         )
         .map((cop) => [cop.x, cop.y] as [number, number]),
     ],
+    tanks: state.vehicles
+      .filter(
+        (vehicle) =>
+          firesCannon(vehicle.kind) &&
+          !vehicle.wrecked &&
+          withinRadar([vehicle.x, vehicle.y], player),
+      )
+      .map((vehicle) => [vehicle.x, vehicle.y] as [number, number]),
     zoneCentre: zone ? zoneCentreMetres(zone) : null,
     zoneRadiusM: zone ? zoneRadiusMetres(zone) : null,
   };
+}
+
+/** The prompt shown at the brewery's tap, by control scheme. */
+export function beerPromptText(showTouch: boolean): string {
+  return showTouch
+    ? "Brouwerij Klein Zwitserland: tik op Biertje voor een biertje"
+    : "Brouwerij Klein Zwitserland: druk op E voor een biertje";
 }
 
 /** Dutch countdown text for the out-of-zone warning. */

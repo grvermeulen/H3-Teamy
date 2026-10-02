@@ -1,0 +1,366 @@
+{
+  "models": {
+    "casual-man": {
+      "file": "casual-man.glb",
+      "rig": "men",
+      "gender": "male",
+      "materials": [
+        "White",
+        "Red_Dark",
+        "LightBrown",
+        "Skin",
+        "Head/Skin",
+        "Skin_Darker",
+        "Eyebrows",
+        "Eye",
+        "Hair",
+        "LightBlue"
+      ],
+      "colours": [
+        10724259, 7414318, 8880758, 12229753, 12229753, 11046253, 3616292,
+        2891800, 4270356, 2963519
+      ],
+      "height": 1.858
+    },
+    "business-man": {
+      "file": "business-man.glb",
+      "rig": "men",
+      "gender": "male",
+      "materials": [
+        "Suit",
+        "Black",
+        "White",
+        "Tie",
+        "Skin",
+        "Head/Skin",
+        "Hair",
+        "Eyebrows",
+        "Eye"
+      ],
+      "colours": [
+        1909545, 2105376, 10724259, 4278097, 12229753, 12229753, 4270356,
+        3616292, 2891800
+      ],
+      "height": 1.8569
+    },
+    "hoodie-man": {
+      "file": "hoodie-man.glb",
+      "rig": "men",
+      "gender": "male",
+      "materials": [
+        "White",
+        "Feet/Purple",
+        "Skin",
+        "LightBlue",
+        "Head/Skin",
+        "Eyebrows",
+        "Eye",
+        "Hair",
+        "Purple"
+      ],
+      "colours": [
+        10724259, 4141394, 12229753, 2963519, 12229753, 3616292, 2891800,
+        4270356, 4141394
+      ],
+      "height": 1.8704
+    },
+    "worker-man": {
+      "file": "worker-man.glb",
+      "rig": "men",
+      "gender": "male",
+      "materials": [
+        "Black",
+        "Grey",
+        "Brown2",
+        "Brown",
+        "Worker_Yellow",
+        "Worker_Vest",
+        "LightBrown",
+        "Skin",
+        "Head/Worker_Yellow",
+        "Head/Skin",
+        "Eyebrows",
+        "Eye",
+        "Moustache"
+      ],
+      "colours": [
+        2105376, 3684408, 5391916, 6969913, 10716688, 10967589, 8880758,
+        12229753, 10716688, 12229753, 3616292, 2891800, 6633987
+      ],
+      "height": 1.8664
+    },
+    "punk-man": {
+      "file": "punk-man.glb",
+      "rig": "men",
+      "gender": "male",
+      "materials": [
+        "Feet/Black",
+        "Feet/Skin",
+        "Skin",
+        "LightBlue",
+        "Black",
+        "White",
+        "Head/Skin",
+        "Red_Dark",
+        "Earrings",
+        "Red",
+        "Eyebrows",
+        "Eye"
+      ],
+      "colours": [
+        2105376, 12229753, 12229753, 2963519, 2105376, 10724259, 12229753,
+        7414318, 10385985, 7343387, 3616292, 2891800
+      ],
+      "height": 1.9696
+    },
+    "beach-man": {
+      "file": "beach-man.glb",
+      "rig": "men",
+      "gender": "male",
+      "materials": [
+        "Feet/Skin",
+        "Feet/Red_Dark",
+        "Skin",
+        "Red_Dark",
+        "White",
+        "LightBrown",
+        "Head/Skin",
+        "Eyebrows",
+        "Eye",
+        "Hair",
+        "Earrings"
+      ],
+      "colours": [
+        12229753, 7414318, 12229753, 7414318, 10724259, 8880758, 12229753,
+        3616292, 2891800, 4270356, 10385985
+      ],
+      "height": 1.8831
+    },
+    "farmer-man": {
+      "file": "farmer-man.glb",
+      "rig": "men",
+      "gender": "male",
+      "materials": [
+        "Brown2",
+        "Feet/Brown",
+        "LightBlue",
+        "Brown",
+        "Skin",
+        "Beige",
+        "Head/Skin",
+        "Head/Beige",
+        "Eyebrows",
+        "Red",
+        "Eye"
+      ],
+      "colours": [
+        5391916, 6969913, 2963519, 6969913, 12229753, 9275504, 12229753,
+        9275504, 3616292, 7343387, 2891800
+      ],
+      "height": 1.856
+    },
+    "swat": {
+      "file": "swat.glb",
+      "rig": "men",
+      "gender": "male",
+      "materials": [
+        "Swat",
+        "Swat_Black",
+        "Feet/Swat_Black",
+        "Skin",
+        "Head/Swat",
+        "Head/Swat_Black",
+        "Visor"
+      ],
+      "colours": [
+        4672081, 2828582, 2828582, 12229753, 4672081, 2828582, 1250067
+      ],
+      "height": 1.8538
+    },
+    "woman-a": {
+      "file": "woman-a.glb",
+      "rig": "women",
+      "gender": "female",
+      "materials": [
+        "Head/Skin",
+        "Head/Red",
+        "Brown",
+        "Skin",
+        "LimeGreen",
+        "Gold",
+        "Feet/Skin",
+        "Feet/Red"
+      ],
+      "colours": [
+        13544838, 6824460, 3220764, 13544838, 4614211, 11503433, 13544838,
+        6824460
+      ],
+      "height": 1.8425
+    },
+    "woman-b": {
+      "file": "woman-b.glb",
+      "rig": "women",
+      "gender": "female",
+      "materials": [
+        "White",
+        "Skin",
+        "Feet/Skin",
+        "Grey",
+        "Head/Skin",
+        "Hair_Blond",
+        "Hair_Brown",
+        "Brown",
+        "Orange"
+      ],
+      "colours": [
+        11842740, 13544838, 13544838, 4144959, 13544838, 9139527, 4076585,
+        3220764, 10379832
+      ],
+      "height": 1.852
+    },
+    "punk-woman": {
+      "file": "punk-woman.glb",
+      "rig": "women",
+      "gender": "female",
+      "materials": [
+        "Skin",
+        "Pink",
+        "Black",
+        "Feet/Black",
+        "Grey",
+        "Head/Skin",
+        "Head/Pink",
+        "Head/Black",
+        "Hair_Brown",
+        "Brown"
+      ],
+      "colours": [
+        13544838, 6823269, 3223083, 3223083, 4144959, 13544838, 6823269,
+        3223083, 4076585, 3220764
+      ],
+      "height": 1.9578
+    },
+    "adventurer-woman": {
+      "file": "adventurer-woman.glb",
+      "rig": "women",
+      "gender": "female",
+      "materials": [
+        "LightGreen",
+        "Skin",
+        "Green",
+        "White",
+        "Brown2",
+        "Gold",
+        "Feet/Brown2",
+        "Feet/Brown_02",
+        "Head/Skin",
+        "Hair_Brown",
+        "Brown",
+        "Brown_02"
+      ],
+      "colours": [
+        5788214, 13544838, 4603941, 11842740, 6049330, 11503433, 6049330,
+        7693376, 13544838, 4076585, 3220764, 7693376
+      ],
+      "height": 1.8281
+    },
+    "hooded-woman": {
+      "file": "hooded-woman.glb",
+      "rig": "women",
+      "gender": "female",
+      "materials": [
+        "Black",
+        "LightBrown",
+        "DarkBrown",
+        "Skin",
+        "Gold",
+        "Metal",
+        "Feet/LightBrown",
+        "Feet/DarkBrown",
+        "Head/Black",
+        "Head/DarkBrown",
+        "Head/Skin",
+        "White",
+        "Brown"
+      ],
+      "colours": [
+        3223083, 7226916, 4795928, 13544838, 11503433, 7631988, 7226916,
+        4795928, 3223083, 4795928, 13544838, 11842740, 3220764
+      ],
+      "height": 1.8774
+    },
+    "suit-woman": {
+      "file": "suit-woman.glb",
+      "rig": "women",
+      "gender": "female",
+      "materials": [
+        "Black",
+        "White",
+        "Skin",
+        "Feet/Black",
+        "Feet/Skin",
+        "Head/Skin",
+        "Hair_Blond",
+        "Hair_Brown",
+        "Brown"
+      ],
+      "colours": [
+        3223083, 11842740, 13544838, 3223083, 13544838, 13544838, 9139527,
+        4076585, 3220764
+      ],
+      "height": 1.8452
+    },
+    "worker-woman": {
+      "file": "worker-woman.glb",
+      "rig": "women",
+      "gender": "female",
+      "materials": [
+        "Skin",
+        "Worker_Vest",
+        "Worker_Yellow",
+        "White",
+        "Feet/Skin",
+        "Black",
+        "Head/Skin",
+        "Head/Worker_Yellow",
+        "DarkBrown",
+        "Brown",
+        "Brown_02",
+        "Brown2"
+      ],
+      "colours": [
+        13544838, 12149802, 11834387, 11842740, 13544838, 3223083, 13544838,
+        11834387, 4795928, 3220764, 7693376, 6049330
+      ],
+      "height": 1.8606
+    }
+  },
+  "animations": {
+    "men": {
+      "file": "anim-men.glb",
+      "clips": {
+        "idle": "Idle",
+        "walk": "Walk",
+        "run": "Run",
+        "death": "Death",
+        "punch": "Punch_Right",
+        "gunIdle": "Idle_Gun_Pointing",
+        "gunShoot": "Gun_Shoot",
+        "swing": "Sword_Slash"
+      }
+    },
+    "women": {
+      "file": "anim-women.glb",
+      "clips": {
+        "idle": "Idle",
+        "walk": "Walk",
+        "run": "Run",
+        "death": "Death",
+        "punch": "Punch_Right",
+        "gunIdle": "Idle_Gun_Pointing",
+        "gunShoot": "Gun_Shoot",
+        "swing": "Sword_Slash"
+      }
+    }
+  }
+}

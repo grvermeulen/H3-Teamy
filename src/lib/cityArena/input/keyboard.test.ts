@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { driveStep } from "../sim/driveInput";
 import { createInputState } from "./inputState";
-import { attachKeyboard } from "./keyboard";
+import { attachKeyboard, attachWheel } from "./keyboard";
 
 const step = 1 / 30;
 
@@ -81,7 +81,7 @@ describe("attachKeyboard", () => {
     detach();
   });
 
-  it("ignores keys typed into form fields or pressed on a focused button, and resets on blur", () => {
+  it("ignores form input and native button activation keys, and resets on blur", () => {
     const state = createInputState();
     const detach = attachKeyboard(window, state);
     const input = document.createElement("input");
@@ -89,7 +89,15 @@ describe("attachKeyboard", () => {
     document.body.append(input, button);
     press("KeyW", input);
     press("Space", button);
+    press("Enter", button);
     expect(state.snapshot()).toMatchObject({ move: [0, 0], fire: false });
+    expect(state.snapshot().enter).toBe(false);
+    press("KeyE", input);
+    expect(state.snapshot().enter).toBe(false);
+    press("KeyE", button);
+    expect(state.snapshot().enter).toBe(true);
+    release("KeyE");
+    expect(state.snapshot().enter).toBe(false);
     press("KeyW");
     press("Space");
     expect(state.snapshot()).toMatchObject({ move: [0, -1], fire: true });
@@ -113,6 +121,190 @@ describe("attachKeyboard", () => {
     // the digital command in one tick regardless, never ramping the way the analog path does.
     expect(driveStep(snapshot, 0, 0.9, step).steer).toBe(1);
     release("KeyD");
+    detach();
+  });
+});
+
+describe("attachKeyboard panels and slots", () => {
+  it("holds Tab as the scorebord, keeps it from the focus trap, and lets go on release or blur", () => {
+    const onScoreboard = vi.fn();
+    const trap = vi.fn();
+    document.addEventListener("keydown", trap, true);
+    const detach = attachKeyboard(window, createInputState(), undefined, {
+      onScoreboard,
+    });
+    const down = new KeyboardEvent("keydown", {
+      code: "Tab",
+      cancelable: true,
+      bubbles: true,
+    });
+    window.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    expect(trap).not.toHaveBeenCalled();
+    expect(onScoreboard).toHaveBeenLastCalledWith(true);
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { code: "Tab", repeat: true }),
+    );
+    expect(onScoreboard).toHaveBeenCalledTimes(1);
+    release("Tab");
+    expect(onScoreboard).toHaveBeenLastCalledWith(false);
+    press("Tab");
+    window.dispatchEvent(new Event("blur"));
+    expect(onScoreboard).toHaveBeenLastCalledWith(false);
+    detach();
+    document.removeEventListener("keydown", trap, true);
+  });
+
+  it("picks a weapon with the number keys, 6 for the rocket launcher, once per press", () => {
+    const onWeaponSlot = vi.fn();
+    const detach = attachKeyboard(window, createInputState(), undefined, {
+      onWeaponSlot,
+    });
+    press("Digit2");
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { code: "Digit2", repeat: true }),
+    );
+    press("Digit3");
+    press("Digit6");
+    expect(onWeaponSlot.mock.calls.map(([slot]) => slot)).toEqual([2, 3, 6]);
+    detach();
+  });
+
+  it("switches the radio with R, once per press and not on repeat", () => {
+    const onRadio = vi.fn();
+    const onUserGesture = vi.fn();
+    const detach = attachKeyboard(window, createInputState(), onUserGesture, {
+      onRadio,
+    });
+    press("KeyR");
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { code: "KeyR", repeat: true }),
+    );
+    release("KeyR");
+    press("KeyR");
+    expect(onRadio).toHaveBeenCalledTimes(2);
+    expect(onUserGesture).toHaveBeenCalledTimes(2);
+    detach();
+    press("KeyR");
+    expect(onRadio).toHaveBeenCalledTimes(2);
+  });
+
+  it("toggles the 3D camera with V, once per press and not on repeat", () => {
+    const onToggleCamera = vi.fn();
+    const onUserGesture = vi.fn();
+    const detach = attachKeyboard(window, createInputState(), onUserGesture, {
+      onToggleCamera,
+    });
+    press("KeyV");
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { code: "KeyV", repeat: true }),
+    );
+    release("KeyV");
+    press("KeyV");
+    expect(onToggleCamera).toHaveBeenCalledTimes(2);
+    expect(onUserGesture).toHaveBeenCalledTimes(2);
+    detach();
+    press("KeyV");
+    expect(onToggleCamera).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignores every game key while a menu owns the keyboard", () => {
+    const state = createInputState();
+    const onScoreboard = vi.fn();
+    let suspended = true;
+    const detach = attachKeyboard(window, state, undefined, {
+      onScoreboard,
+      isSuspended: () => suspended,
+    });
+    press("KeyD");
+    press("Tab");
+    press("Space");
+    expect(state.snapshot().move).toEqual([0, 0]);
+    expect(state.snapshot().fire).toBe(false);
+    expect(onScoreboard).not.toHaveBeenCalled();
+    suspended = false;
+    press("KeyD");
+    expect(state.snapshot().move).toEqual([1, 0]);
+    detach();
+  });
+});
+
+describe("attachWheel", () => {
+  it("cycles the weapon once per notch of travel, not once per trackpad tick", () => {
+    const onCycle = vi.fn();
+    const target = document.createElement("canvas");
+    const detach = attachWheel(target, onCycle);
+    const wheel = (deltaY: number): WheelEvent => {
+      const event = new WheelEvent("wheel", { deltaY, cancelable: true });
+      target.dispatchEvent(event);
+      return event;
+    };
+    expect(wheel(10).defaultPrevented).toBe(true);
+    wheel(10);
+    wheel(10);
+    expect(onCycle).not.toHaveBeenCalled();
+    wheel(10);
+    expect(onCycle).toHaveBeenCalledTimes(1);
+    wheel(-100);
+    expect(onCycle).toHaveBeenCalledTimes(2);
+    detach();
+    wheel(100);
+    expect(onCycle).toHaveBeenCalledTimes(2);
+  });
+
+  it("counts a wheel that reports lines in lines, three to the notch", () => {
+    const onCycle = vi.fn();
+    const target = document.createElement("canvas");
+    const detach = attachWheel(target, onCycle);
+    const line = (deltaY: number): void => {
+      target.dispatchEvent(new WheelEvent("wheel", { deltaY, deltaMode: 1 }));
+    };
+    line(1);
+    line(1);
+    expect(onCycle).not.toHaveBeenCalled();
+    line(1);
+    expect(onCycle).toHaveBeenCalledTimes(1);
+    // A page is a notch on its own, and a change of unit starts the count over.
+    target.dispatchEvent(new WheelEvent("wheel", { deltaY: 1, deltaMode: 2 }));
+    expect(onCycle).toHaveBeenCalledTimes(2);
+    detach();
+  });
+});
+
+describe("attachKeyboard: M for the map", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("opens the map with M and closes it with a second M, though the open map holds the keyboard", () => {
+    let mapOpen = false;
+    const onMap = vi.fn(() => {
+      mapOpen = !mapOpen;
+    });
+    const detach = attachKeyboard(window, createInputState(), undefined, {
+      onMap,
+      isSuspended: () => mapOpen,
+    });
+    press("KeyM");
+    expect(mapOpen).toBe(true);
+    press("KeyM");
+    expect(mapOpen).toBe(false);
+    detach();
+  });
+
+  it("ignores M held down, and M typed into a field", () => {
+    const onMap = vi.fn();
+    const detach = attachKeyboard(window, createInputState(), undefined, {
+      onMap,
+    });
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { code: "KeyM", repeat: true }),
+    );
+    const field = document.createElement("input");
+    document.body.append(field);
+    press("KeyM", field);
+    field.remove();
+    expect(onMap).not.toHaveBeenCalled();
     detach();
   });
 });

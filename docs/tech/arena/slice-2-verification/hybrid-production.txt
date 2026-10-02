@@ -1,0 +1,1 @@
+PASS: mirrored hybrid + controller, shared canvas, simulated gamepad movement and disconnect
