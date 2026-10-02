@@ -37,7 +37,7 @@ describe("fetchTeamEvents when ical.parseICS throws", () => {
     vi.restoreAllMocks();
   });
 
-  it("falls back to cache and reports to Sentry", async () => {
+  it("falls back to cache without reporting to Sentry when parse fails", async () => {
     vi.mocked(kvGetJson).mockResolvedValue([
       {
         id: "cached-1",
@@ -51,12 +51,6 @@ describe("fetchTeamEvents when ical.parseICS throws", () => {
     expect(events).toHaveLength(1);
     expect(events[0].title).toBe("Cached Match");
     expect(kvSetJson).not.toHaveBeenCalled();
-    expect(Sentry.captureException).toHaveBeenCalledWith(
-      expect.any(Error),
-      expect.objectContaining({
-        tags: { source: "sportlink_ical" },
-        fingerprint: ["sportlink-ical-fetch"],
-      }),
-    );
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 });

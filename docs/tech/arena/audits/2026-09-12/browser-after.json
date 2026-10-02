@@ -1,0 +1,103 @@
+{
+  "portrait": {
+    "buttons": [
+      {
+        "name": "Menu",
+        "rect": {
+          "bottom": 53.5,
+          "height": 44,
+          "left": 270.359375,
+          "right": 319,
+          "top": 9.5,
+          "width": 48.640625,
+          "x": 270.359375,
+          "y": 9.5
+        }
+      },
+      {
+        "name": "Sluiten",
+        "rect": {
+          "bottom": 53.5,
+          "height": 44,
+          "left": 323,
+          "right": 367,
+          "top": 9.5,
+          "width": 44,
+          "x": 323,
+          "y": 9.5
+        }
+      },
+      {
+        "name": "Wapen",
+        "rect": {
+          "bottom": 742,
+          "height": 58,
+          "left": 266.84375,
+          "right": 363,
+          "top": 684,
+          "width": 96.15625,
+          "x": 266.84375,
+          "y": 684
+        }
+      },
+      {
+        "name": "Instappen",
+        "rect": {
+          "bottom": 808,
+          "height": 58,
+          "left": 266.84375,
+          "right": 363,
+          "top": 750,
+          "width": 96.15625,
+          "x": 266.84375,
+          "y": 750
+        }
+      },
+      {
+        "name": "CW7VBP · 1/8 · Lobby openen",
+        "rect": {
+          "bottom": 116,
+          "height": 44,
+          "left": 78.1875,
+          "right": 296.8125,
+          "top": 72,
+          "width": 218.625,
+          "x": 78.1875,
+          "y": 72
+        }
+      }
+    ],
+    "canvas": {
+      "bottom": 820,
+      "height": 756,
+      "left": 0,
+      "right": 375,
+      "top": 64,
+      "width": 375,
+      "x": 0,
+      "y": 64
+    },
+    "coarse": false,
+    "viewport": {
+      "height": 844,
+      "width": 390
+    }
+  },
+  "landscape": {
+    "canvas": {
+      "bottom": 366,
+      "height": 302,
+      "left": 0,
+      "right": 829,
+      "top": 64,
+      "width": 829,
+      "x": 0,
+      "y": 64
+    },
+    "viewport": {
+      "height": 390,
+      "width": 844
+    }
+  },
+  "limitations": "In-app desktop Chromium, simulated viewport and selected phone controls. Coarse-pointer hardware, physical GPU/thermal behavior and true background visibility were not available."
+}

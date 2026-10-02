@@ -44,7 +44,22 @@ describe("WhatsNewTour", () => {
   });
 
   it("does not report Chromium Failed to fetch for /api/whats-new (benign transient)", async () => {
-    vi.spyOn(global, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.spyOn(global, "fetch").mockRejectedValue(
+      new TypeError("Failed to fetch"),
+    );
+    render(<WhatsNewTour />);
+    await vi.waitFor(
+      () => {
+        expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+      },
+      { timeout: 500 },
+    );
+  });
+
+  it("does not report Firefox NetworkError for /api/whats-new (benign transient)", async () => {
+    vi.spyOn(global, "fetch").mockRejectedValue(
+      new DOMException("A network error occurred.", "NetworkError"),
+    );
     render(<WhatsNewTour />);
     await vi.waitFor(
       () => {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Sentry from "@sentry/nextjs";
-import { resolveNextAuthUrl } from "./nextAuthUrl";
+import { applyNextAuthUrlEnv, resolveNextAuthUrl } from "./nextAuthUrl";
 
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
@@ -58,5 +58,43 @@ describe("resolveNextAuthUrl", () => {
         extra: expect.objectContaining({ context: "nextauth_url_toOrigin" }),
       }),
     );
+  });
+});
+
+describe("applyNextAuthUrlEnv", () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    vi.clearAllMocks();
+    delete process.env.NEXTAUTH_URL;
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    delete process.env.NEXTAUTH_URL;
+  });
+
+  it("sets NEXTAUTH_URL when resolveNextAuthUrl returns a value", () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("NEXTAUTH_URL", "https://app.example.com/");
+    applyNextAuthUrlEnv();
+    expect(process.env.NEXTAUTH_URL).toBe("https://app.example.com");
+  });
+
+  it("removes invalid NEXTAUTH_URL so NextAuth can infer from request", () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("NEXTAUTH_URL", ":");
+    applyNextAuthUrlEnv();
+    expect(process.env.NEXTAUTH_URL).toBeUndefined();
+  });
+
+  it("removes empty NEXTAUTH_URL", () => {
+    vi.stubEnv("NEXTAUTH_URL", "   ");
+    applyNextAuthUrlEnv();
+    expect(process.env.NEXTAUTH_URL).toBeUndefined();
+  });
+
+  it("does nothing when NEXTAUTH_URL is unset", () => {
+    applyNextAuthUrlEnv();
+    expect(process.env.NEXTAUTH_URL).toBeUndefined();
   });
 });

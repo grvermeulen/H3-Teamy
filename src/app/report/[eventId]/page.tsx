@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { getReport } from "../../../lib/kv";
-import Link from "next/link";
 import MvpVotingPanel from "../../../components/MvpVotingPanel";
+import { AppBar } from "../../../components/ui";
 
 type Params = {
   params: Promise<{ eventId: string }> | { eventId: string };
@@ -16,7 +16,7 @@ export default async function ReportPage({ params }: Params) {
   return (
     <main>
       <div className="container">
-        <h1>Wedstrijdverslag</h1>
+        <AppBar title="Wedstrijdverslag" />
         <div className="muted" style={{ marginBottom: 12 }}>
           Wedstrijd: {eventId}
         </div>
@@ -33,9 +33,6 @@ export default async function ReportPage({ params }: Params) {
           Gepubliceerd {new Date(report.createdAt).toLocaleString("nl-NL")}
         </div>
         <MvpVotingPanel eventId={eventId} />
-        <div style={{ marginTop: 16 }}>
-          <Link href="/">← Terug</Link>
-        </div>
       </div>
     </main>
   );

@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { buildWeeklyIdeaBlocks, postSlackBlocks } from "./slack";
 
+vi.mock("@sentry/nextjs", () => ({
+  captureException: vi.fn(),
+}));
+
 describe("buildWeeklyIdeaBlocks", () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -1,0 +1,682 @@
+"use client";
+import { ArenaMissionPanel } from "./ArenaMissionPanel";
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactPortal,
+  type RefObject,
+} from "react";
+import { createPortal, preload } from "react-dom";
+import { ZONE_OPTIONS } from "@/lib/cityArena/constants";
+import { ArenaRoomLocation } from "./ArenaRoomLocation";
+import { ArenaPhaseScreens } from "./ArenaPhaseScreens";
+import { ArenaSettingsSheet, MENU_LABEL } from "./ArenaSettingsSheet";
+import type { ArenaLayout, ArenaSettings } from "@/lib/cityArena/schemas";
+import {
+  hasSeenArenaTouchTip,
+  markArenaTouchTipSeen,
+  type TouchTipKind,
+} from "@/lib/cityArena/storage";
+import { ArenaLookSensitivity } from "./ArenaLookSensitivity";
+import { ConnectionBanner } from "./ConnectionBanner";
+import { HostToast } from "./HostToast";
+import { useArenaRoom, type ArenaRoom } from "./useArenaRoom";
+import type { ArenaEntry } from "./arenaEntry";
+import { arenaChannels } from "@/lib/cityArena/net/roomProtocol";
+import { useArenaWakeLock } from "./useArenaWakeLock";
+import { isDebugEnabled } from "@/lib/cityArena/debugFlag";
+import {
+  createStick,
+  type StickController,
+} from "@/lib/cityArena/input/touchStick";
+import type { MapZone, ZoneKey } from "@/lib/cityArena/world/mapTypes";
+import ArenaDebugOverlay from "./ArenaDebugOverlay";
+import ArenaRadar from "./ArenaRadar";
+import ArenaNavigationMap from "./ArenaNavigationMap";
+import type { NavigationMapData } from "@/lib/cityArena/render/navigationMap";
+import ArenaLoadingScreen, {
+  ATTRIBUTION_TEXT,
+  MAP_LOAD_FAILURE_TEXT,
+} from "./ArenaLoadingScreen";
+import ArenaTouchControls from "./ArenaTouchControls";
+import ArenaVitals from "./ArenaVitals";
+import ArenaWanted from "./ArenaWanted";
+import ArenaZoneWarning from "./ArenaZoneWarning";
+import ArenaBeerPrompt from "./ArenaBeerPrompt";
+import ArenaLandmarkPrompt from "./ArenaLandmarkPrompt";
+import DeathOverlay, { WASTED_WEBP } from "./DeathOverlay";
+import {
+  useArenaGame,
+  type ArenaGame,
+  type ArenaHud,
+  type ArenaNetplayOptions,
+} from "./useArenaGame";
+import { useDialogFocusTrap } from "./useDialogFocusTrap";
+import { View3dLayer } from "./view3d/View3dLayers";
+import { useReleaseLockWhile } from "./view3d/useView3d";
+
+/** Media query matching phones and other coarse-pointer devices: shows the touch stick. */
+const TOUCH_MEDIA_QUERY = "(max-width: 768px), (pointer: coarse)";
+/** Media query of the user's reduced-motion preference (death screen beats, spec §7). */
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+/** Props for {@link CityArenaOverlay}. */
+type CityArenaOverlayProps = {
+  entry: ArenaEntry;
+  onClose: () => void;
+  onNewGame?: () => void;
+};
+
+/**
+ * The overlay draws whichever phase the match clock is in.
+ *
+ * That phase is deliberately separate from `ArenaPhase`, which is the *canvas* lifecycle
+ * (loading, playing, error). Conflating "the map is still loading" with "we are in the lobby"
+ * is how those two end up unable to express a lobby whose city is still loading behind it.
+ */
+
+/**
+ * True while the viewport matches the touch-control media query (updates on resize/rotate), unless
+ * the settings force a layout, in which case the setting decides.
+ */
+function useShowTouchControls(forceLayout: ArenaLayout | undefined): boolean {
+  const [showTouch, setShowTouch] = useState(true);
+  useEffect(() => {
+    const query = window.matchMedia(TOUCH_MEDIA_QUERY);
+    const apply = (): void => setShowTouch(query.matches);
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, []);
+  return forceLayout ? forceLayout === "mobile" : showTouch;
+}
+
+/**
+ * The first-run touch tip: shown once the touch controls are up, until it has been read — once for
+ * the 2D layouts and once for 3D's look pad, which each have their own tip.
+ */
+function useTouchTip(
+  active: boolean,
+  kind: TouchTipKind,
+): { shown: boolean; dismiss: () => void } {
+  const [shownFor, setShownFor] = useState<TouchTipKind | null>(null);
+  useEffect(() => {
+    if (active && !hasSeenArenaTouchTip(kind)) setShownFor(kind);
+  }, [active, kind]);
+  const dismiss = useCallback(() => {
+    markArenaTouchTipSeen(kind);
+    setShownFor(null);
+  }, [kind]);
+  return { shown: shownFor === kind, dismiss };
+}
+
+/**
+ * True while the user prefers reduced motion; updates when the preference changes. Some jsdom
+ * test environments (and old browsers) leave `window.matchMedia` unimplemented, so this stays
+ * `false` and subscribes to nothing rather than throwing when it is not a function.
+ */
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return undefined;
+    const query = window.matchMedia(REDUCED_MOTION_QUERY);
+    const apply = (): void => setReduced(query.matches);
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, []);
+  return reduced;
+}
+
+/** Warms the browser's cache for the death-screen artwork so it is ready before the first death. */
+function useWarmDeathArtwork(): void {
+  useEffect(() => {
+    preload(WASTED_WEBP, { as: "image", type: "image/webp" });
+  }, []);
+}
+
+/** Locks page scroll behind the full-screen overlay for as long as it is mounted. */
+function useLockBodyScroll(): void {
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
+}
+
+/** Props for {@link ArenaZonePicker}. */
+type ArenaZonePickerProps = {
+  zones: MapZone[];
+  currentKey: string;
+  disabled: boolean;
+  onTeleport: (key: ZoneKey) => void;
+};
+
+/** The "Ga naar" select that teleports the player into another zone. */
+function ArenaZonePicker({
+  zones,
+  currentKey,
+  disabled,
+  onTeleport,
+}: ArenaZonePickerProps): React.JSX.Element {
+  return (
+    <label className="flex items-center gap-1 text-xs">
+      <span>Ga naar</span>
+      <select
+        aria-label="Ga naar"
+        className="rounded border border-[#30363d] bg-[#0d1117] px-2 py-1 text-sm text-[#c9d1d9]"
+        value={currentKey}
+        disabled={disabled}
+        onChange={(event) => {
+          const chosen = zones.find(
+            (candidate) => candidate.key === event.target.value,
+          );
+          if (chosen) onTeleport(chosen.key);
+        }}
+      >
+        <option value="">Kies…</option>
+        {zones.map((candidate) => (
+          <option key={candidate.key} value={candidate.key}>
+            {candidate.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** HUD switch between the 2D and 3D view (spec §7); its label names the view a click switches *to*. */
+function ArenaViewToggleButton({
+  view,
+  onToggle,
+}: {
+  view: ArenaSettings["view"];
+  onToggle: () => void;
+}): React.JSX.Element {
+  const target = view === "3d" ? "2d" : "3d";
+  return (
+    <button
+      className="min-h-11 min-w-11 rounded border border-[var(--arena-line)] px-2 text-xs"
+      type="button"
+      aria-label={target === "3d" ? "Wissel naar 3D" : "Wissel naar 2D"}
+      onClick={onToggle}
+    >
+      {target.toUpperCase()}
+    </button>
+  );
+}
+
+/** Props for {@link ArenaHudBar}. */
+type ArenaHudBarProps = {
+  hud: ArenaHud;
+  showLoadWarning: boolean;
+  view: ArenaSettings["view"];
+  onToggleView: () => void;
+  /** Hides the 3D toggle on a shared/split screen, which 3D does not support (spec §10). */
+  hideViewToggle: boolean;
+  onMenu: () => void;
+  onClose: () => void;
+};
+
+/** The HUD's top-right button cluster: the optional 3D toggle, Menu and Sluiten. */
+function ArenaHudActions({
+  view,
+  onToggleView,
+  hideViewToggle,
+  onMenu,
+  onClose,
+}: Pick<
+  ArenaHudBarProps,
+  "view" | "onToggleView" | "hideViewToggle" | "onMenu" | "onClose"
+>): React.JSX.Element {
+  return (
+    <div className="flex shrink-0 items-center gap-1">
+      {hideViewToggle ? null : (
+        <ArenaViewToggleButton view={view} onToggle={onToggleView} />
+      )}
+      <button
+        className="min-h-11 min-w-11 rounded border border-[var(--arena-line)] px-2 text-xs"
+        type="button"
+        onClick={onMenu}
+      >
+        {MENU_LABEL}
+      </button>
+      <button
+        className="min-h-11 min-w-11 rounded text-xl"
+        aria-label="Sluiten"
+        type="button"
+        onClick={onClose}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+/** Top strip: zone/street, vitals, an optional load warning, the zone picker, the view toggle, the menu and the close button. */
+function ArenaHudBar({
+  hud,
+  showLoadWarning,
+  view,
+  onToggleView,
+  hideViewToggle,
+  onMenu,
+  onClose,
+}: ArenaHudBarProps): React.JSX.Element {
+  return (
+    <div
+      data-testid="arena-hud"
+      className="flex h-16 shrink-0 items-center justify-between gap-1 border-b border-[#21262d] px-2 text-sm text-[#c9d1d9] sm:px-3"
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2 text-[11px] leading-5">
+          <span className="truncate font-semibold">
+            {hud.zoneName ?? "Vrij rondlopen"}
+          </span>
+          {hud.street ? (
+            <span className="muted hidden truncate sm:inline">
+              {hud.street}
+            </span>
+          ) : null}
+          <ArenaWanted wantedLevel={hud.wantedLevel} />
+        </div>
+        <ArenaVitals
+          health={hud.health}
+          weapon={hud.weapon}
+          ammo={hud.ammo}
+          speedMps={hud.speedMps}
+          drunk={hud.drunk}
+        />
+        {showLoadWarning ? (
+          <span className="absolute left-2 top-16 z-10 rounded bg-black/80 px-2 text-xs text-[#f0b429]">
+            {MAP_LOAD_FAILURE_TEXT}
+          </span>
+        ) : null}
+      </div>
+      <ArenaHudActions
+        view={view}
+        onToggleView={onToggleView}
+        hideViewToggle={hideViewToggle}
+        onMenu={onMenu}
+        onClose={onClose}
+      />
+    </div>
+  );
+}
+
+/** Full-screen Dutch error message shown when the world fails to boot. */
+function ArenaErrorMessage(): React.JSX.Element {
+  return (
+    <div
+      role="alert"
+      className="absolute inset-0 flex items-center justify-center p-6 text-center text-[#c9d1d9]"
+    >
+      Kon geen verbinding maken, probeer het later opnieuw
+    </div>
+  );
+}
+
+/** Props for {@link ArenaPlayfield}. */
+type ArenaPlayfieldProps = {
+  canvasRef: RefObject<HTMLCanvasElement | null>;
+  game: ArenaGame;
+  debug: boolean;
+  showTouch: boolean;
+  reducedMotion: boolean;
+  stick: StickController;
+  aimStick: StickController;
+  tip: { shown: boolean; dismiss: () => void };
+  sharedScreen?: boolean;
+  onOpenMap: () => void;
+  /** A menu, the map or an offer is open over the playfield. */
+  paused: boolean;
+};
+
+/** Canvas plus the loading, error, touch-control, death and debug layers drawn on top of it. */
+function ArenaPlayfield({
+  canvasRef,
+  game,
+  debug,
+  showTouch,
+  reducedMotion,
+  stick,
+  aimStick,
+  tip,
+  sharedScreen = false,
+  onOpenMap,
+  paused,
+}: ArenaPlayfieldProps): React.JSX.Element {
+  const playing = game.phase === "playing";
+  return (
+    <div className="relative min-h-0 flex-1">
+      <View3dLayer {...game.view3d} />
+      <canvas
+        ref={canvasRef}
+        className="relative block h-full w-full touch-none [@media(pointer:fine)]:cursor-none"
+        aria-label="GTA H3 speelveld"
+      />
+      <ArenaRadar
+        snapshot={game.radar}
+        onOpen={onOpenMap}
+        disabled={!playing}
+      />
+      <ArenaZoneWarning
+        zoneWarning={game.hud.zoneWarning}
+        secondsLeft={game.hud.zoneSecondsLeft}
+      />
+      {playing && game.hud.mission ? (
+        <ArenaMissionPanel
+          mission={game.hud.mission}
+          onAction={game.missionAction}
+          onRoute={game.setDestination}
+        />
+      ) : null}
+      {playing && !game.hud.landmark ? (
+        <ArenaBeerPrompt
+          canOrderBeer={game.hud.canOrderBeer}
+          showTouch={showTouch}
+        />
+      ) : null}
+      {playing ? (
+        <ArenaLandmarkPrompt
+          landmark={game.hud.landmark}
+          bonus={game.hud.bonus}
+          showTouch={showTouch}
+        />
+      ) : null}
+      {playing && showTouch ? (
+        <ArenaTouchControls
+          game={game}
+          stick={stick}
+          aimStick={aimStick}
+          tip={tip}
+          paused={paused}
+        />
+      ) : null}
+      {game.phase === "loading" ? (
+        <ArenaLoadingScreen
+          loaded={game.progress.loaded}
+          total={game.progress.total}
+          failed={game.failed}
+        />
+      ) : null}
+      {game.phase === "error" ? <ArenaErrorMessage /> : null}
+      {playing && game.death && !sharedScreen ? (
+        <DeathOverlay
+          diedAtMs={game.death.diedAtMs}
+          reducedMotion={reducedMotion}
+        />
+      ) : null}
+      {debug && game.debugSnapshot ? (
+        <ArenaDebugOverlay {...game.debugSnapshot} />
+      ) : null}
+    </div>
+  );
+}
+
+/** Props for {@link ArenaFooter}. */
+type ArenaFooterProps = {
+  showTouch: boolean;
+  twinStick: boolean;
+  /** The 3D view is running, where V switches between third and first person. */
+  view3d: boolean;
+};
+
+/**
+ * The hint for each control scheme (spec §7); "V camera" only in 3D, the one view where V does
+ * anything, and on touch in 3D the look pad and the Schieten button (aim round §6).
+ */
+function controlsHint(
+  showTouch: boolean,
+  twinStick: boolean,
+  view3d: boolean,
+): string {
+  if (!showTouch)
+    return `WASD of pijltjes lopen of sturen · muis richt en schiet · ${view3d ? "rechtermuisknop vizier · " : ""}E instappen of biertje bestellen · Q, wiel of 1-6 wapens · M kaart · ${view3d ? "V camera · " : ""}R radio · Tab scorebord · Esc menu.`;
+  if (view3d)
+    return "Sleep links om te lopen of te sturen; sleep rechts om rond te kijken; houd Schieten vast om te schieten.";
+  return twinStick
+    ? "Sleep links op het scherm om te lopen of te sturen; sleep rechts om te richten en te schieten."
+    : "Sleep links op het scherm om te lopen of te sturen; rechts: Schieten, Instappen, Wapen.";
+}
+
+/** Bottom hint line: the active control scheme plus the OpenStreetMap attribution. */
+function ArenaFooter({
+  showTouch,
+  twinStick,
+  view3d,
+}: ArenaFooterProps): React.JSX.Element {
+  return (
+    <p className="muted mx-2 my-1 shrink-0 text-center text-xs">
+      <span className="hidden sm:inline">
+        {controlsHint(showTouch, twinStick, view3d)}
+      </span>{" "}
+      <span>{ATTRIBUTION_TEXT}</span>
+    </p>
+  );
+}
+
+/** What the game needs from the room to run its loop. */
+function netplayFor(room: ArenaRoom): ArenaNetplayOptions {
+  const channels = room.ticket
+    ? arenaChannels(room.ticket.roomId, room.ticket.epoch)
+    : undefined;
+  return {
+    transport: room.transport,
+    ready: room.status === "ready" && room.connection === "connected",
+    connected: room.connection === "connected",
+    roomCode: room.roomCode,
+    stateChannel: channels?.state,
+    round: room.ticket?.round,
+    inputChannel: channels?.inputs,
+    clientId: room.clientId,
+    clockOffsetMs: room.clockOffsetMs,
+    hostClientId: room.hostClientId,
+    isHost: room.isHost,
+    memberIds: room.crew
+      .filter((member) => member.role !== "display")
+      .map((member) => member.clientId),
+    onHostLost: room.reportHostLost,
+  };
+}
+
+/** True when the URL carries `?debug=1` in a non-production build (read once on mount). */
+function useDebugFlag(): boolean {
+  const [debug] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      isDebugEnabled(window.location.search, process.env.NODE_ENV),
+  );
+  return debug;
+}
+
+/** Full-screen arena session: loading screen, canvas, HUD strip, touch controls, death screen, attribution. */
+export default function CityArenaOverlay({
+  entry,
+  onClose,
+  onNewGame,
+}: CityArenaOverlayProps): ReactPortal | null {
+  const fallbackZone = ZONE_OPTIONS[0]!.key;
+  const room = useArenaRoom({ entry, fallbackZone });
+  useArenaWakeLock();
+  const zone = room.zone;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stick = useMemo(() => createStick(), []);
+  const aimStick = useMemo(() => createStick(), []);
+  const debug = useDebugFlag();
+  const reducedMotion = useReducedMotion();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [mapData, setMapData] = useState<NavigationMapData | null>(null);
+  const [leaving, setLeaving] = useState(false);
+  const [scoreboardHeld, setScoreboardHeld] = useState(false);
+  const openMenu = useCallback(() => setMenuOpen(true), []);
+  const game = useArenaGame({
+    zoneKey: zone,
+    canvasRef,
+    debug,
+    reducedMotion,
+    netplay: entry.kind === "solo" ? undefined : netplayFor(room),
+    keys: {
+      onScoreboard: setScoreboardHeld,
+      suspended: menuOpen || mapData !== null,
+      onPause: openMenu,
+      onMap: () => toggleMap(),
+    },
+    sharedScreen:
+      entry.role === "hybrid"
+        ? room.crew.filter(
+            (member) =>
+              member.role === "controller" || member.role === "hybrid",
+          )
+        : undefined,
+  });
+  const showTouch = useShowTouchControls(game.settings.forceLayout);
+  const tip = useTouchTip(
+    showTouch && game.phase === "playing",
+    game.view3d.active ? "3d" : "2d",
+  );
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+  const closeMap = useCallback(() => setMapData(null), []);
+  const openMap = (): void => setMapData(game.navigationMap());
+  // M, like the HUD's map button, opens the map; a second M closes it. Not over the menu.
+  const toggleMap = (): void => {
+    if (menuOpen) return;
+    if (mapData) closeMap();
+    else openMap();
+  };
+  const toggleView = (): void =>
+    game.updateSettings({ view: game.settings.view === "3d" ? "2d" : "3d" });
+  const leave = useCallback(() => {
+    room.leave();
+    onClose();
+  }, [room, onClose]);
+  const modalOpen =
+    menuOpen || mapData !== null || Boolean(game.hud.mission?.offer);
+  // Escape opens the menu (spec §7); the menu's own trap closes it again, and "Sluiten" is the
+  // way out of the overlay.
+  // Stood down while the sheet is open: the sheet's own trap owns Tab and Escape until then.
+  useDialogFocusTrap(dialogRef, openMenu, !modalOpen);
+  // In 3D the pointer lock hides the mouse: a menu, the map or an offer needs it back.
+  useReleaseLockWhile(modalOpen, game.view3d.release);
+  useLockBodyScroll();
+  useWarmDeathArtwork();
+
+  const overlay = (
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="GTA H3"
+      tabIndex={-1}
+      className="arena arena-grid fixed inset-0 z-[3200] flex h-dvh flex-col touch-none select-none bg-[var(--arena-void)] pt-safe pb-[env(safe-area-inset-bottom)] pl-safe pr-safe [-webkit-user-select:none] [-webkit-touch-callout:none]"
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      <ConnectionBanner state={room.connection} />
+      <HostToast
+        hostClientId={room.hostClientId}
+        hostName={room.crew.find((member) => member.isHost)?.name ?? null}
+      />
+      <ArenaHudBar
+        hud={game.hud}
+        showLoadWarning={game.phase === "playing" && game.failed}
+        view={game.settings.view}
+        onToggleView={toggleView}
+        hideViewToggle={entry.role === "hybrid"}
+        onMenu={openMenu}
+        onClose={onClose}
+      />
+      <ArenaPlayfield
+        canvasRef={canvasRef}
+        game={game}
+        debug={debug}
+        showTouch={showTouch}
+        reducedMotion={reducedMotion}
+        stick={stick}
+        aimStick={aimStick}
+        tip={tip}
+        sharedScreen={entry.role === "hybrid"}
+        onOpenMap={openMap}
+        paused={modalOpen}
+      />
+      <ArenaFooter
+        showTouch={showTouch}
+        twinStick={game.settings.twinStick}
+        view3d={game.view3d.active}
+      />
+      {entry.kind !== "solo" && (
+        <ArenaPhaseScreens
+          game={game}
+          room={room}
+          onClose={onClose}
+          showScoreboard={scoreboardHeld}
+        />
+      )}
+      {mapData ? (
+        <ArenaNavigationMap
+          data={mapData}
+          radar={game.radar}
+          onDestination={game.setDestination}
+          onClose={closeMap}
+        />
+      ) : null}
+      {menuOpen ? (
+        <ArenaSettingsSheet
+          settings={game.settings}
+          onChange={game.updateSettings}
+          onLeave={leave}
+          onClose={closeMenu}
+          hideView={entry.role === "hybrid"}
+        >
+          {showTouch ? (
+            <ArenaLookSensitivity
+              value={game.settings.touchLookSensitivity}
+              onChange={(touchLookSensitivity) =>
+                game.updateSettings({ touchLookSensitivity })
+              }
+            />
+          ) : null}
+          <button
+            type="button"
+            className="my-2 min-h-11 rounded border border-white/25 px-3 text-sm"
+            onClick={game.nextRadioTrack}
+            disabled={!game.settings.radio}
+          >
+            Volgend radionummer
+          </button>
+          {room.ticket ? (
+            <ArenaRoomLocation
+              zone={room.zone}
+              leaving={leaving}
+              onNewGame={
+                onNewGame
+                  ? async () => {
+                      setLeaving(true);
+                      await room.leave();
+                      onNewGame();
+                    }
+                  : undefined
+              }
+            />
+          ) : (
+            <ArenaZonePicker
+              zones={game.zones}
+              currentKey={game.hud.zoneKey ?? ""}
+              disabled={game.phase !== "playing"}
+              onTeleport={game.teleportToZone}
+            />
+          )}
+        </ArenaSettingsSheet>
+      ) : null}
+    </div>
+  );
+
+  if (typeof document === "undefined") return null;
+  return createPortal(overlay, document.body);
+}

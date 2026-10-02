@@ -33,6 +33,7 @@ export default function LoginForm({
   const [invitationCode, setInvitationCode] = useState("");
   const [notice, setNotice] = useState<Notice>(null);
   const [signingIn, setSigningIn] = useState(false);
+  const [signingInWithGoogle, setSigningInWithGoogle] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [webAuthnUsable, setWebAuthnUsable] = useState(false);
@@ -189,7 +190,9 @@ export default function LoginForm({
   }
 
   async function loginGoogle(): Promise<void> {
+    if (signingInWithGoogle) return;
     setNotice(null);
+    setSigningInWithGoogle(true);
     try {
       await signIn("google", { callbackUrl });
     } catch (error: unknown) {
@@ -198,6 +201,7 @@ export default function LoginForm({
         tone: "error",
         text: "Google-inloggen mislukt (netwerk of server). Probeer het opnieuw.",
       });
+      setSigningInWithGoogle(false);
     }
   }
 
@@ -214,6 +218,8 @@ export default function LoginForm({
           <Button
             variant="primary"
             isFullWidth
+            loading={signingInWithGoogle}
+            loadingLabel="Google openen…"
             onClick={() => void loginGoogle()}
           >
             Inloggen met Google

@@ -64,3 +64,23 @@ jobs:
 
       - name: Run Tests
         run: npx vitest run
+
+      - name: OCR worker (OpenCV decode + API smoke)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0
+          python -m pip install --upgrade pip
+          pip install -r ocr-worker/requirements-test.txt
+          pytest ocr-worker -q
+
+      - name: Arena audio (files and credits)
+        run: npm run arena:check-audio
+
+      - name: Arena sprites (files and credits)
+        run: npm run arena:check-sprites
+
+      - name: Arena characters (files, budget and credits)
+        run: npm run arena:check-characters
+
+      - name: Arena cars (files, budget and credits)
+        run: npm run arena:check-cars

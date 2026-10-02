@@ -24,6 +24,210 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.6.0": {
+    title: "GTA H3 komt tot leven",
+    steps: [
+      {
+        title: "Echt achter het stuur",
+        body: "Rij je in eerste persoon (V), dan zit je nu écht in de auto: handen aan het stuur, een dashboard met snelheidsmeter en de motorkap voor je. Bus, tractor en tank hebben elk hun eigen cabine.",
+      },
+      {
+        title: "Schoten uit de loop",
+        body: "Kogels, mondingsvuur en raketten komen nu uit je wapen in plaats van uit het midden van je lijf. Ook bij agenten en andere spelers.",
+      },
+      {
+        title: "Een stad die je hoort",
+        body: "Verkeer dat langsrijdt, mensen die praten, vogels, wind, water, fietsbellen en de klok van de Cunerakerk. Elk geluid komt van waar het gebeurt: dichtbij harder, links of rechts. Uitzetten kan in het menu met Omgevingsgeluid.",
+      },
+      {
+        title: "Nieuwe mensen op straat",
+        body: "Voetgangers, agenten en jijzelf zijn nu geanimeerde figuren in 3D, en elke voorbijganger ziet er anders uit.",
+      },
+      {
+        title: "Een Nederlandse stad in 3D",
+        body: 'Trapgevels, winkels en balkons, stoepranden, rode fietspaden en zebrapaden, geparkeerde fietsen, drie soorten bomen, auto\'s met koplampen en gele kentekens, en sterren boven de stad. Op "laag" blijft alles zo licht als voorheen.',
+      },
+    ],
+  },
+  "0.5.0": {
+    title: "GTA H3 in 3D",
+    steps: [
+      {
+        title: "Speel de stad in 3D",
+        body: "Schakel om met de 3D-knop in de HUD of via Menu → Weergave. Druk op V om te wisselen tussen derde en eerste persoon en klik om met de muis te richten. Zonder muisvergrendeling werkt richten ook gewoon.",
+      },
+      {
+        title: "Gebouwen kun je opblazen",
+        body: "Genoeg schade en een gebouw stort in tot puin. Na een paar minuten wordt het herbouwd. Iedereen in de kamer ziet dezelfde instorting en hetzelfde puin, in 2D en in 3D.",
+      },
+      {
+        title: "Raketwerper",
+        body: "Nieuw wapen op toets 6, één exemplaar te vinden per wijk. Ook de granaten van de tank ontploffen nu net zo hard.",
+      },
+      {
+        title: "Missiebakens ook in 3D",
+        body: "Bakens en het routelint naar je missie blijven zichtbaar in de 3D-weergave, zodat je nooit de weg kwijtraakt.",
+      },
+    ],
+  },
+  "0.4.6": {
+    title: "Nieuwe beukers op de autoradio",
+    steps: [
+      {
+        title: "Radio Beuk gaat een ronde verder",
+        body: "Drie nieuwe originele workout-tracks: Nog één ronde, Staal en zweet en Door de grens. Zet Radio Beuk aan voor stevige acid-rave, stuiterende harddance en snelle melodieuze trance met Nederlandse vocalen.",
+      },
+    ],
+  },
+  "0.4.5": {
+    title: "Een kleiner logboek",
+    steps: [
+      {
+        title: "Nooit hoger dan de minimap",
+        body: "Het ingeklapte missiepaneel is nu maximaal 90 pixels hoog, ook na voltooiing of mislukking en bij het hervatten van je spel. Tik op het paneel voor je volledige logboek, gesprekken en beloning.",
+      },
+    ],
+  },
+  "0.4.4": {
+    title: "Meer zicht tijdens missies",
+    steps: [
+      {
+        title: "Compact missiepaneel",
+        body: "Na het aannemen klapt je missie automatisch in tot een compacte, transparantere balk bovenaan. Je opdracht, afstand en voortgang blijven zichtbaar. Tik op de missienaam om gesprekken, hints en routeknoppen te openen.",
+      },
+    ],
+  },
+  "0.4.3": {
+    title: "Herkenbare autowrakken",
+    steps: [
+      {
+        title: "Uitgebrand, maar herkenbaar",
+        body: "Ontplofte voertuigen krijgen nu echte wraksprites met kapotte ruiten, verwrongen metaal en brandschade. Ook politiewagens, bestelwagens, bussen, oldtimers, tractors en tanks hebben hun eigen uitgebrande uiterlijk.",
+      },
+    ],
+  },
+  "0.4.2": {
+    title: "Een naadloze stad",
+    steps: [
+      {
+        title: "Kaarttegels sluiten vloeiend aan",
+        body: "De donkere naden tussen kaarttegels zijn verholpen. Wegen, gebouwen en gras sluiten nu ook tijdens vloeiend zoomen en bewegen op elkaar aan.",
+      },
+    ],
+  },
+  "0.4.1": {
+    title: "Missies en uitstappen hersteld",
+    steps: [
+      {
+        title: "Weer verder op straat",
+        body: "E blijft werken nadat je een spelknop hebt aangeklikt. Niet-uitvoerbare missieacties blokkeren het uitstappen niet meer. In Schaduw op straat staat de uitkijk nu klaar zodra je hem moet vinden.",
+      },
+    ],
+  },
+  "0.4.0": {
+    title: "Aan het werk in GTA H3",
+    steps: [
+      {
+        title: "24 missies op straat",
+        body: "Zoek de acht opdrachtgevers met het €-teken. Bezorg pakketten, race, beroof een transport, bescherm je passagier of bouw een rave op. Gesprekken, doelen en hints helpen je onderweg. Je solovoortgang blijft op dit apparaat bewaard.",
+      },
+      {
+        title: "Verdien je plek op het scorebord",
+        body: "Elke verdiende euro is een punt; een uitschakeling levert 250 punten op. Nieuwe potjes duren twaalf minuten, zodat er ook tijd is voor langere opdrachten.",
+      },
+      {
+        title: "Meer rijplezier en radio",
+        body: "De camera zoomt soepel uit bij snelheid. Auto’s kunnen meer hebben en bij een kaping zie je de deur en bestuurder bewegen. Locatiebonussen duren drie keer langer. Luister naar twaalf nieuwe radiostukken, van pastapreken tot zomertrance. Schoten klinken harder en de radio iets zachter.",
+      },
+    ],
+  },
+  "0.3.4": {
+    title: "Vind je weg in GTA H3",
+    steps: [
+      {
+        title: "Een grote kaart om je route te plannen",
+        body: "Tik op de kleine kaart om de stratenkaart op volledig scherm te openen. Sleep en zoom om de buurt te bekijken. Houd een straat ingedrukt of kies een bekende plek om je bestemming in te stellen.",
+      },
+      {
+        title: "Volg de pijlen op straat",
+        body: "Je route verschijnt op de kaart én als blauwe pijlen op de weg. De navigatie past zich onderweg aan en houdt tijdens het rijden rekening met eenrichtingsstraten. Open de kaart opnieuw om je bestemming te veranderen of de navigatie te stoppen.",
+      },
+    ],
+  },
+  "0.3.3": {
+    title: "Kies waar je potje begint",
+    steps: [
+      {
+        title: "Een duidelijke startlocatie",
+        body: "Kies bij Nieuw potje uit Rhenen centrum, Wageningen centrum, de WUR-campus en Bennekom. Je laatste keuze wordt onthouden. Via het spelmenu kun je je kamer verlaten en een andere startlocatie kiezen voor een nieuw potje.",
+      },
+    ],
+  },
+  "0.3.2": {
+    title: "Ontdek de buurt in GTA H3",
+    steps: [
+      {
+        title: "Bekende plekken komen tot leven",
+        body: "De zwembaden, kerken, Café Onder de Linden en WUR-gebouwen hebben elk een eigen ontwerp. Ontdek ook het basketballende Oranje-duo bij Bellefleur 5.",
+      },
+      {
+        title: "Een bezoek geeft je een bonus",
+        body: "Loop naar een bekende plek en gebruik de interactieknop voor een korte activiteit. Een duik geeft extra loopsnelheid, koffie helpt je herstellen en de kerkklok biedt tijdelijke bescherming. De resterende tijd zie je in beeld.",
+      },
+      {
+        title: "Meer kleur in de straten",
+        body: "Daken, dakkapellen, zonnepanelen, tuinen, bloemen en akkers maken iedere buurt afwisselender.",
+      },
+    ],
+  },
+  "0.3.1": {
+    title: "GTA H3: hulp bij casten",
+    steps: [
+      {
+        title: "Cast naar tv vanuit je spelmenu",
+        body: "Open tijdens oefenen of spelen het Menu en kies Cast naar tv. Je krijgt stappen voor schermspiegeling op iPhone, Android of computer, met uitleg voor beeld én geluid. Je potje blijft open.",
+      },
+      {
+        title: "Rustiger spelbeeld",
+        body: "De rode richtingspijl vóór je personage is verwijderd.",
+      },
+    ],
+  },
+  "0.3.0": {
+    title: "GTA H3 op de tv",
+    steps: [
+      {
+        title: "Samen op één scherm",
+        body: "Open /arena/scherm op de tv of een laptop. Spelers scannen de QR-code en gebruiken hun telefoon als controller. Het beeld splitst automatisch als jullie uit elkaar lopen.",
+      },
+      {
+        title: "Kies je bediening",
+        body: "Via ‘Spelen met de tv / controller’ kies je een eigen spelbeeld, alleen bediening of Scherm + controller om je telefoon te spiegelen. Je kunt ook met een standaardgamepad spelen.",
+      },
+    ],
+  },
+  "0.2.3": {
+    title: "Wat is er nieuw in 0.2.3",
+    steps: [
+      {
+        title: "GTA H3: samen verder spelen",
+        body: "Potjes zijn gekoppeld aan je ingelogde account. Valt de host weg, dan kan een andere speler het potje overnemen. Uitslagen worden eenmaal opgeslagen; bij een fout kun je opnieuw proberen.",
+      },
+      {
+        title: "Meer stad op je scherm",
+        body: "Een compacter overzicht, duidelijkere voertuigen en gebouwen, en instelbare beeldkwaliteit. Klap de lobby in met ‘Stad verkennen’ en loop alvast rond.",
+      },
+    ],
+  },
+  "0.2.2": {
+    title: "Wat is er nieuw in 0.2.2",
+    steps: [
+      {
+        title: "Brouwerij Klein Zwitserland in GTA H3",
+        body: "Cuneralaan 42 in Rhenen is nu Brouwerij Klein Zwitserland. Loop naar de tap en druk op E (of tik op Biertje) voor een biertje. Je wordt dronken: de wereld gaat deinen en je schoten doen minder schade. Dat zakt langzaam weer weg.",
+      },
+    ],
+  },
   "0.2.1": {
     title: "Wat is er nieuw in 0.2.1",
     steps: [

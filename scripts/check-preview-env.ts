@@ -14,6 +14,12 @@ const REQUIRED_ANY_OF: ReadonlyArray<readonly string[]> = [
   ["PREVIEW_REDIS_URL", "REDIS_URL"],
 ];
 const REQUIRED = ["NEXTAUTH_SECRET", "INVITATION_CODE"];
+/**
+ * Wanted, but not yet required. The arena's realtime play needs ABLY_API_KEY; everything else in
+ * the app runs without it, so a missing key warns rather than blocking `npm run dev:preview`.
+ * Move it into REQUIRED once the arena ships and the key is set in every environment.
+ */
+const WANTED = ["ABLY_API_KEY"];
 
 function readEnv(file: string): Record<string, string> {
   const path = resolve(file);
@@ -48,6 +54,14 @@ if (missing.length || missingGroups.length) {
     );
   }
   process.exit(2);
+}
+
+const absent = WANTED.filter((k) => !env[k] || env[k] === "");
+if (absent.length) {
+  console.warn(
+    `! Preview env file has no ${absent.join(", ")} — GTA H3 realtime play will not connect. ` +
+      `Set it in Vercel (preview) and re-run: vercel env pull ${ENV_FILE} --environment=preview`,
+  );
 }
 
 const target = env.VERCEL_TARGET_ENV ?? env.VERCEL_ENV;

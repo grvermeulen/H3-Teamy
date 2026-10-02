@@ -7,7 +7,9 @@ const DOWNTIME_TITLE_PREFIX = /^Downtime detected for\s+/i;
  *
  * @param title - Issue title, e.g. `Downtime detected for https://…vercel.app`.
  */
-export function extractUptimeUrlFromIssueTitle(title: string): string | undefined {
+export function extractUptimeUrlFromIssueTitle(
+  title: string,
+): string | undefined {
   const match = DOWNTIME_TITLE_PREFIX.exec(title.trim());
   if (!match) return undefined;
   const rest = title.trim().slice(match[0].length).trim();

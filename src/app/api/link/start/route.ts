@@ -7,9 +7,8 @@ function getUserId(req: NextRequest): string | null {
 
 export async function POST(req: NextRequest) {
   const userId = getUserId(req);
-  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!userId)
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const code = await createLinkCode(userId);
   return NextResponse.json({ code });
 }
-
-

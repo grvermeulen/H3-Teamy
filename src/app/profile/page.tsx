@@ -10,6 +10,7 @@ import { getBadgeForAttendance, type AttendanceBadge } from "../../lib/badges";
 import { APP_VERSION } from "../../lib/version";
 import { Button, Card, Input, Stack, showToast } from "../../components/ui";
 import { isBenignWebAuthnClientError } from "../../lib/webAuthnClientErrors";
+import { useSession } from "../../components/SessionContext";
 
 type Profile = {
   id: string;
@@ -21,6 +22,7 @@ type PasskeyRow = { id: string; createdAt: string; label: string | null };
 type Roles = { admin: boolean; trainer: boolean; player: boolean };
 
 export default function ProfilePage() {
+  const { loggedIn } = useSession();
   const [, setProfile] = useState<Profile>(null);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -99,9 +101,7 @@ export default function ProfilePage() {
     }
 
     const pkParsed = pkRes as { passkeys?: PasskeyRow[] };
-    setPasskeys(
-      Array.isArray(pkParsed.passkeys) ? pkParsed.passkeys : [],
-    );
+    setPasskeys(Array.isArray(pkParsed.passkeys) ? pkParsed.passkeys : []);
   }
 
   useEffect(() => {
@@ -154,10 +154,7 @@ export default function ProfilePage() {
 
   async function addPasskey(): Promise<void> {
     if (!browserSupportsWebAuthn()) {
-      showToast(
-        "Passkeys worden niet ondersteund in deze browser.",
-        "error",
-      );
+      showToast("Passkeys worden niet ondersteund in deze browser.", "error");
       return;
     }
     setPasskeyAdding(true);
@@ -341,56 +338,69 @@ export default function ProfilePage() {
         {passkeySupported ? (
           <div data-tour="profile-passkeys">
             <Card style={{ maxWidth: 520, marginTop: 12 }}>
-            <Stack gap="3">
-              <div>
-                <h3 style={{ marginTop: 0 }}>Snel inloggen</h3>
-                <p className="muted" style={{ marginTop: 6 }}>
-                  Voeg een passkey toe voor dit apparaat (Touch ID, Face ID,
-                  Windows Hello of vergelijkbaar). Je blijft ook gewoon met
-                  Google of e-mail kunnen inloggen.
-                </p>
-              </div>
-              <Button
-                variant="secondary"
-                onClick={() => void addPasskey()}
-                loading={passkeyAdding}
-                loadingLabel="Bezig…"
-              >
-                Passkey op dit apparaat toevoegen
-              </Button>
-              {passkeys.length > 0 ? (
-                <Stack gap="2">
-                  <span className="muted">Geregistreerde passkeys</span>
-                  <ul style={{ margin: 0, paddingLeft: 18 }}>
-                    {passkeys.map((pk) => (
-                      <li key={pk.id} style={{ marginBottom: 8 }}>
-                        <Stack
-                          direction="row"
-                          justify="between"
-                          align="center"
-                          gap="2"
-                        >
-                          <span>
-                            {pk.label ??
-                              `Passkey · ${new Date(pk.createdAt).toLocaleDateString("nl-NL")}`}
-                          </span>
-                          <Button
-                            variant="ghost"
-                            onClick={() => void removePasskey(pk.id)}
+              <Stack gap="3">
+                <div>
+                  <h3 style={{ marginTop: 0 }}>Snel inloggen</h3>
+                  <p className="muted" style={{ marginTop: 6 }}>
+                    Voeg een passkey toe voor dit apparaat (Touch ID, Face ID,
+                    Windows Hello of vergelijkbaar). Je blijft ook gewoon met
+                    Google of e-mail kunnen inloggen.
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  onClick={() => void addPasskey()}
+                  loading={passkeyAdding}
+                  loadingLabel="Bezig…"
+                >
+                  Passkey op dit apparaat toevoegen
+                </Button>
+                {passkeys.length > 0 ? (
+                  <Stack gap="2">
+                    <span className="muted">Geregistreerde passkeys</span>
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                      {passkeys.map((pk) => (
+                        <li key={pk.id} style={{ marginBottom: 8 }}>
+                          <Stack
+                            direction="row"
+                            justify="between"
+                            align="center"
+                            gap="2"
                           >
-                            Verwijderen
-                          </Button>
-                        </Stack>
-                      </li>
-                    ))}
-                  </ul>
-                </Stack>
-              ) : (
-                <span className="muted">Nog geen passkeys.</span>
-              )}
-            </Stack>
-          </Card>
+                            <span>
+                              {pk.label ??
+                                `Passkey · ${new Date(pk.createdAt).toLocaleDateString("nl-NL")}`}
+                            </span>
+                            <Button
+                              variant="ghost"
+                              onClick={() => void removePasskey(pk.id)}
+                            >
+                              Verwijderen
+                            </Button>
+                          </Stack>
+                        </li>
+                      ))}
+                    </ul>
+                  </Stack>
+                ) : (
+                  <span className="muted">Nog geen passkeys.</span>
+                )}
+              </Stack>
+            </Card>
           </div>
+        ) : null}
+
+        {loggedIn ? (
+          <form
+            action="/api/auth/signout"
+            method="post"
+            style={{ maxWidth: 520 }}
+          >
+            <input type="hidden" name="callbackUrl" value="/" />
+            <Button type="submit" variant="secondary" isFullWidth>
+              Uitloggen
+            </Button>
+          </form>
         ) : null}
 
         <div

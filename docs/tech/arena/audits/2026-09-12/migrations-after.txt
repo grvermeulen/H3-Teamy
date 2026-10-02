@@ -1,0 +1,5 @@
+Datasource "db": PostgreSQL database "gta_h3_test", schema "public" at "127.0.0.1:54329"
+
+14 migrations found in prisma/migrations
+
+Database schema is up to date!

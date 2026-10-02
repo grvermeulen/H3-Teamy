@@ -7,8 +7,10 @@ on:
     types: [submitted, edited, dismissed]
   pull_request_review_comment:
     types: [created, edited, deleted]
-  pull_request_review_thread:
-    types: [resolved, unresolved]
+  # `pull_request_review_thread` is een webhook-event, maar geen workflow-trigger:
+  # opnemen maakt dit bestand ongeldig. Het resolven van een thread her-evalueert
+  # de gate daarom niet zelf; de push met de bijbehorende fix doet dat via
+  # `pull_request_target: synchronize` (of handmatig "Re-run jobs").
 
 concurrency:
   group: coderabbit-major-gate-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}

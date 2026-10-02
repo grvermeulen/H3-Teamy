@@ -42,5 +42,12 @@ ecc-reference/
 # Temporary files
 tmp-*
 
+# Overpass download cache (scripts/arena)
+.cache/
+
 # Sentry
 .sentryclirc
+
+# Agent worktrees and subagent-driven-development ledgers (scratch, never committed)
+.claude/worktrees/
+.superpowers/

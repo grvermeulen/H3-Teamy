@@ -1,0 +1,84 @@
+# When Vercel preview deploys fail during integration provisioning (often Neon branch
+# limits), prune stale Neon branches and push an empty commit to retry once.
+# See docs/tech/neon-preview-branch-cleanup.md
+name: Vercel preview provision retry
+
+on:
+  deployment_status:
+
+concurrency:
+  group: vercel-preview-retry-${{ github.event.deployment.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  cleanup-and-retry:
+    name: Neon cleanup + retry preview deploy
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.deployment.creator.login == 'vercel[bot]' &&
+      github.event.deployment_status.state == 'failure' &&
+      github.event.deployment.environment == 'Preview'
+    steps:
+      - name: Resolve branch for deployment ref
+        id: branch
+        env:
+          SHA: ${{ github.event.deployment.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          branch="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/pulls" --jq '.[0].head.ref' 2>/dev/null || true)"
+          if [ -z "$branch" ] || [ "$branch" = "null" ]; then
+            branch="${{ github.event.deployment.ref }}"
+          fi
+          echo "name=${branch}" >> "$GITHUB_OUTPUT"
+          echo "Resolved branch: ${branch}"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.branch.outputs.name }}
+          fetch-depth: 1
+
+      - name: Skip if this failure is already a retry commit
+        id: guard
+        env:
+          SHA: ${{ github.event.deployment.sha }}
+        run: |
+          msg="$(git log -1 --format=%s "${SHA}")"
+          echo "commit_message=${msg}" >> "$GITHUB_OUTPUT"
+          if echo "$msg" | grep -q '^ci: retry Vercel preview after Neon cleanup'; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Latest commit is already a provision-retry; not looping."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.guard.outputs.skip != 'true'
+        with:
+          node-version: "22"
+
+      - name: Prune Neon branches
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ secrets.NEON_PROJECT_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -z "${NEON_API_KEY:-}" ] || [ -z "${NEON_PROJECT_ID:-}" ]; then
+            echo "NEON_API_KEY or NEON_PROJECT_ID not configured — skipping Neon cleanup."
+            exit 0
+          fi
+          node scripts/neon-cleanup-branches.mjs --max-total=12 --execute
+
+      - name: Retry Vercel preview (empty commit)
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          REF: ${{ steps.branch.outputs.name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -m "ci: retry Vercel preview after Neon cleanup"
+          git push origin "HEAD:${REF}"

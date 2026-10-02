@@ -15,18 +15,33 @@ export default function BottomNav() {
 
   if (loading) return null;
 
+  const icons = {
+    calendar: <span aria-hidden="true">◫</span>,
+    attendance: <span aria-hidden="true">✓</span>,
+    trainer: <span aria-hidden="true">＋</span>,
+    admin: <span aria-hidden="true">◇</span>,
+    profile: <span aria-hidden="true">○</span>,
+  };
+
   return (
     <nav className="bottomBar" aria-label="Hoofdnavigatie">
       <div className="container" style={{ padding: 0 }}>
         <div className="bottomNavLinks">
-          <Link href="/" className={isActive("/") ? "navActive" : undefined}>
-            RSVP
+          <Link
+            href="/"
+            className={isActive("/") ? "navActive" : undefined}
+            aria-current={isActive("/") ? "page" : undefined}
+          >
+            {icons.calendar}
+            <small>RSVP</small>
           </Link>
           <Link
             href="/attendance"
             className={isActive("/attendance") ? "navActive" : undefined}
+            aria-current={isActive("/attendance") ? "page" : undefined}
           >
-            Opkomst
+            {icons.attendance}
+            <small>Opkomst</small>
           </Link>
           {loggedIn && isTrainer ? (
             <Link
@@ -34,34 +49,38 @@ export default function BottomNav() {
               className={
                 isActive("/trainer/attendance") ? "navActive" : undefined
               }
+              aria-current={
+                isActive("/trainer/attendance") ? "page" : undefined
+              }
             >
-              Trainer
+              {icons.trainer}
+              <small>Trainer</small>
             </Link>
           ) : null}
           {loggedIn && isAdmin ? (
             <Link
               href="/admin"
               className={isActive("/admin") ? "navActive" : undefined}
+              aria-current={isActive("/admin") ? "page" : undefined}
             >
-              Admin
+              {icons.admin}
+              <small>Admin</small>
             </Link>
           ) : null}
           <Link
-            href="/profile"
-            className={isActive("/profile") ? "navActive" : undefined}
+            href={loggedIn ? "/profile" : "/login"}
+            className={
+              isActive(loggedIn ? "/profile" : "/login")
+                ? "navActive"
+                : undefined
+            }
+            aria-current={
+              isActive(loggedIn ? "/profile" : "/login") ? "page" : undefined
+            }
           >
-            Profiel
+            {icons.profile}
+            <small>{loggedIn ? "Profiel" : "Inloggen"}</small>
           </Link>
-          {loggedIn ? (
-            <form action="/api/auth/signout" method="post">
-              <input type="hidden" name="callbackUrl" value="/" />
-              <button type="submit">Uitloggen</button>
-            </form>
-          ) : (
-            <Link href={{ pathname: "/login", query: { callbackUrl: "/" } }}>
-              Inloggen
-            </Link>
-          )}
         </div>
       </div>
     </nav>

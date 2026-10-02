@@ -1,16 +1,19 @@
 import * as Sentry from "@sentry/nextjs";
 import ical from "ical";
+import { TZDateMini } from "@date-fns/tz";
 import type { PrismaClient } from "@prisma/client";
 import { TeamEvent } from "../types";
 import { canonicalEventId } from "./eventId";
 import { fetchWithTimeoutAndRetries } from "./fetchWithRetry";
 import { kvGetJson, kvSetJson } from "./kv";
 
+type IcalDate = Date & { tz?: string };
+
 type ParsedVEvent = {
   type?: string;
   summary?: string;
-  start?: Date | string | number;
-  end?: Date | string | number;
+  start?: IcalDate | string | number;
+  end?: IcalDate | string | number;
   uid?: string;
   location?: string;
   description?: string;
@@ -66,7 +69,20 @@ async function fetchEventsFromDb(): Promise<TeamEvent[]> {
   }
 }
 
-function icalDateToIso(value: Date | string | number): string {
+function icalDateToIso(value: IcalDate | string | number): string {
+  if (value instanceof Date && value.tz) {
+    // `ical` stores TZID wall-clock fields in a server-local Date without converting them.
+    return new TZDateMini(
+      value.getFullYear(),
+      value.getMonth(),
+      value.getDate(),
+      value.getHours(),
+      value.getMinutes(),
+      value.getSeconds(),
+      value.getMilliseconds(),
+      value.tz,
+    ).toISOString();
+  }
   const d = value instanceof Date ? value : new Date(value);
   return d.toISOString();
 }
@@ -85,6 +101,7 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
 
   const cacheKey = "calendar:events:v1";
   let parsed: TeamEvent[] | null = null;
+  let sportlinkFetchError: Error | null = null;
 
   if (url) {
     try {
@@ -116,11 +133,7 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
           } satisfies TeamEvent;
         });
     } catch (err: unknown) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      Sentry.captureException(error, {
-        tags: { source: "sportlink_ical" },
-        fingerprint: ["sportlink-ical-fetch"],
-      });
+      sportlinkFetchError = err instanceof Error ? err : new Error(String(err));
     }
   }
 
@@ -158,6 +171,13 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
   // so historical events with RSVPs remain visible.
   if (merged.length === 0) {
     merged = await fetchEventsFromDb();
+  }
+
+  if (sportlinkFetchError && merged.length === 0) {
+    Sentry.captureException(sportlinkFetchError, {
+      tags: { source: "sportlink_ical" },
+      fingerprint: ["sportlink-ical-fetch"],
+    });
   }
 
   return merged;

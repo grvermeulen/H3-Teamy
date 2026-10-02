@@ -6,6 +6,8 @@ export const PasswordResetRequestBodySchema = z.object({
 
 export const PasswordResetRequestResponseSchema = z.object({
   ok: z.boolean(),
+  sent: z.boolean().optional(),
+  suppressed: z.boolean().optional(),
 });
 
 export const PasswordResetConfirmBodySchema = z.object({

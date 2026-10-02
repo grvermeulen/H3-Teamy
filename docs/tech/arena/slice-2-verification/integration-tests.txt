@@ -1,0 +1,11 @@
+
+ RUN  v5.0.0 C:/Users/Guido/Projects/H3-Teamy
+
+
+ Test Files  4 passed (4)
+      Tests  20 passed (20)
+   Start at  01:50:57
+   Duration  4.07s (import 54%, tests 37%, transform 8%)
+
+    Isolate  4 workers spawned · ~108ms startup each (spawn + environment, per file)
+             at least ~323ms faster with isolate: false — reuses workers across files instead of one per file

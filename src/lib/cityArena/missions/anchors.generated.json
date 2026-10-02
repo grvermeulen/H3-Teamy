@@ -1,0 +1,1300 @@
+{
+  "mapVersion": "v3",
+  "anchors": [
+    {
+      "id": "M02:krat-1",
+      "zone": "rhenen",
+      "position": [-4026.205466739848, 2159.2222495874826],
+      "roadNode": 12649,
+      "heading": -2.6123458727579485
+    },
+    {
+      "id": "M02:krat-2",
+      "zone": "rhenen",
+      "position": [-4025.0878274825536, 2159.875963115334],
+      "roadNode": 12649,
+      "heading": -2.6123458727579485
+    },
+    {
+      "id": "M02:krat-3",
+      "zone": "rhenen",
+      "position": [-4023.9701882252593, 2160.529676643185],
+      "roadNode": 12649,
+      "heading": -2.6123458727579485
+    },
+    {
+      "id": "M02:bus",
+      "zone": "rhenen",
+      "position": [-4173.6100917431195, 2362.6169724770643],
+      "roadNode": 7381,
+      "heading": -0.4939413689195812
+    },
+    {
+      "id": "M02:klant-1",
+      "zone": "rhenen",
+      "position": [-4019.5334187697927, 2689.265978046206],
+      "roadNode": 12372,
+      "heading": -1.441441373914177
+    },
+    {
+      "id": "M02:klant-2",
+      "zone": "rhenen",
+      "position": [-4326.217041420118, 2581.9171005917156],
+      "roadNode": 7912,
+      "heading": -1.3220863377013738
+    },
+    {
+      "id": "M02:garage",
+      "zone": "rhenen",
+      "position": [-4327.5447590525455, 2408.5595017696705],
+      "roadNode": 8065,
+      "heading": -2.549248543310973
+    },
+    {
+      "id": "M03:maaltijd-1",
+      "zone": "rhenen",
+      "position": [-4026.205466739848, 2159.2222495874826],
+      "roadNode": 12649,
+      "heading": -2.6123458727579485
+    },
+    {
+      "id": "M03:maaltijd-2",
+      "zone": "rhenen",
+      "position": [-4025.0878274825536, 2159.875963115334],
+      "roadNode": 12649,
+      "heading": -2.6123458727579485
+    },
+    {
+      "id": "M03:maaltijd-3",
+      "zone": "rhenen",
+      "position": [-4023.9701882252593, 2160.529676643185],
+      "roadNode": 12649,
+      "heading": -2.6123458727579485
+    },
+    {
+      "id": "M03:klant-1",
+      "zone": "rhenen",
+      "position": [-4024.9071302334255, 2412.710290620454],
+      "roadNode": 7263,
+      "heading": 2.1382362762527456
+    },
+    {
+      "id": "M03:klant-2",
+      "zone": "rhenen",
+      "position": [-4136.8735915135785, 2773.333697086578],
+      "roadNode": 7167,
+      "heading": -1.1502030351088537
+    },
+    {
+      "id": "M03:klant-3",
+      "zone": "rhenen",
+      "position": [-4301.923160434189, 2485.1627644030814],
+      "roadNode": 7915,
+      "heading": -1.3357841110742394
+    },
+    {
+      "id": "M03:bon",
+      "zone": "rhenen",
+      "position": [-4175.506491035259, 2359.0950880773757],
+      "roadNode": 7381,
+      "heading": -0.4939413689195812
+    },
+    {
+      "id": "M03:balie",
+      "zone": "rhenen",
+      "position": [-4019.5334187697927, 2689.265978046206],
+      "roadNode": 12372,
+      "heading": -1.441441373914177
+    },
+    {
+      "id": "M04:racewagen",
+      "zone": "rhenen",
+      "position": [-4023.5, 2688.75],
+      "roadNode": 12372,
+      "heading": -1.441441373914177
+    },
+    {
+      "id": "M04:start",
+      "zone": "rhenen",
+      "position": [-4322.340118343195, 2582.901715976331],
+      "roadNode": 7912,
+      "heading": -1.3220863377013738
+    },
+    {
+      "id": "M04:poort-1",
+      "zone": "rhenen",
+      "position": [-4327.5447590525455, 2408.5595017696705],
+      "roadNode": 8065,
+      "heading": -2.549248543310973
+    },
+    {
+      "id": "M04:poort-2",
+      "zone": "rhenen",
+      "position": [-4173.6100917431195, 2362.6169724770643],
+      "roadNode": 7381,
+      "heading": -0.4939413689195812
+    },
+    {
+      "id": "M04:poort-3",
+      "zone": "rhenen",
+      "position": [-4033.5, 2418.75],
+      "roadNode": 7263,
+      "heading": 1.8259787174157152
+    },
+    {
+      "id": "M04:poort-4",
+      "zone": "rhenen",
+      "position": [-3924.689895667952, 2562.2953617600365],
+      "roadNode": 7605,
+      "heading": -2.9587271147133642
+    },
+    {
+      "id": "M04:poort-5",
+      "zone": "rhenen",
+      "position": [-4023.5, 2688.75],
+      "roadNode": 12372,
+      "heading": -1.441441373914177
+    },
+    {
+      "id": "M04:poort-6",
+      "zone": "rhenen",
+      "position": [-4140.524978948532, 2771.7004886492186],
+      "roadNode": 7167,
+      "heading": -1.1502030351088537
+    },
+    {
+      "id": "M04:poort-7",
+      "zone": "rhenen",
+      "position": [-4298.336612450312, 2717.0149246927535],
+      "roadNode": 7647,
+      "heading": -1.6554420710887754
+    },
+    {
+      "id": "M04:poort-8",
+      "zone": "rhenen",
+      "position": [-4322.340118343195, 2582.901715976331],
+      "roadNode": 7912,
+      "heading": -1.3220863377013738
+    },
+    {
+      "id": "M04:garage",
+      "zone": "rhenen",
+      "position": [-4023.5, 2688.75],
+      "roadNode": 12372,
+      "heading": -1.441441373914177
+    },
+    {
+      "id": "M05:sedan",
+      "zone": "rhenen",
+      "position": [-4140.524978948532, 2771.7004886492186],
+      "roadNode": 7167,
+      "heading": -1.1502030351088537
+    },
+    {
+      "id": "M05:garage",
+      "zone": "rhenen",
+      "position": [-4301.923160434189, 2485.1627644030814],
+      "roadNode": 7915,
+      "heading": -1.3357841110742394
+    },
+    {
+      "id": "M05:sedan-route-1",
+      "zone": "rhenen",
+      "position": [-4173.6100917431195, 2362.6169724770643],
+      "roadNode": 7381,
+      "heading": -0.4939413689195812
+    },
+    {
+      "id": "M05:sedan-route-2",
+      "zone": "rhenen",
+      "position": [-4023.5, 2688.75],
+      "roadNode": 12372,
+      "heading": -1.441441373914177
+    },
+    {
+      "id": "M06:koerier",
+      "zone": "rhenen",
+      "position": [-4302.322291200185, 2717.353103495773],
+      "roadNode": 7647,
+      "heading": -1.6554420710887754
+    },
+    {
+      "id": "M06:koffer",
+      "zone": "rhenen",
+      "position": [-4158.002955301475, 2463.653732488405],
+      "roadNode": 7493,
+      "heading": 1.6092389168160848
+    },
+    {
+      "id": "M06:ontmoeting",
+      "zone": "rhenen",
+      "position": [-4024.9071302334255, 2412.710290620454],
+      "roadNode": 7263,
+      "heading": 2.1382362762527456
+    },
+    {
+      "id": "M06:vluchtauto",
+      "zone": "rhenen",
+      "position": [-4140.524978948532, 2771.7004886492186],
+      "roadNode": 7167,
+      "heading": -1.1502030351088537
+    },
+    {
+      "id": "M06:noor",
+      "zone": "rhenen",
+      "position": [-4028.567270453376, 2157.8408172267395],
+      "roadNode": 12649,
+      "heading": -2.6123458727579485
+    },
+    {
+      "id": "M06:aanvaller-2-1",
+      "zone": "rhenen",
+      "position": [-4175.506491035259, 2359.0950880773757],
+      "roadNode": 7381,
+      "heading": -0.4939413689195812
+    },
+    {
+      "id": "M06:aanvaller-2-2",
+      "zone": "rhenen",
+      "position": [-4019.5334187697927, 2689.265978046206],
+      "roadNode": 12372,
+      "heading": -1.441441373914177
+    },
+    {
+      "id": "M07:tas",
+      "zone": "wageningen",
+      "position": [2672.5131889740796, 1715.3051395360044],
+      "roadNode": 4416,
+      "heading": -1.5164281903216992
+    },
+    {
+      "id": "M07:loket",
+      "zone": "wageningen",
+      "position": [2446.9199022041407, 1553.4026221981687],
+      "roadNode": 4304,
+      "heading": -0.6446036441789571
+    },
+    {
+      "id": "M07:buit",
+      "zone": "wageningen",
+      "position": [2848.8357547071687, 1698.7754956653],
+      "roadNode": 4412,
+      "heading": -0.511937176307204
+    },
+    {
+      "id": "M07:vera",
+      "zone": "wageningen",
+      "position": [2672.6158051324337, 1713.419567626255],
+      "roadNode": 4416,
+      "heading": -1.5164281903216992
+    },
+    {
+      "id": "M08:transport",
+      "zone": "wageningen",
+      "position": [2446.362068965517, 1588.594827586207],
+      "roadNode": 4303,
+      "heading": -2.297438667476622
+    },
+    {
+      "id": "M08:laadruimte",
+      "zone": "wageningen",
+      "position": [2565.1014775267795, 1453.660264464949],
+      "roadNode": 1829,
+      "heading": -0.7730531115532238
+    },
+    {
+      "id": "M08:tas-1",
+      "zone": "wageningen",
+      "position": [2785.012189157032, 1842.6472214231148],
+      "roadNode": 4258,
+      "heading": -0.4494305574713173
+    },
+    {
+      "id": "M08:tas-2",
+      "zone": "wageningen",
+      "position": [2356.8528638733933, 1694.2054840616327],
+      "roadNode": 13242,
+      "heading": 0.6993169987780069
+    },
+    {
+      "id": "M08:vluchtauto",
+      "zone": "wageningen",
+      "position": [2405.5, 1505.5],
+      "roadNode": 4312,
+      "heading": -0.6281701124208794
+    },
+    {
+      "id": "M08:depot",
+      "zone": "wageningen",
+      "position": [2848.8357547071687, 1698.7754956653],
+      "roadNode": 4412,
+      "heading": -0.511937176307204
+    },
+    {
+      "id": "M08:transport-route-1",
+      "zone": "wageningen",
+      "position": [2434.5, 1832.5],
+      "roadNode": 12544,
+      "heading": -0.8076167287241673
+    },
+    {
+      "id": "M08:transport-route-2",
+      "zone": "wageningen",
+      "position": [2573.6452830188678, 1582.0915094339623],
+      "roadNode": 4236,
+      "heading": -2.3996453855838755
+    },
+    {
+      "id": "M09:nepkoffer",
+      "zone": "wageningen",
+      "position": [2672.5131889740796, 1715.3051395360044],
+      "roadNode": 4416,
+      "heading": -1.5164281903216992
+    },
+    {
+      "id": "M09:koerier",
+      "zone": "wageningen",
+      "position": [2730.752740664933, 1541.3519533579604],
+      "roadNode": 4452,
+      "heading": -1.5337762109209665
+    },
+    {
+      "id": "M09:echte-koffer",
+      "zone": "wageningen",
+      "position": [2626.8723574949004, 1926.1526267901565],
+      "roadNode": 4401,
+      "heading": -0.11756557413764344
+    },
+    {
+      "id": "M09:vera",
+      "zone": "wageningen",
+      "position": [2672.6158051324337, 1713.419567626255],
+      "roadNode": 4416,
+      "heading": -1.5164281903216992
+    },
+    {
+      "id": "M09:koerier-route-1",
+      "zone": "wageningen",
+      "position": [2565.1014775267795, 1453.660264464949],
+      "roadNode": 1829,
+      "heading": -0.7730531115532238
+    },
+    {
+      "id": "M09:koerier-route-2",
+      "zone": "wageningen",
+      "position": [2785.012189157032, 1842.6472214231148],
+      "roadNode": 4258,
+      "heading": -0.4494305574713173
+    },
+    {
+      "id": "M10:uitkijk",
+      "zone": "wageningen",
+      "position": [2446.9199022041407, 1553.4026221981687],
+      "roadNode": 4304,
+      "heading": -0.6446036441789571
+    },
+    {
+      "id": "M10:observatie-1",
+      "zone": "wageningen",
+      "position": [2848.8357547071687, 1698.7754956653],
+      "roadNode": 4412,
+      "heading": -0.511937176307204
+    },
+    {
+      "id": "M10:observatie-2",
+      "zone": "wageningen",
+      "position": [2453.371856962546, 1819.5145612591227],
+      "roadNode": 4643,
+      "heading": -2.4059617909424116
+    },
+    {
+      "id": "M10:voorraad",
+      "zone": "wageningen",
+      "position": [2593.5117012045516, 1594.886905549288],
+      "roadNode": 4236,
+      "heading": -2.4627080886723576
+    },
+    {
+      "id": "M10:dex",
+      "zone": "wageningen",
+      "position": [2443.648293759748, 1591.5626277691126],
+      "roadNode": 10562,
+      "heading": -2.297438667476622
+    },
+    {
+      "id": "M10:uitkijk-route-1",
+      "zone": "wageningen",
+      "position": [2626.8723574949004, 1926.1526267901565],
+      "roadNode": 4401,
+      "heading": -0.11756557413764344
+    },
+    {
+      "id": "M10:uitkijk-route-2",
+      "zone": "wageningen",
+      "position": [2443.3724316907824, 1591.2522829415266],
+      "roadNode": 4303,
+      "heading": -2.297438667476622
+    },
+    {
+      "id": "M11:beschrijving",
+      "zone": "wageningen",
+      "position": [2451.503430378183, 1588.3580618860597],
+      "roadNode": 10562,
+      "heading": -2.297438667476622
+    },
+    {
+      "id": "M11:doelwit",
+      "zone": "wageningen",
+      "position": [2785.012189157032, 1842.6472214231148],
+      "roadNode": 4258,
+      "heading": -0.4494305574713173
+    },
+    {
+      "id": "M11:dex",
+      "zone": "wageningen",
+      "position": [2443.648293759748, 1591.5626277691126],
+      "roadNode": 10562,
+      "heading": -2.297438667476622
+    },
+    {
+      "id": "M11:dubbelganger",
+      "zone": "wageningen",
+      "position": [2446.9199022041407, 1553.4026221981687],
+      "roadNode": 4304,
+      "heading": -0.6446036441789571
+    },
+    {
+      "id": "M12:routekaart",
+      "zone": "wageningen",
+      "position": [2451.503430378183, 1588.3580618860597],
+      "roadNode": 10562,
+      "heading": -2.297438667476622
+    },
+    {
+      "id": "M12:leiderwagen",
+      "zone": "wageningen",
+      "position": [2631.75, 1877],
+      "roadNode": 4512,
+      "heading": -2.140943685202912
+    },
+    {
+      "id": "M12:leider",
+      "zone": "wageningen",
+      "position": [2443.3724316907824, 1591.2522829415266],
+      "roadNode": 4303,
+      "heading": -2.297438667476622
+    },
+    {
+      "id": "M12:koffer",
+      "zone": "wageningen",
+      "position": [2565.1014775267795, 1453.660264464949],
+      "roadNode": 1829,
+      "heading": -0.7730531115532238
+    },
+    {
+      "id": "M12:ontmoeting",
+      "zone": "wageningen",
+      "position": [2785.012189157032, 1842.6472214231148],
+      "roadNode": 4258,
+      "heading": -0.4494305574713173
+    },
+    {
+      "id": "M12:leiderwagen-route-1",
+      "zone": "wageningen",
+      "position": [2354.278083277917, 1697.2666121029208],
+      "roadNode": 13242,
+      "heading": 0.6993169987780069
+    },
+    {
+      "id": "M12:leiderwagen-route-2",
+      "zone": "wageningen",
+      "position": [2405.5, 1505.5],
+      "roadNode": 4312,
+      "heading": -0.6281701124208794
+    },
+    {
+      "id": "M12:escorte-1",
+      "zone": "wageningen",
+      "position": [2850.795222666483, 1702.2626844064525],
+      "roadNode": 4412,
+      "heading": -0.511937176307204
+    },
+    {
+      "id": "M12:escorte-2",
+      "zone": "wageningen",
+      "position": [2434.5, 1832.5],
+      "roadNode": 12544,
+      "heading": -0.8076167287241673
+    },
+    {
+      "id": "M13:koelstation",
+      "zone": "campus",
+      "position": [2926.7049378644474, -530.6960914462369],
+      "roadNode": 10379,
+      "heading": 2.721395939980518
+    },
+    {
+      "id": "M13:koeler",
+      "zone": "campus",
+      "position": [2731.7782788462646, -444.55603266377165],
+      "roadNode": 10521,
+      "heading": 2.7328635875972784
+    },
+    {
+      "id": "M13:monster-1",
+      "zone": "campus",
+      "position": [2668.715815712435, -681.8274843851476],
+      "roadNode": 12105,
+      "heading": 2.726100557648903
+    },
+    {
+      "id": "M13:monster-2",
+      "zone": "campus",
+      "position": [2797.2008300143443, -737.9210548983805],
+      "roadNode": 9499,
+      "heading": -0.4193727643313001
+    },
+    {
+      "id": "M13:monster-3",
+      "zone": "campus",
+      "position": [2673.1269751420523, -410.4347779808497],
+      "roadNode": 10522,
+      "heading": 2.7328635875972784
+    },
+    {
+      "id": "M13:atlas",
+      "zone": "campus",
+      "position": [2990.5035922049487, -688.3869271151609],
+      "roadNode": 1804,
+      "heading": 1.2028153906499124
+    },
+    {
+      "id": "M14:professor",
+      "zone": "campus",
+      "position": [2821.8254353759007, -475.93736721347733],
+      "roadNode": 10520,
+      "heading": 2.718203491111889
+    },
+    {
+      "id": "M14:sedan",
+      "zone": "campus",
+      "position": [2432.4563180331384, -586.0456257708188],
+      "roadNode": 11700,
+      "heading": 0.036253538791431096
+    },
+    {
+      "id": "M14:atlas",
+      "zone": "campus",
+      "position": [2990.5035922049487, -688.3869271151609],
+      "roadNode": 1804,
+      "heading": 1.2028153906499124
+    },
+    {
+      "id": "M14:ingang",
+      "zone": "campus",
+      "position": [2985.6184664625, -701.0577220096384],
+      "roadNode": 1804,
+      "heading": 1.2028153906499124
+    },
+    {
+      "id": "M15:racewagen",
+      "zone": "campus",
+      "position": [2698.25, -406.25],
+      "roadNode": 12089,
+      "heading": 2.7277952503297445
+    },
+    {
+      "id": "M15:slalom-1",
+      "zone": "campus",
+      "position": [2883.25, -552],
+      "roadNode": 10381,
+      "heading": -2.761086276477428
+    },
+    {
+      "id": "M15:slalom-2",
+      "zone": "campus",
+      "position": [2820.1820245276663, -479.58417414336895],
+      "roadNode": 10520,
+      "heading": 2.718203491111889
+    },
+    {
+      "id": "M15:slalom-3",
+      "zone": "campus",
+      "position": [2698.25, -406.25],
+      "roadNode": 12089,
+      "heading": 2.7277952503297445
+    },
+    {
+      "id": "M15:poort-1",
+      "zone": "campus",
+      "position": [2883.25, -552],
+      "roadNode": 10381,
+      "heading": -2.761086276477428
+    },
+    {
+      "id": "M15:poort-2",
+      "zone": "campus",
+      "position": [2820.1820245276663, -479.58417414336895],
+      "roadNode": 10520,
+      "heading": 2.718203491111889
+    },
+    {
+      "id": "M15:poort-3",
+      "zone": "campus",
+      "position": [2698.25, -406.25],
+      "roadNode": 12089,
+      "heading": 2.7277952503297445
+    },
+    {
+      "id": "M15:poort-4",
+      "zone": "campus",
+      "position": [2487.5798258345426, -430.8755442670537],
+      "roadNode": 1795,
+      "heading": -1.880499271337353
+    },
+    {
+      "id": "M15:poort-5",
+      "zone": "campus",
+      "position": [2432.4563180331384, -586.0456257708188],
+      "roadNode": 11700,
+      "heading": 0.036253538791431096
+    },
+    {
+      "id": "M15:poort-6",
+      "zone": "campus",
+      "position": [2491.8921048525513, -667.0933843033234],
+      "roadNode": 11196,
+      "heading": -2.0232712163569637
+    },
+    {
+      "id": "M15:poort-7",
+      "zone": "campus",
+      "position": [2654.75, -694.25],
+      "roadNode": 10407,
+      "heading": -1.9756881130799802
+    },
+    {
+      "id": "M15:poort-8",
+      "zone": "campus",
+      "position": [2485.8851014231964, -750.874550139048],
+      "roadNode": 13699,
+      "heading": 2.722450050623122
+    },
+    {
+      "id": "M15:poort-9",
+      "zone": "campus",
+      "position": [2635.7498814949863, -798.9304102096627],
+      "roadNode": 12063,
+      "heading": 2.718463397067334
+    },
+    {
+      "id": "M15:poort-10",
+      "zone": "campus",
+      "position": [2798.8295806180786, -734.2676768080598],
+      "roadNode": 9499,
+      "heading": -0.4193727643313001
+    },
+    {
+      "id": "M15:finish",
+      "zone": "campus",
+      "position": [2432.4563180331384, -586.0456257708188],
+      "roadNode": 11700,
+      "heading": 0.036253538791431096
+    },
+    {
+      "id": "M15:recorder",
+      "zone": "campus",
+      "position": [2463.0886504329783, -734.8674313790469],
+      "roadNode": 9116,
+      "heading": -2.0402242182393646
+    },
+    {
+      "id": "M15:ada",
+      "zone": "campus",
+      "position": [2635.6058890558456, -658.6763510789317],
+      "roadNode": 12103,
+      "heading": 2.7265622736607256
+    },
+    {
+      "id": "M16:vierde-opname",
+      "zone": "campus",
+      "position": [2491.3895224233397, -432.0946471754689],
+      "roadNode": 1795,
+      "heading": -1.880499271337353
+    },
+    {
+      "id": "M16:scanner",
+      "zone": "campus",
+      "position": [2887.177052532774, -513.3810227822318],
+      "roadNode": 10517,
+      "heading": 2.729182211992406
+    },
+    {
+      "id": "M16:signaal-1",
+      "zone": "campus",
+      "position": [2797.2008300143443, -737.9210548983805],
+      "roadNode": 9499,
+      "heading": -0.4193727643313001
+    },
+    {
+      "id": "M16:signaal-2",
+      "zone": "campus",
+      "position": [2673.1269751420523, -410.4347779808497],
+      "roadNode": 10522,
+      "heading": 2.7328635875972784
+    },
+    {
+      "id": "M16:signaal-3",
+      "zone": "campus",
+      "position": [2495.4895762691044, -668.8421551308145],
+      "roadNode": 11196,
+      "heading": -2.0232712163569637
+    },
+    {
+      "id": "M16:opname",
+      "zone": "campus",
+      "position": [2684.2263153503786, -688.6703518724756],
+      "roadNode": 9263,
+      "heading": 2.726100557648903
+    },
+    {
+      "id": "M16:bas",
+      "zone": "campus",
+      "position": [2884.973773844249, -512.4170883560022],
+      "roadNode": 10517,
+      "heading": 2.729182211992406
+    },
+    {
+      "id": "M17:bas-passagier",
+      "zone": "campus",
+      "position": [2432.6013004245797, -590.0429974205622],
+      "roadNode": 11700,
+      "heading": 0.036253538791431096
+    },
+    {
+      "id": "M17:bus",
+      "zone": "campus",
+      "position": [2485.8851014231964, -750.874550139048],
+      "roadNode": 13699,
+      "heading": 2.722450050623122
+    },
+    {
+      "id": "M17:upload-1",
+      "zone": "campus",
+      "position": [2635.7498814949863, -798.9304102096627],
+      "roadNode": 12063,
+      "heading": 2.718463397067334
+    },
+    {
+      "id": "M17:upload-2",
+      "zone": "campus",
+      "position": [2798.8295806180786, -734.2676768080598],
+      "roadNode": 9499,
+      "heading": -0.4193727643313001
+    },
+    {
+      "id": "M17:upload-3",
+      "zone": "campus",
+      "position": [2883.25, -552],
+      "roadNode": 10381,
+      "heading": -2.761086276477428
+    },
+    {
+      "id": "M17:laatste-upload",
+      "zone": "campus",
+      "position": [2797.2008300143443, -737.9210548983805],
+      "roadNode": 9499,
+      "heading": -0.4193727643313001
+    },
+    {
+      "id": "M17:zendtafel",
+      "zone": "campus",
+      "position": [2673.1269751420523, -410.4347779808497],
+      "roadNode": 10522,
+      "heading": 2.7328635875972784
+    },
+    {
+      "id": "M18:fragment-1",
+      "zone": "campus",
+      "position": [2885.918036139331, -512.8302031101006],
+      "roadNode": 10517,
+      "heading": 2.729182211992406
+    },
+    {
+      "id": "M18:fragment-2",
+      "zone": "campus",
+      "position": [2887.177052532774, -513.3810227822318],
+      "roadNode": 10517,
+      "heading": 2.729182211992406
+    },
+    {
+      "id": "M18:fragment-3",
+      "zone": "campus",
+      "position": [2888.436068926216, -513.9318424543628],
+      "roadNode": 10517,
+      "heading": 2.729182211992406
+    },
+    {
+      "id": "M18:terminal",
+      "zone": "campus",
+      "position": [2432.6013004245797, -590.0429974205622],
+      "roadNode": 11700,
+      "heading": 0.036253538791431096
+    },
+    {
+      "id": "M18:bestand",
+      "zone": "campus",
+      "position": [2463.0886504329783, -734.8674313790469],
+      "roadNode": 9116,
+      "heading": -2.0402242182393646
+    },
+    {
+      "id": "M18:bas",
+      "zone": "campus",
+      "position": [2884.973773844249, -512.4170883560022],
+      "roadNode": 10517,
+      "heading": 2.729182211992406
+    },
+    {
+      "id": "M18:aanvaller-2-1",
+      "zone": "campus",
+      "position": [2491.3895224233397, -432.0946471754689],
+      "roadNode": 1795,
+      "heading": -1.880499271337353
+    },
+    {
+      "id": "M18:aanvaller-2-2",
+      "zone": "campus",
+      "position": [2668.715815712435, -681.8274843851476],
+      "roadNode": 12105,
+      "heading": 2.726100557648903
+    },
+    {
+      "id": "M19:pasta",
+      "zone": "bennekom",
+      "position": [3602.0840401733844, -1977.2106615479881],
+      "roadNode": 10778,
+      "heading": -1.6256861893890506
+    },
+    {
+      "id": "M19:saus",
+      "zone": "bennekom",
+      "position": [3602.088554981957, -1977.1284920319756],
+      "roadNode": 10778,
+      "heading": -1.6256861893890506
+    },
+    {
+      "id": "M19:kruiden",
+      "zone": "bennekom",
+      "position": [3602.0930697905287, -1977.046322515963],
+      "roadNode": 10778,
+      "heading": -1.6256861893890506
+    },
+    {
+      "id": "M19:bus",
+      "zone": "bennekom",
+      "position": [3369.8682895641514, -2098.3431257707657],
+      "roadNode": 2998,
+      "heading": -0.12814016691166197
+    },
+    {
+      "id": "M19:gemeente-1",
+      "zone": "bennekom",
+      "position": [3503.2773975827085, -2236.7173649902697],
+      "roadNode": 11359,
+      "heading": 1.687905071361761
+    },
+    {
+      "id": "M19:gemeente-2",
+      "zone": "bennekom",
+      "position": [3695.3323672887877, -1898.6784574345804],
+      "roadNode": 2686,
+      "heading": -0.19675658230106124
+    },
+    {
+      "id": "M19:vergiet",
+      "zone": "bennekom",
+      "position": [3300.824967538028, -2006.0613010737595],
+      "roadNode": 2451,
+      "heading": -0.1692512185006272
+    },
+    {
+      "id": "M19:fusilli",
+      "zone": "bennekom",
+      "position": [3601.968461073938, -1979.3142011579087],
+      "roadNode": 10778,
+      "heading": -1.6256861893890506
+    },
+    {
+      "id": "M20:bus",
+      "zone": "bennekom",
+      "position": [3354.898008391276, -2162.875654743842],
+      "roadNode": 2985,
+      "heading": 0.23088268051004424
+    },
+    {
+      "id": "M20:preek-1",
+      "zone": "bennekom",
+      "position": [3721.267299892413, -2016.2496836259152],
+      "roadNode": 2825,
+      "heading": -1.8248040899214903
+    },
+    {
+      "id": "M20:preek-2",
+      "zone": "bennekom",
+      "position": [3329.561703120053, -1815.7128146291077],
+      "roadNode": 13098,
+      "heading": -1.878849107818673
+    },
+    {
+      "id": "M20:preek-3",
+      "zone": "bennekom",
+      "position": [3504.18089201004, -2133.9716517873717],
+      "roadNode": 3162,
+      "heading": 1.904265094793933
+    },
+    {
+      "id": "M20:fusilli",
+      "zone": "bennekom",
+      "position": [3601.968461073938, -1979.3142011579087],
+      "roadNode": 10778,
+      "heading": -1.6256861893890506
+    },
+    {
+      "id": "M21:vitrine",
+      "zone": "bennekom",
+      "position": [3503.2773975827085, -2236.7173649902697],
+      "roadNode": 11359,
+      "heading": 1.687905071361761
+    },
+    {
+      "id": "M21:schuilplek",
+      "zone": "bennekom",
+      "position": [3695.3323672887877, -1898.6784574345804],
+      "roadNode": 2686,
+      "heading": -0.19675658230106124
+    },
+    {
+      "id": "M21:gouden-vergiet",
+      "zone": "bennekom",
+      "position": [3300.824967538028, -2006.0613010737595],
+      "roadNode": 2451,
+      "heading": -0.1692512185006272
+    },
+    {
+      "id": "M21:fusilli",
+      "zone": "bennekom",
+      "position": [3601.968461073938, -1979.3142011579087],
+      "roadNode": 10778,
+      "heading": -1.6256861893890506
+    },
+    {
+      "id": "M21:bewaker",
+      "zone": "bennekom",
+      "position": [3721.267299892413, -2016.2496836259152],
+      "roadNode": 2825,
+      "heading": -1.8248040899214903
+    },
+    {
+      "id": "M21:bewaker-route-1",
+      "zone": "bennekom",
+      "position": [3329.561703120053, -1815.7128146291077],
+      "roadNode": 13098,
+      "heading": -1.878849107818673
+    },
+    {
+      "id": "M21:bewaker-route-2",
+      "zone": "bennekom",
+      "position": [3504.18089201004, -2133.9716517873717],
+      "roadNode": 3162,
+      "heading": 1.904265094793933
+    },
+    {
+      "id": "M22:zangeres",
+      "zone": "bennekom",
+      "position": [3658.741892213694, -2146.368278457512],
+      "roadNode": 2763,
+      "heading": -2.536459174172176
+    },
+    {
+      "id": "M22:bus",
+      "zone": "bennekom",
+      "position": [3557.7372167344565, -1797.0464846019756],
+      "roadNode": 11206,
+      "heading": -1.8391625377008036
+    },
+    {
+      "id": "M22:gitaar",
+      "zone": "bennekom",
+      "position": [3370.379448683603, -2094.375920664573],
+      "roadNode": 2998,
+      "heading": -0.12814016691166197
+    },
+    {
+      "id": "M22:synth",
+      "zone": "bennekom",
+      "position": [3503.2773975827085, -2236.7173649902697],
+      "roadNode": 11359,
+      "heading": 1.687905071361761
+    },
+    {
+      "id": "M22:podium",
+      "zone": "bennekom",
+      "position": [3695.3323672887877, -1898.6784574345804],
+      "roadNode": 2686,
+      "heading": -0.19675658230106124
+    },
+    {
+      "id": "M23:panorama",
+      "zone": "bennekom",
+      "position": [3721.267299892413, -2016.2496836259152],
+      "roadNode": 2825,
+      "heading": -1.8248040899214903
+    },
+    {
+      "id": "M23:kees",
+      "zone": "bennekom",
+      "position": [3329.561703120053, -1815.7128146291077],
+      "roadNode": 13098,
+      "heading": -1.878849107818673
+    },
+    {
+      "id": "M23:fluitje",
+      "zone": "bennekom",
+      "position": [3504.18089201004, -2133.9716517873717],
+      "roadNode": 3162,
+      "heading": 1.904265094793933
+    },
+    {
+      "id": "M23:beschuit",
+      "zone": "bennekom",
+      "position": [3658.741892213694, -2146.368278457512],
+      "roadNode": 2763,
+      "heading": -2.536459174172176
+    },
+    {
+      "id": "M23:aluminiumhoed",
+      "zone": "bennekom",
+      "position": [3543.9662162162163, -1844.7027027027027],
+      "roadNode": 3160,
+      "heading": -1.9010936816241504
+    },
+    {
+      "id": "M23:auto",
+      "zone": "bennekom",
+      "position": [3369.8682895641514, -2098.3431257707657],
+      "roadNode": 2998,
+      "heading": -0.12814016691166197
+    },
+    {
+      "id": "M23:poort-1",
+      "zone": "bennekom",
+      "position": [3717.3956474664355, -2015.2445430922478],
+      "roadNode": 2825,
+      "heading": -1.8248040899214903
+    },
+    {
+      "id": "M23:poort-2",
+      "zone": "bennekom",
+      "position": [3694.6481539474103, -1902.110927697158],
+      "roadNode": 2686,
+      "heading": -0.19675658230106124
+    },
+    {
+      "id": "M23:poort-3",
+      "zone": "bennekom",
+      "position": [3557.7372167344565, -1797.0464846019756],
+      "roadNode": 11206,
+      "heading": -1.8391625377008036
+    },
+    {
+      "id": "M23:uitzicht",
+      "zone": "bennekom",
+      "position": [3355.813355875125, -2166.7695138814856],
+      "roadNode": 2985,
+      "heading": 0.23088268051004424
+    },
+    {
+      "id": "M24:generator",
+      "zone": "bennekom",
+      "position": [3346.8678494562787, -2091.3465415333603],
+      "roadNode": 2998,
+      "heading": -0.12814016691166197
+    },
+    {
+      "id": "M24:truck",
+      "zone": "bennekom",
+      "position": [3301.4987447943017, -2002.1184563888996],
+      "roadNode": 2451,
+      "heading": -0.1692512185006272
+    },
+    {
+      "id": "M24:fusilli-passagier",
+      "zone": "bennekom",
+      "position": [3355.813355875125, -2166.7695138814856],
+      "roadNode": 2985,
+      "heading": 0.23088268051004424
+    },
+    {
+      "id": "M24:podium",
+      "zone": "bennekom",
+      "position": [3721.267299892413, -2016.2496836259152],
+      "roadNode": 2825,
+      "heading": -1.8248040899214903
+    },
+    {
+      "id": "M24:zangeres",
+      "zone": "bennekom",
+      "position": [3329.561703120053, -1815.7128146291077],
+      "roadNode": 13098,
+      "heading": -1.878849107818673
+    },
+    {
+      "id": "M24:installatie",
+      "zone": "bennekom",
+      "position": [3504.18089201004, -2133.9716517873717],
+      "roadNode": 3162,
+      "heading": 1.904265094793933
+    },
+    {
+      "id": "M24:zender",
+      "zone": "bennekom",
+      "position": [3658.741892213694, -2146.368278457512],
+      "roadNode": 2763,
+      "heading": -2.536459174172176
+    },
+    {
+      "id": "M24:aansluiting",
+      "zone": "bennekom",
+      "position": [3543.9662162162163, -1844.7027027027027],
+      "roadNode": 3160,
+      "heading": -1.9010936816241504
+    },
+    {
+      "id": "M24:mengtafel",
+      "zone": "bennekom",
+      "position": [3370.379448683603, -2094.375920664573],
+      "roadNode": 2998,
+      "heading": -0.12814016691166197
+    },
+    {
+      "id": "M24:truck-route-1",
+      "zone": "bennekom",
+      "position": [3496.273599030372, -2233.9744046770284],
+      "roadNode": 2787,
+      "heading": -0.20442120537714656
+    },
+    {
+      "id": "M24:truck-route-2",
+      "zone": "bennekom",
+      "position": [3694.6481539474103, -1902.110927697158],
+      "roadNode": 2686,
+      "heading": -0.19675658230106124
+    },
+    {
+      "id": "M24:aanvaller-5-1",
+      "zone": "bennekom",
+      "position": [3300.824967538028, -2006.0613010737595],
+      "roadNode": 2451,
+      "heading": -0.1692512185006272
+    },
+    {
+      "id": "M24:aanvaller-5-2",
+      "zone": "bennekom",
+      "position": [3355.813355875125, -2166.7695138814856],
+      "roadNode": 2985,
+      "heading": 0.23088268051004424
+    },
+    {
+      "id": "noor",
+      "zone": "rhenen",
+      "position": [-4028.567270453376, 2157.8408172267395],
+      "roadNode": 12649,
+      "heading": -2.6123458727579485
+    },
+    {
+      "id": "mo",
+      "zone": "rhenen",
+      "position": [-3724.171205052987, 2648.196716529181],
+      "roadNode": 7187,
+      "heading": -1.3324254970081457
+    },
+    {
+      "id": "vera",
+      "zone": "wageningen",
+      "position": [2672.6158051324337, 1713.419567626255],
+      "roadNode": 4416,
+      "heading": -1.5164281903216992
+    },
+    {
+      "id": "dex",
+      "zone": "wageningen",
+      "position": [2443.648293759748, 1591.5626277691126],
+      "roadNode": 10562,
+      "heading": -2.297438667476622
+    },
+    {
+      "id": "ada",
+      "zone": "campus",
+      "position": [2635.6058890558456, -658.6763510789317],
+      "roadNode": 12103,
+      "heading": 2.7265622736607256
+    },
+    {
+      "id": "bas",
+      "zone": "campus",
+      "position": [2884.973773844249, -512.4170883560022],
+      "roadNode": 10517,
+      "heading": 2.729182211992406
+    },
+    {
+      "id": "fusilli",
+      "zone": "bennekom",
+      "position": [3601.968461073938, -1979.3142011579087],
+      "roadNode": 10778,
+      "heading": -1.6256861893890506
+    },
+    {
+      "id": "zonnedauw",
+      "zone": "bennekom",
+      "position": [3345.153994045549, -2091.1257178554392],
+      "roadNode": 2998,
+      "heading": -0.12814016691166197
+    },
+    {
+      "id": "M01:parcel",
+      "zone": "rhenen",
+      "position": [-4026.331991938787, 2159.1482442824426],
+      "roadNode": 12649,
+      "heading": -2.6123458727579485
+    },
+    {
+      "id": "M01:note",
+      "zone": "rhenen",
+      "position": [-4024.0967134241982, 2160.4556713381453],
+      "roadNode": 12649,
+      "heading": -2.6123458727579485
+    },
+    {
+      "id": "M01:old-door",
+      "zone": "rhenen",
+      "position": [-4116.704239899011, 2604.0899687502488],
+      "roadNode": 7241,
+      "heading": 0.08063287594517382
+    },
+    {
+      "id": "M01:neighbour",
+      "zone": "rhenen",
+      "position": [-4116.383104572097, 2604.115919079696],
+      "roadNode": 7241,
+      "heading": 0.08063287594517382
+    },
+    {
+      "id": "M01:recipient",
+      "zone": "rhenen",
+      "position": [-4248.578201177352, 2535.468800784901],
+      "roadNode": 7372,
+      "heading": -2.1587989303424644
+    }
+  ]
+}

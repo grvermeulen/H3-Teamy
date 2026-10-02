@@ -1,4 +1,4 @@
-const { withSentryConfig } = require("@sentry/nextjs");
+const { withSentryConfig } = require("@sentry/nextjs/config");
 const pkg = require("./package.json");
 
 /** @type {import('next').NextConfig} */
@@ -9,6 +9,32 @@ const nextConfig = {
   serverExternalPackages: ["ical"],
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
+  },
+  /**
+   * Map tiles are content-versioned by path (`/arena/map/<version>/...`) and radio tracks carry a
+   * content hash in their name, so both can be cached forever.
+   */
+  async headers() {
+    return [
+      {
+        source: "/arena/map/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/arena/radio/tracks/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+    ];
   },
 };
 

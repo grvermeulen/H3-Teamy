@@ -3,6 +3,11 @@ import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import { prisma } from "../../../../lib/db";
 import { getUserRolesBatch, setUserRoles, kvDelete } from "../../../../lib/kv";
+import {
+  getBootstrapAdminUserIds,
+  getBootstrapTrainerUserIds,
+  mergeUserRoles,
+} from "../../../../lib/roleEnv";
 import { isAdminUser } from "../../../../lib/trainer";
 import { displayName, hasUserIdentity } from "../../../../lib/userUtils";
 import { withDbRequestMetrics } from "../../../../lib/dbMetrics";
@@ -24,20 +29,13 @@ const UserRolesUpdateSchema = z.object({
   ),
 });
 
-function norm(s: string): string {
-  return (s || "").toLowerCase().trim();
-}
-
 export async function GET(req: NextRequest): Promise<NextResponse> {
   return withDbRequestMetrics("api/admin/users.GET", async () => {
     const { isAdmin } = await isAdminUser(req);
     if (!isAdmin)
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
-    const adminFull = norm(process.env.ADMIN_FULL_NAME || "");
-    const trainerNames = (process.env.TRAINER_FULL_NAMES || "")
-      .split(",")
-      .map(norm)
-      .filter(Boolean);
+    const envAdminIds = getBootstrapAdminUserIds();
+    const envTrainerIds = getBootstrapTrainerUserIds();
     let users: {
       id: string;
       firstName: string;
@@ -79,15 +77,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       const name = displayName(u);
       if (!name) continue;
       const kv = rolesByUserId[u.id] || { player: true };
-      const full =
-        `${(u.firstName || "").trim()} ${(u.lastName || "").trim()}`.trim();
-      const envAdmin = adminFull && norm(full) === adminFull;
-      const envTrainer = trainerNames.includes(norm(full));
-      const merged = {
-        player: kv.player !== false, // default true
-        trainer: Boolean(kv.trainer || envTrainer || envAdmin),
-        admin: Boolean(kv.admin || envAdmin),
-      };
+      const merged = mergeUserRoles(u.id, kv, envAdminIds, envTrainerIds);
       list.push({ id: u.id, name, roles: merged });
     }
     list.sort((a, b) => a.name.localeCompare(b.name));

@@ -2,10 +2,18 @@
 
 ## API Routes
 
+- /api/admin/features
 - /api/admin/feedback
 - /api/admin/feedback/[id]
 - /api/admin/status
 - /api/admin/users
+- /api/arena/display-matches
+- /api/arena/display-token
+- /api/arena/leaderboard
+- /api/arena/matches
+- /api/arena/realtime-token
+- /api/arena/rooms
+- /api/arena/session
 - /api/auth/[...nextauth]
 - /api/auth/link
 - /api/auth/passkey/login-options
@@ -49,9 +57,12 @@
 
 ## Pages
 
-- 
+- /
 - /admin
 - /admin/feedback
+- /arena/controller
+- /arena/scherm
+- /arena/spelen
 - /attendance
 - /docs
 - /login

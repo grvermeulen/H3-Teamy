@@ -1,0 +1,272 @@
+import type { ButtonName, InputState } from "./inputState";
+import type { WeaponSlot } from "./weaponSelect";
+
+/** The subset of `window` the keyboard binding needs (injectable in tests). */
+export type KeyboardTarget = Pick<
+  Window,
+  "addEventListener" | "removeEventListener"
+>;
+
+/** Movement keys (WASD and arrows) and their unit vectors. */
+const KEY_VECTORS: Partial<Record<string, [number, number]>> = {
+  KeyW: [0, -1],
+  ArrowUp: [0, -1],
+  KeyS: [0, 1],
+  ArrowDown: [0, 1],
+  KeyA: [-1, 0],
+  ArrowLeft: [-1, 0],
+  KeyD: [1, 0],
+  ArrowRight: [1, 0],
+};
+
+/** Held buttons by key code (spec §7): Space fires, E/F/Enter enter or leave a car, Q cycles the weapon. */
+const KEY_BUTTONS: Partial<Record<string, ButtonName>> = {
+  Space: "fire",
+  KeyE: "enter",
+  KeyF: "enter",
+  Enter: "enter",
+  KeyQ: "weaponNext",
+};
+
+/**
+ * The number keys that pick a weapon directly (spec §7; 4 and 5 for Plan 9's rifle and bat, 6 for
+ * the rocket launcher).
+ */
+const SLOT_KEYS: Partial<Record<string, WeaponSlot>> = {
+  Digit1: 1,
+  Digit2: 2,
+  Digit3: 3,
+  Digit4: 4,
+  Digit5: 5,
+  Digit6: 6,
+};
+
+/** The key that switches the car radio to the next station (Plan 7). */
+const RADIO_KEY = "KeyR";
+
+/** The key that toggles between third and first person in the 3D view (spec §6.3). */
+const TOGGLE_CAMERA_KEY = "KeyV";
+
+/** The key that opens the map, and closes it again (aim spec §5). */
+const MAP_KEY = "KeyM";
+
+/** The keys beyond movement and the held buttons, and who owns the keyboard. */
+export type KeyboardHooks = {
+  /** Tab held shows the scorebord; released, it hides it. */
+  onScoreboard?: (held: boolean) => void;
+  /** The number keys 1–6 pick a weapon directly. */
+  onWeaponSlot?: (slot: WeaponSlot) => void;
+  /** R switches the radio to the next station. */
+  onRadio?: () => void;
+  /** V toggles third/first person, while the 3D view is active. */
+  onToggleCamera?: () => void;
+  /**
+   * M opens the map, or closes it again: it reaches this hook even while the open map suspends
+   * the other game keys.
+   */
+  onMap?: () => void;
+  /** True while a menu owns the keyboard: game keys are ignored until it is closed. */
+  isSuspended?: () => boolean;
+};
+
+/** The subset of the canvas the wheel binding needs (injectable in tests). */
+export type WheelTarget = Pick<
+  HTMLElement,
+  "addEventListener" | "removeEventListener"
+>;
+
+/**
+ * Wheel travel that counts as one notch, in each unit `deltaMode` can report: pixels (a trackpad
+ * reports many small deltas per flick), lines (Firefox reports a mouse wheel in lines, three per
+ * notch) and pages. The units never convert into each other, so a change of mode starts over.
+ */
+const DOM_DELTA_PIXEL = 0;
+const DOM_DELTA_LINE = 1;
+const DOM_DELTA_PAGE = 2;
+const WHEEL_STEPS: Record<number, number> = {
+  [DOM_DELTA_PIXEL]: 40,
+  [DOM_DELTA_LINE]: 3,
+  [DOM_DELTA_PAGE]: 1,
+};
+
+/**
+ * Tab, held, is the scorebord (spec §7). Bound in the capture phase on the window and stopped
+ * there, so the dialog's focus trap — which listens on the document — never moves focus off the
+ * game while Tab means "scorebord".
+ */
+function bindPanelKeys(
+  target: KeyboardTarget,
+  hooks: KeyboardHooks,
+): () => void {
+  const onDown = (event: KeyboardEvent): void => {
+    if (event.code !== "Tab" || isTypingTarget(event.target)) return;
+    if (hooks.isSuspended?.()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (!event.repeat) hooks.onScoreboard?.(true);
+  };
+  const onUp = (event: KeyboardEvent): void => {
+    if (event.code === "Tab") hooks.onScoreboard?.(false);
+  };
+  const onBlur = (): void => hooks.onScoreboard?.(false);
+  target.addEventListener("keydown", onDown, true);
+  target.addEventListener("keyup", onUp, true);
+  target.addEventListener("blur", onBlur);
+  return () => {
+    target.removeEventListener("keydown", onDown, true);
+    target.removeEventListener("keyup", onUp, true);
+    target.removeEventListener("blur", onBlur);
+  };
+}
+
+/**
+ * Binds the mouse wheel over the canvas to cycling the weapon (spec §7); returns the detach
+ * function. Travel is summed so a trackpad flick is one notch, not twenty.
+ */
+export function attachWheel(
+  target: WheelTarget,
+  onCycle: () => void,
+): () => void {
+  let travelled = 0;
+  let mode = DOM_DELTA_PIXEL;
+  const onWheel = (event: WheelEvent): void => {
+    event.preventDefault();
+    if (event.deltaMode !== mode) {
+      mode = event.deltaMode;
+      travelled = 0;
+    }
+    travelled += Math.abs(event.deltaY);
+    if (travelled < (WHEEL_STEPS[mode] ?? WHEEL_STEPS[DOM_DELTA_PIXEL]!))
+      return;
+    travelled = 0;
+    onCycle();
+  };
+  target.addEventListener("wheel", onWheel, { passive: false });
+  return () => target.removeEventListener("wheel", onWheel);
+}
+
+/** True for editable targets whose keystrokes must not steer the game. */
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target.isContentEditable ||
+    ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
+  );
+}
+
+/** Sum of the held movement keys, one unit per axis at most. */
+function movementVector(pressed: Set<string>): [number, number] {
+  let x = 0;
+  let y = 0;
+  for (const code of pressed) {
+    const vector = KEY_VECTORS[code];
+    if (!vector) continue;
+    x += vector[0];
+    y += vector[1];
+  }
+  return [Math.sign(x), Math.sign(y)];
+}
+
+/** Every button a key maps to; releases are published for each so no button sticks. */
+const BOUND_BUTTONS: readonly ButtonName[] = ["fire", "enter", "weaponNext"];
+
+/** Publishes each button as held while any of its key codes (E/F/Enter share "enter") is still down. */
+function publishButtons(pressedButtons: Set<string>, state: InputState): void {
+  const held = new Set<ButtonName>();
+  for (const code of pressedButtons) {
+    const button = KEY_BUTTONS[code];
+    if (button) held.add(button);
+  }
+  for (const button of BOUND_BUTTONS) {
+    state.setButton("keyboard", button, held.has(button));
+  }
+}
+
+/** The keys that do one thing per press, by key code, given the hooks. */
+function tapActions(
+  hooks: KeyboardHooks,
+): Partial<Record<string, (() => void) | undefined>> {
+  return {
+    [RADIO_KEY]: hooks.onRadio,
+    [TOGGLE_CAMERA_KEY]: hooks.onToggleCamera,
+  };
+}
+
+/** Runs a one-press key's action: never on a held key's repeats, and after the user gesture. */
+function tap(
+  event: KeyboardEvent,
+  action: (() => void) | undefined,
+  onUserGesture: (() => void) | undefined,
+): void {
+  event.preventDefault();
+  if (event.repeat) return;
+  onUserGesture?.();
+  action?.();
+}
+
+/**
+ * Binds WASD/arrows, the Space/E/F/Enter/Q buttons, 1–6, R, V, M and Tab to the input state and
+ * the hooks; returns the detach function.
+ */
+export function attachKeyboard(
+  target: KeyboardTarget,
+  state: InputState,
+  onUserGesture?: () => void,
+  hooks: KeyboardHooks = {},
+): () => void {
+  const pressed = new Set<string>();
+  const pressedButtons = new Set<string>();
+  const taps = tapActions(hooks);
+  const onKeyDown = (event: KeyboardEvent): void => {
+    if (isTypingTarget(event.target)) return;
+    if (event.code === MAP_KEY) return tap(event, hooks.onMap, onUserGesture);
+    if (hooks.isSuspended?.()) return;
+    const slot = SLOT_KEYS[event.code];
+    if (slot)
+      return tap(event, () => hooks.onWeaponSlot?.(slot), onUserGesture);
+    if (event.code in taps) return tap(event, taps[event.code], onUserGesture);
+    if (KEY_VECTORS[event.code]) {
+      if (event.code.startsWith("Arrow")) event.preventDefault();
+      onUserGesture?.();
+      pressed.add(event.code);
+      state.setKeyboard(movementVector(pressed));
+      return;
+    }
+    const button = KEY_BUTTONS[event.code];
+    if (
+      !button ||
+      (event.target instanceof HTMLButtonElement &&
+        (event.code === "Enter" || event.code === "Space"))
+    )
+      return;
+    event.preventDefault();
+    onUserGesture?.();
+    pressedButtons.add(event.code);
+    publishButtons(pressedButtons, state);
+  };
+  const onKeyUp = (event: KeyboardEvent): void => {
+    if (pressed.delete(event.code)) {
+      state.setKeyboard(movementVector(pressed));
+      return;
+    }
+    if (pressedButtons.delete(event.code)) {
+      publishButtons(pressedButtons, state);
+    }
+  };
+  const onBlur = (): void => {
+    pressed.clear();
+    pressedButtons.clear();
+    state.clearKeyboard();
+  };
+  const detachPanels = bindPanelKeys(target, hooks);
+  target.addEventListener("keydown", onKeyDown);
+  target.addEventListener("keyup", onKeyUp);
+  target.addEventListener("blur", onBlur);
+  return () => {
+    detachPanels();
+    state.clearKeyboard();
+    target.removeEventListener("keydown", onKeyDown);
+    target.removeEventListener("keyup", onKeyUp);
+    target.removeEventListener("blur", onBlur);
+  };
+}

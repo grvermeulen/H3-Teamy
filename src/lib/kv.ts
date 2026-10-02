@@ -5,7 +5,17 @@ import "./envBootstrap";
 import * as Sentry from "@sentry/nextjs";
 import type { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { withPgConnectRetry } from "./prismaConnectRetry";
+import {
+  withPgConnectRetry,
+  shouldFallbackFromPrismaToKv,
+} from "./prismaConnectRetry";
+import { isPrismaSchemaDriftError } from "./prismaSchemaDrift";
+import {
+  PASSWORD_RESET_TTL_SEC,
+  normalizePasswordResetToken,
+  passwordResetPendingKey,
+  passwordResetRedisKey,
+} from "./passwordResetToken";
 
 type RsvpStatus = "yes" | "no" | "maybe" | null;
 type UserProfile = {
@@ -37,40 +47,124 @@ const memoryTtl = new Map<string, number>(); // unix ms expiration for local tok
 // Expect standard env: KV_REST_API_URL, KV_REST_API_TOKEN, KV_REST_API_READ_ONLY_TOKEN, KV_URL
 // Also supports Redis via REDIS_URL using ioredis
 let redisClient: any = null;
+let redisDisabled = false;
+/** Separate Redis client for auth tokens — not disabled by RSVP/cache errors elsewhere. */
+let authRedisClient: any = null;
+
+function markRedisUnavailable(): void {
+  redisDisabled = true;
+  if (redisClient) {
+    try {
+      redisClient.disconnect?.();
+    } catch {}
+    redisClient = null;
+  }
+}
+
+function captureKvCacheError(error: unknown, operation: string): void {
+  Sentry.captureException(
+    error instanceof Error ? error : new Error(String(error)),
+    {
+      tags: { component: "kv-cache", operation },
+    },
+  );
+}
+
+function shouldReportKvDbErrorToSentry(error: unknown): boolean {
+  return (
+    !shouldFallbackFromPrismaToKv(error) && !isPrismaSchemaDriftError(error)
+  );
+}
+
+function captureKvDbError(error: unknown, operation: string): void {
+  if (!shouldReportKvDbErrorToSentry(error)) {
+    Sentry.addBreadcrumb({
+      category: "postgres",
+      message: `KV Postgres ${operation} mislukt; val terug zonder Sentry-issue`,
+      level: "warning",
+      data: { operation, component: "kv-cache" },
+    });
+    return;
+  }
+  captureKvCacheError(error, operation);
+}
+
 async function getRedis() {
+  if (redisDisabled) return null;
   if (redisClient) return redisClient;
   const url = process.env.REDIS_URL;
   if (!url) return null;
-  const { default: IORedis } = await import("ioredis");
-  redisClient = new IORedis(url, {
+  try {
+    const { default: IORedis } = await import("ioredis");
+    redisClient = new IORedis(url, redisClientOptions(url));
+    await redisClient.connect?.();
+    return redisClient;
+  } catch (error: unknown) {
+    captureKvCacheError(error, "redis_connect");
+    markRedisUnavailable();
+    return null;
+  }
+}
+
+function redisClientOptions(url: string) {
+  const options: Record<string, unknown> = {
     lazyConnect: true,
     maxRetriesPerRequest: 2,
-  });
+    enableReadyCheck: false,
+    connectTimeout: 10000,
+  };
+  if (url.startsWith("rediss://")) {
+    options.tls = {};
+  }
+  return options;
+}
+
+/** Redis for password-reset and other auth KV — isolated from {@link markRedisUnavailable}. */
+async function getAuthRedis() {
+  if (authRedisClient) return authRedisClient;
+  const url = process.env.REDIS_URL;
+  if (!url) return null;
   try {
-    await redisClient.connect?.();
-  } catch {}
-  return redisClient;
+    const { default: IORedis } = await import("ioredis");
+    authRedisClient = new IORedis(url, redisClientOptions(url));
+    await authRedisClient.connect?.();
+    return authRedisClient;
+  } catch (error: unknown) {
+    captureKvCacheError(error, "auth_redis_connect");
+    authRedisClient = null;
+    return null;
+  }
 }
 async function kvGet(key: string): Promise<RsvpStatus | null> {
   const redis = await getRedis();
   if (redis) {
-    const val = (await redis.get(key)) as RsvpStatus | null;
-    if (val !== "yes" && val !== "no" && val !== "maybe") return null;
-    return val;
+    try {
+      const val = (await redis.get(key)) as RsvpStatus | null;
+      if (val !== "yes" && val !== "no" && val !== "maybe") return null;
+      return val;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGet_redis");
+      markRedisUnavailable();
+    }
   }
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
-      },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const data = await res.json().catch(() => ({}) as any);
-    const val = data?.result ?? null;
-    if (val !== "yes" && val !== "no" && val !== "maybe") return null;
-    return val;
+    try {
+      const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+        },
+        cache: "no-store",
+      });
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => ({}) as any);
+      const val = data?.result ?? null;
+      if (val !== "yes" && val !== "no" && val !== "maybe") return null;
+      return val;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGet_rest");
+      return memoryStore.get(key) ?? null;
+    }
   }
   return memoryStore.get(key) ?? null;
 }
@@ -78,25 +172,34 @@ async function kvGet(key: string): Promise<RsvpStatus | null> {
 async function kvSet(key: string, value: RsvpStatus): Promise<void> {
   const redis = await getRedis();
   if (redis) {
-    if (value === null) {
-      await redis.del(key);
-    } else {
-      await redis.set(key, value);
+    try {
+      if (value === null) {
+        await redis.del(key);
+      } else {
+        await redis.set(key, value);
+      }
+      return;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSet_redis");
+      markRedisUnavailable();
     }
-    return;
   }
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    await fetch(
-      `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+    try {
+      await fetch(
+        `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+          },
+          body: value ?? "",
         },
-        body: value ?? "",
-      },
-    );
-    return;
+      );
+      return;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSet_rest");
+    }
   }
   if (value === null) memoryStore.delete(key);
   else memoryStore.set(key, value);
@@ -169,28 +272,37 @@ export async function setRsvp(
 export async function kvGetJson<T = any>(key: string): Promise<T | null> {
   const redis = await getRedis();
   if (redis) {
-    const raw = (await redis.get(key)) as string | null;
-    if (!raw) return null;
     try {
-      return JSON.parse(raw) as T;
-    } catch {
-      return null;
+      const raw = (await redis.get(key)) as string | null;
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        return null;
+      }
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGetJson_redis");
+      markRedisUnavailable();
     }
   }
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const data = await res.json().catch(() => ({}) as any);
-    const raw = data?.result ?? null;
-    if (!raw) return null;
     try {
-      return JSON.parse(raw) as T;
-    } catch {
-      return null;
+      const url = `${process.env.KV_REST_API_URL}/get/${encodeURIComponent(key)}`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}` },
+        cache: "no-store",
+      });
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => ({}) as any);
+      const raw = data?.result ?? null;
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        return null;
+      }
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGetJson_rest");
     }
   }
   const exp = memoryTtl.get(key);
@@ -208,49 +320,248 @@ export async function kvGetJson<T = any>(key: string): Promise<T | null> {
   }
 }
 
+/** Per-process counters for {@link kvIncrementWindow} when no store is configured. */
+const memoryCounters = new Map<string, { count: number; expiresAt: number }>();
+/** Above this many memory counters, expired ones are swept before adding another. */
+const MEMORY_COUNTER_SWEEP_AT = 1000;
+
+/** Adds one to a memory counter, starting it over once its window has passed. */
+function incrementInMemory(key: string, windowSec: number): number {
+  const now = Date.now();
+  if (memoryCounters.size >= MEMORY_COUNTER_SWEEP_AT)
+    for (const [stale, entry] of memoryCounters)
+      if (entry.expiresAt <= now) memoryCounters.delete(stale);
+  const current = memoryCounters.get(key);
+  if (!current || current.expiresAt <= now) {
+    memoryCounters.set(key, { count: 1, expiresAt: now + windowSec * 1000 });
+    return 1;
+  }
+  current.count += 1;
+  return current.count;
+}
+
+/**
+ * Adds one to a counter that lives for `windowSec` seconds from its first increment, and
+ * returns the new count — the primitive a fixed-window rate limit needs. Redis first (INCR, and
+ * EXPIRE on the first hit), else a per-process memory counter. The KV REST fallback the JSON
+ * helpers keep is not mirrored here: nothing deployed uses it any more.
+ *
+ * `null` means Redis was configured but failed: callers treat that as "unknown" and let the
+ * request through, because a limiter that cannot count must not become an outage.
+ */
+export async function kvIncrementWindow(
+  key: string,
+  windowSec: number,
+): Promise<number | null> {
+  const redis = await getRedis();
+  if (!redis) return incrementInMemory(key, windowSec);
+  try {
+    const count = Number(await redis.incr(key));
+    if (count === 1) await redis.expire(key, windowSec);
+    return count;
+  } catch (error: unknown) {
+    captureKvCacheError(error, "kvIncrementWindow_redis");
+    markRedisUnavailable();
+    return null;
+  }
+}
+
 export async function kvSetJson(key: string, value: any): Promise<void> {
   const redis = await getRedis();
   const payload = JSON.stringify(value);
   if (redis) {
-    await redis.set(key, payload);
-    return;
+    try {
+      await redis.set(key, payload);
+      return;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSetJson_redis");
+      markRedisUnavailable();
+    }
   }
   if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    await fetch(
-      `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+    try {
+      await fetch(
+        `${process.env.KV_REST_API_URL}/set/${encodeURIComponent(key)}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
+          },
+          body: payload,
         },
-        body: payload,
-      },
-    );
-    return;
+      );
+      return;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSetJson_rest");
+    }
   }
   memoryJson.set(key, payload);
 }
 
 export async function kvDelete(key: string): Promise<void> {
-  const redis = await getRedis();
+  const redis = (await getAuthRedis()) ?? (await getRedis());
   if (redis) {
-    await redis.del(key).catch(() => {});
-    return;
+    try {
+      await redis.del(key);
+      return;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvDelete_redis");
+      if (redis === redisClient) markRedisUnavailable();
+    }
   }
-  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-    await fetch(
-      `${process.env.KV_REST_API_URL}/del/${encodeURIComponent(key)}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.KV_REST_API_TOKEN}`,
-        },
+  const restDel = await kvRestCommand(["DEL", key]);
+  if (restDel !== null) return;
+  const restBase = kvRestBaseUrl();
+  const token = kvRestToken();
+  if (restBase && token) {
+    await fetch(`${restBase}/del/${encodeURIComponent(key)}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
       },
-    ).catch(() => {});
+    }).catch((error: unknown) => {
+      captureKvCacheError(error, "kvDelete_rest");
+    });
     return;
   }
   memoryJson.delete(key);
   memoryTtl.delete(key);
+}
+
+function kvRestBaseUrl(): string | null {
+  const candidates = [
+    process.env.KV_REST_API_URL,
+    process.env.UPSTASH_REDIS_REST_URL,
+    process.env.KV_URL?.startsWith("http") ? process.env.KV_URL : null,
+  ];
+  for (const url of candidates) {
+    if (url) return url.replace(/\/$/, "");
+  }
+  return null;
+}
+
+function kvRestToken(): string | null {
+  return (
+    process.env.KV_REST_API_TOKEN ??
+    process.env.UPSTASH_REDIS_REST_TOKEN ??
+    null
+  );
+}
+
+async function kvRestCommand(command: string[]): Promise<string | null> {
+  const restBase = kvRestBaseUrl();
+  const token = kvRestToken();
+  if (!restBase || !token) return null;
+  try {
+    const res = await fetch(restBase, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(command),
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = (await res.json().catch(() => null)) as {
+      result?: string | null;
+    } | null;
+    const result = data?.result;
+    return typeof result === "string" ? result : null;
+  } catch (error: unknown) {
+    captureKvCacheError(error, "kvRestCommand");
+    return null;
+  }
+}
+
+/** Redis-first string storage with TTL; falls back to KV REST then in-memory. */
+async function kvSetStringWithTtl(
+  key: string,
+  value: string,
+  ttlSec: number,
+): Promise<boolean> {
+  const redis = await getAuthRedis();
+  if (redis) {
+    try {
+      await redis.set(key, value, "EX", ttlSec);
+      return true;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSetStringWithTtl_redis");
+    }
+  }
+  const restSet = await kvRestCommand([
+    "SET",
+    key,
+    value,
+    "EX",
+    String(ttlSec),
+  ]);
+  if (restSet === "OK") return true;
+  const restBase = kvRestBaseUrl();
+  const token = kvRestToken();
+  if (restBase && token) {
+    try {
+      const res = await fetch(
+        `${restBase}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}?EX=${ttlSec}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          cache: "no-store",
+        },
+      );
+      if (res.ok) return true;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvSetStringWithTtl_rest");
+    }
+  }
+  memoryJson.set(key, value);
+  memoryTtl.set(key, Date.now() + ttlSec * 1000);
+  return process.env.NODE_ENV !== "production";
+}
+
+/** Redis-first string lookup; falls back to KV REST then in-memory TTL map. */
+async function kvGetString(key: string): Promise<string | null> {
+  const redis = await getAuthRedis();
+  if (redis) {
+    try {
+      const val = (await redis.get(key)) as string | null;
+      return val ?? null;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGetString_redis");
+    }
+  }
+  const restVal = await kvRestCommand(["GET", key]);
+  if (restVal) return restVal;
+  const restBase = kvRestBaseUrl();
+  const token = kvRestToken();
+  if (restBase && token) {
+    try {
+      const res = await fetch(`${restBase}/get/${encodeURIComponent(key)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        cache: "no-store",
+      });
+      if (!res.ok) return null;
+      const data = await res
+        .json()
+        .catch(() => ({}) as { result?: string | null });
+      const val = data?.result;
+      return typeof val === "string" ? val : null;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "kvGetString_rest");
+    }
+  }
+  if (process.env.NODE_ENV === "production") return null;
+  const exp = memoryTtl.get(key);
+  if (typeof exp === "number" && Date.now() > exp) {
+    memoryJson.delete(key);
+    memoryTtl.delete(key);
+    return null;
+  }
+  return memoryJson.get(key) ?? null;
 }
 
 const WEBAUTHN_CHALLENGE_TTL_SEC = 5 * 60;
@@ -322,51 +633,140 @@ function makeToken(): string {
   return Math.random().toString(36).slice(2, 10).toUpperCase();
 }
 
-export async function createPasswordResetToken(
-  email: string,
-): Promise<{ ok: boolean; token?: string }> {
+async function hasActivePasswordResetPending(userId: string): Promise<boolean> {
+  const pendingKey = passwordResetPendingKey(userId);
+  if (await kvGetString(pendingKey)) return true;
   const p = await getPrisma();
-  const user = p ? await p.user.findFirst({ where: { email } }) : null;
-  if (!user) return { ok: true }; // do not leak existence
-  const token = makeToken();
-  const key = `pwreset:${token}`;
-  const redis = await getRedis();
-  const ttlSec = 15 * 60;
-  if (redis) {
-    await redis.set(key, user.id, "EX", ttlSec);
-  } else {
-    memoryJson.set(key, JSON.stringify({ userId: user.id }));
-    memoryTtl.set(key, Date.now() + ttlSec * 1000);
+  if (!p) return false;
+  const active = await p.passwordResetToken.count({
+    where: { userId, expiresAt: { gt: new Date() } },
+  });
+  return active > 0;
+}
+
+async function storePasswordResetToken(
+  userId: string,
+  token: string,
+  ttlSec: number,
+): Promise<boolean> {
+  const normalizedToken = normalizePasswordResetToken(token);
+  const key = passwordResetRedisKey(normalizedToken);
+  const kvOk = await kvSetStringWithTtl(key, userId, ttlSec);
+  if (kvOk) return true;
+  const p = await getPrisma();
+  if (!p) return false;
+  try {
+    await p.passwordResetToken.deleteMany({ where: { userId } });
+    await p.passwordResetToken.create({
+      data: {
+        token: normalizedToken,
+        userId,
+        expiresAt: new Date(Date.now() + ttlSec * 1000),
+      },
+    });
+    return true;
+  } catch (error: unknown) {
+    captureKvCacheError(error, "password_reset_db_set");
+    return false;
   }
-  return { ok: true, token };
+}
+
+async function lookupPasswordResetUserId(
+  normalizedToken: string,
+): Promise<string | null> {
+  const key = passwordResetRedisKey(normalizedToken);
+  let userId: string | null = await kvGetString(key);
+  if (userId?.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(userId) as { userId?: string };
+      userId = typeof parsed.userId === "string" ? parsed.userId : null;
+    } catch {
+      userId = null;
+    }
+  }
+  if (userId) return userId;
+  const p = await getPrisma();
+  if (!p) return null;
+  const row = await p.passwordResetToken.findUnique({
+    where: { token: normalizedToken },
+  });
+  if (!row) return null;
+  if (row.expiresAt <= new Date()) {
+    await p.passwordResetToken
+      .delete({ where: { token: normalizedToken } })
+      .catch(() => null);
+    return null;
+  }
+  return row.userId;
+}
+
+async function clearPasswordResetToken(
+  normalizedToken: string,
+  userId: string,
+): Promise<void> {
+  const key = passwordResetRedisKey(normalizedToken);
+  await kvDelete(key);
+  await clearPasswordResetPending(userId);
+  const p = await getPrisma();
+  if (p) {
+    await p.passwordResetToken
+      .deleteMany({ where: { userId } })
+      .catch(() => null);
+  }
+}
+
+async function setPasswordResetPending(
+  userId: string,
+  ttlSec: number,
+): Promise<boolean> {
+  const pendingKey = passwordResetPendingKey(userId);
+  return kvSetStringWithTtl(pendingKey, "1", ttlSec);
+}
+
+async function clearPasswordResetPending(userId: string): Promise<void> {
+  const pendingKey = passwordResetPendingKey(userId);
+  await kvDelete(pendingKey);
+}
+
+export async function createPasswordResetToken(email: string): Promise<{
+  ok: boolean;
+  token?: string;
+  recipientEmail?: string;
+  suppressed?: boolean;
+}> {
+  const p = await getPrisma();
+  const user = p
+    ? await p.user.findFirst({
+        where: { email: { equals: email, mode: "insensitive" } },
+        select: { id: true, email: true },
+      })
+    : null;
+  if (!user) return { ok: true };
+  if (await hasActivePasswordResetPending(user.id)) {
+    return { ok: true, suppressed: true };
+  }
+  const token = makeToken();
+  const ttlSec = PASSWORD_RESET_TTL_SEC;
+  const stored = await storePasswordResetToken(user.id, token, ttlSec);
+  if (!stored) {
+    Sentry.captureMessage("password_reset_storage_failed", {
+      level: "error",
+      tags: { context: "password_reset", component: "kv-cache" },
+    });
+    return { ok: true };
+  }
+  await setPasswordResetPending(user.id, ttlSec);
+  return { ok: true, token, recipientEmail: user.email ?? email };
 }
 
 export async function redeemPasswordResetToken(
   token: string,
   newPassword: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  if (!token || !newPassword || newPassword.length < 8)
+  const normalizedToken = normalizePasswordResetToken(token);
+  if (!normalizedToken || !newPassword || newPassword.length < 8)
     return { ok: false, error: "invalid" };
-  const key = `pwreset:${token}`;
-  const redis = await getRedis();
-  let userId: string | null = null;
-  if (redis) {
-    userId = (await redis.get(key)) as string | null;
-  } else {
-    const exp = memoryTtl.get(key);
-    if (typeof exp === "number" && Date.now() > exp) {
-      memoryJson.delete(key);
-      memoryTtl.delete(key);
-    }
-    const val = memoryJson.get(key);
-    if (val) {
-      try {
-        userId = JSON.parse(val).userId as string;
-      } catch {
-        userId = null;
-      }
-    }
-  }
+  const userId = await lookupPasswordResetUserId(normalizedToken);
   if (!userId) return { ok: false, error: "invalid_or_expired" };
   const p = await getPrisma();
   if (!p) return { ok: false, error: "db_unavailable" };
@@ -374,12 +774,7 @@ export async function redeemPasswordResetToken(
   await p.user
     .update({ where: { id: userId }, data: { passwordHash: hash } })
     .catch(() => null);
-  if (redis) {
-    await redis.del(key).catch(() => {});
-  } else {
-    memoryJson.delete(key);
-    memoryTtl.delete(key);
-  }
+  await clearPasswordResetToken(normalizedToken, userId);
   return { ok: true };
 }
 
@@ -441,38 +836,38 @@ export async function getUserProfile(
   }
 }
 
-/**
- * Retrieves profiles for multiple users in one batched lookup.
- *
- * @param userIds - User IDs to load profile information for.
- * @returns Mapping from user ID to profile fields for users that were found.
- */
-export async function getUserProfiles(
-  userIds: string[],
+async function listEventRsvpsFromCache(
+  eventId: string,
+): Promise<{ userId: string; status: RsvpStatus }[]> {
+  const redis = await getRedis();
+  if (redis) {
+    const keys: string[] = await redis.keys(`rsvp:*:${eventId}`);
+    if (keys.length === 0) return [];
+    const vals = await redis.mget(keys);
+    return keys.map((k, i) => ({
+      userId: k.split(":")[1]!,
+      status: (vals[i] as RsvpStatus) ?? null,
+    }));
+  }
+  const outArr: { userId: string; status: RsvpStatus }[] = [];
+  for (const [k, v] of memoryStore.entries()) {
+    if (
+      typeof k === "string" &&
+      k.startsWith(`rsvp:`) &&
+      k.endsWith(`:${eventId}`)
+    ) {
+      const userId = k.split(":")[1] || "";
+      const status = (v as RsvpStatus) ?? null;
+      outArr.push({ userId, status });
+    }
+  }
+  return outArr;
+}
+
+async function getUserProfilesFromCache(
+  uniqueIds: string[],
 ): Promise<Record<string, UserProfile>> {
   const out: Record<string, UserProfile> = {};
-  const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
-  if (uniqueIds.length === 0) return out;
-
-  const p = await getPrisma();
-  if (p) {
-    return withPgConnectRetry("getUserProfiles", async () => {
-      const rows = await p.user.findMany({
-        where: { id: { in: uniqueIds } },
-        select: { id: true, firstName: true, lastName: true, email: true },
-      });
-      const result: Record<string, UserProfile> = {};
-      for (const row of rows) {
-        result[row.id] = {
-          firstName: row.firstName,
-          lastName: row.lastName,
-          email: row.email ?? undefined,
-        };
-      }
-      return result;
-    });
-  }
-
   const redis = await getRedis();
   if (redis) {
     const entries = await Promise.all(
@@ -514,43 +909,102 @@ export async function getUserProfiles(
   return out;
 }
 
+async function getUserRsvpStatsFromCache(
+  uniqueIds: string[],
+): Promise<Record<string, { total: number; yes: number }>> {
+  const out: Record<string, { total: number; yes: number }> = {};
+  for (const userId of uniqueIds) {
+    const history = await listUserRsvps(userId).catch((error: unknown) => {
+      Sentry.captureException(error, {
+        extra: { userId, context: "getUserRsvpStats_listUserRsvps" },
+      });
+      return [];
+    });
+    out[userId] = {
+      total: history.length,
+      yes: history.filter((h) => h.status === "yes").length,
+    };
+  }
+  return out;
+}
+
+function addPrismaKvFallbackBreadcrumb(
+  operationName: string,
+  extra?: Record<string, unknown>,
+): void {
+  Sentry.addBreadcrumb({
+    category: "postgres",
+    message: `Prisma mislukt voor ${operationName}; val terug op cache`,
+    level: "warning",
+    data: { operationName, ...extra },
+  });
+}
+
+/**
+ * Retrieves profiles for multiple users in one batched lookup.
+ *
+ * @param userIds - User IDs to load profile information for.
+ * @returns Mapping from user ID to profile fields for users that were found.
+ */
+export async function getUserProfiles(
+  userIds: string[],
+): Promise<Record<string, UserProfile>> {
+  const out: Record<string, UserProfile> = {};
+  const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
+  if (uniqueIds.length === 0) return out;
+
+  const p = await getPrisma();
+  if (p) {
+    try {
+      return await withPgConnectRetry("getUserProfiles", async () => {
+        const rows = await p.user.findMany({
+          where: { id: { in: uniqueIds } },
+          select: { id: true, firstName: true, lastName: true, email: true },
+        });
+        const result: Record<string, UserProfile> = {};
+        for (const row of rows) {
+          result[row.id] = {
+            firstName: row.firstName,
+            lastName: row.lastName,
+            email: row.email ?? undefined,
+          };
+        }
+        return result;
+      });
+    } catch (error: unknown) {
+      if (!shouldFallbackFromPrismaToKv(error)) {
+        throw error;
+      }
+      addPrismaKvFallbackBreadcrumb("getUserProfiles", {
+        userCount: uniqueIds.length,
+      });
+    }
+  }
+
+  return getUserProfilesFromCache(uniqueIds);
+}
+
 export async function listEventRsvps(
   eventId: string,
 ): Promise<{ userId: string; status: RsvpStatus }[]> {
   const p = await getPrisma();
   if (p) {
-    return withPgConnectRetry("listEventRsvps", async () => {
-      const rows = await p.rsvp.findMany({ where: { eventId } });
-      return rows.map((r: { userId: string; status: unknown }) => ({
-        userId: r.userId,
-        status: (r.status as RsvpStatus) ?? null,
-      }));
-    });
-  }
-  const redis = await getRedis();
-  if (redis) {
-    const keys: string[] = await redis.keys(`rsvp:*:${eventId}`);
-    if (keys.length === 0) return [];
-    const vals = await redis.mget(keys);
-    return keys.map((k, i) => ({
-      userId: k.split(":")[1]!,
-      status: (vals[i] as RsvpStatus) ?? null,
-    }));
-  }
-  const out: { userId: string; status: RsvpStatus }[] = {} as any;
-  const outArr: { userId: string; status: RsvpStatus }[] = [];
-  for (const [k, v] of memoryStore.entries()) {
-    if (
-      typeof k === "string" &&
-      k.startsWith(`rsvp:`) &&
-      k.endsWith(`:${eventId}`)
-    ) {
-      const userId = k.split(":")[1] || "";
-      const status = (v as RsvpStatus) ?? null;
-      outArr.push({ userId, status });
+    try {
+      return await withPgConnectRetry("listEventRsvps", async () => {
+        const rows = await p.rsvp.findMany({ where: { eventId } });
+        return rows.map((r: { userId: string; status: unknown }) => ({
+          userId: r.userId,
+          status: (r.status as RsvpStatus) ?? null,
+        }));
+      });
+    } catch (error: unknown) {
+      if (!shouldFallbackFromPrismaToKv(error)) {
+        throw error;
+      }
+      addPrismaKvFallbackBreadcrumb("listEventRsvps", { eventId });
     }
   }
-  return outArr;
+  return listEventRsvpsFromCache(eventId);
 }
 
 // NEW: List all RSVPs for a given user (used for attendance badge %)
@@ -601,38 +1055,35 @@ export async function getUserRsvpStats(
 
   const p = await getPrisma();
   if (p) {
-    return withPgConnectRetry("getUserRsvpStats", async () => {
-      const rows = await p.rsvp.findMany({
-        where: { userId: { in: uniqueIds } },
-        select: { userId: true, status: true },
+    try {
+      return await withPgConnectRetry("getUserRsvpStats", async () => {
+        const rows = await p.rsvp.findMany({
+          where: { userId: { in: uniqueIds } },
+          select: { userId: true, status: true },
+        });
+        const result: Record<string, { total: number; yes: number }> = {};
+        for (const userId of uniqueIds) {
+          result[userId] = { total: 0, yes: 0 };
+        }
+        for (const row of rows) {
+          const current = result[row.userId] || { total: 0, yes: 0 };
+          current.total += 1;
+          if (row.status === "yes") current.yes += 1;
+          result[row.userId] = current;
+        }
+        return result;
       });
-      const result: Record<string, { total: number; yes: number }> = {};
-      for (const userId of uniqueIds) {
-        result[userId] = { total: 0, yes: 0 };
+    } catch (error: unknown) {
+      if (!shouldFallbackFromPrismaToKv(error)) {
+        throw error;
       }
-      for (const row of rows) {
-        const current = result[row.userId] || { total: 0, yes: 0 };
-        current.total += 1;
-        if (row.status === "yes") current.yes += 1;
-        result[row.userId] = current;
-      }
-      return result;
-    });
+      addPrismaKvFallbackBreadcrumb("getUserRsvpStats", {
+        userCount: uniqueIds.length,
+      });
+    }
   }
 
-  for (const userId of uniqueIds) {
-    const history = await listUserRsvps(userId).catch((error: unknown) => {
-      Sentry.captureException(error, {
-        extra: { userId, context: "getUserRsvpStats_listUserRsvps" },
-      });
-      return [];
-    });
-    out[userId] = {
-      total: history.length,
-      yes: history.filter((h) => h.status === "yes").length,
-    };
-  }
-  return out;
+  return getUserRsvpStatsFromCache(uniqueIds);
 }
 
 // Match Reports
@@ -1033,7 +1484,7 @@ export async function listAllAttendanceKeys(): Promise<string[]> {
   return keys.sort();
 }
 
-// Roles (admin/trainer/player) stored in KV/Redis for simplicity
+// Roles (admin/trainer/player) stored in KV with Postgres fallback for durability.
 export type UserRoles = {
   admin?: boolean;
   trainer?: boolean;
@@ -1041,25 +1492,101 @@ export type UserRoles = {
 };
 type Roles = UserRoles;
 
-export async function getUserRoles(userId: string): Promise<Roles> {
-  const key = `roles:${userId}`;
-  const redis = await getRedis();
-  if (redis) {
-    const raw = (await redis.get(key)) as string | null;
-    if (!raw) return { player: true };
-    try {
-      return JSON.parse(raw) as Roles;
-    } catch {
-      return { player: true };
-    }
-  }
-  const raw = memoryStore.get(key) as unknown as string | undefined;
-  if (!raw) return { player: true };
+const DEFAULT_USER_ROLES: Roles = { player: true };
+
+function userRolesKey(userId: string): string {
+  return `roles:${userId}`;
+}
+
+function normalizeUserRoles(roles: Roles | null | undefined): Roles {
+  if (!roles) return { ...DEFAULT_USER_ROLES };
+  return {
+    admin: Boolean(roles.admin),
+    trainer: Boolean(roles.trainer),
+    player: roles.player === false ? false : true,
+  };
+}
+
+async function getUserRolesFromDb(userId: string): Promise<Roles | null> {
+  const p = await getPrisma();
+  if (!p) return null;
   try {
-    return JSON.parse(raw) as Roles;
-  } catch {
-    return { player: true };
+    const row = await p.userRole.findUnique({ where: { userId } });
+    if (!row) return null;
+    return {
+      admin: row.admin,
+      trainer: row.trainer,
+      player: row.player,
+    };
+  } catch (error: unknown) {
+    captureKvDbError(error, "getUserRoles_db");
+    return null;
   }
+}
+
+async function getUserRolesFromDbBatch(
+  userIds: string[],
+): Promise<Record<string, Roles>> {
+  const out: Record<string, Roles> = {};
+  const p = await getPrisma();
+  if (!p || userIds.length === 0) return out;
+  try {
+    const rows = await p.userRole.findMany({
+      where: { userId: { in: userIds } },
+      select: { userId: true, admin: true, trainer: true, player: true },
+    });
+    for (const row of rows) {
+      out[row.userId] = {
+        admin: row.admin,
+        trainer: row.trainer,
+        player: row.player,
+      };
+    }
+  } catch (error: unknown) {
+    captureKvDbError(error, "getUserRolesBatch_db");
+  }
+  return out;
+}
+
+async function setUserRolesInDb(userId: string, roles: Roles): Promise<void> {
+  const p = await getPrisma();
+  if (!p) return;
+  const normalized = normalizeUserRoles(roles);
+  try {
+    await p.userRole.upsert({
+      where: { userId },
+      create: {
+        userId,
+        admin: normalized.admin ?? false,
+        trainer: normalized.trainer ?? false,
+        player: normalized.player ?? true,
+      },
+      update: {
+        admin: normalized.admin ?? false,
+        trainer: normalized.trainer ?? false,
+        player: normalized.player ?? true,
+      },
+    });
+  } catch (error: unknown) {
+    captureKvDbError(error, "setUserRoles_db");
+  }
+}
+
+/**
+ * Loads role flags for one user from KV, then Postgres, defaulting to player-only.
+ */
+export async function getUserRoles(userId: string): Promise<Roles> {
+  const key = userRolesKey(userId);
+  const cached = await kvGetJson<Roles>(key);
+  if (cached) return normalizeUserRoles(cached);
+  const fromDb = await getUserRolesFromDb(userId);
+  if (fromDb) {
+    await kvSetJson(key, fromDb).catch((error: unknown) => {
+      captureKvCacheError(error, "getUserRoles_cache_warm");
+    });
+    return normalizeUserRoles(fromDb);
+  }
+  return { ...DEFAULT_USER_ROLES };
 }
 
 /**
@@ -1077,61 +1604,82 @@ export async function getUserRolesBatch(
 
   const redis = await getRedis();
   if (redis) {
-    const keys = uniqueIds.map((id) => `roles:${id}`);
-    const vals = (await redis.mget(keys)) as Array<string | null>;
-    for (let i = 0; i < uniqueIds.length; i++) {
-      const raw = vals[i];
-      if (!raw) {
-        out[uniqueIds[i]] = { player: true };
-        continue;
+    try {
+      const keys = uniqueIds.map((id) => userRolesKey(id));
+      const vals = (await redis.mget(keys)) as Array<string | null>;
+      const missingFromKv: string[] = [];
+      for (let i = 0; i < uniqueIds.length; i++) {
+        const raw = vals[i];
+        if (!raw) {
+          missingFromKv.push(uniqueIds[i]);
+          continue;
+        }
+        try {
+          out[uniqueIds[i]] = normalizeUserRoles(JSON.parse(raw) as Roles);
+        } catch (err: unknown) {
+          Sentry.captureException(err, {
+            extra: {
+              userId: uniqueIds[i],
+              context: "getUserRolesBatch_redis_parse",
+            },
+          });
+          missingFromKv.push(uniqueIds[i]);
+        }
       }
-      try {
-        out[uniqueIds[i]] = JSON.parse(raw) as Roles;
-      } catch (err: unknown) {
-        Sentry.captureException(err, {
-          extra: {
-            userId: uniqueIds[i],
-            context: "getUserRolesBatch_redis_parse",
-          },
-        });
-        out[uniqueIds[i]] = { player: true };
+      if (missingFromKv.length === 0) return out;
+      const fromDb = await getUserRolesFromDbBatch(missingFromKv);
+      for (const userId of missingFromKv) {
+        const roles = fromDb[userId] ?? { ...DEFAULT_USER_ROLES };
+        out[userId] = roles;
+        if (fromDb[userId]) {
+          await kvSetJson(userRolesKey(userId), roles).catch(
+            (error: unknown) => {
+              captureKvCacheError(error, "getUserRolesBatch_cache_warm");
+            },
+          );
+        }
       }
+      return out;
+    } catch (error: unknown) {
+      captureKvCacheError(error, "getUserRolesBatch_redis");
+      markRedisUnavailable();
     }
-    return out;
   }
 
+  const missingFromKv: string[] = [];
   for (const userId of uniqueIds) {
-    const raw = memoryStore.get(`roles:${userId}`) as unknown as
-      | string
-      | undefined;
-    if (!raw) {
-      out[userId] = { player: true };
-      continue;
+    const cached = await kvGetJson<Roles>(userRolesKey(userId));
+    if (cached) {
+      out[userId] = normalizeUserRoles(cached);
+    } else {
+      missingFromKv.push(userId);
     }
-    try {
-      out[userId] = JSON.parse(raw) as Roles;
-    } catch (err: unknown) {
-      Sentry.captureException(err, {
-        extra: { userId, context: "getUserRolesBatch_memory_parse" },
-      });
-      out[userId] = { player: true };
+  }
+  if (missingFromKv.length > 0) {
+    const fromDb = await getUserRolesFromDbBatch(missingFromKv);
+    for (const userId of missingFromKv) {
+      const roles = fromDb[userId] ?? { ...DEFAULT_USER_ROLES };
+      out[userId] = roles;
+      if (fromDb[userId]) {
+        await kvSetJson(userRolesKey(userId), roles).catch((error: unknown) => {
+          captureKvCacheError(error, "getUserRolesBatch_cache_warm");
+        });
+      }
     }
   }
   return out;
 }
 
+/**
+ * Persists role flags to KV and Postgres so admin changes survive cache outages.
+ */
 export async function setUserRoles(
   userId: string,
   roles: Roles,
 ): Promise<void> {
-  const key = `roles:${userId}`;
-  const payload = JSON.stringify(roles);
-  const redis = await getRedis();
-  if (redis) {
-    await redis.set(key, payload);
-    return;
-  }
-  memoryStore.set(key, payload as any);
+  const normalized = normalizeUserRoles(roles);
+  await kvSetJson(userRolesKey(userId), normalized);
+  await setUserRolesInDb(userId, normalized);
 }
 
 export async function createLinkCode(userId: string): Promise<string> {

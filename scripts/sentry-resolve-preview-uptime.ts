@@ -2,9 +2,7 @@
  * Resolves unresolved Sentry issues that report downtime on ephemeral Vercel preview URLs.
  * Run from CI (Sentry Issue Sync) or locally with SENTRY_AUTH_TOKEN set.
  */
-import {
-  isEphemeralPreviewUptimeDowntimeIssue,
-} from "../src/lib/sentryUptimePreviewNoise";
+import { isEphemeralPreviewUptimeDowntimeIssue } from "../src/lib/sentryUptimePreviewNoise";
 
 type SentryIssue = {
   id: string;
@@ -55,7 +53,9 @@ async function resolveIssue(issueId: string): Promise<void> {
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Sentry resolve issue ${issueId} failed (${res.status}): ${body}`);
+    throw new Error(
+      `Sentry resolve issue ${issueId} failed (${res.status}): ${body}`,
+    );
   }
 }
 

@@ -1,0 +1,1090 @@
+import { localPlayer } from "@/lib/cityArena/sim/players";
+import * as Sentry from "@sentry/nextjs";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { useRef } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createCamera } from "@/lib/cityArena/render/camera";
+import { RUBBLE_FILL } from "@/lib/cityArena/render/drawStructures";
+import { CROSSHAIR_STROKE } from "@/lib/cityArena/render/palette";
+import { NO_SPRITES } from "@/lib/cityArena/render/sprites";
+import type { View3dFrame } from "@/lib/cityArena/render3d";
+import { createStaticRaster } from "@/lib/cityArena/render/staticRaster";
+import {
+  createFakeContext,
+  createFakeTarget,
+  fakeGetContext,
+  type FakeContext,
+} from "@/lib/cityArena/render/testing/fakeContext";
+import { createArenaState } from "@/lib/cityArena/sim/arena";
+import { HOST_TICK_HZ, createHostLoop } from "@/lib/cityArena/net/hostLoop";
+import {
+  createMemoryHub,
+  createMemoryTransport,
+} from "@/lib/cityArena/net/memoryTransport";
+import {
+  decodeSnapshot,
+  type Snapshot,
+} from "@/lib/cityArena/net/snapshotWire";
+import type { RealtimeTransport } from "@/lib/cityArena/net/transport";
+import {
+  PLAYER_MAX_HEALTH,
+  RESPAWN_DELAY_TICKS,
+} from "@/lib/cityArena/sim/damage";
+import { createRng } from "@/lib/cityArena/sim/rng";
+import { createVehicle } from "@/lib/cityArena/sim/vehicle";
+import { nextWeapon, SPAWN_AMMO } from "@/lib/cityArena/sim/weapons";
+import { boundsOf } from "@/lib/cityArena/mapBuild/geometry";
+import type { StructureState } from "@/lib/cityArena/sim/types";
+import { createCollisionGrid } from "@/lib/cityArena/world/collisionGrid";
+import type { DecodedTile } from "@/lib/cityArena/world/decode";
+import type { LoadProgress } from "@/lib/cityArena/world/mapLoader";
+import type { MapIndex, MapLandmark } from "@/lib/cityArena/world/mapTypes";
+import type { Point } from "@/lib/cityArena/world/projection";
+import { decodeRoadGraph } from "@/lib/cityArena/world/roadGraph";
+import { structureIdOf } from "@/lib/cityArena/world/structureId";
+import type {
+  WorldReady,
+  WorldSession,
+} from "@/lib/cityArena/world/worldSession";
+
+// Hoisted so it exists before `vi.mock` below runs (Vitest hoists `vi.mock` calls to the top
+// of the module, ahead of ordinary `const` declarations).
+const mockCreateWorldSession = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/cityArena/world/worldSession", () => ({
+  createWorldSession: mockCreateWorldSession,
+}));
+vi.mock("@sentry/nextjs", () => ({
+  captureException: vi.fn(),
+  captureMessage: vi.fn(),
+}));
+
+/** jsdom has no WebGL: the lazily imported 3D view is a stand-in the tests inspect. */
+const mockCreateView3d = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/cityArena/render3d", () => ({
+  createView3d: mockCreateView3d,
+  pitchLimitsFor: () => [-0.6, 0.7],
+}));
+
+import {
+  aimAngle,
+  computeHud,
+  nearestLandmarkTo,
+  useArenaGame,
+  type ArenaNetplayOptions,
+} from "./useArenaGame";
+
+/** Wall-clock step (ms) between manually driven frames; matches `MAX_FRAME_S` so each is a full 0.1 s step. */
+const FRAME_STEP_MS = 100;
+/** Generous bound on frames driven while waiting for a respawn (needs roughly 33 at `FRAME_STEP_MS`; see deathScreen.ts). */
+const MAX_RESPAWN_FRAMES = 60;
+
+/** Minimal valid index with no zones: `bootSession` falls back to spawning at `[0, 0]`. */
+const testIndex: MapIndex = {
+  version: 1,
+  generatedAt: "2026-09-04T10:00:00.000Z",
+  origin: { lat: 51.98, lon: 5.625 },
+  unitsPerMetre: 4,
+  bounds: { minX: 0, minY: 0, maxX: 1000, maxY: 1000 },
+  tileSize: 1000,
+  tiles: [],
+  zones: [],
+  landmarks: [],
+};
+const testGraph = decodeRoadGraph({
+  nodes: [],
+  edges: [],
+  classes: [],
+  names: [],
+});
+const testReady: WorldReady = { index: testIndex, graph: testGraph };
+
+/** Index with two single-spawn-point zones, so `teleportToZone` moves to a known position. */
+const zonedTestIndex: MapIndex = {
+  ...testIndex,
+  zones: [
+    {
+      key: "wageningen",
+      name: "Wageningen",
+      center: [0, 0],
+      radius: 4000,
+      spawnNodes: [[0, 0]],
+      landmarks: [],
+    },
+    {
+      key: "campus",
+      name: "Campus",
+      center: [4000, 4000],
+      radius: 4000,
+      spawnNodes: [[4000, 4000]],
+      landmarks: [],
+    },
+  ],
+};
+
+/** A world session whose `ready()` stays pending until the returned `resolveReady` runs. */
+function createControllableSession(): {
+  session: WorldSession;
+  resolveReady: (value: WorldReady) => void;
+} {
+  let settleReady: ((value: WorldReady) => void) | null = null;
+  const readyPromise = new Promise<WorldReady>((resolve) => {
+    settleReady = resolve;
+  });
+  // The executor above runs synchronously, so `settleReady` is always set by this point.
+  const resolveReady = (value: WorldReady): void => settleReady?.(value);
+  const session: WorldSession = {
+    ready: () => readyPromise,
+    index: () => testIndex,
+    graph: () => testGraph,
+    collision: createCollisionGrid(),
+    raster: createStaticRaster((width, height) =>
+      createFakeTarget(width, height),
+    ),
+    overhead: createStaticRaster(() => null),
+    landmarks: () => new Map(),
+    sprites: () => NO_SPRITES,
+    update: vi.fn(async () => ({ loaded: 0, total: 0 })),
+    tiles: () => [],
+    loadedTileRects: () => [],
+    hasFailures: () => false,
+    dispose: vi.fn(),
+  };
+  return { session, resolveReady };
+}
+
+/** Resolves `session.ready()` with {@link testReady} and flushes the boot promise chain: its own `await`, then the `.then` continuation. */
+async function bootReady(
+  resolveReady: (value: WorldReady) => void,
+): Promise<void> {
+  await act(async () => {
+    resolveReady(testReady);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+/**
+ * A controllable session whose `session.update` resolves immediately the first time (the
+ * boot's own sync) but stays pending on every later call until `settlePendingUpdate` is
+ * invoked — for testing that a throttled refresh sync never overlaps itself.
+ */
+function createDeferredUpdateSession(index: MapIndex): {
+  session: WorldSession;
+  resolveReady: (value: WorldReady) => void;
+  updateCalls: Point[];
+  settlePendingUpdate: (progress: LoadProgress) => void;
+} {
+  const { session, resolveReady } = createControllableSession();
+  session.index = () => index;
+  const updateCalls: Point[] = [];
+  let settleFn: ((progress: LoadProgress) => void) | null = null;
+  session.update = vi.fn((centre: Point): Promise<LoadProgress> => {
+    updateCalls.push(centre);
+    if (updateCalls.length === 1)
+      return Promise.resolve({ loaded: 0, total: 0 });
+    return new Promise<LoadProgress>((resolve) => {
+      settleFn = resolve;
+    });
+  });
+  return {
+    session,
+    resolveReady,
+    updateCalls,
+    settlePendingUpdate: (progress) => settleFn?.(progress),
+  };
+}
+
+/** Renders the hook with a plain (unattached) canvas ref, exactly as the overlay would. */
+function renderArenaGame() {
+  return renderHook(() =>
+    useArenaGame({
+      zoneKey: "wageningen",
+      canvasRef: useRef<HTMLCanvasElement>(null),
+      debug: false,
+      reducedMotion: false,
+    }),
+  );
+}
+
+/** Options for {@link renderArenaGameWithCanvas}; omitted fields keep the pre-existing defaults. */
+type RenderWithCanvasOptions = {
+  debug?: boolean;
+  netplay?: ArenaNetplayOptions;
+};
+
+/**
+ * Renders the hook with a real (if unattached-to-the-DOM) canvas, and fakes its 2D context —
+ * jsdom's own `getContext` returns `null`. Needed only by tests that drive the frame loop
+ * manually: `startFrameLoop`'s tick skips `runFrame` (and so the throttled tile-sync/HUD/debug
+ * refreshes) entirely when `canvasRef.current` is null, which `renderArenaGame` above leaves it.
+ * Every `getContext` call returns the SAME fake context (as a real canvas would), so callers can
+ * inspect `fakeContext.calls` across frames; it and the raw `canvas` come back alongside the hook
+ * result so a test can dispatch pointer events and assert on paint calls.
+ */
+function renderArenaGameWithCanvas(options: RenderWithCanvasOptions = {}) {
+  const fakeContext = createFakeContext();
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    fakeGetContext(() => fakeContext),
+  );
+  const canvas = document.createElement("canvas");
+  // `canvasRef` must keep one stable identity across re-renders: `useArenaBoot` and
+  // `useArenaInput`'s effects list it as a dependency, so a fresh object every render would
+  // re-run them (and so re-boot the session) on every re-render instead of once on mount.
+  const canvasRef = { current: canvas };
+  const hook = renderHook(() =>
+    useArenaGame({
+      zoneKey: "wageningen",
+      canvasRef,
+      debug: options.debug ?? false,
+      netplay: options.netplay,
+    }),
+  );
+  return { ...hook, canvas, fakeContext };
+}
+
+/**
+ * Wires a fresh controllable session into the mocked factory, renders the hook on a real canvas,
+ * and boots it — the setup every debug-seam test needing real frames otherwise repeats.
+ */
+async function bootArenaWithCanvas(
+  options: RenderWithCanvasOptions = {},
+): Promise<ReturnType<typeof renderArenaGameWithCanvas>> {
+  const { session, resolveReady } = createControllableSession();
+  mockCreateWorldSession.mockReturnValue(session);
+  const rendered = renderArenaGameWithCanvas(options);
+  await bootReady(resolveReady);
+  return rendered;
+}
+
+/** Stubs `document.pointerLockElement`, which jsdom does not implement. */
+function stubPointerLock(target: Element | null): void {
+  Object.defineProperty(document, "pointerLockElement", {
+    configurable: true,
+    get: () => target,
+  });
+}
+
+/** Grabs the frame-loop's `tick` callback handed to the mocked `requestAnimationFrame`. */
+function getTick(): (timestamp: number) => void {
+  return vi.mocked(window.requestAnimationFrame).mock.calls[0][0];
+}
+
+/** True once the fake context has drawn the mouse crosshair (`drawCrosshair` in drawProjectiles.ts). */
+function hasCrosshairStroke(fakeContext: FakeContext): boolean {
+  const crosshairStroke = `stroke(${CROSSHAIR_STROKE}`;
+  return fakeContext.calls.some((call) => call.startsWith(crosshairStroke));
+}
+
+/**
+ * Calls `tick` with timestamps `FRAME_STEP_MS` apart, starting after `fromMs`, until `isDone`
+ * reports true or `maxFrames` frames have run — whichever comes first, so a regression that
+ * stops the state from ever satisfying `isDone` fails the caller's own assertion instead of
+ * hanging the test.
+ */
+function driveFramesUntil(
+  tick: (timestamp: number) => void,
+  fromMs: number,
+  isDone: () => boolean,
+  maxFrames = MAX_RESPAWN_FRAMES,
+): void {
+  let timestamp = fromMs;
+  for (let frame = 0; frame < maxFrames && !isDone(); frame++) {
+    timestamp += FRAME_STEP_MS;
+    act(() => tick(timestamp));
+  }
+}
+
+/** Half the side of the square shed the destruction tests shoot down, metres. */
+const SHED_HALF_M = 2;
+/** How far ahead of the player the shed's centre stands, metres: well inside pistol range. */
+const SHED_DISTANCE_M = 8;
+/** The shed's structure id: the first building of tile (0, 0). */
+const SHED_ID = structureIdOf(0, 0, 0);
+/**
+ * Frames the destruction tests may shoot for. A pistol round brings a quarter of its 20 damage to
+ * a building, 2.5 times a second, and the smallest building has 120 health: 24 hits, about 96
+ * frames of 0.1 s.
+ */
+const MAX_SHOOTING_FRAMES = 200;
+/** Simulation ticks in one 0.1 s frame. */
+const TICKS_PER_FRAME = 3;
+/** Ticks the trigger is held for: every one of {@link MAX_SHOOTING_FRAMES} frames' worth. */
+const SHOOTING_TICKS = MAX_SHOOTING_FRAMES * TICKS_PER_FRAME;
+
+/**
+ * Stands a one-storey shed {@link SHED_DISTANCE_M} ahead of the local player, on the line they
+ * face, in both the session's collision grid (which the simulation's rounds hit) and its tiles
+ * (which the renderers draw footprints from).
+ */
+function placeShedAhead(session: WorldSession): void {
+  const player = hookedPlayer()!;
+  const centreX = player.x + Math.cos(player.facing) * SHED_DISTANCE_M;
+  const centreY = player.y + Math.sin(player.facing) * SHED_DISTANCE_M;
+  const ring: Point[] = [
+    [centreX - SHED_HALF_M, centreY - SHED_HALF_M],
+    [centreX + SHED_HALF_M, centreY - SHED_HALF_M],
+    [centreX + SHED_HALF_M, centreY + SHED_HALF_M],
+    [centreX - SHED_HALF_M, centreY + SHED_HALF_M],
+  ];
+  const tile: DecodedTile = {
+    x: 0,
+    y: 0,
+    rect: { minX: -2000, minY: -2000, maxX: 2000, maxY: 2000 },
+    roads: [],
+    buildings: [
+      { structureId: SHED_ID, ring, bounds: boundsOf(ring), levels: 1 },
+    ],
+    ground: [],
+    water: [],
+    trees: [],
+    furniture: [],
+  };
+  session.collision.insertTile(tile);
+  session.tiles = () => [tile];
+}
+
+/** True when `structures` lists the shed as destroyed. */
+function shedDestroyed(
+  structures:
+    readonly Pick<StructureState, "id" | "destroyedAtTick">[] | undefined,
+): boolean {
+  return (structures ?? []).some(
+    (entry) => entry.id === SHED_ID && entry.destroyedAtTick !== null,
+  );
+}
+
+/**
+ * Holds the trigger through the debug seam — with no aim, the rounds fly along the player's
+ * facing, straight at the shed — and drives frames from `fromMs` until the simulation has brought
+ * it down.
+ */
+function shootDownShed(
+  tick: (timestamp: number) => void,
+  fromMs: number,
+): void {
+  window.__arena?.dispatch({ fire: true }, SHOOTING_TICKS);
+  driveFramesUntil(
+    tick,
+    fromMs,
+    () => shedDestroyed(window.__arena?.getState()?.structures),
+    MAX_SHOOTING_FRAMES,
+  );
+}
+
+/** The local player behind the test hook, or undefined when the hook is not installed. */
+function hookedPlayer() {
+  const state = window.__arena?.getState();
+  return state ? localPlayer(state) : undefined;
+}
+
+describe("useArenaGame", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("requestAnimationFrame", vi.fn());
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("ignores a boot that resolves after unmount instead of resurrecting the runtime", async () => {
+    const { session, resolveReady } = createControllableSession();
+    mockCreateWorldSession.mockReturnValue(session);
+
+    const { unmount } = renderArenaGame();
+    unmount();
+
+    await act(async () => {
+      resolveReady(testReady);
+      // Flush the boot promise chain: the `ready()` await, then the `.then` continuation.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(session.dispose).toHaveBeenCalledTimes(1);
+    expect(session.update).not.toHaveBeenCalled();
+    expect(window.requestAnimationFrame).not.toHaveBeenCalled();
+  });
+
+  it("boots normally when not cancelled, and disposes exactly once on unmount", async () => {
+    const { session, resolveReady } = createControllableSession();
+    mockCreateWorldSession.mockReturnValue(session);
+
+    const { result, unmount } = renderArenaGame();
+
+    await act(async () => {
+      resolveReady(testReady);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.phase).toBe("playing");
+    expect(session.update).toHaveBeenCalledTimes(1);
+    expect(session.dispose).not.toHaveBeenCalled();
+
+    unmount();
+    expect(session.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("sets the phase to error and reports to Sentry when ready() rejects", async () => {
+    const session: WorldSession = {
+      ready: vi.fn(() => Promise.reject(new Error("boot failed"))),
+      index: () => testIndex,
+      graph: () => testGraph,
+      collision: createCollisionGrid(),
+      raster: createStaticRaster((width, height) =>
+        createFakeTarget(width, height),
+      ),
+      overhead: createStaticRaster(() => null),
+      landmarks: () => new Map(),
+      sprites: () => NO_SPRITES,
+      update: vi.fn(async () => ({ loaded: 0, total: 0 })),
+      tiles: () => [],
+      loadedTileRects: () => [],
+      hasFailures: () => false,
+      dispose: vi.fn(),
+    };
+    mockCreateWorldSession.mockReturnValue(session);
+
+    const { result } = renderArenaGame();
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.phase).toBe("error");
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ tags: { area: "arena", kind: "boot" } }),
+    );
+  });
+
+  it("does not start a second tile sync while one is in flight, and runs exactly one follow-up sync at the newer position", async () => {
+    const { session, resolveReady, updateCalls, settlePendingUpdate } =
+      createDeferredUpdateSession(zonedTestIndex);
+    mockCreateWorldSession.mockReturnValue(session);
+
+    const { result } = renderArenaGameWithCanvas();
+
+    await act(async () => {
+      resolveReady({ index: zonedTestIndex, graph: testGraph });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.phase).toBe("playing");
+    expect(updateCalls).toHaveLength(1); // the boot's own sync
+
+    const tick = getTick();
+
+    act(() => tick(500));
+    expect(updateCalls).toHaveLength(2);
+    expect(updateCalls[1]).toEqual([0, 0]);
+
+    act(() => tick(1000));
+    expect(updateCalls).toHaveLength(2); // still in flight: no second call issued
+
+    act(() => result.current.teleportToZone("campus"));
+    act(() => tick(1001));
+    expect(updateCalls).toHaveLength(2); // the teleport only requests a follow-up
+
+    await act(async () => {
+      settlePendingUpdate({ loaded: 9, total: 9 });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(updateCalls).toHaveLength(3); // exactly one follow-up
+    expect(updateCalls[2]).toEqual([1000, 1000]); // the post-teleport position
+  });
+
+  it("clears the failed flag once a later sync reports the loader has recovered", async () => {
+    const { session, resolveReady } = createControllableSession();
+    let currentlyFailing = true;
+    session.hasFailures = () => currentlyFailing;
+    session.update = vi
+      .fn()
+      .mockResolvedValueOnce({ loaded: 8, total: 9 })
+      .mockImplementationOnce(async () => {
+        currentlyFailing = false;
+        return { loaded: 9, total: 9 };
+      });
+    mockCreateWorldSession.mockReturnValue(session);
+
+    const { result } = renderArenaGameWithCanvas();
+
+    await act(async () => {
+      resolveReady(testReady);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.phase).toBe("playing");
+    expect(result.current.failed).toBe(true);
+
+    await act(async () => {
+      getTick()(500);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.failed).toBe(false);
+  });
+
+  it("flips camera3d with V only while the view is 3d", () => {
+    localStorage.clear();
+    const { session } = createControllableSession();
+    mockCreateWorldSession.mockReturnValue(session);
+    const { result } = renderArenaGame();
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyV" }));
+    });
+    expect(result.current.settings.camera3d).toBe("third");
+    act(() => {
+      result.current.updateSettings({ view: "3d" });
+    });
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyV" }));
+    });
+    expect(result.current.settings.camera3d).toBe("first");
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyV" }));
+    });
+    expect(result.current.settings.camera3d).toBe("third");
+  });
+});
+
+describe("nearestLandmarkTo", () => {
+  const near: MapLandmark = {
+    key: "near",
+    name: "Dichtbij",
+    style: "cafe",
+    center: [40, 40], // 10, 10 m
+    tile: { x: 0, y: 0 },
+  };
+  const far: MapLandmark = {
+    key: "far",
+    name: "Veraf",
+    style: "cafe",
+    center: [4000, 4000], // 1000, 1000 m
+    tile: { x: 1, y: 1 },
+  };
+
+  it("picks the landmark whose centre is closest, straight-line, to the point", () => {
+    expect(nearestLandmarkTo([far, near], [0, 0])).toBe(near);
+    expect(nearestLandmarkTo([near, far], [0, 0])).toBe(near);
+  });
+
+  it("picks the other landmark once the point is closer to it instead", () => {
+    expect(nearestLandmarkTo([near, far], [2000, 2000])).toBe(far);
+  });
+});
+
+describe("computeHud and aimAngle", () => {
+  it("reports vitals on foot and the car speed while driving", () => {
+    const state = createArenaState(
+      { index: testIndex, graph: testGraph, seed: 1, zone: null },
+      createRng(1),
+    );
+    const session = { index: () => testIndex, tiles: () => [] };
+    expect(computeHud(session, state, localPlayer(state))).toMatchObject({
+      zoneName: null,
+      health: 100,
+      weapon: "pistol",
+      speedMps: null,
+      inVehicle: false,
+    });
+    const car = { ...createVehicle(9, "sport", [0, 0], 0, 0), velocityX: 10 };
+    const driving = {
+      ...state,
+      vehicles: [car],
+      players: [{ ...localPlayer(state), vehicleId: 9 }],
+    };
+    expect(computeHud(session, driving, localPlayer(driving))).toMatchObject({
+      speedMps: 10,
+      inVehicle: true,
+    });
+  });
+
+  it("aims from the player toward the mouse position", () => {
+    const camera = createCamera([0, 0], 8);
+    const viewport = { width: 200, height: 100 };
+    expect(aimAngle(camera, viewport, [0, 0], null)).toBeNull();
+    expect(aimAngle(camera, viewport, [0, 0], [100, 90])).toBeCloseTo(
+      Math.PI / 2,
+    );
+    expect(aimAngle(camera, viewport, [0, 0], [180, 50])).toBeCloseTo(0);
+  });
+});
+
+describe("debug hooks", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Every test starts from the default (2D) settings, whatever an earlier one stored.
+    localStorage.clear();
+    stubPointerLock(null);
+    document.exitPointerLock = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", vi.fn());
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  });
+
+  afterEach(() => {
+    stubPointerLock(null);
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("preserves the latest radar position when a held destination gesture completes", async () => {
+    const { result } = await bootArenaWithCanvas({ debug: true });
+    const selectDestination = result.current.setDestination;
+    const before = result.current.radar.player;
+    window.__arena?.dispatch({ move: [1, 0] }, 6);
+    const tick = getTick();
+    act(() => tick(0));
+    act(() => tick(FRAME_STEP_MS));
+    const latest = result.current.radar.player;
+    expect(latest[0]).toBeGreaterThan(before[0]);
+    act(() => selectDestination([100, 0]));
+    expect(result.current.radar.player).toEqual(latest);
+    expect(result.current.radar.navigation?.destination).toEqual([100, 0]);
+  });
+
+  it("installs window.__arena in debug mode and removes it on unmount", async () => {
+    const { session, resolveReady } = createControllableSession();
+    mockCreateWorldSession.mockReturnValue(session);
+    const { unmount } = renderHook(() =>
+      useArenaGame({
+        zoneKey: "wageningen",
+        canvasRef: useRef<HTMLCanvasElement>(null),
+        debug: true,
+        reducedMotion: false,
+      }),
+    );
+    await act(async () => {
+      resolveReady(testReady);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(window.__arena?.getState()?.tick).toBe(0);
+    expect(window.__arena?.getMetrics()).toMatchObject({
+      fps: 0,
+      samples: 0,
+      sessionFrames: 0,
+    });
+    window.__arena?.dispatch({ fire: true }, 2);
+    expect(window.__arena?.getViolations()).toBe(0);
+    expect(window.__arena?.audio.levels()).toMatchObject({
+      "amb-traffic": 0,
+      "amb-birds": 0,
+    });
+    expect(window.__arena?.audio.voices()).toMatchObject({
+      ambience: true,
+      oneShots: 0,
+    });
+    unmount();
+    expect(window.__arena).toBeUndefined();
+  });
+
+  it("switches the held weapon once, stamps and clears a death, and hides the crosshair while dead", async () => {
+    const { result, canvas, fakeContext } = await bootArenaWithCanvas({
+      debug: true,
+    });
+    expect(result.current.phase).toBe("playing");
+    const tick = getTick();
+    // A live mouse position, so a crosshair would be drawn if the death fix below didn't hide it.
+    canvas.dispatchEvent(
+      new PointerEvent("pointermove", {
+        pointerType: "mouse",
+        clientX: 50,
+        clientY: 50,
+        bubbles: true,
+      }),
+    );
+
+    // (a) held for 3 ticks, the edge-trigger contract (detectEdges in arena.ts) switches once.
+    window.__arena?.dispatch({ weaponNext: true }, 3);
+    act(() => tick(0));
+    act(() => tick(FRAME_STEP_MS));
+    expect(hookedPlayer()?.weapon).toBe(nextWeapon("pistol", SPAWN_AMMO));
+    expect(hasCrosshairStroke(fakeContext)).toBe(true);
+    fakeContext.calls.length = 0;
+
+    // (b) damage() stamps the death on the very next frame, at that frame's clock, and hides
+    // the crosshair; (c) it clears once the tick passes the respawn delay (damage.ts).
+    window.__arena?.damage(PLAYER_MAX_HEALTH);
+    const diedAtTick = hookedPlayer()?.diedAtTick ?? 0;
+    act(() => tick(2 * FRAME_STEP_MS));
+    expect(result.current.death).toEqual({ diedAtMs: 2 * FRAME_STEP_MS });
+    expect(hasCrosshairStroke(fakeContext)).toBe(false);
+
+    const respawnTick = diedAtTick + RESPAWN_DELAY_TICKS;
+    driveFramesUntil(
+      tick,
+      2 * FRAME_STEP_MS,
+      () => (window.__arena?.getState()?.tick ?? 0) >= respawnTick,
+    );
+    expect(result.current.death).toBeNull();
+
+    // None of the frames above broke an invariant.
+    expect(window.__arena?.getViolations()).toBe(0);
+  });
+
+  it("reports a broken invariant to Sentry once, even though it recurs every later frame", async () => {
+    const { result } = await bootArenaWithCanvas({ debug: true });
+    expect(result.current.phase).toBe("playing");
+    const tick = getTick();
+
+    // No live input ever produces NaN; this is the cheapest way to put the state into a shape
+    // checkInvariants (invariants.ts) rejects, so the once-per-message dedupe can be exercised.
+    // The break is permanent (stepPlayer's dead-zone branch only overwrites facing/speed), so the
+    // same message recurs on every later tick without any further help from this test.
+    window.__arena?.dispatch({ move: [Number.NaN, Number.NaN] }, 1);
+    act(() => tick(0));
+    act(() => tick(FRAME_STEP_MS));
+    act(() => tick(2 * FRAME_STEP_MS));
+
+    expect(window.__arena?.getViolations()).toBeGreaterThan(0);
+    expect(vi.mocked(Sentry.captureMessage)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(Sentry.captureMessage)).toHaveBeenCalledWith(
+      "Arena invariant: player 0 position is not finite",
+      { level: "warning", tags: { area: "arena", kind: "invariant" } },
+    );
+  });
+
+  it("in 3D paints through the 3D view and aims where the mouse turned the camera", async () => {
+    const handle = {
+      render: vi.fn(),
+      aimPoint: vi.fn(() => null),
+      lookZoom: vi.fn(() => 1),
+      dispose: vi.fn(),
+    };
+    mockCreateView3d.mockReturnValue(handle);
+    const { result, canvas, fakeContext } = await bootArenaWithCanvas({
+      debug: true,
+    });
+    canvas.requestPointerLock = vi.fn(() => Promise.resolve());
+    result.current.view3d.layerRef.current = document.createElement("div");
+    await act(async () => {
+      result.current.updateSettings({ view: "3d" });
+    });
+    await waitFor(() => expect(mockCreateView3d).toHaveBeenCalledTimes(1));
+    const facing = hookedPlayer()!.facing;
+    // The click that takes the pointer lock aims but does not shoot.
+    canvas.dispatchEvent(
+      new PointerEvent("pointerdown", { pointerType: "mouse", button: 0 }),
+    );
+    expect(canvas.requestPointerLock).toHaveBeenCalledTimes(1);
+    stubPointerLock(canvas);
+    canvas.dispatchEvent(new MouseEvent("pointermove", { movementX: 200 }));
+    fakeContext.calls.length = 0;
+    const tick = getTick();
+    act(() => tick(0));
+    act(() => tick(FRAME_STEP_MS));
+    expect(window.__arena?.getState()?.bullets).toHaveLength(0);
+    const [frame, overlay] = handle.render.mock.calls.at(-1)!;
+    expect(overlay).toBe(fakeContext);
+    expect(frame.yaw).toBeCloseTo(facing + 0.48);
+    expect(frame.aim).toBeCloseTo(facing + 0.48);
+    expect(frame.scene.localPlayerId).toBe(0);
+    expect(hookedPlayer()!.facing).toBeCloseTo(facing + 0.48);
+    // The 2D renderer stood down: the HUD canvas was only cleared, never filled with the world.
+    expect(fakeContext.calls.some((call) => call.startsWith("fill("))).toBe(
+      false,
+    );
+  });
+
+  it("in 3D hands the view a building the player shot down, as destroyed", async () => {
+    const handle = {
+      render: vi.fn(),
+      aimPoint: vi.fn(() => null),
+      lookZoom: vi.fn(() => 1),
+      dispose: vi.fn(),
+    };
+    mockCreateView3d.mockReturnValue(handle);
+    const { session, resolveReady } = createControllableSession();
+    mockCreateWorldSession.mockReturnValue(session);
+    const { result } = renderArenaGameWithCanvas({ debug: true });
+    await bootReady(resolveReady);
+    result.current.view3d.layerRef.current = document.createElement("div");
+    await act(async () => {
+      result.current.updateSettings({ view: "3d" });
+    });
+    await waitFor(() => expect(mockCreateView3d).toHaveBeenCalledTimes(1));
+    placeShedAhead(session);
+    const tick = getTick();
+    act(() => tick(0));
+    const [before] = handle.render.mock.calls.at(-1)! as [View3dFrame];
+    expect(shedDestroyed(before.structures)).toBe(false);
+
+    shootDownShed(tick, 0);
+    expect(shedDestroyed(window.__arena?.getState()?.structures)).toBe(true);
+    act(() => tick((MAX_SHOOTING_FRAMES + 1) * FRAME_STEP_MS));
+
+    const [after] = handle.render.mock.calls.at(-1)! as [View3dFrame];
+    expect(shedDestroyed(after.structures)).toBe(true);
+    expect(after.structures).toBe(window.__arena?.getState()?.structures);
+    expect(window.__arena?.getViolations()).toBe(0);
+  });
+
+  it("in 2D draws the rubble of a building the player shot down", async () => {
+    const { session, resolveReady } = createControllableSession();
+    mockCreateWorldSession.mockReturnValue(session);
+    const { canvas, fakeContext } = renderArenaGameWithCanvas({
+      debug: true,
+    });
+    // jsdom lays nothing out; a 0 × 0 canvas would show no world at all.
+    vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 800, 600),
+    );
+    await bootReady(resolveReady);
+    placeShedAhead(session);
+    const tick = getTick();
+    act(() => tick(0));
+    expect(fakeContext.calls).not.toContain(`fill(${RUBBLE_FILL})`);
+
+    shootDownShed(tick, 0);
+    expect(shedDestroyed(window.__arena?.getState()?.structures)).toBe(true);
+    fakeContext.calls.length = 0;
+    act(() => tick((MAX_SHOOTING_FRAMES + 1) * FRAME_STEP_MS));
+
+    expect(fakeContext.calls).toContain(`fill(${RUBBLE_FILL})`);
+  });
+});
+
+/** The room the netplay tests play in. */
+const ROOM = "7K4M2Q";
+
+/** Netplay options for "me" over `transport`, connected and ready unless overridden. */
+function netplayFor(
+  transport: RealtimeTransport,
+  overrides: Partial<ArenaNetplayOptions> = {},
+): ArenaNetplayOptions {
+  return {
+    transport: () => transport,
+    ready: true,
+    connected: true,
+    roomCode: ROOM,
+    clientId: "me",
+    clockOffsetMs: 0,
+    hostClientId: overrides.isHost ? "me" : "host",
+    isHost: false,
+    memberIds: ["me"],
+    onHostLost: vi.fn(),
+    ...overrides,
+  };
+}
+
+/** A host loop on `hub`, driven by the test rather than a runtime, with itself seated as player 0. */
+function createTestHost(hub: ReturnType<typeof createMemoryHub>) {
+  const host = createHostLoop({
+    transport: createMemoryTransport(hub, "host"),
+    roomCode: ROOM,
+    world: {
+      collision: createCollisionGrid(),
+      index: testIndex,
+      graph: testGraph,
+    },
+    state: createArenaState(
+      { index: testIndex, graph: testGraph, seed: 1, zone: null },
+      createRng(1),
+    ),
+    random: createRng(2),
+    serverTimeMs: () => 0,
+  });
+  host.claim("host", 0);
+  return host;
+}
+
+describe("netplay", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("requestAnimationFrame", vi.fn());
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("hosts the room once booted: frames step the host loop and publish the world", async () => {
+    const hub = createMemoryHub();
+    const published: Snapshot[] = [];
+    createMemoryTransport(hub, "watcher")
+      .channel(`arena:room:${ROOM}`)
+      .subscribe("state", (message) => {
+        published.push(message.data as Snapshot);
+      });
+    const { result } = await bootArenaWithCanvas({
+      debug: true,
+      netplay: netplayFor(createMemoryTransport(hub, "me"), {
+        isHost: true,
+        memberIds: ["me", "other"],
+      }),
+    });
+    expect(result.current.phase).toBe("playing");
+    const tick = getTick();
+    act(() => tick(0));
+    for (let frame = 1; frame <= 3; frame += 1) {
+      act(() => tick(frame * FRAME_STEP_MS));
+      hub.flush();
+    }
+    expect(published.length).toBeGreaterThan(0);
+    const seats = decodeSnapshot(published[0]!).seats;
+    expect(seats.get("me")).toBe(0);
+    expect(seats.has("other")).toBe(true);
+    expect(result.current.peek()?.youId).toBe(0);
+    expect(window.__arena?.getState()?.players).toHaveLength(2);
+    expect(window.__arena?.getViolations()).toBe(0);
+  });
+
+  it("joins as a client: the seat the host names becomes the player this runtime drives", async () => {
+    const hub = createMemoryHub();
+    const host = createTestHost(hub);
+    const seat = host.addMember("me");
+    const { result } = await bootArenaWithCanvas({
+      debug: true,
+      netplay: netplayFor(createMemoryTransport(hub, "me"), {
+        memberIds: ["host", "me"],
+      }),
+    });
+    const tick = getTick();
+    act(() => tick(0));
+    // Alone until the host's first snapshot names this client's seat.
+    expect(result.current.peek()?.youId).toBe(0);
+    host.advance(FRAME_STEP_MS);
+    hub.flush();
+    act(() => tick(FRAME_STEP_MS));
+    expect(result.current.peek()?.youId).toBe(seat);
+    expect(
+      window.__arena?.getState()?.players.map((player) => player.id),
+    ).toEqual([0, seat]);
+    host.stop();
+  });
+
+  it("survives being unseated: reports it, roams alone, and takes the next seat it is given", async () => {
+    const hub = createMemoryHub();
+    const host = createTestHost(hub);
+    const seat = host.addMember("me");
+    const { result } = await bootArenaWithCanvas({
+      debug: true,
+      netplay: netplayFor(createMemoryTransport(hub, "me"), {
+        memberIds: ["host", "me"],
+      }),
+    });
+    const tick = getTick();
+    act(() => tick(0));
+    host.advance(FRAME_STEP_MS);
+    hub.flush();
+    act(() => tick(FRAME_STEP_MS));
+    expect(result.current.peek()?.youId).toBe(seat);
+
+    // The host drops this client; its next snapshot no longer carries the player. Without the
+    // recovery the frame would throw looking for it and the loop would never run again.
+    host.removeMember("me");
+    host.advance(FRAME_STEP_MS);
+    hub.flush();
+    act(() => tick(2 * FRAME_STEP_MS));
+    const alone = result.current.peek();
+    expect(alone?.seats.size).toBe(0);
+    expect(
+      window.__arena?.getState()?.players.map((player) => player.id),
+    ).toContain(alone?.youId);
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.any(Error),
+      { tags: { area: "arena", kind: "netplay-unseated" } },
+    );
+
+    // The host changes its mind: the next snapshot naming this client seats it again.
+    const again = host.addMember("me");
+    for (let index = 3; index <= 13; index++) {
+      host.advance(FRAME_STEP_MS);
+      hub.flush();
+      act(() => tick(index * FRAME_STEP_MS));
+    }
+    expect(result.current.peek()?.youId).toBe(again);
+    expect(result.current.peek()?.seats.get("me")).toBe(again);
+    host.stop();
+  });
+});
+
+describe("hidden tab", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("requestAnimationFrame", vi.fn());
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  });
+
+  afterEach(() => {
+    cleanup();
+    Reflect.deleteProperty(document, "hidden");
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  /** Makes `document.hidden` report `hidden` and tells the page so. */
+  function setHidden(hidden: boolean): void {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      get: () => hidden,
+    });
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+  }
+
+  it("does no simulation or canvas work while hidden and resumes without catching up", async () => {
+    const { result, fakeContext } = await bootArenaWithCanvas({ debug: true });
+    const tick = getTick();
+    act(() => tick(0));
+    const framesRequested = vi.mocked(window.requestAnimationFrame).mock.calls
+      .length;
+    const tickBefore = window.__arena?.getState()?.tick ?? 0;
+    const paintedBefore = fakeContext.calls.length;
+
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    // The interval clocks the world by performance.now(), the frame clock's own timeline.
+    vi.spyOn(performance, "now").mockImplementation(() => Date.now());
+    setHidden(true);
+    act(() => {
+      vi.advanceTimersByTime((1000 / HOST_TICK_HZ) * 6);
+    });
+    act(() => tick(5000));
+    expect(window.__arena?.getState()?.tick ?? 0).toBe(tickBefore);
+    expect(fakeContext.calls.length).toBe(paintedBefore);
+    expect(vi.mocked(window.requestAnimationFrame).mock.calls).toHaveLength(
+      framesRequested,
+    );
+
+    setHidden(false);
+    expect(vi.mocked(window.requestAnimationFrame).mock.calls).toHaveLength(
+      framesRequested + 1,
+    );
+    expect(result.current.phase).toBe("playing");
+    act(() => tick(6000));
+    expect(fakeContext.calls.length).toBeGreaterThan(paintedBefore);
+    expect(
+      (window.__arena?.getState()?.tick ?? 0) - tickBefore,
+    ).toBeLessThanOrEqual(2);
+  });
+
+  it("records a 500 ms frame stall separately from the simulation clamp", async () => {
+    const { result } = await bootArenaWithCanvas({ debug: true });
+    const tick = getTick();
+    act(() => tick(0));
+    act(() => tick(500));
+    expect(result.current.debugSnapshot?.metrics.frameP95Ms).toBe(500);
+    expect(result.current.debugSnapshot?.metrics.sessionWorstFrameMs).toBe(500);
+  });
+});

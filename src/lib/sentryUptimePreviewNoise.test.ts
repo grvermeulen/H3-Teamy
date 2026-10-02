@@ -16,9 +16,9 @@ describe("extractUptimeUrlFromIssueTitle", () => {
   });
 
   it("returns undefined for unrelated titles", () => {
-    expect(extractUptimeUrlFromIssueTitle("TypeError: x is not a function")).toBe(
-      undefined,
-    );
+    expect(
+      extractUptimeUrlFromIssueTitle("TypeError: x is not a function"),
+    ).toBe(undefined);
   });
 });
 
