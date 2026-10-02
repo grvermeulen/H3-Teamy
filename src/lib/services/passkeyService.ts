@@ -1,5 +1,5 @@
 import type {
-  AuthenticatorTransportFuture,
+  AuthenticatorTransport,
   AuthenticationResponseJSON,
   RegistrationResponseJSON,
 } from "@simplewebauthn/browser";
@@ -55,12 +55,10 @@ export async function startPasskeyRegistration(
       `${user.firstName} ${user.lastName}`.trim() || userName;
 
     const excludeCredentials = existing.map((row) => {
-      let transports: AuthenticatorTransportFuture[] | undefined;
+      let transports: AuthenticatorTransport[] | undefined;
       if (row.transports) {
         try {
-          transports = JSON.parse(
-            row.transports,
-          ) as AuthenticatorTransportFuture[];
+          transports = JSON.parse(row.transports) as AuthenticatorTransport[];
         } catch {
           transports = undefined;
         }

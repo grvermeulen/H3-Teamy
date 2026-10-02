@@ -21,18 +21,18 @@
 
 ## File map
 
-| File | Change |
-| --- | --- |
-| `render3d/textures.ts` | more façade styles and palettes; shopfront and door textures; normal-ish shading baked in |
-| `render3d/buildingMesh.ts` (+ new `facadeDetail.ts`) | gable fronts, shopfront bands with awnings, balconies, sills/frames, roof overhangs |
-| `render3d/pitchedRoof.ts` / new `roofDetail.ts` | chimneys, dormers |
-| `render3d/roadMesh.ts` (+ new `streetMarkings.ts`) | raised kerbs, red cycle paths, zebra crossings |
-| new `render3d/streetClutter.ts` | instanced bikes + racks, bins, bollards, signs, planters, hedges |
-| `render3d/treeMesh.ts` | three species, per-instance variation |
-| `render3d/vehicleShapes.ts`, `vehicleShapesHeavy.ts`, `vehicleParts.ts`, `vehicles3d.ts` | bevels, arches, lights (brake glow), plates, mirrors, darker glass |
-| `render3d/sky.ts`, new `lampPools.ts` | stars, moon, light pools under lamps |
-| `render3d/buildCell.ts`, `worldCells.ts`, `renderer3d.ts` | wiring + quality gating |
-| `docs/tech/arena/3D-MODE.md` | "City detail" section, module map, before/after screenshots |
+| File                                                                                     | Change                                                                                    |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `render3d/textures.ts`                                                                   | more façade styles and palettes; shopfront and door textures; normal-ish shading baked in |
+| `render3d/buildingMesh.ts` (+ new `facadeDetail.ts`)                                     | gable fronts, shopfront bands with awnings, balconies, sills/frames, roof overhangs       |
+| `render3d/pitchedRoof.ts` / new `roofDetail.ts`                                          | chimneys, dormers                                                                         |
+| `render3d/roadMesh.ts` (+ new `streetMarkings.ts`)                                       | raised kerbs, red cycle paths, zebra crossings                                            |
+| new `render3d/streetClutter.ts`                                                          | instanced bikes + racks, bins, bollards, signs, planters, hedges                          |
+| `render3d/treeMesh.ts`                                                                   | three species, per-instance variation                                                     |
+| `render3d/vehicleShapes.ts`, `vehicleShapesHeavy.ts`, `vehicleParts.ts`, `vehicles3d.ts` | bevels, arches, lights (brake glow), plates, mirrors, darker glass                        |
+| `render3d/sky.ts`, new `lampPools.ts`                                                    | stars, moon, light pools under lamps                                                      |
+| `render3d/buildCell.ts`, `worldCells.ts`, `renderer3d.ts`                                | wiring + quality gating                                                                   |
+| `docs/tech/arena/3D-MODE.md`                                                             | "City detail" section, module map, before/after screenshots                               |
 
 ---
 

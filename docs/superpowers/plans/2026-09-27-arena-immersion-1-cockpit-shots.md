@@ -4,7 +4,7 @@
 
 **Goal:** First person in a vehicle shows a real cockpit (wheel turning in both hands, dashboard, pillars, bonnet), and every shot, flash and rocket visibly leaves the weapon's muzzle.
 
-**Architecture:** The cockpit is a per-kind model drawn in the existing view-model pass (own scene/camera, depth cleared), anchored in car space; the own car's exterior hides in first person. Shots keep the sim's flat line but are *drawn* from a per-owner muzzle point that converges onto that line within `CONVERGE_M`.
+**Architecture:** The cockpit is a per-kind model drawn in the existing view-model pass (own scene/camera, depth cleared), anchored in car space; the own car's exterior hides in first person. Shots keep the sim's flat line but are _drawn_ from a per-owner muzzle point that converges onto that line within `CONVERGE_M`.
 
 **Tech Stack:** three.js 0.186, TypeScript 6.0.3, Vitest 5.
 
@@ -20,19 +20,19 @@
 
 ## File map
 
-| File | Change |
-| --- | --- |
-| `src/lib/cityArena/render3d/cockpitSpecs.ts` | **new** — `CockpitSpec`, `COCKPITS: Record<VehicleKind, CockpitSpec>` |
-| `src/lib/cityArena/render3d/cockpit3d.ts` | **new** — builds a kind's cockpit model (cached geometry per kind, per-colour bonnet), poses wheel/needle/hands/header glow |
-| `src/lib/cityArena/render3d/cameraRig.ts` | seat pose from `COCKPITS[kind]`; `RigInput.driving` gains `kind` |
-| `src/lib/cityArena/render3d/index.ts` | `Focus.driving` gains `kind` (+ `focusOf`) |
-| `src/lib/cityArena/render3d/entities.ts` | hides own vehicle in first person; `LocalCharacter.vehicle`; per-frame `muzzles` map |
-| `src/lib/cityArena/render3d/viewModelPass.ts`, `viewmodel.ts` | pass shows hands **or** cockpit; exposes the view-model muzzle in world space |
-| `src/lib/cityArena/render3d/cast3d.ts` | chooses hands/cockpit/none; hands the muzzle map to the effects |
-| `src/lib/cityArena/render3d/muzzleBlend.ts` | **new** — pure convergence maths shared by tracers and projectiles |
-| `src/lib/cityArena/render3d/tracers.ts`, `projectiles3d.ts`, `bursts.ts`, `effects3d.ts` | draw from the muzzle |
-| `src/lib/cityArena/render3d/sharedAssets.ts` | frees cockpit caches |
-| `docs/tech/arena/3D-MODE.md` | cockpit + muzzle sections, module-map rows, screenshots |
+| File                                                                                     | Change                                                                                                                      |
+| ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `src/lib/cityArena/render3d/cockpitSpecs.ts`                                             | **new** — `CockpitSpec`, `COCKPITS: Record<VehicleKind, CockpitSpec>`                                                       |
+| `src/lib/cityArena/render3d/cockpit3d.ts`                                                | **new** — builds a kind's cockpit model (cached geometry per kind, per-colour bonnet), poses wheel/needle/hands/header glow |
+| `src/lib/cityArena/render3d/cameraRig.ts`                                                | seat pose from `COCKPITS[kind]`; `RigInput.driving` gains `kind`                                                            |
+| `src/lib/cityArena/render3d/index.ts`                                                    | `Focus.driving` gains `kind` (+ `focusOf`)                                                                                  |
+| `src/lib/cityArena/render3d/entities.ts`                                                 | hides own vehicle in first person; `LocalCharacter.vehicle`; per-frame `muzzles` map                                        |
+| `src/lib/cityArena/render3d/viewModelPass.ts`, `viewmodel.ts`                            | pass shows hands **or** cockpit; exposes the view-model muzzle in world space                                               |
+| `src/lib/cityArena/render3d/cast3d.ts`                                                   | chooses hands/cockpit/none; hands the muzzle map to the effects                                                             |
+| `src/lib/cityArena/render3d/muzzleBlend.ts`                                              | **new** — pure convergence maths shared by tracers and projectiles                                                          |
+| `src/lib/cityArena/render3d/tracers.ts`, `projectiles3d.ts`, `bursts.ts`, `effects3d.ts` | draw from the muzzle                                                                                                        |
+| `src/lib/cityArena/render3d/sharedAssets.ts`                                             | frees cockpit caches                                                                                                        |
+| `docs/tech/arena/3D-MODE.md`                                                             | cockpit + muzzle sections, module-map rows, screenshots                                                                     |
 
 ---
 
@@ -51,7 +51,12 @@ export type CockpitSpec = {
   /** Eye left of the centre line (Dutch cars: wheel on the left), metres (positive = left). */
   eyeLeftM: number;
   /** Wheel: radius, distance ahead of the eye, drop below the eye, tilt back from vertical (rad). */
-  wheel: { radiusM: number; aheadM: number; dropM: number; tiltRad: number } | null;
+  wheel: {
+    radiusM: number;
+    aheadM: number;
+    dropM: number;
+    tiltRad: number;
+  } | null;
   /** Dashboard top height above the ground and distance ahead of the eye, metres. */
   dash: { heightM: number; aheadM: number };
   /** Bonnet length ahead of the windscreen base; 0 for a flat-fronted bus/van cab. */
@@ -62,7 +67,11 @@ export type CockpitSpec = {
   frame: "car" | "open" | "hatch";
 };
 export const COCKPITS: Readonly<Record<VehicleKind, CockpitSpec>>;
-export function seatOffset(kind: VehicleKind): { forwardM: number; leftM: number; heightM: number };
+export function seatOffset(kind: VehicleKind): {
+  forwardM: number;
+  leftM: number;
+  heightM: number;
+};
 ```
 
 `RigInput.driving` becomes `{ length: number; heading: number; kind: VehicleKind } | null`. `firstPersonPose` places the eye at the car centre + `forward·eyeForwardM` + `left·eyeLeftM` (left of heading `h` in sim coordinates is `(sin h, −cos h)` — keep the existing sign convention of `SEAT_SIDE_M`), height `eyeHeightM`; delete `SEAT_EYE_HEIGHT_M`/`SEAT_SIDE_M`.
@@ -80,8 +89,13 @@ export function seatOffset(kind: VehicleKind): { forwardM: number; leftM: number
 
 ```ts
 export type CockpitInput = {
-  kind: VehicleKind; colour: number; steer: number; speedMps: number;
-  siren: boolean; tick: number; dt: number;
+  kind: VehicleKind;
+  colour: number;
+  steer: number;
+  speedMps: number;
+  siren: boolean;
+  tick: number;
+  dt: number;
 };
 export type Cockpit3d = {
   /** Root in car space: +X forward, +Y up, +Z right, origin at the footprint centre on the ground. */
@@ -89,9 +103,9 @@ export type Cockpit3d = {
   update(input: CockpitInput): void;
   dispose(): void;
 };
-export function createCockpit3d(): Cockpit3d;          // rebuilds its model when kind/colour change
-export const WHEEL_TURN_RAD: number;                     // wheel angle at steer ±1 (≈ 2.1 rad)
-export const SPEEDO_MAX_MPS: number;                     // needle end stop
+export function createCockpit3d(): Cockpit3d; // rebuilds its model when kind/colour change
+export const WHEEL_TURN_RAD: number; // wheel angle at steer ±1 (≈ 2.1 rad)
+export const SPEEDO_MAX_MPS: number; // needle end stop
 export function disposeCockpitAssets(): void;
 ```
 
@@ -110,18 +124,38 @@ Build with `lowPoly.ts` `block`/`rod` + `mergeParts` in vertex colours and the e
 
 ```ts
 // entities.ts
-export type LocalVehicle = { id: number; kind: VehicleKind; colour: number; steer: number;
-  speedMps: number; heading: number; x: number; y: number; siren: boolean; wrecked: boolean };
-export type LocalCharacter = { /* existing fields */ vehicle: LocalVehicle | null };
+export type LocalVehicle = {
+  id: number;
+  kind: VehicleKind;
+  colour: number;
+  steer: number;
+  speedMps: number;
+  heading: number;
+  x: number;
+  y: number;
+  siren: boolean;
+  wrecked: boolean;
+};
+export type LocalCharacter = {
+  /* existing fields */ vehicle: LocalVehicle | null;
+};
 // EntityView gains nothing new: firstPerson already exists.
 
 // viewModelPass.ts
 export type ViewModelPass = {
-  update(camera: PerspectiveCamera, input: ViewModelInput | null, cockpit?: CockpitPose | null): OverlayPass | null;
-  muzzleWorld(target: Vector3): boolean;   // see Task 4
+  update(
+    camera: PerspectiveCamera,
+    input: ViewModelInput | null,
+    cockpit?: CockpitPose | null,
+  ): OverlayPass | null;
+  muzzleWorld(target: Vector3): boolean; // see Task 4
   dispose(): void;
 };
-export type CockpitPose = CockpitInput & { x: number; y: number; heading: number };
+export type CockpitPose = CockpitInput & {
+  x: number;
+  y: number;
+  heading: number;
+};
 ```
 
 - `syncVehicle`: when `view.firstPerson` and the car is the local player's (`driverOf(...)?.id === scene.localPlayerId`) and not wrecked, set its object invisible and fill `local.vehicle`; otherwise visible. The local player is still "hidden" in a car as today.
@@ -142,14 +176,23 @@ export type CockpitPose = CockpitInput & { x: number; y: number; heading: number
 /** Rounds are drawn from the muzzle and meet the sim's flat line after this many metres flown. */
 export const CONVERGE_M = 15;
 /** Eased share (0 at the muzzle … 1 on the line) for a distance flown. */
-export function convergeShare(flownM: number): number;           // smoothstep(0, CONVERGE_M)
+export function convergeShare(flownM: number): number; // smoothstep(0, CONVERGE_M)
 /** Writes the drawn point of a round into `out` (three.js space). `muzzle` null = today's point. */
-export function blendedRoundPoint(x: number, y: number, flownM: number,
-  muzzle: Readonly<Vector3> | null, out: Vector3): Vector3;
+export function blendedRoundPoint(
+  x: number,
+  y: number,
+  flownM: number,
+  muzzle: Readonly<Vector3> | null,
+  out: Vector3,
+): Vector3;
 // entities.ts
-export type EntitySync = { /* existing */ muzzles: ReadonlyMap<number, Vector3> };  // ownerId → world muzzle
+export type EntitySync = {
+  /* existing */ muzzles: ReadonlyMap<number, Vector3>;
+}; // ownerId → world muzzle
 // viewmodel.ts
-export type ViewModel = { /* existing */ muzzleWorld(target: Vector3): boolean };
+export type ViewModel = {
+  /* existing */ muzzleWorld(target: Vector3): boolean;
+};
 ```
 
 - `entities`: after each player/cop `placeCharacter`, call `slot.item.muzzleWorld(scratch)`; keep one `Vector3` per owner id in a pooled map (reuse vectors; delete owners not seen this frame). Verify first that player ids and cop ids never collide (both come from the state's id counter — read `sim/players.ts`, `sim/cops.ts`); if they can, key by `"p:"|"c:"` prefix instead and adjust `ownerId` lookups accordingly (bullets carry the shooter id; `hits.ts`/`cops.ts` show which).

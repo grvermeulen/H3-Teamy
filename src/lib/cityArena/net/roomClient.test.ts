@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  ArenaRequestError,
-  shouldReportArenaRequestError,
-} from "./roomClient";
+import { ArenaRequestError, shouldReportArenaRequestError } from "./roomClient";
 
 describe("shouldReportArenaRequestError", () => {
   it("returns false for expected client refusals", () => {
@@ -27,9 +24,7 @@ describe("shouldReportArenaRequestError", () => {
 
   it("returns true for unexpected server failures", () => {
     expect(
-      shouldReportArenaRequestError(
-        new ArenaRequestError("Interne fout", 500),
-      ),
+      shouldReportArenaRequestError(new ArenaRequestError("Interne fout", 500)),
     ).toBe(true);
     expect(shouldReportArenaRequestError(new Error("boom"))).toBe(true);
   });

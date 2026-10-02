@@ -479,70 +479,72 @@ export async function commandArenaRoom(
 ): Promise<ArenaRoomTicket | null> {
   return withPrismaSchemaDriftAsDbUnavailable(() =>
     prisma.$transaction(async (tx) => {
-    if (command.action === "create" || command.action === "join")
-      return join(tx, user, command, now);
-    const owner = actorOwner(user);
-    const ownerKey = typeof owner === "string" ? owner : owner.displayKeyHash;
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`arena:${ownerKey}`}))`;
-    const member = await requireArenaMember(tx, command.memberId, owner);
-    let room = await lockArenaRoom(tx, member.roomId, now);
-    // Recheck after acquiring the room lock: a concurrent leave may have won.
-    const fresh = await requireArenaMember(tx, member.id, owner);
-    if (command.action === "leave") {
-      await tx.arenaRoomMember.update({
-        where: { id: member.id },
-        data: { leftAt: now, visible: false },
-      });
-      await maintainHost(tx, room, now);
-      return null;
-    }
-    if (command.action === "heartbeat") {
-      await resumeMember(tx, fresh, now);
-      await tx.arenaRoomMember.update({
-        where: { id: member.id },
-        data: { seenAt: now, visible: command.visible },
-      });
-      room = await maintainHost(tx, room, now, member.id);
-      return ticketFor(tx, room, member.id, now);
-    }
-    room = await maintainHost(tx, room, now);
-    if (
-      room.hostMemberId !== member.id ||
-      room.hostEpoch !== command.epoch ||
-      room.hostLeaseUntil <= now
-    ) {
-      throw new ArenaRoomError(
-        "not-host",
-        403,
-        "Alleen de huidige host kan het potje starten",
-      );
-    }
-    const existing = await activeRound(tx, room.id, now);
-    if (!existing) {
-      const members = playerMembers(await liveMembers(tx, room.id, now));
-      if (members.length === 0)
+      if (command.action === "create" || command.action === "join")
+        return join(tx, user, command, now);
+      const owner = actorOwner(user);
+      const ownerKey = typeof owner === "string" ? owner : owner.displayKeyHash;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`arena:${ownerKey}`}))`;
+      const member = await requireArenaMember(tx, command.memberId, owner);
+      let room = await lockArenaRoom(tx, member.roomId, now);
+      // Recheck after acquiring the room lock: a concurrent leave may have won.
+      const fresh = await requireArenaMember(tx, member.id, owner);
+      if (command.action === "leave") {
+        await tx.arenaRoomMember.update({
+          where: { id: member.id },
+          data: { leftAt: now, visible: false },
+        });
+        await maintainHost(tx, room, now);
+        return null;
+      }
+      if (command.action === "heartbeat") {
+        await resumeMember(tx, fresh, now);
+        await tx.arenaRoomMember.update({
+          where: { id: member.id },
+          data: { seenAt: now, visible: command.visible },
+        });
+        room = await maintainHost(tx, room, now, member.id);
+        return ticketFor(tx, room, member.id, now);
+      }
+      room = await maintainHost(tx, room, now);
+      if (
+        room.hostMemberId !== member.id ||
+        room.hostEpoch !== command.epoch ||
+        room.hostLeaseUntil <= now
+      ) {
         throw new ArenaRoomError(
-          "no-players",
-          409,
-          "Laat eerst een speler aansluiten",
+          "not-host",
+          403,
+          "Alleen de huidige host kan het potje starten",
         );
-      const startedAt = new Date(now.getTime() + ROOM_RULES.countdownMs);
-      await tx.arenaRound.create({
-        data: {
-          roomId: room.id,
-          startedAt,
-          scoringVersion: 2,
-          finishesAt: new Date(startedAt.getTime() + ROOM_RULES.missionMatchMs),
-          participants: {
-            create: members.map((entry) => ({
-              memberId: entry.id,
-              userId: entry.userId,
-            })),
+      }
+      const existing = await activeRound(tx, room.id, now);
+      if (!existing) {
+        const members = playerMembers(await liveMembers(tx, room.id, now));
+        if (members.length === 0)
+          throw new ArenaRoomError(
+            "no-players",
+            409,
+            "Laat eerst een speler aansluiten",
+          );
+        const startedAt = new Date(now.getTime() + ROOM_RULES.countdownMs);
+        await tx.arenaRound.create({
+          data: {
+            roomId: room.id,
+            startedAt,
+            scoringVersion: 2,
+            finishesAt: new Date(
+              startedAt.getTime() + ROOM_RULES.missionMatchMs,
+            ),
+            participants: {
+              create: members.map((entry) => ({
+                memberId: entry.id,
+                userId: entry.userId,
+              })),
+            },
           },
-        },
-      });
-    }
-    return ticketFor(tx, room, member.id, now);
+        });
+      }
+      return ticketFor(tx, room, member.id, now);
     }),
   );
 }
@@ -555,17 +557,17 @@ export async function authorizeArenaToken(
 ): Promise<ArenaRoomTicket> {
   return withPrismaSchemaDriftAsDbUnavailable(() =>
     prisma.$transaction(async (tx) => {
-    const member = await requireArenaMember(tx, memberId, owner);
-    let room = await lockArenaRoom(tx, member.roomId, now);
-    const fresh = await requireArenaMember(tx, memberId, owner);
-    if (fresh.seenAt.getTime() <= now.getTime() - ROOM_RULES.memberTtlMs)
-      throw new ArenaRoomError(
-        "membership-expired",
-        403,
-        "Je verbinding is verlopen, open het potje opnieuw",
-      );
-    room = await maintainHost(tx, room, now);
-    return ticketFor(tx, room, memberId, now);
+      const member = await requireArenaMember(tx, memberId, owner);
+      let room = await lockArenaRoom(tx, member.roomId, now);
+      const fresh = await requireArenaMember(tx, memberId, owner);
+      if (fresh.seenAt.getTime() <= now.getTime() - ROOM_RULES.memberTtlMs)
+        throw new ArenaRoomError(
+          "membership-expired",
+          403,
+          "Je verbinding is verlopen, open het potje opnieuw",
+        );
+      room = await maintainHost(tx, room, now);
+      return ticketFor(tx, room, memberId, now);
     }),
   );
 }
@@ -595,37 +597,39 @@ export function arenaTokenCapability(
 /** Lists bounded, live server-registered rooms without trusting client advertisements. */
 export async function listArenaRooms(now = new Date()): Promise<LobbyRoom[]> {
   return withPrismaSchemaDriftAsDbUnavailable(async () => {
-  const rooms = await prisma.arenaRoom.findMany({
-    where: {
-      expiresAt: { gt: now },
-      hostLeaseUntil: { gt: now },
-      hostMemberId: { not: null },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 30,
-    include: {
-      members: {
-        where: {
-          leftAt: null,
-          seenAt: { gt: new Date(now.getTime() - ROOM_RULES.memberTtlMs) },
+    const rooms = await prisma.arenaRoom.findMany({
+      where: {
+        expiresAt: { gt: now },
+        hostLeaseUntil: { gt: now },
+        hostMemberId: { not: null },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      include: {
+        members: {
+          where: {
+            leftAt: null,
+            seenAt: { gt: new Date(now.getTime() - ROOM_RULES.memberTtlMs) },
+          },
+          take: ROOM_RULES.capacity + ROOM_RULES.displayCapacity,
         },
-        take: ROOM_RULES.capacity + ROOM_RULES.displayCapacity,
+        rounds: { where: { completedAt: null }, take: 1 },
       },
-      rounds: { where: { completedAt: null }, take: 1 },
-    },
-  });
-  return rooms.flatMap((room) => {
-    const host = room.members.find((member) => member.id === room.hostMemberId);
-    if (!host) return [];
-    return [
-      {
-        roomCode: room.code,
-        zone: ArenaZoneSchema.parse(room.zone),
-        hostName: host.displayName,
-        players: playerMembers(room.members).length,
-        phase: room.rounds.length ? ("playing" as const) : ("lobby" as const),
-      },
-    ];
-  });
+    });
+    return rooms.flatMap((room) => {
+      const host = room.members.find(
+        (member) => member.id === room.hostMemberId,
+      );
+      if (!host) return [];
+      return [
+        {
+          roomCode: room.code,
+          zone: ArenaZoneSchema.parse(room.zone),
+          hostName: host.displayName,
+          players: playerMembers(room.members).length,
+          phase: room.rounds.length ? ("playing" as const) : ("lobby" as const),
+        },
+      ];
+    });
   });
 }
