@@ -20,6 +20,7 @@ import {
 } from "@/lib/jev/datasetWorktree";
 import { gitActorCommit, runGit, tryRunGit } from "@/lib/jev/gitExec";
 import { authenticatedRemoteUrl } from "@/lib/jev/gitRemote";
+import { jevDatasetVercelJsonText } from "@/lib/jev/datasetBranchVercel";
 import {
   JEV_DATA_BRANCH,
   OUTCOMES_FILE,
@@ -69,6 +70,10 @@ function remoteBranchExists(repoRoot: string): boolean {
   return branches.includes(`origin/${JEV_DATA_BRANCH}`);
 }
 
+function writeDatasetVercelConfig(dir: string): void {
+  writeFileSync(join(dir, "vercel.json"), jevDatasetVercelJsonText(), "utf8");
+}
+
 function writeInitialDatasetFiles(dir: string): void {
   writeFileSync(join(dir, PREDICTIONS_FILE), "", "utf8");
   writeFileSync(join(dir, OUTCOMES_FILE), "", "utf8");
@@ -77,6 +82,7 @@ function writeInitialDatasetFiles(dir: string): void {
     "# JEV risk dataset\n\nOrphan branch for predictions/outcomes JSONL. Not deployed on Vercel.\n",
     "utf8",
   );
+  writeDatasetVercelConfig(dir);
 }
 
 function resolveAuthenticatedRemote(repoRoot: string): string {
@@ -248,6 +254,7 @@ function pushWithRetry(
 
       runGit(worktreeDir, ["fetch", "origin", JEV_DATA_BRANCH]);
       runGit(worktreeDir, ["reset", "--hard", `origin/${JEV_DATA_BRANCH}`]);
+      writeDatasetVercelConfig(worktreeDir);
       mutate();
       runGit(worktreeDir, ["add", "-A"]);
       const status = runGit(worktreeDir, ["status", "--porcelain"]);
