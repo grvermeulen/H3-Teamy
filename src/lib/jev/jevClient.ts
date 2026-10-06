@@ -1,3 +1,4 @@
+import { extractApiCostUsd } from "./pricing";
 import type { JevResponse } from "./types";
 
 const JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
@@ -32,8 +33,8 @@ export async function callJevApi(
     });
 
     if (res.ok) {
-      const json = (await res.json()) as JevResponse;
-      return json;
+      const json = await res.json();
+      return parseJevResponse(json);
     }
 
     if ((res.status === 429 || res.status === 529) && attempt < maxRetries) {
@@ -95,7 +96,13 @@ export function parseJevResponse(json: unknown): JevResponse {
   ) {
     throw new Error("Invalid JEV response: missing usage");
   }
-  return json as JevResponse;
+
+  const response = json as JevResponse;
+  const apiCost = extractApiCostUsd(json);
+  if (apiCost !== undefined) {
+    response.usage = { ...response.usage, cost_usd: apiCost };
+  }
+  return response;
 }
 
 function sleep(ms: number): Promise<void> {

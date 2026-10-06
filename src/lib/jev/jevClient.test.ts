@@ -16,6 +16,15 @@ describe("parseJevResponse", () => {
     expect(parseJevResponse(json).model).toBe("jev-1.13.0");
   });
 
+  it("extracts API-reported cost into usage", () => {
+    const json = {
+      model: "jev-1.13.0",
+      answers: {},
+      usage: { input_tokens: 100, output_tokens: 10, cost_usd: 0.0042 },
+    };
+    expect(parseJevResponse(json).usage.cost_usd).toBe(0.0042);
+  });
+
   it("rejects missing usage", () => {
     expect(() =>
       parseJevResponse({ model: "jev-1.13.0", answers: {} }),

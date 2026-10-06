@@ -1,8 +1,12 @@
+import { getJevPricingConfig } from "./pricing";
+import { getPredictionCostUsd, getPredictionUsage } from "./usage";
 import type {
+  MonthlyUsageRow,
   OutcomeRecord,
   PredictionRecord,
   ReportMetrics,
   RiskLevel,
+  UsageReportSummary,
 } from "./types";
 
 export interface JoinedRecord {
@@ -126,6 +130,7 @@ export function computeReportMetrics(
     outcome_count: outcomes.length,
     labeled_pairs: n,
     too_small: n < minSample,
+    usage_summary: computeUsageReportSummary(predictions),
     confusion_matrix: confusion,
     calibration: (["low", "medium", "high"] as RiskLevel[]).map((level) => ({
       predicted: level,
@@ -168,7 +173,27 @@ export function formatReportMarkdown(metrics: ReportMetrics): string {
     "",
     `Predictions: ${metrics.prediction_count} · Outcomes: ${metrics.outcome_count} · Gekoppelde paren: ${metrics.labeled_pairs}`,
     "",
+    "## Token- en kostenoverzicht",
+    "",
+    `Totaal: ${metrics.usage_summary.total_input_tokens.toLocaleString("nl-NL")} input / ${metrics.usage_summary.total_output_tokens.toLocaleString("nl-NL")} output tokens · $${metrics.usage_summary.total_cost_usd.toFixed(4)}`,
+    `Gemiddeld per assessment: ${metrics.usage_summary.avg_input_tokens.toFixed(0)} input / ${metrics.usage_summary.avg_output_tokens.toFixed(0)} output tokens · $${metrics.usage_summary.avg_cost_usd.toFixed(4)}`,
+    "",
   ];
+
+  if (metrics.usage_summary.by_month.length > 0) {
+    lines.push(
+      "### Per maand",
+      "",
+      "| Maand | Assessments | Input tokens | Output tokens | Kosten (USD) |",
+      "|-------|-------------|--------------|---------------|--------------|",
+    );
+    for (const row of metrics.usage_summary.by_month) {
+      lines.push(
+        `| ${row.month} | ${row.predictions} | ${row.input_tokens.toLocaleString("nl-NL")} | ${row.output_tokens.toLocaleString("nl-NL")} | $${row.cost_usd.toFixed(4)} |`,
+      );
+    }
+    lines.push("");
+  }
 
   if (metrics.too_small) {
     lines.push(
@@ -224,6 +249,54 @@ export function formatReportMarkdown(metrics: ReportMetrics): string {
   );
 
   return lines.join("\n");
+}
+
+/**
+ * Aggregates token and cost totals across all predictions.
+ * @param predictions - Full prediction dataset (including non-final rows).
+ */
+export function computeUsageReportSummary(
+  predictions: PredictionRecord[],
+): UsageReportSummary {
+  const pricing = getJevPricingConfig();
+  const byMonth = new Map<string, MonthlyUsageRow>();
+
+  let totalInput = 0;
+  let totalOutput = 0;
+  let totalCost = 0;
+
+  for (const prediction of predictions) {
+    const usage = getPredictionUsage(prediction);
+    const cost = getPredictionCostUsd(prediction, pricing);
+    totalInput += usage.input_tokens;
+    totalOutput += usage.output_tokens;
+    totalCost += cost;
+
+    const month = prediction.assessed_at.slice(0, 7);
+    const existing = byMonth.get(month) ?? {
+      month,
+      predictions: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      cost_usd: 0,
+    };
+    existing.predictions += 1;
+    existing.input_tokens += usage.input_tokens;
+    existing.output_tokens += usage.output_tokens;
+    existing.cost_usd += cost;
+    byMonth.set(month, existing);
+  }
+
+  const count = predictions.length;
+  return {
+    total_input_tokens: totalInput,
+    total_output_tokens: totalOutput,
+    total_cost_usd: totalCost,
+    avg_input_tokens: count > 0 ? totalInput / count : 0,
+    avg_output_tokens: count > 0 ? totalOutput / count : 0,
+    avg_cost_usd: count > 0 ? totalCost / count : 0,
+    by_month: [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month)),
+  };
 }
 
 function getRiskLevel(prediction: PredictionRecord): RiskLevel | undefined {

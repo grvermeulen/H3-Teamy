@@ -35,7 +35,7 @@ De JEV-job **faalt nooit** de PR (script exit 0). Dependabot auto-merge (`status
 
 Orphan branch, **niet** gemerged naar `image`:
 
-- `predictions.jsonl` — één record per head-SHA (laatste assessment wint)
+- `predictions.jsonl` — één record per head-SHA (laatste assessment wint). Nieuwere records bevatten ook `input_tokens`, `output_tokens`, `cost_usd`, `model` en `api_calls` (per API-call bij retry). Oudere records met alleen `usage` blijven geldig.
 - `outcomes.jsonl` — gelabelde uitkomst per gemergde PR (≥ 7 dagen oud)
 
 Waarom orphan branch:
@@ -64,13 +64,29 @@ Handmatige override: `jev:false-alarm` / `jev:no-issue`.
 npm run jev:report
 ```
 
-Of via de dagelijkse workflow (job summary). Toont o.a. confusion matrix (high/medium vs low), precision/recall voor `high` (alleen bij voldoende N), kalibratie per risiconiveau, flag hit rates, Dependabot vs mens.
+Of via de dagelijkse workflow (job summary). Toont o.a. **token- en kostenoverzicht** (totaal, gemiddelde en per maand), confusion matrix (high/medium vs low), precision/recall voor `high` (alleen bij voldoende N), kalibratie per risiconiveau, flag hit rates, Dependabot vs mens.
 
 Bij **N < 5** gekoppelde paren: rapport vermeldt dat metrics te klein zijn.
 
 ## Kosten
 
-JEV pricing (indicatief): ~**$0.042 per M input tokens**; output tokens gratis. Typische PR-state is enkele duizenden input tokens.
+Officiële TypeSafe-tariefkaart voor `jev-1.13.0` ([docs.typesafe.ai/models](https://docs.typesafe.ai/models), gecontroleerd 2026-10-06):
+
+| | Tarief |
+|---|--------|
+| Input | **$0,042 per miljoen tokens** ($42 per miljard) |
+| Output | **gratis** |
+
+De PR-comment toont gesomde tokens en **geschatte** kosten (`kosten ≈ $…`) op basis van deze tarieven. Bij een token-budget-retry worden alle API-calls opgeteld. Als de JEV API zelf een `cost`/`cost_usd` teruggeeft, heeft die voorrang.
+
+Configureerbaar via Actions-secrets of env:
+
+| Variabele | Default |
+|-----------|---------|
+| `JEV_PRICE_INPUT_PER_MTOK` | `0.042` |
+| `JEV_PRICE_OUTPUT_PER_MTOK` | `0` |
+
+Typische PR-state: enkele duizenden input tokens (~$0,001–$0,002 per assessment).
 
 ## Code
 

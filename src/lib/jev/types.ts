@@ -37,6 +37,16 @@ export type JevAnswer = JevNoulAnswer | JevChoiceAnswer | JevScoreAnswer;
 export interface JevUsage {
   input_tokens: number;
   output_tokens: number;
+  /** Present when the JEV API reports a billed cost for the call. */
+  cost_usd?: number;
+}
+
+/** Per-call usage stored on newer prediction records (supports retry aggregation). */
+export interface JevApiCallRecord {
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+  model: string;
 }
 
 export interface JevResponse {
@@ -81,7 +91,16 @@ export interface PredictionRecord {
   sensitive_paths: string[];
   jev_answers: Record<string, JevAnswer>;
   model: string;
+  /** Legacy summed usage; kept for backward compatibility with older JSONL rows. */
   usage: JevUsage;
+  /** Summed input tokens across all API calls in this assessment. */
+  input_tokens?: number;
+  /** Summed output tokens across all API calls in this assessment. */
+  output_tokens?: number;
+  /** Summed USD cost (API-reported or estimated) for this assessment. */
+  cost_usd?: number;
+  /** One entry per successful JEV API call (e.g. token-budget retry). */
+  api_calls?: JevApiCallRecord[];
   assessed_at: string;
   workflow_run_id?: number;
   final_before_merge?: boolean;
@@ -131,4 +150,23 @@ export interface ReportMetrics {
     dependabot: { predictions: number; problems: number };
     human: { predictions: number; problems: number };
   };
+  usage_summary: UsageReportSummary;
+}
+
+export interface MonthlyUsageRow {
+  month: string;
+  predictions: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+}
+
+export interface UsageReportSummary {
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_cost_usd: number;
+  avg_input_tokens: number;
+  avg_output_tokens: number;
+  avg_cost_usd: number;
+  by_month: MonthlyUsageRow[];
 }

@@ -13,6 +13,11 @@ import {
 } from "@/lib/jev/stateBudget";
 import { formatJevPrComment, formatJevUnavailableComment } from "@/lib/jev/formatComment";
 import { callJevApi, isMaxTokensExceededError } from "@/lib/jev/jevClient";
+import type { JevResponse } from "@/lib/jev/types";
+import {
+  aggregateJevAssessment,
+  buildApiCallRecords,
+} from "@/lib/jev/usage";
 import { buildJevRequest } from "@/lib/jev/questions";
 import { matchSensitivePaths } from "@/lib/jev/sensitivePaths";
 import { JEV_COMMENT_MARKER } from "@/lib/jev/types";
@@ -79,9 +84,9 @@ async function main(): Promise<void> {
     logTokenEstimates(state);
 
     let requestBody = buildJevRequest(state);
-    let response;
+    const apiResponses: JevResponse[] = [];
     try {
-      response = await callJevApi(requestBody, { apiKey });
+      apiResponses.push(await callJevApi(requestBody, { apiKey }));
     } catch (firstErr: unknown) {
       if (!isMaxTokensExceededError(firstErr)) {
         throw firstErr;
@@ -93,8 +98,11 @@ async function main(): Promise<void> {
       });
       logTokenEstimates(state);
       requestBody = buildJevRequest(state);
-      response = await callJevApi(requestBody, { apiKey });
+      apiResponses.push(await callJevApi(requestBody, { apiKey }));
     }
+    const response = apiResponses[apiResponses.length - 1];
+    const assessmentUsage = aggregateJevAssessment(apiResponses);
+    const apiCallRecords = buildApiCallRecords(apiResponses);
     console.log(
       `JEV answers: ${JSON.stringify({
         risk_level: response.answers.risk_level,
@@ -106,7 +114,7 @@ async function main(): Promise<void> {
       })}`,
     );
     const sensitive = matchSensitivePaths(files.map((f) => f.filename));
-    const comment = formatJevPrComment(response, sensitive);
+    const comment = formatJevPrComment(response, sensitive, assessmentUsage);
     await upsertJevComment(client, prNumber, JEV_COMMENT_MARKER, comment);
 
     const record: PredictionRecord = {
@@ -119,8 +127,15 @@ async function main(): Promise<void> {
       changed_paths_summary: files.map((f) => f.filename),
       sensitive_paths: sensitive,
       jev_answers: response.answers,
-      model: response.model,
-      usage: response.usage,
+      model: assessmentUsage.model,
+      usage: {
+        input_tokens: assessmentUsage.input_tokens,
+        output_tokens: assessmentUsage.output_tokens,
+      },
+      input_tokens: assessmentUsage.input_tokens,
+      output_tokens: assessmentUsage.output_tokens,
+      cost_usd: assessmentUsage.cost_usd,
+      api_calls: apiCallRecords,
       assessed_at: new Date().toISOString(),
       workflow_run_id: process.env.GITHUB_RUN_ID
         ? Number(process.env.GITHUB_RUN_ID)
