@@ -50,6 +50,7 @@
     "test:e2e:preview": "playwright test e2e/post-merge",
     "test:arena:tv": "node e2e/arena/tv.browser.cjs && node e2e/arena/hybrid.browser.cjs",
     "eval": "braintrust eval evals",
+    "jev:report": "tsx scripts/jev/report.ts",
     "arena:build-sprites": "node scripts/generate-arena-sprites.js"
   },
   "overrides": {

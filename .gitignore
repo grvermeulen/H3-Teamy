@@ -41,6 +41,8 @@ ecc-reference/
 
 # Temporary files
 tmp-*
+.jev-report-data/
+.jev-data-worktree/
 
 # Overpass download cache (scripts/arena)
 .cache/
