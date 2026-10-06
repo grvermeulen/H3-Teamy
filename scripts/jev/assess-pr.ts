@@ -5,9 +5,14 @@
  */
 import { join } from "node:path";
 import { buildJevState } from "@/lib/jev/buildState";
-import { estimateJsonTokens, estimateRequestTokens } from "@/lib/jev/stateBudget";
+import {
+  estimateJsonTokens,
+  estimateRequestTokens,
+  estimateStatePlusLongestQuestion,
+  MAX_STATE_TOKENS,
+} from "@/lib/jev/stateBudget";
 import { formatJevPrComment, formatJevUnavailableComment } from "@/lib/jev/formatComment";
-import { callJevApi } from "@/lib/jev/jevClient";
+import { callJevApi, isMaxTokensExceededError } from "@/lib/jev/jevClient";
 import { buildJevRequest } from "@/lib/jev/questions";
 import { matchSensitivePaths } from "@/lib/jev/sensitivePaths";
 import { JEV_COMMENT_MARKER } from "@/lib/jev/types";
@@ -61,23 +66,35 @@ async function main(): Promise<void> {
       (l: { name: string }) => l.name,
     );
 
-    const state = buildJevState({
+    const stateInput = {
       title: pr.title,
       body: pr.body ?? "",
       author: pr.user?.login ?? "unknown",
       labels,
       files,
       diff,
-    });
+    };
 
-    const stateTokens = estimateJsonTokens(state);
-    const requestTokens = estimateRequestTokens(state);
-    console.log(
-      `JEV state ~${stateTokens} tokens, request ~${requestTokens} tokens (cap 32000 state+questions)`,
-    );
+    let state = buildJevState(stateInput);
+    logTokenEstimates(state);
 
-    const requestBody = buildJevRequest(state);
-    const response = await callJevApi(requestBody, { apiKey });
+    let requestBody = buildJevRequest(state);
+    let response;
+    try {
+      response = await callJevApi(requestBody, { apiKey });
+    } catch (firstErr: unknown) {
+      if (!isMaxTokensExceededError(firstErr)) {
+        throw firstErr;
+      }
+      console.warn("JEV max_tokens_exceeded — rebuilding state at 60% budget");
+      state = buildJevState({
+        ...stateInput,
+        maxStateTokens: Math.floor(MAX_STATE_TOKENS * 0.6),
+      });
+      logTokenEstimates(state);
+      requestBody = buildJevRequest(state);
+      response = await callJevApi(requestBody, { apiKey });
+    }
     console.log(
       `JEV answers: ${JSON.stringify({
         risk_level: response.answers.risk_level,
@@ -168,6 +185,12 @@ async function fetchPr(
     base?: { ref: string };
     labels?: Array<{ name: string }>;
   }>;
+}
+
+function logTokenEstimates(state: ReturnType<typeof buildJevState>): void {
+  console.log(
+    `JEV state ~${estimateJsonTokens(state)} tokens, state+longest-question ~${estimateStatePlusLongestQuestion(state)} (cap 32000), full request ~${estimateRequestTokens(state)}`,
+  );
 }
 
 async function safeUpsertComment(

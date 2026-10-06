@@ -2,8 +2,9 @@ import { isLockfilePath, summarizeLockfileChanges } from "./lockfileSummary";
 import { matchSensitivePaths, REPO_CONTEXT } from "./sensitivePaths";
 import {
   estimateJsonTokens,
-  estimateTokens,
+  isStateWithinBudget,
   MAX_STATE_TOKENS,
+  STATE_TOKEN_SAFETY_MARGIN,
 } from "./stateBudget";
 import type { JevState, PrFileChange } from "./types";
 
@@ -40,7 +41,7 @@ export interface BuildStateInput {
  */
 export function buildJevState(input: BuildStateInput): JevState {
   const maxStateTokens = input.maxStateTokens ?? MAX_STATE_TOKENS;
-  const targetTokens = maxStateTokens - 200;
+  const targetTokens = maxStateTokens - STATE_TOKEN_SAFETY_MARGIN;
   const body = trimBody(input.body);
   const paths = input.files.map((f) => f.filename);
   const lockfileSummaries: Record<string, string[]> = {};
@@ -92,8 +93,7 @@ export function buildJevState(input: BuildStateInput): JevState {
         ? diff
         : `${diff.slice(0, mid)}\n\n[diff truncated for token budget]`;
     const state: JevState = { ...baseState(), diff: candidate };
-    const tokens = estimateJsonTokens(state);
-    if (tokens <= targetTokens) {
+    if (isStateWithinBudget(state) && estimateJsonTokens(state) <= targetTokens) {
       bestDiff = candidate;
       truncated = mid < diff.length;
       low = mid + 1;
@@ -108,7 +108,7 @@ export function buildJevState(input: BuildStateInput): JevState {
   }
 
   let state: JevState = { ...baseState(), diff: bestDiff };
-  while (estimateJsonTokens(state) > targetTokens && state.diff.length > 0) {
+  while (!isStateWithinBudget(state) && state.diff.length > 0) {
     truncated = true;
     const nextLen = Math.floor(state.diff.length * 0.9);
     state = {

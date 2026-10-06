@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { callJevApi, parseJevResponse } from "./jevClient";
+import {
+  callJevApi,
+  isMaxTokensExceededError,
+  JevApiError,
+  parseJevResponse,
+} from "./jevClient";
 
 describe("parseJevResponse", () => {
   it("accepts a valid response", () => {
@@ -51,6 +56,14 @@ describe("callJevApi", () => {
     expect(result.model).toBe("jev-1.13.0");
     expect(fetchFn).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
+  });
+
+  it("detects max_tokens_exceeded errors", () => {
+    expect(
+      isMaxTokensExceededError(
+        new JevApiError(400, '{"detail":{"error_type":"max_tokens_exceeded"}}'),
+      ),
+    ).toBe(true);
   });
 
   it("throws on non-retryable errors", async () => {

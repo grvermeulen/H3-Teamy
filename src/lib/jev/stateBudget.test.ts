@@ -3,8 +3,9 @@ import { buildJevState } from "./buildState";
 import {
   estimateJsonTokens,
   estimateRequestTokens,
+  estimateStatePlusLongestQuestion,
   isStateWithinBudget,
-  MAX_STATE_TOKENS,
+  JEV_STATE_QUESTION_TOKEN_LIMIT,
 } from "./stateBudget";
 
 describe("stateBudget", () => {
@@ -18,8 +19,9 @@ describe("stateBudget", () => {
       files: [{ filename: "a.ts", additions: 1, deletions: 0 }],
       diff: hugeDiff,
     });
-    expect(estimateJsonTokens(state)).toBeLessThanOrEqual(MAX_STATE_TOKENS);
+    expect(estimateStatePlusLongestQuestion(state)).toBeLessThanOrEqual(
+      JEV_STATE_QUESTION_TOKEN_LIMIT,
+    );
     expect(isStateWithinBudget(state)).toBe(true);
-    expect(estimateRequestTokens(state)).toBeLessThan(32_000);
   });
 });

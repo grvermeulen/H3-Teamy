@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { buildJevState, isSkippedFile, trimBody } from "./buildState";
-import { estimateJsonTokens, MAX_STATE_TOKENS } from "./stateBudget";
+import {
+  estimateStatePlusLongestQuestion,
+  isStateWithinBudget,
+  JEV_STATE_QUESTION_TOKEN_LIMIT,
+} from "./stateBudget";
 
 describe("buildJevState", () => {
   it("summarizes lockfiles and omits binary paths from diff", () => {
@@ -45,7 +49,7 @@ describe("buildJevState", () => {
     expect(state.sensitive_paths).toContain("service layer");
     expect(state.diff).toContain("src/lib/services/foo.ts");
     expect(state.diff).not.toContain("Binary files differ");
-    expect(estimateJsonTokens(state)).toBeLessThanOrEqual(MAX_STATE_TOKENS);
+    expect(isStateWithinBudget(state)).toBe(true);
   });
 
   it("truncates very large diffs within budget", () => {
@@ -60,7 +64,7 @@ describe("buildJevState", () => {
     });
     expect(state.truncation_note).toBeDefined();
     expect(state.diff).toContain("[diff truncated");
-    expect(estimateJsonTokens(state)).toBeLessThanOrEqual(MAX_STATE_TOKENS);
+    expect(isStateWithinBudget(state)).toBe(true);
   });
 });
 

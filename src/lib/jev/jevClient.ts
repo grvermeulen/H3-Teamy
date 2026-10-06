@@ -43,10 +43,33 @@ export async function callJevApi(
     }
 
     const text = await res.text();
-    throw new Error(`JEV API ${res.status}: ${text.slice(0, 500)}`);
+    throw new JevApiError(res.status, text.slice(0, 500));
   }
 
   throw new Error("JEV API retries exhausted");
+}
+
+/** Error thrown when the JEV API returns a non-retryable HTTP status. */
+export class JevApiError extends Error {
+  constructor(
+    public readonly status: number,
+    body: string,
+  ) {
+    super(`JEV API ${status}: ${body}`);
+    this.name = "JevApiError";
+  }
+}
+
+/**
+ * Returns true when the API rejected the request for exceeding token limits.
+ * @param error - Caught error from callJevApi.
+ */
+export function isMaxTokensExceededError(error: unknown): boolean {
+  return (
+    error instanceof JevApiError &&
+    error.status === 400 &&
+    error.message.includes("max_tokens_exceeded")
+  );
 }
 
 /**
