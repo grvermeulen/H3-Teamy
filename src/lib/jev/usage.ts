@@ -140,7 +140,7 @@ export function formatNlCostUsd(amount: number, significantDigits = 4): string {
     maximumFractionDigits: fractionDigits,
   }).format(amount);
 
-  return formatted.replace(/\u00A0/g, "");
+  return formatted.replace(/\u00A0/g, "").replace(/^US\$/, "$");
 }
 
 /**

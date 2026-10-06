@@ -100,7 +100,8 @@ describe("getPredictionUsage", () => {
 describe("formatting", () => {
   it("formats Dutch token counts and costs", () => {
     expect(formatNlTokenCount(29_908)).toBe("29.908");
-    expect(formatNlCostUsd(0.001256136)).toContain("0,001");
+    expect(formatNlCostUsd(0.001256136)).toMatch(/\$0,001/);
+    expect(formatNlCostUsd(0.001256136)).not.toContain("US$");
     expect(formatAssessmentUsageLine({
       input_tokens: 29_908,
       output_tokens: 135,
