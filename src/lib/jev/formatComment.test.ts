@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatJevPrComment, formatJevUnavailableComment } from "./formatComment";
+import { aggregateJevAssessment } from "./usage";
 import { JEV_COMMENT_MARKER } from "./types";
 import type { JevResponse } from "./types";
 
@@ -29,13 +30,16 @@ const sampleResponse: JevResponse = {
 
 describe("formatJevPrComment", () => {
   it("renders Dutch comment with corrected noul and severity labels", () => {
-    const body = formatJevPrComment(sampleResponse, ["CI workflows"]);
+    const usage = aggregateJevAssessment([sampleResponse]);
+    const body = formatJevPrComment(sampleResponse, ["CI workflows"], usage);
     expect(body).toContain(JEV_COMMENT_MARKER);
     expect(body).toContain("gemiddeld (kans 47%)");
     expect(body).toContain("Ernst: **Klein**");
     expect(body).toContain("Beveiligingsrisico: nee (kans 79%)");
     expect(body).toContain("Testdekking adequaat: ja (kans 72%)");
     expect(body).toContain("Gevoelige paden: CI workflows");
+    expect(body).toContain("Tokens: 1.200 in / 40 uit");
+    expect(body).toContain("kosten ≈");
   });
 });
 

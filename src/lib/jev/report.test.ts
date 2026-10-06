@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { computeReportMetrics, formatReportMarkdown } from "./report";
+import {
+  computeReportMetrics,
+  computeUsageReportSummary,
+  formatReportMarkdown,
+} from "./report";
 import type { OutcomeRecord, PredictionRecord } from "./types";
 
 function prediction(
@@ -72,6 +76,26 @@ describe("computeReportMetrics", () => {
   });
 });
 
+describe("computeUsageReportSummary", () => {
+  it("totals tokens and groups by month", () => {
+    const predictions = [
+      prediction(1, "low"),
+      {
+        ...prediction(2, "high"),
+        assessed_at: "2026-02-15T00:00:00Z",
+        input_tokens: 10_000,
+        output_tokens: 50,
+        cost_usd: 0.00042,
+        usage: { input_tokens: 10_000, output_tokens: 50 },
+      },
+    ];
+    const summary = computeUsageReportSummary(predictions);
+    expect(summary.total_input_tokens).toBe(10_001);
+    expect(summary.by_month).toHaveLength(2);
+    expect(summary.by_month[1].month).toBe("2026-02");
+  });
+});
+
 describe("formatReportMarkdown", () => {
   it("includes confusion matrix table", () => {
     const md = formatReportMarkdown(
@@ -79,5 +103,6 @@ describe("formatReportMarkdown", () => {
     );
     expect(md).toContain("Confusion matrix");
     expect(md).toContain("N te klein");
+    expect(md).toContain("Token- en kostenoverzicht");
   });
 });

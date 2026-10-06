@@ -3,6 +3,8 @@ import {
   formatSeverityAnswer,
   isNoulYes,
 } from "./formatAnswers";
+import { formatAssessmentUsageLine } from "./usage";
+import type { AssessmentUsage } from "./usage";
 import { JEV_COMMENT_MARKER } from "./types";
 import type { JevAnswer, JevResponse, RiskLevel } from "./types";
 
@@ -14,12 +16,14 @@ const RISK_LABELS: Record<RiskLevel, string> = {
 
 /**
  * Formats the Dutch sticky PR comment from JEV answers.
- * @param response - JEV API response.
+ * @param response - JEV API response (answers/model from the final call).
  * @param sensitivePaths - Matched sensitive path labels.
+ * @param usage - Aggregated token/cost usage for all API calls in this run.
  */
 export function formatJevPrComment(
   response: JevResponse,
   sensitivePaths: string[],
+  usage: AssessmentUsage,
 ): string {
   const risk = response.answers.risk_level;
   const severity = response.answers.severity;
@@ -67,7 +71,7 @@ export function formatJevPrComment(
     "**Waar op te letten**",
     ...watchlist.map((w) => `- ${w}`),
     "",
-    `<sub>Model: \`${response.model}\` · tokens: ${response.usage.input_tokens} in / ${response.usage.output_tokens} out · geautomatiseerde inschatting, geen blokkade</sub>`,
+    `<sub>Model: \`${usage.model}\` · ${formatAssessmentUsageLine(usage)} · geautomatiseerde inschatting, geen blokkade</sub>`,
   ].join("\n");
 }
 
