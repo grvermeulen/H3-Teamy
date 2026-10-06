@@ -41,7 +41,7 @@ Orphan branch, **niet** gemerged naar `image`:
 Waarom orphan branch:
 
 - Geen wijzigingen op `image` → geen Vercel production/preview deploy door dataset-commits
-- `vercel.json` zet `git.deploymentEnabled.jev-risk-data: false` als extra vangnet
+- `vercel.json` op **de dataset-branch zelf** met `git.deploymentEnabled: false` — Vercel leest config uit de branch die gebouwd wordt, niet uit `image`
 - JSONL + git push met retry bij concurrente PR-runs
 
 Bij merge markeert `mark_merged` de laatste voorspelling vóór merge als `final_before_merge: true`.
