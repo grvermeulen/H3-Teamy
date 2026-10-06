@@ -2,10 +2,10 @@
 /**
  * Generates JEV calibration report from jev-risk-data branch JSONL files.
  */
-import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseJsonl } from "@/lib/jev/dataset";
+import { tryRunGit } from "@/lib/jev/gitExec";
 import { computeReportMetrics, formatReportMarkdown } from "@/lib/jev/report";
 import { JEV_DATA_BRANCH, OUTCOMES_FILE, PREDICTIONS_FILE } from "@/lib/jev/types";
 import type { OutcomeRecord, PredictionRecord } from "@/lib/jev/types";
@@ -38,23 +38,20 @@ function main(): void {
 
 function fetchDataset(dir: string): void {
   mkdirSync(dir, { recursive: true });
-  try {
-    execSync(`git fetch origin ${JEV_DATA_BRANCH} 2>/dev/null || true`, {
-      stdio: "pipe",
-    });
-    for (const file of [PREDICTIONS_FILE, OUTCOMES_FILE]) {
-      try {
-        const content = execSync(
-          `git show origin/${JEV_DATA_BRANCH}:${file} 2>/dev/null || true`,
-          { encoding: "utf8" },
-        );
-        writeFileSync(join(dir, file), content, "utf8");
-      } catch {
-        writeFileSync(join(dir, file), "", "utf8");
-      }
-    }
-  } catch {
+  const repoRoot = process.cwd();
+  const fetched = tryRunGit(repoRoot, ["fetch", "origin", JEV_DATA_BRANCH]);
+  if (fetched === null) {
     console.warn(`Could not fetch ${JEV_DATA_BRANCH}; reporting on empty dataset.`);
+    return;
+  }
+
+  for (const file of [PREDICTIONS_FILE, OUTCOMES_FILE]) {
+    const content =
+      tryRunGit(repoRoot, [
+        "show",
+        `origin/${JEV_DATA_BRANCH}:${file}`,
+      ]) ?? "";
+    writeFileSync(join(dir, file), content, "utf8");
   }
 }
 

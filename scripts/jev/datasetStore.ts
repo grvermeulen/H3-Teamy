@@ -1,4 +1,3 @@
-import { execSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -19,6 +18,8 @@ import {
   shouldGitWorktreeRemove,
   shouldRemovePlainDirectory,
 } from "@/lib/jev/datasetWorktree";
+import { gitActorCommit, runGit, tryRunGit } from "@/lib/jev/gitExec";
+import { authenticatedRemoteUrl } from "@/lib/jev/gitRemote";
 import {
   JEV_DATA_BRANCH,
   OUTCOMES_FILE,
@@ -28,24 +29,8 @@ import type { OutcomeRecord, PredictionRecord } from "@/lib/jev/types";
 
 const MAX_PUSH_RETRIES = 5;
 
-function runGit(cwd: string, args: string): string {
-  return execSync(`git ${args}`, {
-    cwd,
-    encoding: "utf8",
-    stdio: "pipe",
-  }) as string;
-}
-
-function gitActor(): string {
-  return `-c user.name="github-actions[bot]" -c user.email="github-actions[bot]@users.noreply.github.com"`;
-}
-
 function worktreeList(repoRoot: string): string {
-  try {
-    return runGit(repoRoot, "worktree list --porcelain");
-  } catch {
-    return "";
-  }
+  return tryRunGit(repoRoot, ["worktree", "list", "--porcelain"]) ?? "";
 }
 
 /**
@@ -59,7 +44,7 @@ export function cleanupWorktreeDir(repoRoot: string, worktreeDir: string): void 
 
   if (shouldGitWorktreeRemove(dirExists, list, worktreeDir)) {
     try {
-      runGit(repoRoot, `worktree remove --force "${worktreeDir}"`);
+      runGit(repoRoot, ["worktree", "remove", "--force", worktreeDir]);
     } catch {
       // Fall through to directory removal.
     }
@@ -75,16 +60,12 @@ export function cleanupWorktreeDir(repoRoot: string, worktreeDir: string): void 
     rmSync(worktreeDir, { recursive: true, force: true });
   }
 
-  try {
-    runGit(repoRoot, "worktree prune");
-  } catch {
-    // Non-fatal.
-  }
+  tryRunGit(repoRoot, ["worktree", "prune"]);
 }
 
 function remoteBranchExists(repoRoot: string): boolean {
-  runGit(repoRoot, `fetch origin ${JEV_DATA_BRANCH} 2>/dev/null || true`);
-  const branches = runGit(repoRoot, "branch -r");
+  tryRunGit(repoRoot, ["fetch", "origin", JEV_DATA_BRANCH]);
+  const branches = runGit(repoRoot, ["branch", "-r"]);
   return branches.includes(`origin/${JEV_DATA_BRANCH}`);
 }
 
@@ -98,19 +79,9 @@ function writeInitialDatasetFiles(dir: string): void {
   );
 }
 
-function authenticatedRemote(repoRoot: string): string {
-  const url = runGit(repoRoot, "remote get-url origin").trim();
-  const token = process.env.GITHUB_TOKEN?.trim();
-  if (!token || !url.includes("github.com")) {
-    return url;
-  }
-  if (url.startsWith("https://")) {
-    return url.replace(
-      /^https:\/\/github\.com\//,
-      `https://x-access-token:${token}@github.com/`,
-    );
-  }
-  return url;
+function resolveAuthenticatedRemote(repoRoot: string): string {
+  const url = runGit(repoRoot, ["remote", "get-url", "origin"]).trim();
+  return authenticatedRemoteUrl(url, process.env.GITHUB_TOKEN?.trim());
 }
 
 /**
@@ -124,19 +95,21 @@ function initOrphanBranch(repoRoot: string, worktreeDir: string): void {
   mkdirSync(tempDir, { recursive: true });
 
   writeInitialDatasetFiles(tempDir);
-  runGit(tempDir, "init");
-  runGit(tempDir, `checkout --orphan ${JEV_DATA_BRANCH}`);
-  runGit(tempDir, "add -A");
-  runGit(
-    tempDir,
-    `${gitActor()} commit -m "jev: init ${JEV_DATA_BRANCH} dataset branch"`,
-  );
-  runGit(tempDir, `remote add origin "${authenticatedRemote(repoRoot)}"`);
-  runGit(tempDir, `push -u origin ${JEV_DATA_BRANCH}`);
+  runGit(tempDir, ["init"]);
+  runGit(tempDir, ["checkout", "--orphan", JEV_DATA_BRANCH]);
+  runGit(tempDir, ["add", "-A"]);
+  gitActorCommit(tempDir, `jev: init ${JEV_DATA_BRANCH} dataset branch`);
+  runGit(tempDir, ["remote", "add", "origin", resolveAuthenticatedRemote(repoRoot)]);
+  runGit(tempDir, ["push", "-u", "origin", JEV_DATA_BRANCH]);
 
   rmSync(tempDir, { recursive: true, force: true });
-  runGit(repoRoot, `fetch origin ${JEV_DATA_BRANCH}`);
-  runGit(repoRoot, `worktree add "${worktreeDir}" origin/${JEV_DATA_BRANCH}`);
+  runGit(repoRoot, ["fetch", "origin", JEV_DATA_BRANCH]);
+  runGit(repoRoot, [
+    "worktree",
+    "add",
+    worktreeDir,
+    `origin/${JEV_DATA_BRANCH}`,
+  ]);
 }
 
 /**
@@ -151,7 +124,12 @@ export function ensureDatasetWorktree(
   cleanupWorktreeDir(repoRoot, worktreeDir);
 
   if (remoteBranchExists(repoRoot)) {
-    runGit(repoRoot, `worktree add "${worktreeDir}" origin/${JEV_DATA_BRANCH}`);
+    runGit(repoRoot, [
+      "worktree",
+      "add",
+      worktreeDir,
+      `origin/${JEV_DATA_BRANCH}`,
+    ]);
     return;
   }
 
@@ -268,20 +246,16 @@ function pushWithRetry(
         ensureDatasetWorktree(repoRoot, worktreeDir);
       }
 
-      runGit(worktreeDir, `fetch origin ${JEV_DATA_BRANCH}`);
-      runGit(worktreeDir, `reset --hard origin/${JEV_DATA_BRANCH}`);
+      runGit(worktreeDir, ["fetch", "origin", JEV_DATA_BRANCH]);
+      runGit(worktreeDir, ["reset", "--hard", `origin/${JEV_DATA_BRANCH}`]);
       mutate();
-      runGit(worktreeDir, "add -A");
-      const status = runGit(worktreeDir, "status --porcelain");
+      runGit(worktreeDir, ["add", "-A"]);
+      const status = runGit(worktreeDir, ["status", "--porcelain"]);
       if (!status.trim()) {
         return;
       }
-      const safeMessage = message.replace(/"/g, '\\"');
-      runGit(
-        worktreeDir,
-        `${gitActor()} commit -m "${safeMessage}"`,
-      );
-      runGit(worktreeDir, `push origin HEAD:${JEV_DATA_BRANCH}`);
+      gitActorCommit(worktreeDir, message);
+      runGit(worktreeDir, ["push", "origin", `HEAD:${JEV_DATA_BRANCH}`]);
       return;
     } catch {
       if (attempt === MAX_PUSH_RETRIES - 1) {
