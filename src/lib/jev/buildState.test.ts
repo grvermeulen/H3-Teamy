@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildJevState,
-  estimateTokens,
-  isSkippedFile,
-  trimBody,
-} from "./buildState";
+import { buildJevState, isSkippedFile, trimBody } from "./buildState";
+import { estimateJsonTokens, MAX_STATE_TOKENS } from "./stateBudget";
 
 describe("buildJevState", () => {
   it("summarizes lockfiles and omits binary paths from diff", () => {
@@ -49,9 +45,10 @@ describe("buildJevState", () => {
     expect(state.sensitive_paths).toContain("service layer");
     expect(state.diff).toContain("src/lib/services/foo.ts");
     expect(state.diff).not.toContain("Binary files differ");
+    expect(estimateJsonTokens(state)).toBeLessThanOrEqual(MAX_STATE_TOKENS);
   });
 
-  it("truncates very large diffs", () => {
+  it("truncates very large diffs within budget", () => {
     const hugeDiff = `diff --git a/a.ts b/a.ts\n${"+line\n".repeat(200_000)}`;
     const state = buildJevState({
       title: "big",
@@ -60,17 +57,10 @@ describe("buildJevState", () => {
       labels: [],
       files: [{ filename: "a.ts", additions: 1, deletions: 0 }],
       diff: hugeDiff,
-      tokenBudget: 1000,
     });
     expect(state.truncation_note).toBeDefined();
     expect(state.diff).toContain("[diff truncated");
-  });
-});
-
-describe("estimateTokens", () => {
-  it("approximates chars/4", () => {
-    expect(estimateTokens("abcd")).toBe(1);
-    expect(estimateTokens("abcdefgh")).toBe(2);
+    expect(estimateJsonTokens(state)).toBeLessThanOrEqual(MAX_STATE_TOKENS);
   });
 });
 

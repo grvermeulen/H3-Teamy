@@ -2,7 +2,6 @@
 /**
  * Marks final JEV prediction when a PR merges into image.
  */
-import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { commitMergeMark, ensureDatasetWorktree } from "./datasetStore";
 
@@ -19,7 +18,6 @@ async function main(): Promise<void> {
   }
 
   try {
-    mkdirSync(WORKTREE_DIR, { recursive: true });
     ensureDatasetWorktree(process.cwd(), WORKTREE_DIR);
     commitMergeMark(process.cwd(), WORKTREE_DIR, prNumber, mergedAt);
     console.log(`Marked final prediction for merged PR #${prNumber}`);

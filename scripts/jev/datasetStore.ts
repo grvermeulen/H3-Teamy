@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import {
   markFinalBeforeMerge,
@@ -8,10 +8,83 @@ import {
   upsertOutcome,
   upsertPrediction,
 } from "@/lib/jev/dataset";
+import {
+  isRegisteredWorktree,
+  shouldGitWorktreeRemove,
+  shouldRemovePlainDirectory,
+} from "@/lib/jev/datasetWorktree";
 import { JEV_DATA_BRANCH, OUTCOMES_FILE, PREDICTIONS_FILE } from "@/lib/jev/types";
 import type { OutcomeRecord, PredictionRecord } from "@/lib/jev/types";
 
 const MAX_PUSH_RETRIES = 5;
+
+function runGit(
+  repoRoot: string,
+  args: string,
+  options: { cwd?: string; encoding?: BufferEncoding } = {},
+): string {
+  return execSync(`git ${args}`, {
+    cwd: options.cwd ?? repoRoot,
+    encoding: options.encoding ?? "utf8",
+    stdio: options.encoding ? "pipe" : "pipe",
+  }) as string;
+}
+
+function worktreeList(repoRoot: string): string {
+  try {
+    return runGit(repoRoot, "worktree list --porcelain");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Idempotently removes a worktree directory or plain folder at worktreeDir.
+ * @param repoRoot - Main repository checkout path.
+ * @param worktreeDir - Candidate worktree path.
+ */
+export function cleanupWorktreeDir(repoRoot: string, worktreeDir: string): void {
+  const dirExists = existsSync(worktreeDir);
+  const list = worktreeList(repoRoot);
+
+  if (shouldGitWorktreeRemove(dirExists, list, worktreeDir)) {
+    try {
+      runGit(repoRoot, `worktree remove --force "${worktreeDir}"`);
+    } catch {
+      // Fall through to directory removal.
+    }
+  }
+
+  if (shouldRemovePlainDirectory(existsSync(worktreeDir), worktreeList(repoRoot), worktreeDir)) {
+    rmSync(worktreeDir, { recursive: true, force: true });
+  }
+
+  try {
+    runGit(repoRoot, "worktree prune");
+  } catch {
+    // Non-fatal.
+  }
+}
+
+function remoteBranchExists(repoRoot: string): boolean {
+  runGit(repoRoot, `fetch origin ${JEV_DATA_BRANCH} 2>/dev/null || true`);
+  const branches = runGit(repoRoot, "branch -r");
+  return branches.includes(`origin/${JEV_DATA_BRANCH}`);
+}
+
+function writeInitialDatasetFiles(worktreeDir: string): void {
+  writeFileSync(join(worktreeDir, PREDICTIONS_FILE), "", "utf8");
+  writeFileSync(join(worktreeDir, OUTCOMES_FILE), "", "utf8");
+  writeFileSync(
+    join(worktreeDir, "README.md"),
+    "# JEV risk dataset\n\nOrphan branch for predictions/outcomes JSONL. Not deployed on Vercel.\n",
+    "utf8",
+  );
+}
+
+function gitActor(repoRoot: string): string {
+  return `-c user.name="github-actions[bot]" -c user.email="github-actions[bot]@users.noreply.github.com"`;
+}
 
 /**
  * Prepares a git worktree for the jev-risk-data orphan branch.
@@ -22,70 +95,20 @@ export function ensureDatasetWorktree(
   repoRoot: string,
   worktreeDir: string,
 ): void {
-  execSync(`git fetch origin ${JEV_DATA_BRANCH} 2>/dev/null || true`, {
-    cwd: repoRoot,
-    stdio: "pipe",
-  });
+  cleanupWorktreeDir(repoRoot, worktreeDir);
 
-  const remoteBranch = execSync("git branch -r", {
-    cwd: repoRoot,
-    encoding: "utf8",
-  }).includes(`origin/${JEV_DATA_BRANCH}`);
-
-  if (existsSync(worktreeDir)) {
-    execSync(`git worktree remove --force ${worktreeDir}`, {
-      cwd: repoRoot,
-      stdio: "pipe",
-    });
-  }
-  mkdirSync(worktreeDir, { recursive: true });
-
-  if (!remoteBranch) {
-    initOrphanBranch(repoRoot, worktreeDir);
+  if (remoteBranchExists(repoRoot)) {
+    runGit(repoRoot, `worktree add "${worktreeDir}" origin/${JEV_DATA_BRANCH}`);
     return;
   }
 
-  execSync(`git worktree add ${worktreeDir} origin/${JEV_DATA_BRANCH}`, {
-    cwd: repoRoot,
-    stdio: "pipe",
+  runGit(repoRoot, `worktree add --orphan ${JEV_DATA_BRANCH} "${worktreeDir}"`);
+  writeInitialDatasetFiles(worktreeDir);
+  runGit(repoRoot, "add -A", { cwd: worktreeDir });
+  runGit(repoRoot, `${gitActor(repoRoot)} commit -m "jev: init ${JEV_DATA_BRANCH} dataset branch"`, {
+    cwd: worktreeDir,
   });
-}
-
-function initOrphanBranch(repoRoot: string, worktreeDir: string): void {
-  writeFileSync(join(worktreeDir, PREDICTIONS_FILE), "", "utf8");
-  writeFileSync(join(worktreeDir, OUTCOMES_FILE), "", "utf8");
-  writeFileSync(
-    join(worktreeDir, "README.md"),
-    "# JEV risk dataset\n\nOrphan branch for predictions/outcomes JSONL. Not deployed on Vercel.\n",
-    "utf8",
-  );
-
-  const tempBranch = `${JEV_DATA_BRANCH}-init`;
-  execSync(`git checkout --orphan ${tempBranch}`, {
-    cwd: repoRoot,
-    stdio: "pipe",
-  });
-  execSync("git rm -rf . 2>/dev/null || true", { cwd: repoRoot, stdio: "pipe" });
-  for (const file of [PREDICTIONS_FILE, OUTCOMES_FILE, "README.md"]) {
-    execSync(`cp ${join(worktreeDir, file)} ${join(repoRoot, file)}`, {
-      stdio: "pipe",
-    });
-  }
-  execSync("git add -A", { cwd: repoRoot, stdio: "pipe" });
-  execSync(`git commit -m "jev: init ${JEV_DATA_BRANCH} dataset branch"`, {
-    cwd: repoRoot,
-    stdio: "pipe",
-  });
-  execSync(`git branch -M ${JEV_DATA_BRANCH}`, { cwd: repoRoot, stdio: "pipe" });
-  execSync(`git push -u origin ${JEV_DATA_BRANCH}`, {
-    cwd: repoRoot,
-    stdio: "pipe",
-  });
-  execSync(`git checkout -`, { cwd: repoRoot, stdio: "pipe" });
-  execSync(`git worktree add ${worktreeDir} origin/${JEV_DATA_BRANCH}`, {
-    cwd: repoRoot,
-    stdio: "pipe",
-  });
+  runGit(repoRoot, `push -u origin ${JEV_DATA_BRANCH}`, { cwd: worktreeDir });
 }
 
 function readPredictions(dir: string): PredictionRecord[] {
@@ -191,36 +214,31 @@ function pushWithRetry(
 ): void {
   for (let attempt = 0; attempt < MAX_PUSH_RETRIES; attempt++) {
     try {
-      execSync(`git fetch origin ${JEV_DATA_BRANCH}`, {
-        cwd: worktreeDir,
-        stdio: "pipe",
-      });
-      execSync(`git reset --hard origin/${JEV_DATA_BRANCH}`, {
-        cwd: worktreeDir,
-        stdio: "pipe",
-      });
+      if (!existsSync(worktreeDir) || !isRegisteredWorktree(worktreeDir, worktreeList(repoRoot))) {
+        ensureDatasetWorktree(repoRoot, worktreeDir);
+      }
+
+      runGit(repoRoot, `fetch origin ${JEV_DATA_BRANCH}`, { cwd: worktreeDir });
+      runGit(repoRoot, `reset --hard origin/${JEV_DATA_BRANCH}`, { cwd: worktreeDir });
       mutate();
-      execSync("git add -A", { cwd: worktreeDir, stdio: "pipe" });
-      const status = execSync("git status --porcelain", {
-        cwd: worktreeDir,
-        encoding: "utf8",
-      });
+      runGit(repoRoot, "add -A", { cwd: worktreeDir });
+      const status = runGit(repoRoot, "status --porcelain", { cwd: worktreeDir });
       if (!status.trim()) {
         return;
       }
-      execSync(`git -c user.name="github-actions[bot]" -c user.email="github-actions[bot]@users.noreply.github.com commit -m "${message.replace(/"/g, '\\"')}"`, {
-        cwd: worktreeDir,
-        stdio: "pipe",
-      });
-      execSync(`git push origin HEAD:${JEV_DATA_BRANCH}`, {
-        cwd: worktreeDir,
-        stdio: "pipe",
-      });
+      const safeMessage = message.replace(/"/g, '\\"');
+      runGit(
+        repoRoot,
+        `${gitActor(repoRoot)} commit -m "${safeMessage}"`,
+        { cwd: worktreeDir },
+      );
+      runGit(repoRoot, `push origin HEAD:${JEV_DATA_BRANCH}`, { cwd: worktreeDir });
       return;
     } catch {
       if (attempt === MAX_PUSH_RETRIES - 1) {
         throw new Error("Failed to push jev-risk-data after retries");
       }
+      cleanupWorktreeDir(repoRoot, worktreeDir);
     }
   }
 }

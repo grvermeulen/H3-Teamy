@@ -1,3 +1,8 @@
+import {
+  formatNoulFlagLine,
+  formatSeverityAnswer,
+  isNoulYes,
+} from "./formatAnswers";
 import { JEV_COMMENT_MARKER } from "./types";
 import type { JevAnswer, JevResponse, RiskLevel } from "./types";
 
@@ -29,10 +34,10 @@ export function formatJevPrComment(
     : "—";
 
   const flags = [
-    formatNoulFlag("Beveiligingsrisico", security),
-    formatNoulFlag("Migratie-/dataverliesrisico", migration),
-    formatNoulFlag("Waarschijnlijke runtime-regressie", regression),
-    formatNoulFlag("Testdekking adequaat", tests, true),
+    formatNoulFlagLine("Beveiligingsrisico", security),
+    formatNoulFlagLine("Migratie-/dataverliesrisico", migration),
+    formatNoulFlagLine("Waarschijnlijke runtime-regressie", regression),
+    formatNoulFlagLine("Testdekking adequaat", tests),
   ];
 
   const watchlist = buildWatchlist(
@@ -46,14 +51,14 @@ export function formatJevPrComment(
 
   const severityLine =
     severity && severity.type === "score"
-      ? `Ernst (score): **${severity.score.toFixed(2)}** (vertrouwen ${(severity.confidence * 100).toFixed(0)}%)`
+      ? `Ernst: ${formatSeverityAnswer(severity)}`
       : "Ernst: —";
 
   return [
     JEV_COMMENT_MARKER,
     "### JEV PR-risico",
     "",
-    `**Risiconiveau:** ${riskLevel ? RISK_LABELS[riskLevel] : "onbekend"} (${riskProb})`,
+    `**Risiconiveau:** ${riskLevel ? RISK_LABELS[riskLevel] : "onbekend"} (kans ${riskProb})`,
     severityLine,
     "",
     "**Signalen**",
@@ -93,20 +98,6 @@ function formatTopProbability(
   return `${(p * 100).toFixed(0)}%`;
 }
 
-function formatNoulFlag(
-  label: string,
-  answer: JevAnswer | undefined,
-  invert = false,
-): string {
-  if (!answer || answer.type !== "noul") {
-    return `${label}: —`;
-  }
-  const yes = answer.noul >= 0.5;
-  const display = invert ? !yes : yes;
-  const pct = (answer.noul * 100).toFixed(0);
-  return `${label}: ${display ? "ja" : "nee"} (${pct}%)`;
-}
-
 function buildWatchlist(
   sensitivePaths: string[],
   security: JevAnswer | undefined,
@@ -120,16 +111,16 @@ function buildWatchlist(
   if (sensitivePaths.length > 0) {
     items.push(`Gevoelige paden: ${sensitivePaths.join(", ")}`);
   }
-  if (security?.type === "noul" && security.noul >= 0.5) {
+  if (isNoulYes(security)) {
     items.push("Controleer auth, secrets en inputvalidatie handmatig.");
   }
-  if (migration?.type === "noul" && migration.noul >= 0.5) {
+  if (isNoulYes(migration)) {
     items.push("Plan migratie/rollback en controleer Prisma-wijzigingen.");
   }
-  if (regression?.type === "noul" && regression.noul >= 0.5) {
+  if (isNoulYes(regression)) {
     items.push("Overweeg extra smoke/E2E op preview vóór merge.");
   }
-  if (tests?.type === "noul" && tests.noul < 0.5) {
+  if (tests?.type === "noul" && !isNoulYes(tests)) {
     items.push("Overweeg gerichte tests voor gewijzigde businesslogica.");
   }
   if (severity?.type === "score" && severity.score >= 2) {

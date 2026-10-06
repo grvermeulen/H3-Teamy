@@ -3,9 +3,9 @@
  * JEV PR risk assessment — runs in GitHub Actions on pull_request.
  * Never exits non-zero (non-blocking for CI / Dependabot auto-merge).
  */
-import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { buildJevState } from "@/lib/jev/buildState";
+import { estimateJsonTokens, estimateRequestTokens } from "@/lib/jev/stateBudget";
 import { formatJevPrComment, formatJevUnavailableComment } from "@/lib/jev/formatComment";
 import { callJevApi } from "@/lib/jev/jevClient";
 import { buildJevRequest } from "@/lib/jev/questions";
@@ -70,8 +70,24 @@ async function main(): Promise<void> {
       diff,
     });
 
+    const stateTokens = estimateJsonTokens(state);
+    const requestTokens = estimateRequestTokens(state);
+    console.log(
+      `JEV state ~${stateTokens} tokens, request ~${requestTokens} tokens (cap 32000 state+questions)`,
+    );
+
     const requestBody = buildJevRequest(state);
     const response = await callJevApi(requestBody, { apiKey });
+    console.log(
+      `JEV answers: ${JSON.stringify({
+        risk_level: response.answers.risk_level,
+        severity: response.answers.severity,
+        security_concern: response.answers.security_concern,
+        data_migration_risk: response.answers.data_migration_risk,
+        likely_runtime_regression: response.answers.likely_runtime_regression,
+        test_coverage_adequate: response.answers.test_coverage_adequate,
+      })}`,
+    );
     const sensitive = matchSensitivePaths(files.map((f) => f.filename));
     const comment = formatJevPrComment(response, sensitive);
     await upsertJevComment(client, prNumber, JEV_COMMENT_MARKER, comment);
@@ -95,7 +111,6 @@ async function main(): Promise<void> {
     };
 
     try {
-      mkdirSync(WORKTREE_DIR, { recursive: true });
       ensureDatasetWorktree(process.cwd(), WORKTREE_DIR);
       commitPrediction(
         process.cwd(),

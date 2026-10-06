@@ -2,7 +2,6 @@
 /**
  * Labels post-merge outcomes for merged PRs (>= 7 days old).
  */
-import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { labeledPrNumbers } from "@/lib/jev/dataset";
 import {
@@ -26,7 +25,6 @@ async function main(): Promise<void> {
     return;
   }
 
-  mkdirSync(WORKTREE_DIR, { recursive: true });
   ensureDatasetWorktree(process.cwd(), WORKTREE_DIR);
 
   const predictionsPath = join(WORKTREE_DIR, PREDICTIONS_FILE);

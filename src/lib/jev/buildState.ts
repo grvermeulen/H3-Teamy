@@ -1,5 +1,10 @@
 import { isLockfilePath, summarizeLockfileChanges } from "./lockfileSummary";
 import { matchSensitivePaths, REPO_CONTEXT } from "./sensitivePaths";
+import {
+  estimateJsonTokens,
+  estimateTokens,
+  MAX_STATE_TOKENS,
+} from "./stateBudget";
 import type { JevState, PrFileChange } from "./types";
 
 const BINARY_OR_GENERATED = [
@@ -10,14 +15,6 @@ const BINARY_OR_GENERATED = [
   /^coverage\//,
   /\.min\.(js|css)$/,
 ];
-
-/** Approximate token count (chars / 4) for JEV budget checks. */
-export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4);
-}
-
-/** Max tokens reserved for the state payload (32k total minus question headroom). */
-export const STATE_TOKEN_BUDGET = 24_000;
 
 /**
  * Returns true when a file should be omitted from the diff (binary/generated).
@@ -34,7 +31,7 @@ export interface BuildStateInput {
   labels: string[];
   files: PrFileChange[];
   diff: string;
-  tokenBudget?: number;
+  maxStateTokens?: number;
 }
 
 /**
@@ -42,7 +39,8 @@ export interface BuildStateInput {
  * @param input - PR fields and raw unified diff.
  */
 export function buildJevState(input: BuildStateInput): JevState {
-  const tokenBudget = input.tokenBudget ?? STATE_TOKEN_BUDGET;
+  const maxStateTokens = input.maxStateTokens ?? MAX_STATE_TOKENS;
+  const targetTokens = maxStateTokens - 200;
   const body = trimBody(input.body);
   const paths = input.files.map((f) => f.filename);
   const lockfileSummaries: Record<string, string[]> = {};
@@ -61,16 +59,10 @@ export function buildJevState(input: BuildStateInput): JevState {
   }
 
   const filteredDiff = filterDiff(input.diff, input.files);
-  const { diff, truncated } = truncateDiffToBudget(filteredDiff, tokenBudget, {
-    title: input.title,
-    body,
-    author: input.author,
-    labels: input.labels,
-    paths,
-    lockfileSummaries,
-  });
+  let diff = filteredDiff;
+  let truncated = false;
 
-  const state: JevState = {
+  const baseState = (): Omit<JevState, "diff" | "truncation_note"> => ({
     title: input.title,
     body,
     author: input.author,
@@ -84,17 +76,54 @@ export function buildJevState(input: BuildStateInput): JevState {
       })),
     sensitive_paths: matchSensitivePaths(paths),
     repo_context: REPO_CONTEXT,
-    diff,
-  };
+    ...(Object.keys(lockfileSummaries).length > 0
+      ? { lockfile_summaries: lockfileSummaries }
+      : {}),
+  });
 
-  if (Object.keys(lockfileSummaries).length > 0) {
-    state.lockfile_summaries = lockfileSummaries;
+  // Iteratively shrink diff until serialized state fits the 32k state+question cap.
+  let low = 0;
+  let high = diff.length;
+  let bestDiff = "";
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const candidate =
+      mid >= diff.length
+        ? diff
+        : `${diff.slice(0, mid)}\n\n[diff truncated for token budget]`;
+    const state: JevState = { ...baseState(), diff: candidate };
+    const tokens = estimateJsonTokens(state);
+    if (tokens <= targetTokens) {
+      bestDiff = candidate;
+      truncated = mid < diff.length;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
   }
+
+  if (!bestDiff && diff.length > 0) {
+    bestDiff = "[diff omitted — PR too large for JEV state budget]";
+    truncated = true;
+  }
+
+  let state: JevState = { ...baseState(), diff: bestDiff };
+  while (estimateJsonTokens(state) > targetTokens && state.diff.length > 0) {
+    truncated = true;
+    const nextLen = Math.floor(state.diff.length * 0.9);
+    state = {
+      ...state,
+      diff:
+        nextLen <= 0
+          ? "[diff omitted — PR too large for JEV state budget]"
+          : `${state.diff.slice(0, nextLen)}\n\n[diff truncated for token budget]`,
+    };
+  }
+
   if (truncated) {
     state.truncation_note =
-      "Diff truncated to fit JEV token budget; lockfiles summarized separately.";
+      "Diff truncated to fit JEV token budget (32k state + questions); lockfiles summarized separately.";
   }
-
   return state;
 }
 
@@ -102,7 +131,7 @@ export function buildJevState(input: BuildStateInput): JevState {
  * Trims PR body to a reasonable length for the model.
  * @param body - Raw PR body markdown.
  */
-export function trimBody(body: string, maxChars = 4000): string {
+export function trimBody(body: string, maxChars = 3000): string {
   const trimmed = body.trim();
   if (trimmed.length <= maxChars) {
     return trimmed;
@@ -157,39 +186,4 @@ function filterDiff(diff: string, files: PrFileChange[]): string {
     parts.push(part);
   }
   return parts.join("\n");
-}
-
-function truncateDiffToBudget(
-  diff: string,
-  tokenBudget: number,
-  overhead: {
-    title: string;
-    body: string;
-    author: string;
-    labels: string[];
-    paths: string[];
-    lockfileSummaries: Record<string, string[]>;
-  },
-): { diff: string; truncated: boolean } {
-  const overheadJson = JSON.stringify({
-    title: overhead.title,
-    body: overhead.body,
-    author: overhead.author,
-    labels: overhead.labels,
-    changed_files: overhead.paths,
-    lockfile_summaries: overhead.lockfileSummaries,
-    repo_context: REPO_CONTEXT,
-  });
-  const overheadTokens = estimateTokens(overheadJson);
-  const diffBudget = Math.max(2000, tokenBudget - overheadTokens);
-
-  if (estimateTokens(diff) <= diffBudget) {
-    return { diff, truncated: false };
-  }
-
-  const maxChars = diffBudget * 4;
-  return {
-    diff: `${diff.slice(0, maxChars)}\n\n[diff truncated for token budget]`,
-    truncated: true,
-  };
 }
