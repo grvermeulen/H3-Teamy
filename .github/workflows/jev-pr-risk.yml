@@ -1,0 +1,73 @@
+# Non-blocking JEV PR risk assessment. Never fails the PR (Dependabot auto-merge safe).
+# Secrets: JEV_API_KEY in Actions secrets AND Dependabot secrets (Settings → Dependabot).
+name: JEV PR Risk
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, closed]
+    branches: [image]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  assess:
+    name: JEV risico-inschatting
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps --ignore-scripts
+
+      - name: Run JEV assessment
+        env:
+          JEV_API_KEY: ${{ secrets.JEV_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: npx tsx scripts/jev/assess-pr.ts
+
+  mark_merged:
+    name: JEV merge-markering
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps --ignore-scripts
+
+      - name: Mark final prediction
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_MERGED: "true"
+          MERGED_AT: ${{ github.event.pull_request.merged_at }}
+        run: npx tsx scripts/jev/mark-merged.ts
