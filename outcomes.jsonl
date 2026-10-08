@@ -64,3 +64,7 @@
 {"pr_number":767,"merge_commit_sha":"53c2e16334060566d296ce2047033702883ddece","merged_at":"2026-09-30T07:23:46Z","labeled_at":"2026-10-07T14:07:30.569Z","had_problem":false,"evidence":{}}
 {"pr_number":768,"merge_commit_sha":"efdf3b886a314288056b8e38f337632cde610eaf","merged_at":"2026-09-30T07:25:16Z","labeled_at":"2026-10-07T14:07:20.769Z","had_problem":false,"evidence":{}}
 {"pr_number":773,"merge_commit_sha":"402b668de02724a62837c086e2d42c256facf1f7","merged_at":"2026-09-30T07:32:11Z","labeled_at":"2026-10-07T14:07:10.782Z","had_problem":true,"evidence":{"failed_checks_on_merge":true,"failed_check_names":["Sync Unresolved Sentry Issues to GitHub"]}}
+{"pr_number":772,"merge_commit_sha":"75d435dd50299224bf890d31a76d27b7e40188ec","merged_at":"2026-09-30T16:49:51Z","labeled_at":"2026-10-08T14:17:56.165Z","had_problem":false,"evidence":{}}
+{"pr_number":774,"merge_commit_sha":"c8b5278bad2a5c23fe175168d2e7ba37cc2e58d0","merged_at":"2026-09-30T16:56:21Z","labeled_at":"2026-10-08T14:17:45.524Z","had_problem":false,"evidence":{}}
+{"pr_number":775,"merge_commit_sha":"fb764cc9a3d5b3b3806c6f7604b10a2766d68650","merged_at":"2026-09-30T16:56:24Z","labeled_at":"2026-10-08T14:17:35.396Z","had_problem":false,"evidence":{}}
+{"pr_number":776,"merge_commit_sha":"f483ed90042ea80ce339fc9442f40b1c762e39b6","merged_at":"2026-10-01T13:56:29Z","labeled_at":"2026-10-08T14:17:23.901Z","had_problem":true,"evidence":{"failed_checks_on_merge":true,"failed_check_names":["Sync Unresolved Sentry Issues to GitHub","Dependabot"]}}
