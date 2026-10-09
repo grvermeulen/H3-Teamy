@@ -68,3 +68,4 @@
 {"pr_number":774,"merge_commit_sha":"c8b5278bad2a5c23fe175168d2e7ba37cc2e58d0","merged_at":"2026-09-30T16:56:21Z","labeled_at":"2026-10-08T14:17:45.524Z","had_problem":false,"evidence":{}}
 {"pr_number":775,"merge_commit_sha":"fb764cc9a3d5b3b3806c6f7604b10a2766d68650","merged_at":"2026-09-30T16:56:24Z","labeled_at":"2026-10-08T14:17:35.396Z","had_problem":false,"evidence":{}}
 {"pr_number":776,"merge_commit_sha":"f483ed90042ea80ce339fc9442f40b1c762e39b6","merged_at":"2026-10-01T13:56:29Z","labeled_at":"2026-10-08T14:17:23.901Z","had_problem":true,"evidence":{"failed_checks_on_merge":true,"failed_check_names":["Sync Unresolved Sentry Issues to GitHub","Dependabot"]}}
+{"pr_number":777,"merge_commit_sha":"91ce58f0e546caa7f2a4e62548937365fb561750","merged_at":"2026-10-01T19:24:53Z","labeled_at":"2026-10-09T14:02:39.986Z","had_problem":false,"evidence":{}}
