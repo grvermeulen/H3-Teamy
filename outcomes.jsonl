@@ -69,3 +69,11 @@
 {"pr_number":775,"merge_commit_sha":"fb764cc9a3d5b3b3806c6f7604b10a2766d68650","merged_at":"2026-09-30T16:56:24Z","labeled_at":"2026-10-08T14:17:35.396Z","had_problem":false,"evidence":{}}
 {"pr_number":776,"merge_commit_sha":"f483ed90042ea80ce339fc9442f40b1c762e39b6","merged_at":"2026-10-01T13:56:29Z","labeled_at":"2026-10-08T14:17:23.901Z","had_problem":true,"evidence":{"failed_checks_on_merge":true,"failed_check_names":["Sync Unresolved Sentry Issues to GitHub","Dependabot"]}}
 {"pr_number":777,"merge_commit_sha":"91ce58f0e546caa7f2a4e62548937365fb561750","merged_at":"2026-10-01T19:24:53Z","labeled_at":"2026-10-09T14:02:39.986Z","had_problem":false,"evidence":{}}
+{"pr_number":778,"merge_commit_sha":"bc03c064a95ba57b85389b62898eaf5bd029c100","merged_at":"2026-10-02T14:03:01Z","labeled_at":"2026-10-10T13:12:30.399Z","had_problem":false,"evidence":{}}
+{"pr_number":779,"merge_commit_sha":"21ea1d46f3e297ebd9baf6135277048315cef1dd","merged_at":"2026-10-02T14:04:24Z","labeled_at":"2026-10-10T13:12:21.349Z","had_problem":false,"evidence":{}}
+{"pr_number":781,"merge_commit_sha":"8c13ee3536c2f0a601c7d77796d1193cb4092d25","merged_at":"2026-10-02T14:12:07Z","labeled_at":"2026-10-10T13:12:04.053Z","had_problem":false,"evidence":{}}
+{"pr_number":780,"merge_commit_sha":"a1ff245abeea2a932d070dd4a3f2c4d7ce691278","merged_at":"2026-10-02T14:13:24Z","labeled_at":"2026-10-10T13:12:12.455Z","had_problem":true,"evidence":{"failed_checks_on_merge":true,"failed_check_names":["Sync Unresolved Sentry Issues to GitHub"]}}
+{"pr_number":441,"merge_commit_sha":"b39d75bb633da87db989f4c991a5219f46200209","merged_at":"2026-10-02T14:29:02Z","labeled_at":"2026-10-10T13:11:55.432Z","had_problem":false,"evidence":{}}
+{"pr_number":782,"merge_commit_sha":"1fbc4ee93cef4a215a2f167a5d640dd0f88e331d","merged_at":"2026-10-02T14:40:33Z","labeled_at":"2026-10-10T13:11:47.296Z","had_problem":false,"evidence":{}}
+{"pr_number":652,"merge_commit_sha":"5f6ed679e361df426cbfa4638a171a5422466ba7","merged_at":"2026-10-02T14:42:22Z","labeled_at":"2026-10-10T13:11:39.371Z","had_problem":false,"evidence":{}}
+{"pr_number":766,"merge_commit_sha":"4abdf1a1caad908d51fd04c18c5c4181ab8ecef0","merged_at":"2026-10-03T10:01:35Z","labeled_at":"2026-10-10T13:11:31.494Z","had_problem":false,"evidence":{}}
