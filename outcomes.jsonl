@@ -77,3 +77,6 @@
 {"pr_number":782,"merge_commit_sha":"1fbc4ee93cef4a215a2f167a5d640dd0f88e331d","merged_at":"2026-10-02T14:40:33Z","labeled_at":"2026-10-10T13:11:47.296Z","had_problem":false,"evidence":{}}
 {"pr_number":652,"merge_commit_sha":"5f6ed679e361df426cbfa4638a171a5422466ba7","merged_at":"2026-10-02T14:42:22Z","labeled_at":"2026-10-10T13:11:39.371Z","had_problem":false,"evidence":{}}
 {"pr_number":766,"merge_commit_sha":"4abdf1a1caad908d51fd04c18c5c4181ab8ecef0","merged_at":"2026-10-03T10:01:35Z","labeled_at":"2026-10-10T13:11:31.494Z","had_problem":false,"evidence":{}}
+{"pr_number":785,"merge_commit_sha":"4afc0f373d3d2344189e927ffa4c46b76ec82399","merged_at":"2026-10-05T12:35:29Z","labeled_at":"2026-10-12T16:23:11.596Z","had_problem":false,"evidence":{}}
+{"pr_number":784,"merge_commit_sha":"7e38147812167aefb4af17bee028416bed65c196","merged_at":"2026-10-05T12:36:35Z","labeled_at":"2026-10-12T16:23:02.056Z","had_problem":false,"evidence":{}}
+{"pr_number":788,"merge_commit_sha":"52be58df8b5fc8c441c512d657adc013c21cb505","merged_at":"2026-10-05T12:38:46Z","labeled_at":"2026-10-12T16:22:53.494Z","had_problem":true,"evidence":{"failed_checks_on_merge":true,"failed_check_names":["Sync Unresolved Sentry Issues to GitHub"]}}
