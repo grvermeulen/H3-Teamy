@@ -17,7 +17,8 @@ test.describe("Read-only deploy smoke", () => {
   });
 
   test("homepage laadt en toont teamtitel", async ({ page }) => {
-    await page.goto("/");
+    // `load` kan hangen door analytics/streams; DOM is genoeg voor de header-smoke.
+    await page.goto("/", { waitUntil: "domcontentloaded" });
     // Site title lives in the global header (not necessarily as <h1> — subpages have their own h1).
     await expect(
       page
@@ -27,7 +28,7 @@ test.describe("Read-only deploy smoke", () => {
   });
 
   test("loginpagina laadt", async ({ page }) => {
-    await page.goto("/login");
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
     await expect(
       page.getByRole("heading", { level: 1, name: "Inloggen" }),
     ).toBeVisible();
