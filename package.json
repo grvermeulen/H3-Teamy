@@ -81,7 +81,7 @@
     "next-auth": "^4.24.15",
     "pg": "^8.23.1",
     "postcss": "^8.5.30",
-    "prisma": "7.10.0",
+    "prisma": "7.10.1",
     "qrcode.react": "^4.2.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
