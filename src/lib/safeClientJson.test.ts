@@ -1,10 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Sentry from "@sentry/nextjs";
-import { fetchJsonIfOkOr, fetchJsonOr } from "./safeClientJson";
+import {
+  fetchJsonIfOkOr,
+  fetchJsonOr,
+  readResponseJson,
+} from "./safeClientJson";
 
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
 }));
+
+describe("readResponseJson", () => {
+  it("returns null when the body is plain-text rate limit output", async () => {
+    const response = new Response("Error 429: Too Many Requests", {
+      status: 429,
+      headers: { "content-type": "text/plain" },
+    });
+    await expect(readResponseJson(response)).resolves.toBeNull();
+  });
+});
 
 describe("fetchJsonOr", () => {
   beforeEach(() => {
@@ -13,6 +27,24 @@ describe("fetchJsonOr", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("returns fallback without Sentry when status is 429 with non-JSON body", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("Error 429: Too Many Requests", {
+        status: 429,
+        headers: { "content-type": "text/plain" },
+      }),
+    );
+    const fallback = { show: false, version: "" };
+    const result = await fetchJsonOr(
+      "/api/whats-new",
+      undefined,
+      fallback,
+      "test-429-plain",
+    );
+    expect(result).toBe(fallback);
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });
 
   it("returns parsed JSON on success", async () => {

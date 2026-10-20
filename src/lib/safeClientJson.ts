@@ -38,9 +38,28 @@ function isBenignTransientFetchTypeError(error: unknown): boolean {
 }
 
 /**
+ * Parses JSON from a `fetch` response body. Returns `null` when the body is empty
+ * or not valid JSON (for example Vercel edge `Error 429:` plain-text rate limits).
+ *
+ * @param response - A resolved `fetch` response whose body has not been read yet.
+ * @returns Parsed value, or `null` when parsing fails.
+ */
+export async function readResponseJson(
+  response: Response,
+): Promise<unknown | null> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Performs a browser `fetch`, parses JSON, and never throws: unexpected failures
- * (network errors other than known benign transient `TypeError`s, invalid JSON)
- * are reported to Sentry and the caller receives `fallback` instead. Aborted
+ * (network errors other than known benign transient `TypeError`s, invalid JSON on
+ * success responses) are reported to Sentry and the caller receives `fallback`
+ * instead. Non-OK HTTP statuses return `fallback` without parsing the body (edge
+ * rate limits often respond with plain text such as `Error 429:`). Aborted
  * requests (`AbortSignal`, React unmount) return `fallback` without reporting —
  * they are expected during navigation. Some browsers surface cancellation as
  * `TypeError: Failed to fetch` while the `AbortSignal` is already aborted; those
@@ -62,8 +81,14 @@ export async function fetchJsonOr<T>(
 ): Promise<T> {
   try {
     const res = await fetch(url, init);
-    const data = (await res.json()) as T;
-    return data;
+    if (!res.ok) {
+      return fallback;
+    }
+    const parsed = await readResponseJson(res);
+    if (parsed === null) {
+      throw new SyntaxError("Response body is not valid JSON");
+    }
+    return parsed as T;
   } catch (error: unknown) {
     if (
       !isCancelledClientFetch(error, init?.signal ?? undefined) &&
@@ -82,8 +107,8 @@ export async function fetchJsonOr<T>(
  * request fails, the response is not OK, or JSON is invalid. Same Sentry and
  * Chromium/WebKit transient fetch `TypeError` behaviour as {@link fetchJsonOr}.
  * Use this when the
- * caller distinguishes failure from success via HTTP status (unlike
- * `fetchJsonOr`, which parses even error bodies).
+ * caller distinguishes failure from success via HTTP status. Non-OK responses
+ * return `null` without parsing the body.
  *
  * @param url - Request URL (same as `fetch` first argument).
  * @param init - Optional `fetch` init; pass `undefined` when not needed.
@@ -100,7 +125,11 @@ export async function fetchJsonIfOkOr<T>(
     if (!res.ok) {
       return null;
     }
-    return (await res.json()) as T;
+    const parsed = await readResponseJson(res);
+    if (parsed === null) {
+      throw new SyntaxError("Response body is not valid JSON");
+    }
+    return parsed as T;
   } catch (error: unknown) {
     if (
       !isCancelledClientFetch(error, init?.signal ?? undefined) &&
