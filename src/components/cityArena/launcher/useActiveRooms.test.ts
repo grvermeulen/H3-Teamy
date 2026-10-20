@@ -105,6 +105,23 @@ describe("useActiveRooms", () => {
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });
 
+  it("treats 429 with plain-text edge body as offline without Sentry", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response("Error 429: Too Many Requests", {
+            status: 429,
+            headers: { "content-type": "text/plain" },
+          }),
+      ),
+    );
+    const { result } = renderHook(() => useActiveRooms(true));
+    await settle();
+    expect(result.current).toEqual({ status: "offline" });
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
   it("treats 429 as offline without Sentry when rate limited", async () => {
     vi.stubGlobal(
       "fetch",
