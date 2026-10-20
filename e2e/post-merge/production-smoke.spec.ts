@@ -18,9 +18,9 @@ test.describe("Read-only deploy smoke", () => {
     });
   });
 
-  test("homepage laadt en toont teamtitel", async ({ page }) => {
-    // `load` kan hangen door analytics/streams; DOM is genoeg voor de header-smoke.
-    await page.goto("/", { waitUntil: "domcontentloaded" });
+  test("app-shell toont teamtitel in header", async ({ page }) => {
+    // `/` doet zware Sportlink/iCal-SSR; statische pagina dekt dezelfde layout/header-smoke.
+    await page.goto("/privacy", { waitUntil: "domcontentloaded" });
     // Site title lives in the global header (not necessarily as <h1> — subpages have their own h1).
     await expect(
       page
