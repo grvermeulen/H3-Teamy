@@ -5,6 +5,8 @@ import { expect, test } from "@playwright/test";
  * geen datawijziging. Draait tegen preview (CI) of productie (post-merge secret).
  */
 test.describe("Read-only deploy smoke", () => {
+  test.describe.configure({ mode: "serial" });
+
   test.beforeEach(({}, testInfo) => {
     test.skip(
       !process.env.PRODUCTION_VERIFY_BASE_URL,
