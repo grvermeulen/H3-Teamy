@@ -70,7 +70,7 @@
     "@simplewebauthn/server": "^14.0.3",
     "@tailwindcss/postcss": "^4.3.3",
     "@vercel/speed-insights": "^2.0.0",
-    "ably": "^2.29.0",
+    "ably": "^2.30.0",
     "ai": "^7.0.150",
     "bcryptjs": "^3.0.3",
     "braintrust": "^3.38.0",
