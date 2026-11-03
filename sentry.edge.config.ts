@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { shouldDropBenignClientFetchNoiseEvent } from "@/lib/sentryBenignClientFetchNoise";
 
 /** Parseert traces sample rate (0–1) uit edge-env; default 0.1. */
 function parseTracesSampleRate(): number {
@@ -13,6 +14,13 @@ Sentry.init({
   dsn: "https://31454117718e26c4a62047b74d633fe0@o4509873010049024.ingest.de.sentry.io/4509873018634320",
 
   tracesSampleRate: parseTracesSampleRate(),
+
+  beforeSend(event, hint) {
+    if (shouldDropBenignClientFetchNoiseEvent(event, hint)) {
+      return null;
+    }
+    return event;
+  },
 
   _experiments: {
     enableLogs: true,

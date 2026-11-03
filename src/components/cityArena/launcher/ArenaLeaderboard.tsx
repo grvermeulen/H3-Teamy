@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import * as Sentry from "@sentry/nextjs";
+import { captureBrowserException } from "@/lib/sentryClientCapture";
 
 /** One line of the ranglijst, as the route serves it. */
 type LeaderboardRow = {
@@ -53,7 +53,7 @@ export function ArenaLeaderboard(): React.JSX.Element {
             : { status: "offline" },
         );
       } catch (error: unknown) {
-        Sentry.captureException(error, {
+        captureBrowserException(error, {
           tags: { area: "arena", kind: "leaderboard-load" },
         });
         if (alive) setState({ status: "offline" });

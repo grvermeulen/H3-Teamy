@@ -4,6 +4,13 @@ on:
   schedule:
     - cron: "0 8 * * 1-5"
   workflow_dispatch:
+    inputs:
+      resolve_issue_ids:
+        description: "Comma-separated Sentry issue IDs to resolve when benign (optional)"
+        required: false
+        type: string
+  push:
+    branches: ["image"]
 
 jobs:
   sync:
@@ -32,6 +39,7 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: h3-teamy
           SENTRY_PROJECT: javascript-nextjs
+          SENTRY_RESOLVE_ISSUE_IDS: ${{ github.event_name == 'workflow_dispatch' && inputs.resolve_issue_ids || '' }}
         run: npx tsx scripts/sentry-resolve-benign-client-fetch.ts
 
       - name: Resolve transient Prisma connect noise (Sentry)

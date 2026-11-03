@@ -73,6 +73,28 @@ describe("shouldDropBenignClientFetchNoiseEvent", () => {
       shouldDropBenignClientFetchNoiseEvent({ message: title } as Event, {}),
     ).toBe(true);
   });
+
+  it("returns true for JAVASCRIPT-NEXTJS-5D preview Failed to fetch title", () => {
+    const title =
+      "TypeError: Failed to fetch (h3-teamy-gkscby5z6-guido-vermeulens-projects.vercel.app)";
+    expect(isBenignTransientClientFetchSentryIssueTitle(title)).toBe(true);
+    expect(BENIGN_TRANSIENT_CLIENT_FETCH_IGNORE_RE.test(title)).toBe(true);
+    expect(
+      shouldDropBenignClientFetchNoiseEvent({ message: title } as Event, {}),
+    ).toBe(true);
+  });
+
+  it("returns true when nested exception values include Failed to fetch", () => {
+    const event = {
+      exception: {
+        values: [
+          { type: "Error", value: "leaderboard poll failed" },
+          { type: "TypeError", value: "Failed to fetch" },
+        ],
+      },
+    } as Event;
+    expect(shouldDropBenignClientFetchNoiseEvent(event, {})).toBe(true);
+  });
 });
 
 describe("shouldDropBenignClientFetchNoiseLog", () => {

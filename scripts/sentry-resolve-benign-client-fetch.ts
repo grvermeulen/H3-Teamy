@@ -67,6 +67,16 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const explicitIds = (process.env.SENTRY_RESOLVE_ISSUE_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+
+  for (const issueId of explicitIds) {
+    await resolveIssue(issueId);
+    console.log(`Resolved explicit issue ${issueId}`);
+  }
+
   const issues = await fetchUnresolvedIssues();
   const benignFetch = issues.filter((issue) =>
     isBenignTransientClientFetchSentryIssueTitle(issue.title),
