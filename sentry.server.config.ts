@@ -2,7 +2,9 @@ import * as Sentry from "@sentry/nextjs";
 import { shouldDropDevLocalhostDbNoiseForSentry } from "@/lib/sentryDevDbNoise";
 import { shouldDropInvalidMultipartBodyNoiseForSentry } from "@/lib/sentryInvalidMultipartBodyNoise";
 import { shouldDropPgPoolNoiseForSentry } from "@/lib/sentryPgPoolNoise";
+import { shouldDropRedisNoiseForSentry } from "@/lib/sentryRedisNoise";
 import { shouldDropNodeTransformStreamNoiseForSentry } from "@/lib/sentryTransformStreamNoise";
+import { shouldDropBenignTurbopackDevCompileNoiseForSentry } from "@/lib/sentryBenignTurbopackDevCompileNoise";
 
 /** Parseert traces sample rate (0–1) uit server-env; default 0.1. */
 function parseTracesSampleRate(): number {
@@ -26,7 +28,11 @@ Sentry.init({
     if (shouldDropDevLocalhostDbNoiseForSentry(event, hint)) return null;
     if (shouldDropInvalidMultipartBodyNoiseForSentry(event, hint)) return null;
     if (shouldDropPgPoolNoiseForSentry(event, hint)) return null;
+    if (shouldDropRedisNoiseForSentry(event, hint)) return null;
     if (shouldDropNodeTransformStreamNoiseForSentry(event, hint)) return null;
+    if (shouldDropBenignTurbopackDevCompileNoiseForSentry(event, hint)) {
+      return null;
+    }
     return event;
   },
 
