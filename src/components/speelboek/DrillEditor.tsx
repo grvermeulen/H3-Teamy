@@ -181,11 +181,13 @@ export default function DrillEditor({
 
   function onRemoveStep(): void {
     if (draft.steps.length <= 1) return;
+    const nextLen = draft.steps.length - 1;
     setDraft((d) => ({
       ...d,
       steps: d.steps.filter((_, i) => i !== stepIndex),
     }));
     setStepIndex(Math.max(0, stepIndex - 1));
+    setPreviewIndex((pi) => (pi === null ? null : Math.min(pi, nextLen - 1)));
   }
 
   async function onSave(): Promise<void> {
@@ -250,7 +252,9 @@ export default function DrillEditor({
   }
 
   const previewFrame =
-    previewIndex !== null ? draft.steps[previewIndex].frame : null;
+    previewIndex !== null && previewIndex < draft.steps.length
+      ? draft.steps[previewIndex].frame
+      : null;
 
   return (
     <main>

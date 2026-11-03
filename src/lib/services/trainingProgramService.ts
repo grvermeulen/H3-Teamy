@@ -114,15 +114,21 @@ export async function getUpcomingProgram(
       now.getTime() + UPCOMING_PROGRAM_WINDOW_DAYS * 24 * 60 * 60 * 1000,
     ),
   );
-  const first = await prisma.trainingProgramItem.findFirst({
+  const dateRows = await prisma.trainingProgramItem.findMany({
     where: { date: { gte: from, lte: to } },
     select: { date: true },
     orderBy: { date: "asc" },
   });
-  if (!first) return null;
-  const program = await getProgram(first.date, false);
-  program.items = program.items.filter((i) => i.drill !== null);
-  return program.items.length > 0 ? program : null;
+  if (dateRows.length === 0) return null;
+  const seen = new Set<string>();
+  for (const row of dateRows) {
+    if (seen.has(row.date)) continue;
+    seen.add(row.date);
+    const program = await getProgram(row.date, false);
+    program.items = program.items.filter((i) => i.drill !== null);
+    if (program.items.length > 0) return program;
+  }
+  return null;
 }
 
 /**
@@ -163,7 +169,8 @@ export async function shareProgram(
   date: string,
   dayLabel: string,
 ): Promise<NotificationResult> {
-  const program = await getProgram(date);
+  const program = await getProgram(date, false);
+  program.items = program.items.filter((i) => i.drill !== null);
   if (program.items.length === 0) {
     return { sent: false, reason: "request_failed", details: "empty_program" };
   }

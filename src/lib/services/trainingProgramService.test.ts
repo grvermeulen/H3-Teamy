@@ -13,7 +13,6 @@ const { db } = vi.hoisted(() => ({
   db: {
     trainingProgramItem: {
       findMany: vi.fn(),
-      findFirst: vi.fn(),
       deleteMany: vi.fn(),
       createMany: vi.fn(),
     },
@@ -98,16 +97,18 @@ describe("trainingProgramService", () => {
   });
 
   it("finds the next planned training within the window", async () => {
-    db.trainingProgramItem.findFirst.mockResolvedValue({ date: "2026-11-05" });
-    db.trainingProgramItem.findMany.mockResolvedValue([row("tip-in", 0)]);
+    db.trainingProgramItem.findMany
+      .mockResolvedValueOnce([{ date: "2026-11-05" }])
+      .mockResolvedValueOnce([row("tip-in", 0)]);
     const program = await getUpcomingProgram(new Date("2026-11-03T10:00:00"));
     expect(program?.date).toBe("2026-11-05");
-    expect(db.trainingProgramItem.findFirst).toHaveBeenCalledWith(
+    expect(db.trainingProgramItem.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { date: { gte: "2026-11-03", lte: "2026-11-17" } },
+        select: { date: true },
       }),
     );
-    db.trainingProgramItem.findFirst.mockResolvedValue(null);
+    db.trainingProgramItem.findMany.mockResolvedValueOnce([]);
     expect(await getUpcomingProgram()).toBeNull();
   });
 

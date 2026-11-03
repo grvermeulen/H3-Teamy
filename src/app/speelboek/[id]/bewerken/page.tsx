@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
+import { NextRequest } from "next/server";
 import { notFound, redirect } from "next/navigation";
 import EditDrillGate from "../../../../components/speelboek/EditDrillGate";
 import { drillToInput } from "../../../../lib/speelboek/editor";
@@ -6,6 +8,7 @@ import {
   findDrill,
   getAllDrills,
 } from "../../../../lib/services/speelboekService";
+import { isTrainer } from "../../../../lib/trainer";
 
 export const dynamic = "force-dynamic";
 
@@ -34,9 +37,13 @@ export default async function EditDrillPage({
   const drill = await findDrill(id);
   if (!drill) notFound();
   if (drill.source === "static") redirect(`/speelboek/nieuw?van=${id}`);
-  const others = (await getAllDrills(true))
-    .filter((d) => d.id !== id)
-    .map((d) => ({ id: d.id, title: d.title }));
+  const req = new NextRequest("http://localhost", { headers: await headers() });
+  const { isTrainer: trainer } = await isTrainer(req);
+  const others = trainer
+    ? (await getAllDrills(true))
+        .filter((d) => d.id !== id)
+        .map((d) => ({ id: d.id, title: d.title }))
+    : [];
   return (
     <EditDrillGate
       drillId={id}
