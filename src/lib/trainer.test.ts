@@ -81,6 +81,19 @@ describe("trainer permissions", () => {
       expect(result.isTrainer).toBe(true);
     });
 
+    it("returns true for the preview seed trainer email without env IDs or KV", async () => {
+      vi.mocked(getActiveUser).mockResolvedValue({ userId: "seed-cuid" });
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
+        firstName: "Test",
+        lastName: "Trainer",
+        email: "trainer@example.test",
+      });
+      vi.mocked(getUserRoles).mockResolvedValue({});
+
+      const result = await isTrainer(mockReq);
+      expect(result.isTrainer).toBe(true);
+    });
+
     it("returns true if user has trainer role in KV", async () => {
       vi.mocked(getActiveUser).mockResolvedValue({ userId: "3" });
       vi.mocked(prisma.user.findUnique).mockResolvedValue({
@@ -191,6 +204,19 @@ describe("trainer permissions", () => {
       vi.mocked(prisma.user.findUnique).mockResolvedValue({
         firstName: "Super",
         lastName: "Admin",
+      });
+      vi.mocked(getUserRoles).mockResolvedValue({});
+
+      const result = await isAdminUser(mockReq);
+      expect(result.isAdmin).toBe(true);
+    });
+
+    it("returns true for the preview seed trainer email without env IDs or KV", async () => {
+      vi.mocked(getActiveUser).mockResolvedValue({ userId: "seed-cuid" });
+      vi.mocked(prisma.user.findUnique).mockResolvedValue({
+        firstName: "Test",
+        lastName: "Trainer",
+        email: "trainer@example.test",
       });
       vi.mocked(getUserRoles).mockResolvedValue({});
 
