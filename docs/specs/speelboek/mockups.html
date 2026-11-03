@@ -1,0 +1,1300 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Speelboek – mockups (H3 Teamy)</title>
+    <style>
+      :root {
+        --bg: #0b0f14;
+        --card: #111926;
+        --text: #e8f0fe;
+        --muted: #9fb0c3;
+        --accent: #00d4ff;
+        --positive: #33d17a;
+        --negative: #ff6b6b;
+        --warn: #fbbf24;
+        /* Waterpolo-kleuren */
+        --cap-white: #f3f6fb;
+        --cap-blue: #2563eb;
+        --cap-red: #dc2626;
+        --ball: #ffd60a;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+        --hit: 44px;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #05080c;
+        color: var(--text);
+        font-family:
+          ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu,
+          Cantarell, "Noto Sans", "Helvetica Neue", Arial;
+        font-size: 15px;
+        line-height: 1.4;
+      }
+      .board {
+        display: flex;
+        gap: 32px;
+        padding: 32px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+        max-width: 1760px;
+      }
+      .shot {
+        width: 390px;
+      }
+      .shot > .label {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 0 0 6px 4px;
+      }
+      .shot > .label b {
+        color: var(--text);
+        display: block;
+        font-size: 15px;
+      }
+      .phone {
+        width: 390px;
+        background: var(--bg);
+        border-radius: 28px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        overflow: hidden;
+        position: relative;
+      }
+      .statusbar {
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 22px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .screen {
+        padding: 8px 16px 24px;
+        min-height: 760px;
+      }
+      .screen.has-nav {
+        padding-bottom: 92px;
+      }
+      h2 {
+        font-size: 22px;
+        margin: 4px 0 2px;
+      }
+      .sub {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 0 0 14px;
+      }
+      .appbar {
+        display: grid;
+        grid-template-columns: var(--hit) 1fr auto;
+        align-items: center;
+        min-height: 56px;
+        margin: -8px 0 8px;
+      }
+      .appbar .back {
+        color: var(--accent);
+        font-size: 22px;
+        text-align: center;
+      }
+      .appbar h1 {
+        margin: 0;
+        font-size: 19px;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .appbar .action {
+        min-width: var(--hit);
+        text-align: center;
+        color: var(--muted);
+        font-size: 18px;
+      }
+      .appbar .action.link {
+        color: var(--accent);
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: var(--radius-lg);
+        padding: 14px;
+        margin-bottom: 12px;
+      }
+      .card.highlight {
+        border-color: color-mix(in oklab, var(--accent) 45%, transparent);
+        background: color-mix(in oklab, var(--accent) 8%, var(--card));
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .grow {
+        flex: 1;
+        min-width: 0;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .small {
+        font-size: 13px;
+      }
+      .xs {
+        font-size: 12px;
+      }
+      .badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--muted);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .badge.new {
+        background: color-mix(in oklab, var(--accent) 18%, transparent);
+        color: var(--accent);
+        border: 1px solid color-mix(in oklab, var(--accent) 35%, transparent);
+      }
+      .badge.off {
+        background: color-mix(in oklab, var(--accent) 18%, transparent);
+        color: #c8f4ff;
+      }
+      .badge.def {
+        background: color-mix(in oklab, var(--cap-blue) 25%, transparent);
+        color: #cfe0ff;
+      }
+      .badge.tech {
+        background: color-mix(in oklab, var(--positive) 18%, transparent);
+        color: #c9f7d1;
+      }
+      .badge.done {
+        background: color-mix(in oklab, var(--positive) 18%, transparent);
+        color: var(--positive);
+      }
+      .badge.ai {
+        background: color-mix(in oklab, #a855f7 20%, transparent);
+        color: #e5ccff;
+      }
+      .search {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 40px;
+        padding: 0 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--muted);
+        margin-bottom: 10px;
+      }
+      .input {
+        display: flex;
+        align-items: center;
+        min-height: 40px;
+        padding: 8px 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text);
+        font-size: 14px;
+      }
+      .input.placeholder {
+        color: var(--muted);
+      }
+      .field-label {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 10px 2px 4px;
+      }
+      .chips {
+        display: flex;
+        gap: 6px;
+        overflow: hidden;
+        margin-bottom: 14px;
+      }
+      .chips.wrap {
+        flex-wrap: wrap;
+      }
+      .chip {
+        padding: 6px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        font-size: 13px;
+        color: var(--text);
+        white-space: nowrap;
+      }
+      .chip.on {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #06121a;
+        font-weight: 600;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: var(--hit);
+        padding: 0 16px;
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text);
+        font-weight: 600;
+        font-size: 15px;
+        white-space: nowrap;
+      }
+      .btn.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #06121a;
+      }
+      .btn.ghost {
+        border-color: transparent;
+        background: transparent;
+        color: var(--accent);
+      }
+      .btn.sm {
+        min-height: 36px;
+        padding: 0 12px;
+        font-size: 14px;
+      }
+      .btn.full {
+        width: 100%;
+      }
+      .title {
+        font-weight: 600;
+      }
+      .section {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin: 18px 0 8px;
+      }
+      .thumb {
+        width: 56px;
+        height: 44px;
+        border-radius: 8px;
+        background: rgba(0, 212, 255, 0.07);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        flex: none;
+        overflow: hidden;
+      }
+      .thumb svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .pool-wrap {
+        border-radius: 10px;
+        background: rgba(0, 212, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 6px;
+        margin-bottom: 10px;
+      }
+      .pool-wrap svg {
+        width: 100%;
+        display: block;
+      }
+      .legend {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        font-size: 12px;
+        color: var(--muted);
+        margin: 0 2px 12px;
+      }
+      .legend i {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 5px;
+        vertical-align: -1px;
+        border: 1px solid rgba(0, 0, 0, 0.5);
+      }
+      .legend .line {
+        display: inline-block;
+        width: 16px;
+        height: 0;
+        border-top: 2px solid var(--text);
+        vertical-align: 3px;
+        margin-right: 5px;
+      }
+      .legend .dash {
+        border-top-style: dashed;
+        border-color: var(--accent);
+      }
+      ol.steps {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      ol.steps li {
+        display: flex;
+        gap: 12px;
+        padding: 10px 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      ol.steps li:first-child {
+        border-top: 0;
+        padding-top: 0;
+      }
+      ol.steps .n {
+        flex: none;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: #06121a;
+        font-weight: 700;
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      ul.points {
+        margin: 0;
+        padding-left: 18px;
+      }
+      ul.points li {
+        margin: 4px 0;
+      }
+      .stepper {
+        display: grid;
+        grid-template-columns: var(--hit) 1fr var(--hit);
+        align-items: center;
+        margin: 2px 0 10px;
+      }
+      .stepper .nav {
+        width: var(--hit);
+        height: var(--hit);
+        border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text);
+        font-size: 20px;
+        background: transparent;
+        cursor: pointer;
+      }
+      .stepper .mid {
+        text-align: center;
+      }
+      .dots {
+        display: flex;
+        gap: 6px;
+        justify-content: center;
+        margin-top: 6px;
+      }
+      .dots i {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.18);
+      }
+      .dots i.on {
+        background: var(--accent);
+        width: 18px;
+        border-radius: 999px;
+      }
+      /* Rollen per positie */
+      ul.roles {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      ul.roles li {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        padding: 6px 8px;
+        border-radius: 8px;
+        font-size: 12.5px;
+      }
+      ul.roles li.you {
+        background: color-mix(in oklab, var(--accent) 12%, transparent);
+        border-left: 3px solid var(--accent);
+      }
+      ul.roles .cap {
+        flex: none;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: var(--cap-white);
+        color: #0b0f14;
+        font-weight: 700;
+        font-size: 11px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(0, 0, 0, 0.5);
+      }
+      ul.roles .pos {
+        color: var(--muted);
+        font-size: 11px;
+        display: block;
+      }
+      /* Editor */
+      .tools {
+        display: flex;
+        gap: 6px;
+        margin: 0 0 10px;
+      }
+      .tool {
+        flex: 1;
+        min-height: 54px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .tool b {
+        font-size: 16px;
+        color: var(--text);
+        font-weight: 500;
+      }
+      .tool.on {
+        border-color: var(--accent);
+        background: color-mix(in oklab, var(--accent) 12%, transparent);
+        color: var(--accent);
+      }
+      .tool.on b {
+        color: var(--accent);
+      }
+      .steps-strip {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .steps-strip .s {
+        flex: none;
+        min-height: 36px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+      }
+      .steps-strip .s.done {
+        color: var(--positive);
+        border-color: color-mix(in oklab, var(--positive) 40%, transparent);
+      }
+      .steps-strip .s.on {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #06121a;
+        font-weight: 600;
+      }
+      .steps-strip .s.add {
+        border-style: dashed;
+        color: var(--accent);
+      }
+      /* AI / spraak */
+      .mic {
+        width: 88px;
+        height: 88px;
+        border-radius: 50%;
+        margin: 6px auto 8px;
+        background: color-mix(in oklab, var(--accent) 16%, transparent);
+        border: 2px solid var(--accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--accent);
+        font-size: 34px;
+      }
+      .wave {
+        display: flex;
+        gap: 3px;
+        align-items: center;
+        justify-content: center;
+        height: 22px;
+        margin-bottom: 4px;
+      }
+      .wave i {
+        width: 3px;
+        border-radius: 2px;
+        background: var(--accent);
+        opacity: 0.8;
+      }
+      .transcript {
+        font-size: 15px;
+        line-height: 1.5;
+      }
+      .transcript mark {
+        background: color-mix(in oklab, var(--accent) 22%, transparent);
+        color: var(--text);
+        border-radius: 3px;
+        padding: 0 2px;
+      }
+      .gen {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+      .gen .f {
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        overflow: hidden;
+        background: rgba(0, 212, 255, 0.05);
+      }
+      .gen .f svg {
+        width: 100%;
+        display: block;
+      }
+      .gen .f div {
+        font-size: 11px;
+        padding: 4px 6px 6px;
+        color: var(--muted);
+        text-align: center;
+      }
+      .program li {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      .program li:first-child {
+        border-top: 0;
+        padding-top: 0;
+      }
+      .program .grip {
+        color: rgba(255, 255, 255, 0.3);
+        font-size: 16px;
+      }
+      .program .dur {
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        font-size: 13px;
+        min-width: 32px;
+        text-align: right;
+      }
+      .bottomBar {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: var(--card);
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 10px 12px 18px;
+      }
+      .navLinks {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
+        gap: 2px;
+      }
+      .navLinks a {
+        color: var(--text);
+        text-decoration: none;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        min-height: 48px;
+        border-radius: var(--radius-md);
+        font-size: 17px;
+      }
+      .navLinks a small {
+        font-size: 11px;
+      }
+      .navLinks a.on {
+        color: var(--accent);
+        background: color-mix(in oklab, var(--accent) 12%, transparent);
+      }
+      .scrim {
+        position: absolute;
+        inset: 0;
+        background: rgba(3, 6, 10, 0.62);
+      }
+      .sheet {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: var(--card);
+        border-radius: 18px 18px 0 0;
+        padding: 10px 16px 28px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .sheet .handle {
+        width: 40px;
+        height: 4px;
+        border-radius: 2px;
+        background: rgba(255, 255, 255, 0.2);
+        margin: 0 auto 14px;
+      }
+      .option {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        padding: 12px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        margin-bottom: 8px;
+      }
+      .option .ico {
+        flex: none;
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        background: rgba(0, 212, 255, 0.1);
+        color: var(--accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+      }
+      .fab {
+        position: absolute;
+        right: 16px;
+        bottom: 18px;
+        min-height: 44px;
+        padding: 0 16px;
+        border-radius: 999px;
+        background: var(--accent);
+        color: #06121a;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="board">
+      <!-- ───────────────────────── 1. Speelboek bibliotheek ───────────────────────── -->
+      <div class="shot" id="shot-1">
+        <p class="label"><b>1 · Speelboek (nieuw tabblad)</b>Spelersweergave – bibliotheek van tactiek en techniek</p>
+        <div class="phone">
+          <div class="statusbar"><span>19:41</span><span>●●● ▮</span></div>
+          <div class="screen has-nav">
+            <h2>Speelboek</h2>
+            <p class="sub">Tactiek en techniek van H3 – voor in en naast het water</p>
+
+            <div class="search"><span>⌕</span><span>Zoek oefening, positie of situatie…</span></div>
+            <div class="chips">
+              <span class="chip on">Alles</span><span class="chip">Aanval</span><span class="chip">Verdediging</span><span class="chip">Techniek</span><span class="chip">Keeper</span>
+            </div>
+
+            <div class="card highlight">
+              <div class="row">
+                <div class="grow">
+                  <div class="xs" style="color: var(--accent); font-weight: 700; letter-spacing: 0.05em">DONDERDAG 6 NOV · TRAINING</div>
+                  <div class="title" style="margin-top: 2px">Vanavond oefenen we</div>
+                  <div class="small muted">Tip-in · 4-2 man-meer · Zone 5 tegen 6</div>
+                </div>
+                <span class="btn sm">Bekijk</span>
+              </div>
+            </div>
+
+            <div class="section">Nieuw</div>
+            <div class="card">
+              <div class="row">
+                <div class="thumb" id="thumb-tipin"></div>
+                <div class="grow">
+                  <div class="row" style="gap: 8px"><span class="title grow">Tip-in</span><span class="badge new">Nieuw</span></div>
+                  <div class="small muted">Techniek · Vleugel / midvoor · 3 stappen</div>
+                  <div class="xs muted" style="margin-top: 4px">Idee van Henry via de ideeënbus</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="section">Aanval</div>
+            <div class="card">
+              <div class="row">
+                <div class="thumb" id="thumb-42"></div>
+                <div class="grow">
+                  <div class="row" style="gap: 8px"><span class="title grow">4-2 man-meer</span><span class="badge done">2× geoefend</span></div>
+                  <div class="small muted">6 tegen 5 · Positiespel · 4 stappen</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="section">Verdediging</div>
+            <div class="card">
+              <div class="row">
+                <div class="thumb" id="thumb-zone"></div>
+                <div class="grow">
+                  <div class="title">Zone 5 tegen 6: M-verdediging</div>
+                  <div class="small muted">Positiespel · 5 stappen</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="section">Keeper</div>
+            <div class="card">
+              <div class="row">
+                <div class="thumb" id="thumb-keeper"></div>
+                <div class="grow">
+                  <div class="title">Positie bij een lob vanaf de hoek</div>
+                  <div class="small muted">Techniek · Keeper · 3 stappen</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <nav class="bottomBar">
+            <div class="navLinks">
+              <a>◫<small>RSVP</small></a>
+              <a>✓<small>Opkomst</small></a>
+              <a class="on">▣<small>Speelboek</small></a>
+              <a>＋<small>Trainer</small></a>
+              <a>○<small>Profiel</small></a>
+            </div>
+          </nav>
+        </div>
+      </div>
+
+      <!-- ───────────────────────── 2. Techniek: Tip-in ───────────────────────── -->
+      <div class="shot" id="shot-2">
+        <p class="label"><b>2 · Techniek-kaart: Tip-in</b>Henry's idee – stappen, kernpunten, fouten, video</p>
+        <div class="phone">
+          <div class="statusbar"><span>19:41</span><span>●●● ▮</span></div>
+          <div class="screen">
+            <div class="appbar"><span class="back">‹</span><h1>Tip-in</h1><span class="action">⋯</span></div>
+
+            <div class="chips" style="margin-bottom: 10px">
+              <span class="badge tech">Techniek</span><span class="badge">Vleugel / midvoor</span><span class="badge">Niveau: gemiddeld</span>
+            </div>
+
+            <div class="pool-wrap" id="pool-tipin"></div>
+            <div class="legend">
+              <span><i style="background: var(--cap-white)"></i>Aanval</span>
+              <span><i style="background: var(--cap-blue)"></i>Verdediging</span>
+              <span><i style="background: var(--cap-red)"></i>Keeper</span>
+              <span><i style="background: var(--ball)"></i>Bal</span>
+              <span><span class="line"></span>Actie</span>
+              <span><span class="line dash"></span>Pass</span>
+            </div>
+
+            <div class="card">
+              <ol class="steps">
+                <li><span class="n">1</span><div><div class="title">Actie voor de goal</div><div class="small muted">Vleugel 1 zwemt langs zijn man naar de 2e paal.</div></div></li>
+                <li><span class="n">2</span><div><div class="title">Bal hoog en droog</div><div class="small muted">Pas dán speelt 5 hoog in, buiten bereik van de keeper.</div></div></li>
+                <li><span class="n">3</span><div><div class="title">Tippen, niet vangen</div><div class="small muted">Gestrekte arm, één tik over of langs de keeper.</div></div></li>
+              </ol>
+            </div>
+
+            <div class="section">Let op</div>
+            <div class="card">
+              <ul class="points small">
+                <li>Start pas als de balbezitter je ziet; te vroeg en de keeper staat al klaar.</li>
+                <li>Benen (schaartrap) vóór de arm omhoog gaat; lichaam tussen verdediger en bal.</li>
+                <li>Fout: bal te laag aangespeeld, of bal willen vangen en dán schieten.</li>
+              </ul>
+            </div>
+
+            <div class="card">
+              <div class="row">
+                <div class="thumb" style="display: flex; align-items: center; justify-content: center; color: var(--accent); font-size: 18px">▶</div>
+                <div class="grow"><div class="title">Voorbeeld uit de training</div><div class="small muted">0:12 · opgenomen 30 okt door Guido</div></div>
+              </div>
+            </div>
+
+            <div class="row" style="gap: 8px; margin-top: 4px">
+              <span class="btn primary grow">Ik snap 'm</span>
+              <span class="btn grow">Vraag aan trainer</span>
+            </div>
+            <p class="xs muted" style="margin: 10px 2px 0">Geoefend op do 23 en do 30 okt · 9 van 14 spelers hebben 'm afgevinkt</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ───────────────────────── 3. Tactiek: 4-2 man-meer met stappen ───────────────────────── -->
+      <div class="shot" id="shot-3">
+        <p class="label"><b>3 · Tactiek-kaart: 4-2 man-meer</b>Stap voor stap, met de rol van elke positie en 'jouw positie' uitgelicht</p>
+        <div class="phone">
+          <div class="statusbar"><span>19:41</span><span>●●● ▮</span></div>
+          <div class="screen">
+            <div class="appbar"><span class="back">‹</span><h1>4-2 man-meer</h1><span class="action">⋯</span></div>
+
+            <div class="chips" style="margin-bottom: 10px">
+              <span class="badge off">Aanval</span><span class="badge">6 tegen 5</span><span class="badge">Positiespel</span>
+            </div>
+
+            <div class="pool-wrap" id="pool-42"></div>
+
+            <div class="stepper">
+              <span class="nav" data-dir="-1">‹</span>
+              <div class="mid">
+                <div class="title" id="step-title">Stap 2 van 4 · Snel rondspelen</div>
+                <div class="dots" id="dots"></div>
+              </div>
+              <span class="nav" data-dir="1">›</span>
+            </div>
+
+            <div class="card">
+              <div class="small" id="step-text"></div>
+            </div>
+
+            <div class="section" style="margin-top: 6px">Rol per positie in deze stap · <span style="color: var(--accent); text-transform: none; letter-spacing: 0">jij speelt 3</span></div>
+            <div class="card" style="padding: 8px">
+              <ul class="roles" id="roles"></ul>
+            </div>
+
+            <div class="row" style="gap: 8px">
+              <span class="btn primary grow">▶ Speel animatie</span>
+              <span class="btn grow">Verdediging-weergave</span>
+            </div>
+            <p class="xs muted" style="margin: 10px 2px 0">Tegenhanger: <span style="color: var(--accent)">Zone 5 tegen 6: M-verdediging</span></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ───────────────────────── 4. Trainer: programma ───────────────────────── -->
+      <div class="shot" id="shot-4">
+        <p class="label"><b>4 · Trainer: trainingsprogramma</b>Oefeningen koppelen aan een training en vooraf delen</p>
+        <div class="phone">
+          <div class="statusbar"><span>19:41</span><span>●●● ▮</span></div>
+          <div class="screen" style="padding-bottom: 80px">
+            <div class="appbar"><span class="back">‹</span><h1>Training – do 6 nov</h1><span class="action">⋯</span></div>
+
+            <div class="card">
+              <div class="row">
+                <div class="grow"><div class="title">Opkomst</div><div class="small muted">14 aanwezig · 3 afgemeld</div></div>
+                <span class="btn sm">Afvinken</span>
+              </div>
+            </div>
+
+            <div class="section">Programma · 70 min</div>
+            <div class="card">
+              <ul class="program" style="list-style: none; margin: 0; padding: 0">
+                <li><span class="grip">⋮⋮</span><div class="grow"><div class="title">Warming-up</div><div class="xs muted">Zwemmen en benen</div></div><span class="dur">10'</span></li>
+                <li><span class="grip">⋮⋮</span><div class="grow"><div class="title">Tip-in</div><div class="xs muted">Techniek · vleugels 1 en 5 + midvoor</div></div><span class="badge tech">Techniek</span><span class="dur">15'</span></li>
+                <li><span class="grip">⋮⋮</span><div class="grow"><div class="title">4-2 man-meer</div><div class="xs muted">Aanval · met zone 5 tegen 6 als tegenhanger</div></div><span class="badge off">Aanval</span><span class="dur">20'</span></li>
+                <li><span class="grip">⋮⋮</span><div class="grow"><div class="title">Partijtje</div><div class="xs muted">Accent: man-meer uitspelen</div></div><span class="dur">25'</span></li>
+              </ul>
+              <div style="margin-top: 10px"><span class="btn ghost sm">+ Oefening uit speelboek</span></div>
+            </div>
+
+            <div class="card">
+              <div class="title small">Vooraf delen</div>
+              <div class="small muted" style="margin: 2px 0 10px">Spelers zien het programma in hun Speelboek. Stuur ook een linkje naar de groep.</div>
+              <span class="btn full">Stuur naar WhatsApp-groep</span>
+            </div>
+
+            <div class="card">
+              <div class="title small">Na de training</div>
+              <div class="small muted">Tip-in: 9 van 14 afgevinkt · 2 vragen van spelers</div>
+            </div>
+          </div>
+          <div class="fab">+ Nieuwe oefening</div>
+        </div>
+      </div>
+
+      <!-- ───────────────────────── 5. Trainer: nieuwe oefening (keuze) ───────────────────────── -->
+      <div class="shot" id="shot-5">
+        <p class="label"><b>5 · Trainer: nieuwe oefening</b>Instapwegen: inspreken/beschrijven (AI), whiteboard-foto, zelf bouwen, of vanuit de ideeënbus</p>
+        <div class="phone" id="phone-5">
+          <div class="scrim"></div>
+          <div class="sheet">
+            <div class="handle"></div>
+            <div class="title" style="margin-bottom: 2px">Nieuwe oefening</div>
+            <div class="small muted" style="margin-bottom: 12px">Kies hoe je wilt beginnen</div>
+            <div class="option">
+              <div class="ico">AI</div>
+              <div class="grow"><div class="title small">Inspreken of beschrijven</div><div class="xs muted">"Vleugel 1 doet een actie naar de tweede paal, 5 speelt hoog in, 1 tipt 'm binnen" → stappen, rollen en animatie.</div></div>
+            </div>
+            <div class="option">
+              <div class="ico">AI</div>
+              <div class="grow"><div class="title small">Foto van het whiteboard</div><div class="xs muted">De AI zet posities en pijlen om naar een bewerkbare animatie.</div></div>
+            </div>
+            <div class="option">
+              <div class="ico">✎</div>
+              <div class="grow"><div class="title small">Zelf bouwen</div><div class="xs muted">Start met de standaardopstelling, verschuif spelers, teken passes en acties, stap voor stap.</div></div>
+            </div>
+            <div class="option" style="border-style: dashed">
+              <div class="ico" style="background: rgba(255, 255, 255, 0.06); color: var(--muted)">↑</div>
+              <div class="grow"><div class="title small">Uit de ideeënbus</div><div class="xs muted">1 open idee: <b style="color: var(--text)">Tip-in</b> (Henry, 21 okt) → begin hiermee</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ───────────────────────── 6. Trainer: editor ───────────────────────── -->
+      <div class="shot" id="shot-6">
+        <p class="label"><b>6 · Trainer: spelsituatie bouwen</b>Standaardopstelling, spelers verschuiven/toevoegen/verwijderen, passes en acties tekenen, stap voor stap opslaan</p>
+        <div class="phone">
+          <div class="statusbar"><span>19:41</span><span>●●● ▮</span></div>
+          <div class="screen">
+            <div class="appbar"><span class="back">‹</span><h1>Tip-in</h1><span class="action link">Opslaan</span></div>
+
+            <div class="steps-strip">
+              <span class="s done">✓ Stap 1</span>
+              <span class="s on">Stap 2</span>
+              <span class="s add">+ Stap</span>
+              <span class="grow"></span>
+              <span class="xs muted">Vanuit stap 1</span>
+            </div>
+
+            <div class="pool-wrap" id="pool-editor" style="margin-bottom: 8px"></div>
+
+            <div class="tools">
+              <span class="tool on"><b>✥</b>Verplaats</span>
+              <span class="tool"><b>→</b>Actie</span>
+              <span class="tool"><b>⇢</b>Pass</span>
+              <span class="tool"><b>⇒</b>Schot</span>
+              <span class="tool"><b>＋</b>Speler</span>
+              <span class="tool"><b>－</b>Speler</span>
+            </div>
+
+            <div class="card" style="padding: 12px">
+              <div class="row" style="gap: 10px; margin-bottom: 8px">
+                <span class="cap" style="width: 28px; height: 28px; border-radius: 50%; background: var(--cap-white); color: #0b0f14; font-weight: 700; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid rgba(0, 0, 0, 0.5)">1</span>
+                <div class="grow"><div class="title small">Positie 1 · Vleugel rechts</div><div class="xs muted">Geselecteerd · sleep om te verplaatsen</div></div>
+                <span class="badge">Bal: 5</span>
+              </div>
+              <div class="field-label" style="margin-top: 0">Rol in deze stap</div>
+              <div class="input">Zwemt langs zijn man naar de 2e paal, arm omhoog.</div>
+            </div>
+
+            <div class="field-label">Titel van stap 2</div>
+            <div class="input">Bal hoog en droog</div>
+            <div class="field-label">Uitleg</div>
+            <div class="input placeholder">Kort: wat gebeurt er in deze stap?</div>
+
+            <div class="row" style="gap: 8px; margin-top: 14px">
+              <span class="btn primary grow">Stap opslaan</span>
+              <span class="btn grow">▶ Afspelen</span>
+            </div>
+            <p class="xs muted" style="margin: 10px 2px 0">Stap opgeslagen? Dan <b style="color: var(--text)">+ Stap</b> voor de volgende, of <b style="color: var(--text)">Opslaan</b> om de oefening af te ronden.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ───────────────────────── 7. Trainer: inspreken (AI) ───────────────────────── -->
+      <div class="shot" id="shot-7">
+        <p class="label"><b>7 · Trainer: oefening inspreken</b>Spraak of tekst → AI maakt stappen, rollen per positie en animatie; daarna bijstellen in de editor</p>
+        <div class="phone">
+          <div class="statusbar"><span>19:41</span><span>●●● ▮</span></div>
+          <div class="screen">
+            <div class="appbar"><span class="back">‹</span><h1>Oefening inspreken</h1><span class="action"></span></div>
+
+            <div class="mic">◉</div>
+            <div class="wave" id="wave"></div>
+            <p class="xs muted" style="text-align: center; margin: 0 0 12px">Tik om te stoppen · of typ hieronder</p>
+
+            <div class="card">
+              <div class="xs muted" style="margin-bottom: 4px">Wat je zei</div>
+              <div class="transcript">"<mark>Vleugel 1</mark> doet een actie langs zijn man naar de <mark>tweede paal</mark>. <mark>5</mark> wacht tot de actie uitkomt en speelt <mark>hoog in</mark>. 1 <mark>tipt</mark> 'm met gestrekte arm over de keeper."</div>
+            </div>
+
+            <div class="row" style="gap: 8px; margin: 0 2px 8px">
+              <span class="badge ai">AI</span>
+              <span class="small grow">Animatie gemaakt · 3 stappen · 2 rollen herkend</span>
+            </div>
+            <div class="card" style="padding: 10px">
+              <div class="gen">
+                <div class="f"><div id="gen-1"></div><div>1 · Actie</div></div>
+                <div class="f"><div id="gen-2"></div><div>2 · Pass hoog</div></div>
+                <div class="f"><div id="gen-3"></div><div>3 · Tip-in</div></div>
+              </div>
+              <ul class="roles" style="margin-top: 8px">
+                <li><span class="cap">1</span><div><span class="pos">Vleugel rechts</span>Actie naar de 2e paal, arm omhoog, bal tippen.</div></li>
+                <li><span class="cap">5</span><div><span class="pos">Vleugel links</span>Wacht op de actie, speelt hoog en droog in.</div></li>
+                <li><span class="cap" style="background: rgba(255,255,255,0.08); color: var(--muted); border-style: dashed">?</span><div><span class="pos">Midvoor 6</span><span class="muted">Niet genoemd – wil je een rol toevoegen?</span></div></li>
+              </ul>
+            </div>
+
+            <div class="row" style="gap: 8px">
+              <span class="btn primary grow">▶ Bekijk animatie</span>
+              <span class="btn grow">Aanpassen in editor</span>
+            </div>
+            <div style="text-align: center; margin-top: 6px"><span class="btn ghost sm">Opnieuw inspreken</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ── Shot 5 reuses the trainer programme screen as backdrop for the sheet ──
+      {
+        const src = document.querySelector("#shot-4 .phone");
+        const dst = document.getElementById("phone-5");
+        dst.prepend(src.querySelector(".screen").cloneNode(true));
+        dst.prepend(src.querySelector(".statusbar").cloneNode(true));
+      }
+
+      // ── Waterpolo-kleuren ──
+      const C = {
+        off: { fill: "#f3f6fb", text: "#0b0f14" }, // aanval: witte cap
+        def: { fill: "#2563eb", text: "#ffffff" }, // verdediging: blauwe cap
+        gk: { fill: "#dc2626", text: "#ffffff" }, // keeper: rood, nummerkleur van zijn team
+        ball: "#ffd60a",
+      };
+
+      // ── Half-pool diagram helpers (top-down, attacking goal at the top) ──
+      const W = 300;
+      const H = 150;
+      function pool(inner, opts = {}) {
+        const mini = Boolean(opts.mini);
+        const lines = mini
+          ? ""
+          : `
+          <text x="6" y="43" fill="#9fb0c3" font-size="8">2m</text>
+          <text x="6" y="86" fill="#9fb0c3" font-size="8">5m</text>
+          <text x="6" y="101" fill="#9fb0c3" font-size="8">6m</text>`;
+        return `
+        <svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0 0L10 5L0 10z" fill="#e8f0fe"/>
+            </marker>
+            <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0 0L10 5L0 10z" fill="#00d4ff"/>
+            </marker>
+          </defs>
+          <rect x="0" y="0" width="${W}" height="${H}" rx="6" fill="rgba(0,212,255,0.06)"/>
+          <line x1="0" y1="10" x2="${W}" y2="10" stroke="rgba(255,255,255,0.35)" stroke-width="1"/>
+          <line x1="0" y1="40" x2="${W}" y2="40" stroke="#ff6b6b" stroke-opacity="0.55" stroke-width="1"/>
+          <line x1="0" y1="85" x2="${W}" y2="85" stroke="#fbbf24" stroke-opacity="0.45" stroke-width="1"/>
+          <line x1="0" y1="100" x2="${W}" y2="100" stroke="#33d17a" stroke-opacity="0.4" stroke-width="1" stroke-dasharray="4 3"/>
+          <rect x="127.5" y="3" width="45" height="8" rx="1.5" fill="none" stroke="#e8f0fe" stroke-width="1.5"/>
+          ${lines}
+          ${inner}
+        </svg>`;
+      }
+      function player(x, y, label, kind = "off", opts = {}) {
+        const c = C[kind];
+        const sel = opts.selected
+          ? `<circle cx="${x}" cy="${y}" r="14" fill="none" stroke="#00d4ff" stroke-width="1.5" stroke-dasharray="3 3"/>`
+          : "";
+        return `<g>${sel}<circle cx="${x}" cy="${y}" r="9.5" fill="${c.fill}" stroke="#0b0f14" stroke-width="1.5"/>
+          <text x="${x}" y="${y + 3.5}" text-anchor="middle" font-size="9.5" font-weight="700" fill="${c.text}">${label}</text></g>`;
+      }
+      function ball(x, y) {
+        return `<circle cx="${x}" cy="${y}" r="5.2" fill="${C.ball}" stroke="#0b0f14" stroke-width="1.2"/>`;
+      }
+      function move(x1, y1, x2, y2, curve) {
+        const d = curve ? `M${x1} ${y1} Q${curve[0]} ${curve[1]} ${x2} ${y2}` : `M${x1} ${y1} L${x2} ${y2}`;
+        return `<path d="${d}" fill="none" stroke="#e8f0fe" stroke-width="2" marker-end="url(#arr)"/>`;
+      }
+      function pass(x1, y1, x2, y2) {
+        return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#00d4ff" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrA)"/>`;
+      }
+      function shot(x1, y1, x2, y2) {
+        return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#e8f0fe" stroke-width="3.2" marker-end="url(#arr)"/>`;
+      }
+      function num(x, y, n) {
+        return `<g><circle cx="${x}" cy="${y}" r="7" fill="#e8f0fe"/><text x="${x}" y="${y + 3}" text-anchor="middle" font-size="9" font-weight="700" fill="#06121a">${n}</text></g>`;
+      }
+
+      // ── Standaardopstelling: 1 rechts → 5 links, 6 = midvoor (gezien vanaf de aanval) ──
+      const LINEUP = {
+        1: [258, 66], // vleugel rechts
+        2: [232, 112], // rechts op 6m
+        3: [150, 118], // midden (punt)
+        4: [70, 112], // links op 6m
+        5: [48, 66], // vleugel links
+        6: [150, 58], // midvoor op 2m
+      };
+      const LINEUP_DEF = [
+        [238, 74],
+        [226, 96],
+        [150, 100],
+        [78, 96],
+        [62, 74],
+        [150, 41],
+      ];
+      const GK = [150, 19];
+      const lineup = (sel) =>
+        Object.entries(LINEUP)
+          .map(([n, [x, y]]) => player(x, y, n, "off", { selected: Number(n) === sel }))
+          .join("");
+      const lineupDef = (skip = []) =>
+        LINEUP_DEF.filter((_, i) => !skip.includes(i)).map(([x, y]) => player(x, y, "", "def")).join("");
+
+      // ── Tip-in diagram (1 doet de actie, 5 speelt in) ──
+      document.getElementById("pool-tipin").innerHTML = pool(
+        [
+          player(...GK, "K", "gk"),
+          lineupDef([4]),
+          player(...LINEUP[6], "6"),
+          move(255, 66, 182, 40, [225, 38]),
+          num(222, 60, 1),
+          player(...LINEUP[1], "1"),
+          player(...LINEUP[2], "2"),
+          player(...LINEUP[3], "3"),
+          player(...LINEUP[4], "4"),
+          player(...LINEUP[5], "5"),
+          ball(58, 56),
+          pass(66, 54, 160, 30),
+          num(108, 36, 2),
+          shot(174, 32, 160, 14),
+          num(195, 24, 3),
+        ].join(""),
+      );
+
+      // ── 4-2 man-meer: posities 1 (paal rechts) → 6 (paal links) ──
+      const O = {
+        1: [173, 46], // paal rechts
+        2: [228, 52], // hoek rechts
+        3: [190, 106], // 6m rechts
+        4: [110, 106], // 6m links
+        5: [72, 52], // hoek links
+        6: [127, 46], // paal links
+      };
+      const POS_NAME = { 1: "Paal rechts", 2: "Hoek rechts", 3: "6m rechts", 4: "6m links", 5: "Hoek links", 6: "Paal links" };
+      const YOU = 3;
+      const D0 = { dl: [118, 30], dr: [182, 30], wl: [88, 68], wr: [212, 68], top: [150, 82] };
+      const steps = [
+        {
+          title: "Opstelling 4-2",
+          text: "Vier spelers op de 2-meterlijn (twee op de paal, twee in de hoek), twee op 6 meter. De verdediging staat in een zone met 5 man plus keeper.",
+          def: D0,
+          ball: 3,
+          extra: "",
+          roles: {
+            1: "Rug naar de keeper, arm vrij, vraag de bal niet te vroeg.",
+            2: "Hoog in het water, buiten de zone, klaar voor de inleg.",
+            3: "Bal in de hand, kijk naar de zone, dicteer het tempo.",
+            4: "Beschikbaar op 6m, hou afstand tot de verdediger.",
+            5: "Hoek breed houden zodat de zone moet strekken.",
+            6: "Positie vasthouden op de paal, lichaam tussen bal en verdediger.",
+          },
+        },
+        {
+          title: "Snel rondspelen",
+          text: "Speel de bal snel rond over 6 meter. Dwing de zone om mee te schuiven; niet dribbelen, niet vasthouden.",
+          def: { ...D0, top: [134, 80], wr: [204, 62] },
+          ball: 3,
+          extra: () => pass(178, 106, 122, 106),
+          roles: {
+            1: "Blijf op de paal, armen hoog voor een snelle inleg.",
+            2: "Zak iets naar 3–4 meter als de zone naar links schuift.",
+            3: "Speel direct door naar 6m links; blijf beschikbaar voor de terugpass.",
+            4: "Neem aan en kijk meteen naar de hoek links.",
+            5: "Vraag de bal breed, dwing de linkerverdediger uit te stappen.",
+            6: "Voel waar je man staat; klaar om vrij te komen.",
+          },
+        },
+        {
+          title: "Gat trekken",
+          text: "Bal naar de hoek links. De linkerverdediger moet uitstappen; daardoor komt de paalspeler links vrij.",
+          def: { ...D0, top: [128, 78], wl: [78, 58], dl: [122, 32] },
+          ball: 4,
+          extra: () => pass(100, 100, 84, 62),
+          roles: {
+            1: "Blijf buiten beeld van de keeper; geen beweging naar de bal.",
+            2: "Veiligheid: kom iets naar binnen voor een eventuele counter.",
+            3: "Schuif naar 5m als uitwijkoptie wanneer het dichtzit.",
+            4: "Speel de hoek aan en blijf achter de bal (dekking).",
+            5: "Neem aan, dreig met een schot zodat de verdediger moet komen.",
+            6: "Nu vrijkomen: draai weg van je man richting de bal.",
+          },
+        },
+        {
+          title: "Afronden",
+          text: "De hoekspeler legt de bal in bij de paalspeler links: direct schieten (binnenkant paal) of terugleggen naar 6 meter als de keeper al staat.",
+          def: { ...D0, top: [128, 78], wl: [78, 58], dl: [104, 34], dr: [178, 30] },
+          ball: 5,
+          extra: () => pass(80, 48, 118, 46) + shot(134, 40, 146, 14),
+          roles: {
+            1: "Terugzakken voor de rebound of de omschakeling.",
+            2: "Eerste man terug bij balverlies.",
+            3: "Klaar voor de terugpass; komt de bal, dan direct schieten.",
+            4: "Dekking achter de bal, ga niet mee naar voren.",
+            5: "Inleg op de paal, hoog en droog; anders terug naar 6m.",
+            6: "Direct schieten, binnenkant paal; de keeper komt van de andere kant.",
+          },
+        },
+      ];
+      let step = 1;
+      function render42() {
+        const s = steps[step];
+        const b = O[s.ball];
+        const inner = [
+          player(...GK, "K", "gk"),
+          ...Object.values(s.def).map(([x, y]) => player(x, y, "", "def")),
+          ...Object.entries(O).map(([n, [x, y]]) => player(x, y, n, "off", { selected: Number(n) === YOU })),
+          typeof s.extra === "function" ? s.extra() : "",
+          ball(b[0] + 10, b[1] - 9),
+        ].join("");
+        document.getElementById("pool-42").innerHTML = pool(inner);
+        document.getElementById("step-title").textContent = `Stap ${step + 1} van 4 · ${s.title}`;
+        document.getElementById("step-text").textContent = s.text;
+        document.getElementById("dots").innerHTML = steps
+          .map((_, i) => `<i class="${i === step ? "on" : ""}"></i>`)
+          .join("");
+        document.getElementById("roles").innerHTML = Object.entries(s.roles)
+          .map(
+            ([n, role]) =>
+              `<li class="${Number(n) === YOU ? "you" : ""}"><span class="cap">${n}</span><div><span class="pos">${POS_NAME[n]}${Number(n) === YOU ? " · jij" : ""}</span>${role}</div></li>`,
+          )
+          .join("");
+      }
+      document.querySelectorAll(".stepper .nav").forEach((el) =>
+        el.addEventListener("click", () => {
+          step = (step + Number(el.dataset.dir) + steps.length) % steps.length;
+          render42();
+        }),
+      );
+      render42();
+
+      // ── Editor: standaardopstelling, speler 1 geselecteerd, actie uit stap 1 als 'ghost' ──
+      document.getElementById("pool-editor").innerHTML = pool(
+        [
+          player(...GK, "K", "gk"),
+          lineupDef([4]),
+          `<path d="M255 66 Q225 38 192 44" fill="none" stroke="#e8f0fe" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="2 3"/>`,
+          `<circle cx="258" cy="66" r="9.5" fill="none" stroke="#f3f6fb" stroke-opacity="0.3" stroke-dasharray="2 2"/>`,
+          ...[2, 3, 4, 5, 6].map((n) => player(...LINEUP[n], String(n))),
+          player(186, 42, "1", "off", { selected: true }),
+          ball(58, 56),
+          `<line x1="66" y1="54" x2="172" y2="34" stroke="#00d4ff" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arrA)"/>`,
+          `<circle cx="174" cy="33" r="6" fill="none" stroke="#00d4ff" stroke-width="1.5"/>`,
+          `<text x="${W - 6}" y="${H - 6}" text-anchor="end" fill="#9fb0c3" font-size="8">sleep · tik voor pijl</text>`,
+        ].join(""),
+      );
+
+      // ── Spraakgolf (statisch) ──
+      document.getElementById("wave").innerHTML = [6, 12, 18, 10, 20, 14, 8, 16, 22, 12, 6, 14, 18, 8, 12]
+        .map((h) => `<i style="height:${h}px"></i>`)
+        .join("");
+
+      // ── Gegenereerde stappen in shot 7 ──
+      const mini = (inner) => pool(inner, { mini: true });
+      const base7 = () => player(...GK, "K", "gk") + lineupDef([4]) + player(...LINEUP[6], "6") + player(...LINEUP[5], "5") + player(...LINEUP[2], "2") + player(...LINEUP[3], "3") + player(...LINEUP[4], "4");
+      document.getElementById("gen-1").innerHTML = mini(base7() + player(...LINEUP[1], "1") + move(255, 66, 182, 40, [225, 38]) + ball(58, 56));
+      document.getElementById("gen-2").innerHTML = mini(base7() + player(182, 40, "1") + pass(66, 54, 170, 30) + ball(58, 56));
+      document.getElementById("gen-3").innerHTML = mini(base7() + player(182, 40, "1") + shot(174, 32, 160, 14) + ball(170, 30));
+
+      // ── Library thumbnails ──
+      document.getElementById("thumb-tipin").innerHTML = mini(
+        player(...GK, "K", "gk") + player(...LINEUP[1], "1") + move(250, 62, 182, 40) + player(...LINEUP[5], "5") + pass(62, 58, 160, 30) + ball(58, 56),
+      );
+      document.getElementById("thumb-42").innerHTML = mini(
+        player(...GK, "K", "gk") + Object.values(O).map(([x, y]) => player(x, y, "")).join("") + Object.values(D0).map(([x, y]) => player(x, y, "", "def")).join("") + ball(200, 97),
+      );
+      document.getElementById("thumb-zone").innerHTML = mini(
+        player(...GK, "K", "gk") + [[110, 34], [190, 34], [70, 72], [230, 72], [150, 90]].map(([x, y]) => player(x, y, "", "def")).join(""),
+      );
+      document.getElementById("thumb-keeper").innerHTML = mini(
+        player(140, 22, "K", "gk") + move(140, 22, 160, 16) + player(40, 60, "") + pass(50, 56, 172, 18) + ball(44, 52),
+      );
+    </script>
+  </body>
+</html>

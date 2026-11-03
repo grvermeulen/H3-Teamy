@@ -24,6 +24,24 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.7.0": {
+    title: "Het Speelboek",
+    steps: [
+      {
+        title: "Tactiek en techniek op je telefoon",
+        body: "Nieuw tabblad Speelboek: oefeningen van H3 met een bovenaanzicht van het bad, stap voor stap. Aanval in wit, verdediging in blauw, keeper in rood.",
+        target: 'a[href="/speelboek"]',
+      },
+      {
+        title: "Jouw rol per stap",
+        body: "Tik op je positie en zie bij elke stap wat jíj doet. Je positie wordt onthouden. Met 'Speel animatie' zie je de hele oefening in beweging.",
+      },
+      {
+        title: "Eerste oefeningen",
+        body: "De tip-in (idee van Henry via de ideeënbus), de 4-2 man-meer en de zone 5 tegen 6 als tegenhanger. Mis je een oefening? Stuur 'm in via de feedbackknop.",
+      },
+    ],
+  },
   "0.6.0": {
     title: "GTA H3 komt tot leven",
     steps: [

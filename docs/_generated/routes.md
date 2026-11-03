@@ -71,6 +71,8 @@
 - /report/[eventId]
 - /reset-request
 - /reset/[token]
+- /speelboek
+- /speelboek/[id]
 - /terms
 - /trainer/attendance
 - /trainer/attendance/[date]

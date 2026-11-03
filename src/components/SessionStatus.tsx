@@ -31,6 +31,12 @@ export default function SessionStatus() {
             >
               Opkomst
             </Link>
+            <Link
+              href={{ pathname: "/speelboek" }}
+              className={isActive("/speelboek") ? "navActive" : undefined}
+            >
+              Speelboek
+            </Link>
             {isTrainer ? (
               <Link
                 href={{ pathname: "/trainer/attendance" }}
