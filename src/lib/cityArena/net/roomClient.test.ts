@@ -22,6 +22,16 @@ describe("shouldReportArenaRequestError", () => {
     ).toBe(false);
   });
 
+  it("returns false for benign Chromium Failed to fetch on preview host", () => {
+    expect(
+      shouldReportArenaRequestError(
+        new TypeError(
+          "Failed to fetch (h3-teamy-gkscby5z6-guido-vermeulens-projects.vercel.app)",
+        ),
+      ),
+    ).toBe(false);
+  });
+
   it("returns true for unexpected server failures", () => {
     expect(
       shouldReportArenaRequestError(new ArenaRequestError("Interne fout", 500)),

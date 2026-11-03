@@ -1,3 +1,4 @@
+import { isBenignTransientClientFetchError } from "@/lib/benignClientFetchErrors";
 import {
   ArenaRoomTicketSchema,
   ARENA_PROTOCOL_VERSION,
@@ -19,6 +20,7 @@ export class ArenaRequestError extends Error {
 
 /** Expected refusals and infrastructure outages should not become Sentry issues. */
 export function shouldReportArenaRequestError(error: unknown): boolean {
+  if (isBenignTransientClientFetchError(error)) return false;
   if (!(error instanceof ArenaRequestError)) return true;
   return error.status >= 500 && error.status !== 503;
 }

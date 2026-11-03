@@ -1,4 +1,8 @@
 import * as Sentry from "@sentry/nextjs";
+import {
+  shouldDropBenignClientFetchNoiseEvent,
+  shouldDropBenignClientFetchNoiseLog,
+} from "@/lib/sentryBenignClientFetchNoise";
 import { shouldDropBenignTurbopackDevCompileNoiseForSentry } from "@/lib/sentryBenignTurbopackDevCompileNoise";
 import { shouldDropDevLocalhostDbNoiseForSentry } from "@/lib/sentryDevDbNoise";
 import { shouldDropInvalidMultipartBodyNoiseForSentry } from "@/lib/sentryInvalidMultipartBodyNoise";
@@ -28,6 +32,7 @@ Sentry.init({
   tracesSampleRate: parseTracesSampleRate(),
 
   beforeSend(event, hint) {
+    if (shouldDropBenignClientFetchNoiseEvent(event, hint)) return null;
     if (shouldDropDbUnavailableErrorForSentry(event, hint)) return null;
     if (shouldDropTransientPrismaConnectNoiseForSentry(event, hint)) {
       return null;
@@ -44,6 +49,13 @@ Sentry.init({
       return null;
     }
     return event;
+  },
+
+  beforeSendLog(log) {
+    if (shouldDropBenignClientFetchNoiseLog(log)) {
+      return null;
+    }
+    return log;
   },
 
   _experiments: {
