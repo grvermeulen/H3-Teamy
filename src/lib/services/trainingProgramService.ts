@@ -169,7 +169,7 @@ export async function shareProgram(
   date: string,
   dayLabel: string,
 ): Promise<NotificationResult> {
-  const program = await getProgram(date, false);
+  const program = await getProgram(date);
   program.items = program.items.filter((i) => i.drill !== null);
   if (program.items.length === 0) {
     return { sent: false, reason: "request_failed", details: "empty_program" };
