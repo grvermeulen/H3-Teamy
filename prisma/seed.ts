@@ -280,7 +280,7 @@ async function main() {
       created.push({ id: row.id, email: row.email ?? "" });
     }
     console.log(
-      `Upserted ${created.length} users. Login: ${TRAINER_EMAIL} / ${TRAINER_PASSWORD}`,
+      `Upserted ${created.length} users. Login: ${TRAINER_EMAIL} (password not logged).`,
     );
 
     const trainer = created.find((u) => u.email === TRAINER_EMAIL);
