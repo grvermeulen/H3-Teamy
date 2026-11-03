@@ -73,6 +73,15 @@ describe("shouldDropBenignClientFetchNoiseEvent", () => {
       shouldDropBenignClientFetchNoiseEvent({ message: title } as Event, {}),
     ).toBe(true);
   });
+
+  it("returns true for JAVASCRIPT-NEXTJS-5C preview Failed to fetch title", () => {
+    const title =
+      "TypeError: Failed to fetch (h3-teamy-gkscby5z6-guido-vermeulens-projects.vercel.app)";
+    expect(isBenignTransientClientFetchSentryIssueTitle(title)).toBe(true);
+    expect(
+      shouldDropBenignClientFetchNoiseEvent({ message: title } as Event, {}),
+    ).toBe(true);
+  });
 });
 
 describe("shouldDropBenignClientFetchNoiseLog", () => {
@@ -82,6 +91,18 @@ describe("shouldDropBenignClientFetchNoiseLog", () => {
         level: "error",
         message:
           "TypeError: Failed to fetch (h3-teamy-mi5xi63um-guido-vermeulens-projects.vercel.app)",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns true for multiline console error log (JAVASCRIPT-NEXTJS-5C)", () => {
+    expect(
+      shouldDropBenignClientFetchNoiseLog({
+        level: "error",
+        message: [
+          "TypeError: Failed to fetch (h3-teamy-gkscby5z6-guido-vermeulens-projects.vercel.app)",
+          "    at fetch (app.js:1:1)",
+        ].join("\n"),
       }),
     ).toBe(true);
   });

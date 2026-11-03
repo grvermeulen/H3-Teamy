@@ -5,7 +5,8 @@
  * @returns Genormaliseerde kernmelding.
  */
 export function normalizeBenignClientFetchMessage(raw: string): string {
-  return raw
+  const firstLine = raw.trim().split(/\r?\n/, 1)[0] ?? raw;
+  return firstLine
     .trim()
     .replace(/^TypeError:\s*/i, "")
     .trim();
