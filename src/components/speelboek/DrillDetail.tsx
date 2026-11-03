@@ -161,6 +161,27 @@ export default function DrillDetail({ drill, counterpart }: Props) {
           <p className="m-0 text-[14px]">{step.text}</p>
         </div>
 
+        <div className="flex gap-2">
+          <Button
+            variant="primary"
+            className="flex-1"
+            onClick={playing ? () => showStep(viewIndex) : play}
+          >
+            {playing ? "Stop animatie" : "▶ Speel animatie"}
+          </Button>
+          {counterpart ? (
+            <Link
+              href={`/speelboek/${counterpart.id}` as Route}
+              className="ui-btn flex-1"
+              data-variant="secondary"
+            >
+              {counterpart.category === "VERDEDIGING"
+                ? "Verdediging-weergave"
+                : "Aanval-weergave"}
+            </Link>
+          ) : null}
+        </div>
+
         <h2 className="speelboek-section">
           Rol per positie in deze stap
           {myPlayerId ? (
@@ -207,27 +228,6 @@ export default function DrillDetail({ drill, counterpart }: Props) {
               );
             })}
           </ul>
-        </div>
-
-        <div className="flex gap-2">
-          <Button
-            variant="primary"
-            className="flex-1"
-            onClick={playing ? () => showStep(viewIndex) : play}
-          >
-            {playing ? "Stop animatie" : "▶ Speel animatie"}
-          </Button>
-          {counterpart ? (
-            <Link
-              href={`/speelboek/${counterpart.id}` as Route}
-              className="ui-btn flex-1"
-              data-variant="secondary"
-            >
-              {counterpart.category === "VERDEDIGING"
-                ? "Verdediging-weergave"
-                : "Aanval-weergave"}
-            </Link>
-          ) : null}
         </div>
 
         {drill.keyPoints.length > 0 ? (
