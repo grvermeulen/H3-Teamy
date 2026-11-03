@@ -108,6 +108,18 @@ describe("shouldDropBenignClientFetchNoiseLog", () => {
     ).toBe(true);
   });
 
+  it("returns true for multiline console error log (JAVASCRIPT-NEXTJS-5C)", () => {
+    expect(
+      shouldDropBenignClientFetchNoiseLog({
+        level: "error",
+        message: [
+          "TypeError: Failed to fetch (h3-teamy-gkscby5z6-guido-vermeulens-projects.vercel.app)",
+          "    at fetch (app.js:1:1)",
+        ].join("\n"),
+      }),
+    ).toBe(true);
+  });
+
   it("returns false for unrelated application log messages", () => {
     expect(
       shouldDropBenignClientFetchNoiseLog({

@@ -21,6 +21,14 @@ describe("isBenignTransientClientFetchMessage", () => {
       ),
     ).toBe(true);
   });
+
+  it("returns true when the message includes a stack trace on following lines", () => {
+    const multiline = [
+      "TypeError: Failed to fetch (h3-teamy-gkscby5z6-guido-vermeulens-projects.vercel.app)",
+      "    at window.fetch (https://example.com/_next/static/chunks/app.js:1:1)",
+    ].join("\n");
+    expect(isBenignTransientClientFetchMessage(multiline)).toBe(true);
+  });
 });
 
 describe("isBenignTransientClientFetchError", () => {
