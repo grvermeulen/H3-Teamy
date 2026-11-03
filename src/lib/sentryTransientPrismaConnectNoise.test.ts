@@ -14,6 +14,14 @@ describe("isTransientPrismaConnectSentryNoise", () => {
     expect(isTransientPrismaConnectSentryNoise(err)).toBe(true);
   });
 
+  it("returns true for empty-message P1017 (JAVASCRIPT-NEXTJS-55)", () => {
+    const err = new Prisma.PrismaClientKnownRequestError("", {
+      code: "P1017",
+      clientVersion: "7.10.1",
+    });
+    expect(isTransientPrismaConnectSentryNoise(err)).toBe(true);
+  });
+
   it("returns true for connect timeout message errors", () => {
     expect(
       isTransientPrismaConnectSentryNoise(
