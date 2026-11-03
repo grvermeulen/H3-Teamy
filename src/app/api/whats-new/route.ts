@@ -6,6 +6,7 @@ import { prisma } from "../../../lib/db";
 import { getActiveUser } from "../../../lib/activeUser";
 import { APP_VERSION } from "../../../lib/version";
 import { getChangelogEntry } from "../../../lib/changelog";
+import { isDbUnavailableError } from "../../../lib/dbUnavailableError";
 
 /**
  * Tells the client whether the What's-new tour should run for the active user.
@@ -38,7 +39,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       payload: show ? entry : undefined,
     });
   } catch (err: unknown) {
-    Sentry.captureException(err, { tags: { component: "api-whats-new" } });
+    if (!isDbUnavailableError(err)) {
+      Sentry.captureException(err, { tags: { component: "api-whats-new" } });
+    }
     return NextResponse.json({ show: false, version: APP_VERSION });
   }
 }

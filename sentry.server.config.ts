@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/nextjs";
 import { shouldDropBenignTurbopackDevCompileNoiseForSentry } from "@/lib/sentryBenignTurbopackDevCompileNoise";
 import { shouldDropDevLocalhostDbNoiseForSentry } from "@/lib/sentryDevDbNoise";
 import { shouldDropInvalidMultipartBodyNoiseForSentry } from "@/lib/sentryInvalidMultipartBodyNoise";
+import { shouldDropDbUnavailableErrorForSentry } from "@/lib/sentryDbUnavailableNoise";
 import { shouldDropNodeClientDisconnectWriteNoiseForSentry } from "@/lib/sentryClientDisconnectWriteNoise";
 import { shouldDropNodeTransformStreamNoiseForSentry } from "@/lib/sentryTransformStreamNoise";
 import { shouldDropPgPoolNoiseForSentry } from "@/lib/sentryPgPoolNoise";
@@ -26,6 +27,7 @@ Sentry.init({
   tracesSampleRate: parseTracesSampleRate(),
 
   beforeSend(event, hint) {
+    if (shouldDropDbUnavailableErrorForSentry(event, hint)) return null;
     if (shouldDropDevLocalhostDbNoiseForSentry(event, hint)) return null;
     if (shouldDropInvalidMultipartBodyNoiseForSentry(event, hint)) return null;
     if (shouldDropPgPoolNoiseForSentry(event, hint)) return null;
