@@ -1,4 +1,4 @@
-import type { Event, EventHint } from "@sentry/nextjs";
+import type { Event, EventHint, Log } from "@sentry/nextjs";
 import { isBenignTransientClientFetchError } from "./benignClientFetchErrors";
 
 /** Regex voor Sentry `ignoreErrors` — zelfde patroon als {@link isBenignTransientClientFetchError}. */
@@ -62,4 +62,37 @@ export function isBenignTransientClientFetchSentryIssueTitle(
   title: string,
 ): boolean {
   return isBenignTransientClientFetchError(title.trim());
+}
+
+function logMessageText(log: Log): string | null {
+  const raw = log.message;
+  if (raw === undefined || raw === null) {
+    return null;
+  }
+  return String(raw);
+}
+
+/**
+ * Filtert Sentry Logs (o.a. `consoleLoggingIntegration`) van tijdelijke client fetch-ruis.
+ *
+ * @param log - Sentry log record vóór verzending.
+ * @returns `true` wanneer dit log niet naar Sentry gestuurd mag worden.
+ */
+export function shouldDropBenignClientFetchNoiseLog(log: Log): boolean {
+  const message = logMessageText(log);
+  if (message !== null && isBenignTransientClientFetchError(message)) {
+    return true;
+  }
+  const attrs = log.attributes;
+  if (attrs && typeof attrs === "object") {
+    for (const value of Object.values(attrs)) {
+      if (
+        typeof value === "string" &&
+        isBenignTransientClientFetchError(value)
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
 }

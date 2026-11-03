@@ -4,6 +4,7 @@ import {
   BENIGN_TRANSIENT_CLIENT_FETCH_IGNORE_RE,
   isBenignTransientClientFetchSentryIssueTitle,
   shouldDropBenignClientFetchNoiseEvent,
+  shouldDropBenignClientFetchNoiseLog,
 } from "./sentryBenignClientFetchNoise";
 
 const baseEvent = {} as Event;
@@ -62,5 +63,35 @@ describe("shouldDropBenignClientFetchNoiseEvent", () => {
     expect(
       shouldDropBenignClientFetchNoiseEvent({ message: title } as Event, {}),
     ).toBe(true);
+  });
+
+  it("returns true for JAVASCRIPT-NEXTJS-5A preview Failed to fetch title", () => {
+    const title =
+      "TypeError: Failed to fetch (h3-teamy-mi5xi63um-guido-vermeulens-projects.vercel.app)";
+    expect(isBenignTransientClientFetchSentryIssueTitle(title)).toBe(true);
+    expect(
+      shouldDropBenignClientFetchNoiseEvent({ message: title } as Event, {}),
+    ).toBe(true);
+  });
+});
+
+describe("shouldDropBenignClientFetchNoiseLog", () => {
+  it("returns true for console error log with Failed to fetch preview host", () => {
+    expect(
+      shouldDropBenignClientFetchNoiseLog({
+        level: "error",
+        message:
+          "TypeError: Failed to fetch (h3-teamy-mi5xi63um-guido-vermeulens-projects.vercel.app)",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns false for unrelated application log messages", () => {
+    expect(
+      shouldDropBenignClientFetchNoiseLog({
+        level: "error",
+        message: "feedback POST failed: 500",
+      }),
+    ).toBe(false);
   });
 });

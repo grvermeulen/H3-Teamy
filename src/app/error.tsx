@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import * as Sentry from "@sentry/nextjs";
+import { isBenignTransientClientFetchError } from "@/lib/benignClientFetchErrors";
 
 export default function Error({
   error,
@@ -11,6 +12,9 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
+    if (isBenignTransientClientFetchError(error)) {
+      return;
+    }
     console.error(error);
     Sentry.captureException(error);
   }, [error]);
