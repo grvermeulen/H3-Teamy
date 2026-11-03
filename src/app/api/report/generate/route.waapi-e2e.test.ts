@@ -174,7 +174,7 @@ describe("POST /api/report/generate WAAPI e2e", () => {
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(0);
   });
 
-  it("captures a Sentry signal when notification is not sent", async () => {
+  it("does not capture Sentry when notifications are disabled", async () => {
     vi.stubEnv("WAAPI_NOTIFICATIONS_ENABLED", "false");
 
     mockedGenerateText.mockResolvedValue({
@@ -204,17 +204,6 @@ describe("POST /api/report/generate WAAPI e2e", () => {
       expect.stringMatching(/^e2e-waapi-/),
       expect.any(Object),
     );
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
-      expect.any(Error),
-    );
-    const firstCallArg = vi.mocked(Sentry.captureException).mock.calls[0]?.[0];
-    expect(firstCallArg).toEqual(
-      expect.objectContaining({
-        message: expect.stringContaining(
-          "WaAPI notification not sent: disabled",
-        ),
-      }),
-    );
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(0);
   });
 });

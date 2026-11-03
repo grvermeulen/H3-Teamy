@@ -85,12 +85,17 @@ export default function GenerateReportButton({
       };
       if (data?.whatsappNotification?.sent === false) {
         const reason = data.whatsappNotification.reason ?? "onbekend";
-        const details = data.whatsappNotification.details
-          ? ` ${data.whatsappNotification.details}`
-          : "";
-        setNotice(
-          `Het verslag is opgeslagen, maar de WhatsApp-melding is niet verzonden (${reason}).${details ? ` ${details}` : ""}`,
-        );
+        const details = data.whatsappNotification.details?.trim();
+        if (reason === "api_unauthenticated") {
+          setNotice(
+            details ??
+              "Het verslag is opgeslagen, maar de WhatsApp-melding kon niet worden verzonden: het WaAPI-token is ongeldig. Werk WAAPI_API_TOKEN bij in Vercel.",
+          );
+        } else {
+          setNotice(
+            `Het verslag is opgeslagen, maar de WhatsApp-melding is niet verzonden (${reason}).${details ? ` ${details}` : ""}`,
+          );
+        }
       }
       setDone(true);
       // Notify other components to refresh report content
