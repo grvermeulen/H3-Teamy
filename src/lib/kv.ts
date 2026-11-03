@@ -16,6 +16,7 @@ import {
   passwordResetPendingKey,
   passwordResetRedisKey,
 } from "./passwordResetToken";
+import { isRedisTransientConnectionNoise } from "./redisConnectionError";
 
 type RsvpStatus = "yes" | "no" | "maybe" | null;
 type UserProfile = {
@@ -62,6 +63,15 @@ function markRedisUnavailable(): void {
 }
 
 function captureKvCacheError(error: unknown, operation: string): void {
+  if (isRedisTransientConnectionNoise(error)) {
+    Sentry.addBreadcrumb({
+      category: "redis",
+      message: error instanceof Error ? error.message : String(error),
+      level: "warning",
+      data: { component: "kv-cache", operation, transientConnection: true },
+    });
+    return;
+  }
   Sentry.captureException(
     error instanceof Error ? error : new Error(String(error)),
     {
