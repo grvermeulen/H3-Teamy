@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Sentry from "@sentry/nextjs";
 import {
+  getWaapiAppUrl,
   normalizeWaapiGroupChatId,
   sendMatchReportToWhatsAppGroup,
+  sendWhatsAppGroupMessage,
 } from "./waapiService";
 
 vi.mock("@sentry/nextjs", () => ({
@@ -233,5 +235,70 @@ describe("waapiService", () => {
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(Error),
     );
+  });
+});
+
+describe("sendWhatsAppGroupMessage", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it("rejects a blank message without calling WaAPI", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch");
+    expect(await sendWhatsAppGroupMessage("   ")).toEqual({
+      sent: false,
+      reason: "request_failed",
+      details: "empty_message",
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("sends free-form text with the same headers as match reports", async () => {
+    vi.stubEnv("WAAPI_NOTIFICATIONS_ENABLED", "true");
+    vi.stubEnv("WAAPI_BASE_URL", "https://waapi.app/api/v1");
+    vi.stubEnv("WAAPI_INSTANCE_ID", "instance-123");
+    vi.stubEnv("WAAPI_API_TOKEN", "token-abc");
+    vi.stubEnv("WAAPI_GROUP_CHAT_ID", "1467733237");
+    vi.stubEnv("APP_URL", "https://teamy.example");
+
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    expect(await sendWhatsAppGroupMessage("Training: tip-in")).toEqual({
+      sent: true,
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [, init] = fetchSpy.mock.calls[0] ?? [];
+    expect(init?.headers).toMatchObject({
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Authorization: "Bearer token-abc",
+    });
+    expect(init?.body).toContain("1467733237@g.us");
+    expect(init?.body).toContain("Training: tip-in");
+  });
+});
+
+describe("getWaapiAppUrl", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("returns the configured app URL", () => {
+    vi.stubEnv("WAAPI_INSTANCE_ID", "instance-123");
+    vi.stubEnv("WAAPI_API_TOKEN", "token-abc");
+    vi.stubEnv("WAAPI_GROUP_CHAT_ID", "1467733237@g.us");
+    vi.stubEnv("APP_URL", "https://teamy.example/");
+    expect(getWaapiAppUrl()).toBe("https://teamy.example");
+  });
+
+  it("returns null when WaAPI config is incomplete", () => {
+    vi.stubEnv("APP_URL", "https://teamy.example");
+    expect(getWaapiAppUrl()).toBeNull();
   });
 });

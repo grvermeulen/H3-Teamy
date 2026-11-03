@@ -1,5 +1,9 @@
 import * as Sentry from "@sentry/nextjs";
-import { buildWaapiJsonHeaders, loadWaapiRuntimeConfig } from "@/lib/waapiEnv";
+import {
+  buildWaapiJsonHeaders,
+  loadWaapiRuntimeConfig,
+  type WaapiRuntimeConfig,
+} from "@/lib/waapiEnv";
 import { classifyWaapiHttpFailure } from "@/lib/waapiUpstreamError";
 
 type MatchReportNotificationInput = {
@@ -126,18 +130,18 @@ export async function sendWhatsAppGroupMessage(
   if (process.env.WAAPI_NOTIFICATIONS_ENABLED !== "true") {
     return { sent: false, reason: "disabled" };
   }
-  const config = getWaapiConfig();
+  const config = loadWaapiRuntimeConfig();
   if (!config) return { sent: false, reason: "missing_config" };
   return postToGroup(config, message);
 }
 
 /** Public app URL from the WaAPI config, used to build deep links in messages. */
 export function getWaapiAppUrl(): string | null {
-  return getWaapiConfig()?.appUrl ?? null;
+  return loadWaapiRuntimeConfig()?.appUrl ?? null;
 }
 
 async function postToGroup(
-  config: WaapiConfig,
+  config: WaapiRuntimeConfig,
   message: string,
 ): Promise<NotificationResult> {
   const endpoint = `${config.baseUrl}/instances/${encodeURIComponent(config.instanceId)}/client/action/send-message`;
