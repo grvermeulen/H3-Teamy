@@ -62,7 +62,8 @@ describe("waapiService", () => {
     expect(init).toMatchObject({
       method: "POST",
       headers: {
-        "content-type": "application/json",
+        Accept: "application/json",
+        "Content-Type": "application/json",
         Authorization: "Bearer token-abc",
       },
     });
@@ -125,6 +126,27 @@ describe("waapiService", () => {
     expect(init?.body).toContain("1467733237@g.us");
   });
 
+  it("returns api_unauthenticated when WaAPI responds with 401", async () => {
+    vi.stubEnv("WAAPI_NOTIFICATIONS_ENABLED", "true");
+    vi.stubEnv("WAAPI_INSTANCE_ID", "instance-123");
+    vi.stubEnv("WAAPI_API_TOKEN", "token-abc");
+    vi.stubEnv("WAAPI_GROUP_CHAT_ID", "1467733237@g.us");
+    vi.stubEnv("APP_URL", "https://teamy.example");
+
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response('{"message":"Unauthenticated."}', { status: 401 }),
+    );
+
+    const result = await sendMatchReportToWhatsAppGroup({ eventId: "evt-1" });
+
+    expect(result).toEqual({
+      sent: false,
+      reason: "api_unauthenticated",
+      details: expect.stringContaining("WAAPI_API_TOKEN"),
+    });
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
   it("returns upstream_error when WaAPI returns 200 with success false", async () => {
     vi.stubEnv("WAAPI_NOTIFICATIONS_ENABLED", "true");
     vi.stubEnv("WAAPI_INSTANCE_ID", "instance-123");
@@ -149,10 +171,7 @@ describe("waapiService", () => {
       reason: "upstream_error",
       details: "Chat not found",
     });
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
-      expect.any(Error),
-    );
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });
 
   it("returns upstream_error when WaAPI responds with non-ok", async () => {
@@ -173,10 +192,30 @@ describe("waapiService", () => {
       reason: "upstream_error",
       details: "Bad Request",
     });
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
-      expect.any(Error),
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
+  it("normalizes Bearer-prefixed WAAPI_API_TOKEN in Authorization header", async () => {
+    vi.stubEnv("WAAPI_NOTIFICATIONS_ENABLED", "true");
+    vi.stubEnv("WAAPI_BASE_URL", "https://waapi.app/api/v1");
+    vi.stubEnv("WAAPI_INSTANCE_ID", "instance-123");
+    vi.stubEnv("WAAPI_API_TOKEN", "Bearer real-token");
+    vi.stubEnv("WAAPI_GROUP_CHAT_ID", "1467733237@g.us");
+    vi.stubEnv("APP_URL", "https://teamy.example");
+
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
     );
+
+    await sendMatchReportToWhatsAppGroup({ eventId: "evt-1" });
+
+    const [, init] = fetchSpy.mock.calls[0] ?? [];
+    expect(init?.headers).toMatchObject({
+      Authorization: "Bearer real-token",
+    });
   });
 
   it("captures exception when fetch throws", async () => {

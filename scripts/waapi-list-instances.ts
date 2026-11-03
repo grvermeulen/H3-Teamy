@@ -9,6 +9,11 @@
  *   npx tsx scripts/waapi-list-instances.ts
  */
 
+import {
+  buildWaapiJsonHeaders,
+  normalizeWaapiApiToken,
+} from "../src/lib/waapiEnv";
+
 type WaapiInstanceRow = {
   id?: string | number;
   name?: string;
@@ -54,20 +59,19 @@ async function main(): Promise<void> {
   const baseUrl = (
     process.env.WAAPI_BASE_URL || "https://waapi.app/api/v1"
   ).replace(/\/$/, "");
-  const apiToken = requiredEnv("WAAPI_API_TOKEN");
+  const apiToken = normalizeWaapiApiToken(requiredEnv("WAAPI_API_TOKEN"));
 
   const endpoint = `${baseUrl}/instances`;
   const response = await fetch(endpoint, {
     method: "GET",
-    headers: {
-      accept: "application/json",
-      authorization: `Bearer ${apiToken}`,
-    },
+    headers: buildWaapiJsonHeaders(apiToken),
   });
 
   if (!response.ok) {
     const details = await response.text();
-    throw new Error(`WAAPI list-instances failed: ${response.status} ${details}`);
+    throw new Error(
+      `WAAPI list-instances failed: ${response.status} ${details}`,
+    );
   }
 
   const json = (await response.json()) as WaapiListInstancesResponse;
@@ -92,7 +96,7 @@ async function main(): Promise<void> {
     process.stdout.write(`${id}\t${name}\tstatus: ${status}${phonePart}\n`);
   }
   process.stdout.write(
-    "\nThen set WAAPI_INSTANCE_ID to that id and run: npx tsx scripts/waapi-list-groups.ts --filter \"rijn\"\n",
+    '\nThen set WAAPI_INSTANCE_ID to that id and run: npx tsx scripts/waapi-list-groups.ts --filter "rijn"\n',
   );
 }
 

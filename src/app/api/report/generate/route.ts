@@ -73,9 +73,18 @@ function reportNotificationOutcome(
 ): void {
   if (result.sent) return;
   Sentry.setTag("waapi_notification_reason", result.reason);
-  const details = result.details ? ` (${result.details})` : "";
+
+  if (
+    result.reason === "disabled" ||
+    result.reason === "missing_config" ||
+    result.reason === "invalid_event_id"
+  ) {
+    return;
+  }
+
+  const details = result.details ? `: ${result.details}` : "";
   Sentry.captureException(
-    new Error(`WaAPI notification not sent: ${result.reason}${details}`),
+    new Error(`WaAPI notification not sent (${result.reason})${details}`),
   );
 }
 
