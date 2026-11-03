@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "./db";
 import { isDbUnavailableError } from "./dbUnavailableError";
 import {
+  isPrismaCredentialError,
   isTransientPostgresConnectError,
   withPgConnectRetry,
 } from "./prismaConnectRetry";
@@ -17,7 +18,11 @@ function reportCredentialsAuthorizeError(
   error: unknown,
   context: string,
 ): void {
-  if (isDbUnavailableError(error) || isTransientPostgresConnectError(error)) {
+  if (
+    isDbUnavailableError(error) ||
+    isTransientPostgresConnectError(error) ||
+    isPrismaCredentialError(error)
+  ) {
     return;
   }
   const code =

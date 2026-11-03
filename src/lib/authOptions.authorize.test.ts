@@ -163,6 +163,22 @@ describe("Credentials authorize", () => {
     });
   });
 
+  it("returns null on Postgres password-auth failure without Sentry noise", async () => {
+    const err = new Prisma.PrismaClientKnownRequestError(
+      "Raw query failed. Code: `28P01`. Message: `password authentication failed for user 'neondb_owner'`",
+      { code: "P2010", clientVersion: "7" },
+    );
+    vi.mocked(prisma.user.findFirst).mockRejectedValueOnce(err);
+
+    const result = await authorize?.({
+      email: "a@b.nl",
+      password: "secret",
+    });
+
+    expect(result).toBeNull();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
   it("returns null on P2022 schema drift and reports to Sentry", async () => {
     const err = new Prisma.PrismaClientKnownRequestError("column missing", {
       code: "P2022",

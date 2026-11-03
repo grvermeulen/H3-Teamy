@@ -8,6 +8,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { recordPrismaQuery, isDbMetricsEnabled } from "./dbMetrics";
 import { getPgPoolConfig, getPrismaPgAdapterOptions } from "./pgPool";
+import { resolvePrismaDatasourceUrl } from "./prismaDatasourceUrl";
 
 declare global {
   var prisma: PrismaClient | undefined;
@@ -35,8 +36,7 @@ const prismaInstance =
   global.prisma ||
   (() => {
     const rawUrl =
-      process.env.PRISMA_DATABASE_URL ||
-      process.env.DATABASE_URL ||
+      resolvePrismaDatasourceUrl() ??
       "postgresql://postgres:postgres@127.0.0.1:5432/postgres";
     const url = relaxChannelBinding(rawUrl);
     const baseOptions: Prisma.PrismaClientOptions = isDbMetricsEnabled()

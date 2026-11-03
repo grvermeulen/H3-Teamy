@@ -73,6 +73,14 @@ describe("isPrismaCredentialError", () => {
     expect(isPrismaCredentialError(err)).toBe(true);
   });
 
+  it("returns true for P2010 wrapping a Postgres 28P01 password failure", () => {
+    const err = new Prisma.PrismaClientKnownRequestError(
+      "Raw query failed. Code: `28P01`. Message: `password authentication failed for user 'neondb_owner'`",
+      { code: "P2010", clientVersion: "test" },
+    );
+    expect(isPrismaCredentialError(err)).toBe(true);
+  });
+
   it("returns true for authentication failed message", () => {
     expect(
       isPrismaCredentialError(

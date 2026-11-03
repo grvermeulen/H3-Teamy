@@ -23,8 +23,11 @@ const PRISMA_CREDENTIAL_ERROR_CODES = new Set<string>(["P1000"]);
  * @returns `true` wanneer authenticatie/credentials de oorzaak lijken.
  */
 export function isPrismaCredentialError(error: unknown): boolean {
-  if (error instanceof Prisma.PrismaClientKnownRequestError) {
-    return PRISMA_CREDENTIAL_ERROR_CODES.has(error.code);
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    PRISMA_CREDENTIAL_ERROR_CODES.has(error.code)
+  ) {
+    return true;
   }
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
