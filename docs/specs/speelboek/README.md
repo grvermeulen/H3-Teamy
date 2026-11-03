@@ -134,11 +134,18 @@ Flow, zoals de animatie op de tactiek-kaart loopt:
 | Nieuwe infra    | Geen; één SVG-renderer (`src/lib/speelboek/diagram.ts`)                                         | Migratie (`Drill`, `DrillStep`, `TrainingProgramItem`, `DrillAck`), API onder `/api/speelboek/**`, drag-editor | Spraak→tekst, structured-output-prompt + Zod-schema, Braintrust-eval |
 | Inschatting     | 1 sprint                                                                                        | 2–3 sprints                                                                                                    | +1 sprint na B                                                       |
 
-Aanbeveling: **start met A** (met een datamodel dat al op B is voorbereid) en
-vul het speelboek met 6–8 oefeningen die de trainers nu al gebruiken, inclusief
-Henry's Tip-in. Daarmee is de waarde direct zichtbaar en leren we of spelers
-het openen. Route B pas als "vanavond oefenen we" een expliciete wens wordt;
-route C zodra trainers vaker dan wekelijks nieuwe oefeningen willen toevoegen.
+Aanbeveling destijds: **start met A** (met een datamodel dat al op B is
+voorbereid) en vul het speelboek met 6–8 oefeningen die de trainers nu al
+gebruiken, inclusief Henry's Tip-in.
+
+**Status (PR #871):** A, B en C zijn gebouwd. Statische oefeningen (Tip-in,
+4-2 man-meer, Zone 5 tegen 6) staan in de repo; trainers maken nieuwe
+oefeningen in de editor (mockup 6), optioneel vanuit een AI-opzet op basis van
+beschrijven/inspreken of een whiteboardfoto (mockup 7); het trainingsprogramma
+hangt aan de opkomstpagina en is deelbaar naar de WhatsApp-groep (mockup 4);
+spelers vinken af en stellen vragen (mockup 2). Technische details in
+`docs/tech/speelboek/README.md`. De Braintrust-eval voor de AI-opzet is nog
+niet gemaakt.
 
 ## Datamodel (voorstel, geschikt voor A en B)
 

@@ -94,6 +94,48 @@ export const drillSchema = z.object({
   addedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
+/**
+ * Body for creating or updating a trainer drill. The server assigns `id` and
+ * `addedOn`; `published` controls whether players see the drill in the library.
+ */
+export const drillInputSchema = drillSchema
+  .omit({ id: true, addedOn: true })
+  .extend({ published: z.boolean().default(true) });
+
+/** Free-text (or transcribed speech) and/or whiteboard photo the AI turns into a drill draft. */
+export const drillDraftRequestSchema = z
+  .object({
+    description: z.string().trim().max(4000).default(""),
+    /** `data:image/...;base64,...` of a whiteboard photo, at most ~4 MB. */
+    imageDataUrl: z
+      .string()
+      .regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/)
+      .max(5_500_000)
+      .optional(),
+  })
+  .refine((v) => v.description.length > 0 || v.imageDataUrl, {
+    message: "Beschrijf de oefening of voeg een foto toe",
+  });
+
+/** One drill in a training programme. */
+export const programItemInputSchema = z.object({
+  drillId: z.string().min(1),
+  minutes: z.number().int().min(1).max(120).optional(),
+  note: z.string().trim().max(200).optional(),
+});
+
+/** Full programme for one training date, in order. */
+export const programInputSchema = z.object({
+  items: z.array(programItemInputSchema).max(20),
+});
+
+/** `YYYY-MM-DD` training date. */
+export const trainingDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+export const drillQuestionInputSchema = z.object({
+  text: z.string().trim().min(3).max(500),
+});
+
 export type DiagramPoint = z.infer<typeof diagramPointSchema>;
 export type DiagramTeam = z.infer<typeof diagramTeamSchema>;
 export type DiagramPlayer = z.infer<typeof diagramPlayerSchema>;
@@ -105,3 +147,7 @@ export type DrillRosterEntry = z.infer<typeof drillRosterEntrySchema>;
 export type DrillCategory = z.infer<typeof drillCategorySchema>;
 export type DrillLevel = z.infer<typeof drillLevelSchema>;
 export type Drill = z.infer<typeof drillSchema>;
+export type DrillInput = z.infer<typeof drillInputSchema>;
+export type DrillDraftRequest = z.infer<typeof drillDraftRequestSchema>;
+export type ProgramItemInput = z.infer<typeof programItemInputSchema>;
+export type DrillQuestionInput = z.infer<typeof drillQuestionInputSchema>;

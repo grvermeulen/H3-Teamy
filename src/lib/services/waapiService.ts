@@ -8,7 +8,8 @@ type MatchReportNotificationInput = {
   opponentScore?: number;
 };
 
-type NotificationResult =
+/** Outcome of a WhatsApp group send: delivered, or skipped/failed with a reason. */
+export type NotificationResult =
   | { sent: true }
   | {
       sent: false;
@@ -135,7 +136,38 @@ export async function sendMatchReportToWhatsAppGroup(
   }
 
   const reportUrl = `${config.appUrl}/report/${encodeURIComponent(input.eventId)}`;
-  const message = buildMessage(input, reportUrl);
+  return postToGroup(config, buildMessage(input, reportUrl));
+}
+
+/**
+ * Sends a free-form text message to the configured team WhatsApp group.
+ * Honours the same `WAAPI_NOTIFICATIONS_ENABLED` switch and config as match reports.
+ *
+ * @param message - Message text; blank messages are rejected as `request_failed`.
+ */
+export async function sendWhatsAppGroupMessage(
+  message: string,
+): Promise<NotificationResult> {
+  if (!message.trim()) {
+    return { sent: false, reason: "request_failed", details: "empty_message" };
+  }
+  if (process.env.WAAPI_NOTIFICATIONS_ENABLED !== "true") {
+    return { sent: false, reason: "disabled" };
+  }
+  const config = getWaapiConfig();
+  if (!config) return { sent: false, reason: "missing_config" };
+  return postToGroup(config, message);
+}
+
+/** Public app URL from the WaAPI config, used to build deep links in messages. */
+export function getWaapiAppUrl(): string | null {
+  return getWaapiConfig()?.appUrl ?? null;
+}
+
+async function postToGroup(
+  config: WaapiConfig,
+  message: string,
+): Promise<NotificationResult> {
   const endpoint = `${config.baseUrl}/instances/${encodeURIComponent(config.instanceId)}/client/action/send-message`;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 10_000);

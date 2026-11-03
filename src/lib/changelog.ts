@@ -40,6 +40,14 @@ export const CHANGELOG: Record<string, ChangelogEntry> = {
         title: "Eerste oefeningen",
         body: "De tip-in (idee van Henry via de ideeënbus), de 4-2 man-meer en de zone 5 tegen 6 als tegenhanger. Mis je een oefening? Stuur 'm in via de feedbackknop.",
       },
+      {
+        title: "Snap je 'm? Zeg het",
+        body: "Onder elke oefening kun je 'Ik snap 'm' aanvinken of een vraag aan de trainer stellen. Staat er een training gepland, dan zie je bovenaan het speelboek wat we die avond oefenen.",
+      },
+      {
+        title: "Voor trainers: zelf oefeningen maken",
+        body: "Bouw een oefening stap voor stap in de editor, of beschrijf, spreek in of fotografeer het whiteboard en laat de AI een opzet maken. Koppel oefeningen aan een training via de opkomstpagina en deel het programma in de WhatsApp-groep.",
+      },
     ],
   },
   "0.6.0": {

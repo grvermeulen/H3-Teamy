@@ -2,17 +2,14 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import DrillDetail from "../../../components/speelboek/DrillDetail";
 import {
+  findDrill,
   getCounterpart,
-  getDrill,
 } from "../../../lib/services/speelboekService";
-import { DRILLS } from "../../../lib/speelboek/drills";
+
+/** Trainer drills live in Postgres and change at any time. */
+export const dynamic = "force-dynamic";
 
 type Params = { id: string };
-
-/** Pre-render every drill; the content is static. */
-export function generateStaticParams(): Params[] {
-  return DRILLS.map((d) => ({ id: d.id }));
-}
 
 export async function generateMetadata({
   params,
@@ -20,7 +17,7 @@ export async function generateMetadata({
   params: Promise<Params>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const drill = getDrill(id);
+  const drill = await findDrill(id);
   return drill
     ? { title: `${drill.title} – Speelboek`, description: drill.summary }
     : { title: "Speelboek" };
@@ -33,13 +30,13 @@ export default async function DrillPage({
   params: Promise<Params>;
 }) {
   const { id } = await params;
-  const drill = getDrill(id);
+  const drill = await findDrill(id);
   if (!drill) notFound();
   return (
     <DrillDetail
       key={drill.id}
       drill={drill}
-      counterpart={getCounterpart(drill)}
+      counterpart={await getCounterpart(drill)}
     />
   );
 }

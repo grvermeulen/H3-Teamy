@@ -1,69 +1,70 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DRILLS } from "../speelboek/drills";
 import {
+  findDrill,
+  getAllDrills,
   getCounterpart,
-  getDrill,
-  groupByCategory,
-  isRecentlyAdded,
-  listDrills,
-  rosterLabels,
+  isStaticDrill,
 } from "./speelboekService";
+import { getStoredDrill, listStoredDrills } from "./speelboekStore";
+
+vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
+vi.mock("./speelboekStore", () => ({
+  listStoredDrills: vi.fn(),
+  getStoredDrill: vi.fn(),
+}));
+
+const stored = {
+  ...DRILLS[0],
+  id: "trainer-oefening",
+  title: "Trainer-oefening",
+  published: false,
+  createdById: "u1",
+  updatedAt: "2026-11-03T00:00:00.000Z",
+};
 
 describe("speelboekService", () => {
-  it("lists every drill without filters", () => {
-    expect(listDrills()).toHaveLength(DRILLS.length);
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(listStoredDrills).mockResolvedValue([stored]);
+    vi.mocked(getStoredDrill).mockResolvedValue(null);
   });
 
-  it("filters by category", () => {
-    const result = listDrills({ category: "VERDEDIGING" });
-    expect(result.length).toBeGreaterThan(0);
-    expect(result.every((d) => d.category === "VERDEDIGING")).toBe(true);
-  });
-
-  it("matches a case-insensitive query on title, summary and position names", () => {
-    expect(listDrills({ query: "TIP" }).map((d) => d.id)).toEqual(["tip-in"]);
-    expect(listDrills({ query: "paal rechts" }).map((d) => d.id)).toContain(
-      "4-2-man-meer",
-    );
-    expect(listDrills({ query: "   " })).toHaveLength(DRILLS.length);
-    expect(listDrills({ query: "onbestaand" })).toEqual([]);
-  });
-
-  it("looks up drills and counterparts", () => {
-    const manMeer = getDrill("4-2-man-meer");
-    expect(manMeer?.title).toBe("4-2 man-meer");
-    expect(getCounterpart(manMeer!)?.id).toBe("zone-5-tegen-6");
-    expect(getCounterpart(getDrill("tip-in")!)).toBeNull();
-    expect(getDrill("nope")).toBeNull();
-  });
-
-  it("marks a drill as new for 30 days after addedOn", () => {
-    const drill = { ...DRILLS[0], addedOn: "2026-11-03" };
-    expect(isRecentlyAdded(drill, new Date("2026-11-03T12:00:00Z"))).toBe(true);
-    expect(isRecentlyAdded(drill, new Date("2026-12-03T11:00:00Z"))).toBe(true);
-    expect(isRecentlyAdded(drill, new Date("2026-12-04T12:00:00Z"))).toBe(
-      false,
-    );
-    expect(isRecentlyAdded(drill, new Date("2026-10-01T12:00:00Z"))).toBe(
-      false,
-    );
-  });
-
-  it("groups drills in library order and skips empty categories", () => {
-    const groups = groupByCategory(listDrills());
-    expect(groups.map((g) => g.category)).toEqual([
-      "AANVAL",
-      "VERDEDIGING",
-      "TECHNIEK",
-    ]);
-    expect(groupByCategory([])).toEqual([]);
-  });
-
-  it("maps roster labels by player id", () => {
-    expect(rosterLabels(getDrill("tip-in")!)).toEqual({
-      p1: "1",
-      p5: "5",
-      p6: "6",
+  it("merges stored drills in front of the static library, tagging their source", async () => {
+    const all = await getAllDrills(true);
+    expect(all[0]).toMatchObject({
+      id: "trainer-oefening",
+      source: "trainer",
+      published: false,
     });
+    expect(all[0]).not.toHaveProperty("createdById");
+    expect(all.slice(1).map((d) => d.id)).toEqual(DRILLS.map((d) => d.id));
+    expect(
+      all.slice(1).every((d) => d.source === "static" && d.published),
+    ).toBe(true);
+    expect(listStoredDrills).toHaveBeenCalledWith(true);
+  });
+
+  it("falls back to the static library when the database fails", async () => {
+    vi.mocked(listStoredDrills).mockRejectedValue(new Error("db down"));
+    const all = await getAllDrills();
+    expect(all.map((d) => d.id)).toEqual(DRILLS.map((d) => d.id));
+  });
+
+  it("finds static drills without touching the store, stored ones through it", async () => {
+    expect((await findDrill("tip-in"))?.source).toBe("static");
+    expect(getStoredDrill).not.toHaveBeenCalled();
+    vi.mocked(getStoredDrill).mockResolvedValue(stored);
+    expect((await findDrill("trainer-oefening"))?.source).toBe("trainer");
+    vi.mocked(getStoredDrill).mockResolvedValue(null);
+    expect(await findDrill("nope")).toBeNull();
+    expect(isStaticDrill("tip-in")).toBe(true);
+    expect(isStaticDrill("trainer-oefening")).toBe(false);
+  });
+
+  it("resolves counterparts", async () => {
+    const manMeer = (await findDrill("4-2-man-meer"))!;
+    expect((await getCounterpart(manMeer))?.id).toBe("zone-5-tegen-6");
+    expect(await getCounterpart((await findDrill("tip-in"))!)).toBeNull();
   });
 });

@@ -96,6 +96,17 @@ This document reflects the features that exist in the code today. Planned or fut
 - /api/report/mvp/reopen
 - /api/rsvp
 - /api/rsvp/list
+- /api/speelboek/acks
+- /api/speelboek/ai/draft
+- /api/speelboek/drills
+- /api/speelboek/drills/[id]
+- /api/speelboek/drills/[id]/ack
+- /api/speelboek/drills/[id]/engagement
+- /api/speelboek/drills/[id]/questions
+- /api/speelboek/drills/[id]/questions/[questionId]
+- /api/speelboek/program/[date]
+- /api/speelboek/program/[date]/share
+- /api/speelboek/program/upcoming
 - /api/test-image
 - /api/trainer/status
 - /api/training/attendance
@@ -124,6 +135,8 @@ This document reflects the features that exist in the code today. Planned or fut
 - /reset/[token]
 - /speelboek
 - /speelboek/[id]
+- /speelboek/[id]/bewerken
+- /speelboek/nieuw
 - /terms
 - /trainer/attendance
 - /trainer/attendance/[date]

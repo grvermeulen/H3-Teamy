@@ -1,4 +1,4 @@
-import {
+﻿import {
   act,
   cleanup,
   fireEvent,
@@ -6,15 +6,27 @@ import {
   screen,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getCounterpart, getDrill } from "../../lib/services/speelboekService";
+import type { LibraryDrill } from "../../lib/speelboek/library";
+import { DRILLS } from "../../lib/speelboek/drills";
 import DrillDetail, { PLAY_INTERVAL_MS } from "./DrillDetail";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
 }));
+vi.mock("./DrillEngagementPanel", () => ({
+  default: () => <div data-testid="engagement" />,
+}));
 
-const manMeer = getDrill("4-2-man-meer")!;
-const tipIn = getDrill("tip-in")!;
+function lib(id: string): LibraryDrill {
+  return {
+    ...DRILLS.find((d) => d.id === id)!,
+    source: "static",
+    published: true,
+  };
+}
+const manMeer = lib("4-2-man-meer");
+const tipIn = lib("tip-in");
+const zone = lib("zone-5-tegen-6");
 
 describe("DrillDetail", () => {
   beforeEach(() => {
@@ -27,9 +39,7 @@ describe("DrillDetail", () => {
   });
 
   it("steps through the drill and shows the roles of that step", () => {
-    render(
-      <DrillDetail drill={manMeer} counterpart={getCounterpart(manMeer)} />,
-    );
+    render(<DrillDetail drill={manMeer} counterpart={zone} />);
 
     expect(
       screen.getByText(/Stap 1 van 4 · Opstelling 4-2/),
@@ -97,9 +107,7 @@ describe("DrillDetail", () => {
   });
 
   it("links to the counterpart drill", () => {
-    render(
-      <DrillDetail drill={manMeer} counterpart={getCounterpart(manMeer)} />,
-    );
+    render(<DrillDetail drill={manMeer} counterpart={zone} />);
     expect(
       screen.getByRole("link", { name: "Verdediging-weergave" }),
     ).toHaveAttribute("href", "/speelboek/zone-5-tegen-6");

@@ -5,8 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import type { Route } from "next";
 import type { Drill } from "../../lib/schemas/speelboek";
 import { CATEGORY_LABELS, LEVEL_LABELS } from "../../lib/speelboek/lineup";
-import { rosterLabels } from "../../lib/services/speelboekService";
+import { rosterLabels, type LibraryDrill } from "../../lib/speelboek/library";
 import { AppBar, Button } from "../ui";
+import DrillEngagementPanel from "./DrillEngagementPanel";
 import PoolDiagram from "./PoolDiagram";
 
 /** Milliseconds per step while the animation plays. */
@@ -15,7 +16,7 @@ export const PLAY_INTERVAL_MS = 2500;
 const STORAGE_PREFIX = "speelboek:position:";
 
 type Props = {
-  drill: Drill;
+  drill: LibraryDrill;
   counterpart: Drill | null;
 };
 
@@ -91,6 +92,9 @@ export default function DrillDetail({ drill, counterpart }: Props) {
           <span className="badge">
             {drill.steps.length} {drill.steps.length === 1 ? "stap" : "stappen"}
           </span>
+          {!drill.published ? (
+            <span className="badge">Concept – alleen via de link</span>
+          ) : null}
         </div>
 
         <div className="speelboek-pool">
@@ -241,6 +245,8 @@ export default function DrillDetail({ drill, counterpart }: Props) {
             </div>
           </>
         ) : null}
+
+        <DrillEngagementPanel drillId={drill.id} source={drill.source} />
 
         {counterpart ? (
           <p className="muted text-xs mt-2">
