@@ -3,7 +3,10 @@ import {
   BROWSER_EXTENSION_RUNTIME_SEND_MESSAGE_IGNORE_RE,
   shouldDropBrowserExtensionNoiseEvent,
 } from "@/lib/sentryBrowserExtensionNoise";
-import { shouldDropBenignClientFetchNoiseEvent } from "@/lib/sentryBenignClientFetchNoise";
+import {
+  BENIGN_TRANSIENT_CLIENT_FETCH_IGNORE_RE,
+  shouldDropBenignClientFetchNoiseEvent,
+} from "@/lib/sentryBenignClientFetchNoise";
 import {
   BENIGN_POINTER_LOCK_WRONG_DOCUMENT_IGNORE_RE,
   shouldDropBenignPointerLockNoiseEvent,
@@ -28,6 +31,7 @@ Sentry.init({
   ignoreErrors: [
     BROWSER_EXTENSION_RUNTIME_SEND_MESSAGE_IGNORE_RE,
     BENIGN_POINTER_LOCK_WRONG_DOCUMENT_IGNORE_RE,
+    BENIGN_TRANSIENT_CLIENT_FETCH_IGNORE_RE,
   ],
 
   beforeSend(event, hint) {
