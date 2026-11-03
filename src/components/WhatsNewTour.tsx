@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as Sentry from "@sentry/nextjs";
 import type { ChangelogEntry, TourStep } from "../lib/changelog";
 import { isBenignTransientClientFetchError } from "../lib/benignClientFetchErrors";
@@ -32,8 +32,9 @@ function spotlightFor(target: string | undefined): Spotlight {
  * current `APP_VERSION` once. On mount it asks `/api/whats-new` whether the
  * tour should run; if so it renders a stepper, drawing a fixed-position
  * spotlight box around each step's `target` selector. Dismiss / "Done"
- * acknowledges the version via `POST /api/whats-new/ack`. The initial fetch is
- * not aborted on unmount: some browsers report cancellation as
+ * acknowledges the version via `POST /api/whats-new/ack`. Clicking the dimmed
+ * backdrop or pressing Escape dismisses the tour the same way as Overslaan.
+ * The initial fetch is not aborted on unmount: some browsers report cancellation as
  * `TypeError: Failed to fetch`, which would otherwise be sent to Sentry as a
  * false positive; state updates after unmount are skipped via a flag instead.
  */
@@ -42,6 +43,7 @@ export default function WhatsNewTour(): React.JSX.Element | null {
   const [version, setVersion] = useState<string | null>(null);
   const [stepIdx, setStepIdx] = useState(0);
   const [spotlight, setSpotlight] = useState<Spotlight>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -72,6 +74,17 @@ export default function WhatsNewTour(): React.JSX.Element | null {
 
   const step: TourStep | null = entry?.steps[stepIdx] ?? null;
 
+  const dismiss = useCallback(async (): Promise<void> => {
+    setEntry(null);
+    try {
+      await fetch("/api/whats-new/ack", { method: "POST" });
+    } catch (err: unknown) {
+      if (!isBenignTransientClientFetchError(err)) {
+        Sentry.captureException(err, { tags: { component: "whats-new-tour" } });
+      }
+    }
+  }, []);
+
   useEffect(() => {
     if (!step) return;
     setSpotlight(spotlightFor(step.target));
@@ -86,18 +99,18 @@ export default function WhatsNewTour(): React.JSX.Element | null {
     };
   }, [step]);
 
-  if (!entry || !step) return null;
-
-  async function dismiss(): Promise<void> {
-    setEntry(null);
-    try {
-      await fetch("/api/whats-new/ack", { method: "POST" });
-    } catch (err: unknown) {
-      if (!isBenignTransientClientFetchError(err)) {
-        Sentry.captureException(err, { tags: { component: "whats-new-tour" } });
-      }
+  useEffect(() => {
+    if (!entry || !step) return;
+    function onKeyDown(e: KeyboardEvent): void {
+      if (e.key === "Escape") void dismiss();
     }
-  }
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [dismiss, entry, step]);
+
+  if (!entry || !step) return null;
 
   function next(): void {
     if (!entry) return;
@@ -109,6 +122,10 @@ export default function WhatsNewTour(): React.JSX.Element | null {
   }
 
   const isLast = stepIdx === entry.steps.length - 1;
+
+  function onBackdropClick(e: React.MouseEvent<HTMLDivElement>): void {
+    if (e.target === backdropRef.current) void dismiss();
+  }
 
   return (
     <>
@@ -123,7 +140,14 @@ export default function WhatsNewTour(): React.JSX.Element | null {
           }}
         />
       ) : null}
-      <div className="whatsNewBackdrop" role="dialog" aria-modal="true">
+      <div
+        ref={backdropRef}
+        className="whatsNewBackdrop"
+        role="dialog"
+        aria-modal="true"
+        aria-label={entry.title}
+        onClick={onBackdropClick}
+      >
         <div className="card whatsNewCard">
           <div className="row justify-between mb-2">
             <strong>{entry.title}</strong>
