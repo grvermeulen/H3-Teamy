@@ -1,6 +1,8 @@
 import type { ErrorEvent, EventHint } from "@sentry/nextjs";
 import { isDbUnavailableError } from "./dbUnavailableError";
 
+const DB_UNAVAILABLE_MESSAGE = "Database tijdelijk niet beschikbaar";
+
 /**
  * Bepaalt of een fout overeenkomt met een verwachte DB-onbeschikbaarheid (503),
  * die routes afhandelen zonder Sentry-issue.
@@ -13,12 +15,15 @@ export function isDbUnavailableSentryNoise(error: unknown): boolean {
   if (error instanceof Error && error.name === "DbUnavailableError") {
     return true;
   }
+  if (error instanceof Error && error.message === DB_UNAVAILABLE_MESSAGE) {
+    return true;
+  }
   return false;
 }
 
 /**
  * Bepaalt of een server-side Sentry-event een {@link DbUnavailableError} is
- * en niet naar ingest gestuurd moet worden (JAVASCRIPT-NEXTJS-54).
+ * en niet naar ingest gestuurd moet worden (JAVASCRIPT-NEXTJS-53/54).
  *
  * @param event - Sentry-foutevent.
  * @param hint - Hint met oorspronkelijke exception.
@@ -30,7 +35,10 @@ export function shouldDropDbUnavailableErrorForSentry(
 ): boolean {
   if (isDbUnavailableSentryNoise(hint.originalException)) return true;
   return (
-    event.exception?.values?.some((v) => v.type === "DbUnavailableError") ??
-    false
+    event.exception?.values?.some(
+      (v) =>
+        v.type === "DbUnavailableError" ||
+        v.value === DB_UNAVAILABLE_MESSAGE,
+    ) ?? false
   );
 }

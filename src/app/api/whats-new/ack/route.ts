@@ -4,11 +4,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../lib/authOptions";
 import { prisma } from "../../../../lib/db";
 import { getActiveUser } from "../../../../lib/activeUser";
-import { APP_VERSION } from "../../../../lib/version";
 import {
   isDbUnavailableError,
   jsonDatabaseUnavailable,
 } from "../../../../lib/dbUnavailableError";
+import { APP_VERSION } from "../../../../lib/version";
 
 /**
  * Records that the active user has seen the What's-new tour for the current

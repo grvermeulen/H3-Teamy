@@ -4,9 +4,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../../../lib/authOptions";
 import { prisma } from "../../../lib/db";
 import { getActiveUser } from "../../../lib/activeUser";
+import { isDbUnavailableError } from "../../../lib/dbUnavailableError";
 import { APP_VERSION } from "../../../lib/version";
 import { getChangelogEntry } from "../../../lib/changelog";
-import { isDbUnavailableError } from "../../../lib/dbUnavailableError";
 
 /**
  * Tells the client whether the What's-new tour should run for the active user.

@@ -10,10 +10,12 @@ describe("isDbUnavailableSentryNoise", () => {
     expect(isDbUnavailableSentryNoise(new DbUnavailableError())).toBe(true);
   });
 
-  it("returns true for errors with DbUnavailableError name", () => {
-    const err = new Error("Database tijdelijk niet beschikbaar");
-    err.name = "DbUnavailableError";
-    expect(isDbUnavailableSentryNoise(err)).toBe(true);
+  it("returns true for the default Dutch unavailable message", () => {
+    expect(
+      isDbUnavailableSentryNoise(
+        new Error("Database tijdelijk niet beschikbaar"),
+      ),
+    ).toBe(true);
   });
 
   it("returns false for unrelated errors", () => {

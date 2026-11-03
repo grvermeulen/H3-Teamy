@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { prisma } from "../../../lib/db";
 import { getActiveUser } from "../../../lib/activeUser";
-import { FeedbackCreateBodySchema } from "../../../lib/schemas/feedback";
 import {
   isDbUnavailableError,
   jsonDatabaseUnavailable,
 } from "../../../lib/dbUnavailableError";
+import { FeedbackCreateBodySchema } from "../../../lib/schemas/feedback";
 
 /**
  * Creates a new `Feedback` row (BUG or IDEA) for the active user. Validates

@@ -3,13 +3,13 @@ import * as Sentry from "@sentry/nextjs";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../lib/authOptions";
 import { getActiveUser } from "../../../../lib/activeUser";
+import { isDbUnavailableError } from "../../../../lib/dbUnavailableError";
 import { getUserProfile } from "../../../../lib/kv";
 import {
   computeRecentAttendance,
   decideNudgeBucket,
   getOrCreateNudge,
 } from "../../../../lib/services/attendanceNudgeService";
-import { isDbUnavailableError } from "../../../../lib/dbUnavailableError";
 
 export const dynamic = "force-dynamic";
 
