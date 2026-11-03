@@ -1,5 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { isBenignTransientClientFetchError } from "./benignClientFetchErrors";
+import {
+  isBenignTransientClientFetchError,
+  isBenignTransientClientFetchMessage,
+  normalizeBenignClientFetchMessage,
+} from "./benignClientFetchErrors";
+
+describe("normalizeBenignClientFetchMessage", () => {
+  it("strips a TypeError prefix", () => {
+    expect(normalizeBenignClientFetchMessage("TypeError: Load failed")).toBe(
+      "Load failed",
+    );
+  });
+});
+
+describe("isBenignTransientClientFetchMessage", () => {
+  it("returns true for WebKit Load failed with request host suffix", () => {
+    expect(
+      isBenignTransientClientFetchMessage("Load failed (heren-3-de-rijn.com)"),
+    ).toBe(true);
+  });
+});
 
 describe("isBenignTransientClientFetchError", () => {
   it("returns true for WebKit Load failed TypeError", () => {
@@ -41,6 +61,16 @@ describe("isBenignTransientClientFetchError", () => {
     const wrapped = new Error("wrapped");
     Object.assign(wrapped, { cause: inner });
     expect(isBenignTransientClientFetchError(wrapped)).toBe(true);
+  });
+
+  it("returns true for string Load failed from Sentry event payload", () => {
+    expect(isBenignTransientClientFetchError("Load failed")).toBe(true);
+  });
+
+  it("returns true for TypeError-prefixed event message", () => {
+    expect(isBenignTransientClientFetchError("TypeError: Load failed")).toBe(
+      true,
+    );
   });
 
   it("returns false for unexpected application errors", () => {
