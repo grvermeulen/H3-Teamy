@@ -15,7 +15,14 @@ type Spotlight = {
 
 function spotlightFor(target: string | undefined): Spotlight {
   if (!target || typeof window === "undefined") return null;
-  const el = document.querySelector(target) as HTMLElement | null;
+  let el: HTMLElement | null = null;
+  for (const node of document.querySelectorAll<HTMLElement>(target)) {
+    const probe = node.getBoundingClientRect();
+    if (probe.width > 0 && probe.height > 0) {
+      el = node;
+      break;
+    }
+  }
   if (!el) return null;
   const rect = el.getBoundingClientRect();
   const pad = 8;

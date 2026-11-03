@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useMemo } from "react";
 import {
   DIAGRAM_HEIGHT,
   DIAGRAM_WIDTH,
@@ -82,9 +82,11 @@ export default function PoolDiagram({
   title,
   className,
 }: Props) {
-  const uid = useId();
-  const arrowId = `${uid}-arrow`;
-  const passId = `${uid}-pass`;
+  const reactId = useId();
+  const { arrowId, passId } = useMemo(() => {
+    const uid = reactId.replace(/:/g, "");
+    return { arrowId: `${uid}-arrow`, passId: `${uid}-pass` };
+  }, [reactId]);
   const byId = new Map(frame.players.map((p) => [p.id, p]));
   const ballHolder = frame.ballPlayerId
     ? byId.get(frame.ballPlayerId)
