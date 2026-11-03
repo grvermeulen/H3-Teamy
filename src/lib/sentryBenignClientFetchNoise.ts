@@ -51,3 +51,15 @@ export function shouldDropBenignClientFetchNoiseEvent(
   ];
   return candidates.some(shouldDropCandidate);
 }
+
+/**
+ * Herkent Sentry-issue-titels die alleen tijdelijke client-side fetch-ruis groeperen
+ * (zelfde vorm als {@link shouldDropBenignClientFetchNoiseEvent}, bv. JAVASCRIPT-NEXTJS-57).
+ *
+ * @param title - Sentry issue title (often `TypeError: Failed to fetch (host)`).
+ */
+export function isBenignTransientClientFetchSentryIssueTitle(
+  title: string,
+): boolean {
+  return isBenignTransientClientFetchError(title.trim());
+}
