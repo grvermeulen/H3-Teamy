@@ -20,14 +20,21 @@ type Recognition = {
 
 type RecognitionCtor = new () => Recognition;
 
-/** Shown when the browser refuses microphone access without a new prompt. */
+type MicrophonePermission = PermissionState | "unknown";
+
+/** Shown when the site blocked the microphone and Chrome will not prompt again. */
 export const MIC_BLOCKED_MESSAGE =
   "Geen toegang tot de microfoon. Klik op het slotje in de adresbalk, zet Microfoon op Toestaan, en probeer Inspreken opnieuw.";
 
-const MIC_MISSING_MESSAGE =
-  "Geen microfoon gevonden. Controleer of er een microfoon is aangesloten.";
+/**
+ * Shown when Chrome cannot see a microphone. On macOS that is often the
+ * system privacy switch hiding the hardware, not a missing device.
+ */
+export const MIC_UNAVAILABLE_MESSAGE =
+  "De microfoon is geblokkeerd of niet zichtbaar voor Chrome. Sta Chrome toe bij macOS Systeeminstellingen → Privacy en beveiliging → Microfoon, controleer of er een microfoon is aangesloten, en probeer Inspreken opnieuw.";
 
-const MIC_INTERRUPTED_MESSAGE =
+/** Shown when speech recognition stops for a reason other than microphone access. */
+export const MIC_INTERRUPTED_MESSAGE =
   "Spraakherkenning is onderbroken. Probeer het opnieuw of typ de oefening.";
 
 function getRecognitionCtor(): RecognitionCtor | null {
@@ -39,8 +46,18 @@ function getRecognitionCtor(): RecognitionCtor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
+function isSystemMicrophoneBlock(reason: DOMException): boolean {
+  if (reason.name === "NotFoundError") return true;
+  const systemDenied =
+    reason.name === "NotAllowedError" ||
+    reason.name === "PermissionDeniedError";
+  // Chrome's DOMException message stays English, also in a Dutch UI.
+  return systemDenied && /denied by system/i.test(reason.message);
+}
+
 function dictationErrorMessage(reason: unknown): string {
   if (reason instanceof DOMException) {
+    if (isSystemMicrophoneBlock(reason)) return MIC_UNAVAILABLE_MESSAGE;
     if (
       reason.name === "NotAllowedError" ||
       reason.name === "PermissionDeniedError" ||
@@ -48,15 +65,49 @@ function dictationErrorMessage(reason: unknown): string {
     ) {
       return MIC_BLOCKED_MESSAGE;
     }
-    if (reason.name === "NotFoundError") return MIC_MISSING_MESSAGE;
   }
   return MIC_INTERRUPTED_MESSAGE;
 }
 
 /**
- * Chrome's SpeechRecognition often fires `not-allowed` without a permission
- * popup. `getUserMedia` is what actually shows the prompt; the stream is
- * stopped so recognition can take over the microphone.
+ * Site microphone permission. `"unknown"` when this browser has no
+ * Permissions API entry for `"microphone"` — Safari rejects that name.
+ */
+async function microphonePermissionState(): Promise<MicrophonePermission> {
+  const permissions = navigator.permissions;
+  if (!permissions?.query) return "unknown";
+  try {
+    const query = permissions.query.bind(permissions) as (descriptor: {
+      name: "microphone";
+    }) => Promise<PermissionStatus>;
+    const status = await query({ name: "microphone" });
+    return status.state;
+  } catch {
+    return "unknown";
+  }
+}
+
+/**
+ * `true` when the browser lists an audio input. Before permission, Chrome
+ * exposes at most one blank entry; an empty list means macOS privacy (or a
+ * missing device) is hiding the microphone. `getUserMedia` in that state
+ * opens Chrome's own "no microphone" dialog.
+ */
+async function browserCanSeeMicrophone(): Promise<boolean> {
+  const media = navigator.mediaDevices;
+  if (!media?.enumerateDevices) return true;
+  try {
+    const devices = await media.enumerateDevices();
+    return devices.some((device) => device.kind === "audioinput");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Shows the real site-permission prompt. Speech recognition alone often fires
+ * `not-allowed` without one. The stream is stopped so recognition can take
+ * the microphone afterwards.
  */
 async function requestMicrophonePrompt(): Promise<void> {
   const media = navigator.mediaDevices;
@@ -78,10 +129,10 @@ export type Dictation = {
 };
 
 /**
- * Dictation via the browser's Web Speech API (`nl-NL`). Asks for the
- * microphone first (`getUserMedia`) so Chrome shows a permission popup,
- * then streams phrases through `onFinal`. Unsupported browsers (Firefox,
- * some WebViews) get `supported: false`.
+ * Dictation via the browser's Web Speech API (`nl-NL`). Starts recognition
+ * first. Only if that reports `not-allowed` and a site prompt is still
+ * possible do we call `getUserMedia` — an unconditional call makes Chrome on
+ * macOS show its own "no microphone" dialog when the OS hides the input.
  *
  * @param onFinal - Called with each finalised phrase.
  */
@@ -91,7 +142,10 @@ export function useDictation(onFinal: (text: string) => void): Dictation {
   const [interim, setInterim] = useState("");
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<Recognition | null>(null);
-  const startingRef = useRef(false);
+  const sessionRef = useRef(0);
+  const activeRef = useRef(false);
+  const promptedRef = useRef(false);
+  const recoveringRef = useRef(false);
   const onFinalRef = useRef(onFinal);
 
   useEffect(() => {
@@ -100,11 +154,20 @@ export function useDictation(onFinal: (text: string) => void): Dictation {
 
   useEffect(() => {
     setSupported(getRecognitionCtor() !== null);
-    return () => recognitionRef.current?.stop();
+    return () => {
+      sessionRef.current += 1;
+      activeRef.current = false;
+      recoveringRef.current = false;
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
+    };
   }, []);
 
   const stop = useCallback(() => {
-    startingRef.current = false;
+    sessionRef.current += 1;
+    activeRef.current = false;
+    recoveringRef.current = false;
+    promptedRef.current = false;
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     setListening(false);
@@ -112,50 +175,133 @@ export function useDictation(onFinal: (text: string) => void): Dictation {
   }, []);
 
   const start = useCallback(() => {
-    if (startingRef.current || recognitionRef.current) return;
+    if (activeRef.current) return;
     const Ctor = getRecognitionCtor();
     if (!Ctor) return;
-    startingRef.current = true;
-    void (async () => {
+
+    activeRef.current = true;
+    promptedRef.current = false;
+    recoveringRef.current = false;
+    const session = sessionRef.current + 1;
+    sessionRef.current = session;
+    setError(null);
+    setListening(true);
+
+    function fail(message: string): void {
+      if (sessionRef.current !== session) return;
+      activeRef.current = false;
+      recoveringRef.current = false;
+      recognitionRef.current = null;
+      setListening(false);
+      setInterim("");
+      setError(message);
+    }
+
+    function sessionEnded(): boolean {
+      return sessionRef.current !== session;
+    }
+
+    async function recover(): Promise<void> {
+      if (sessionEnded()) return;
+      if (promptedRef.current) {
+        fail(MIC_BLOCKED_MESSAGE);
+        return;
+      }
+      const state = await microphonePermissionState();
+      if (sessionEnded()) return;
+      switch (state) {
+        case "denied":
+          fail(MIC_BLOCKED_MESSAGE);
+          return;
+        case "granted":
+          fail(MIC_UNAVAILABLE_MESSAGE);
+          return;
+        case "prompt":
+        case "unknown":
+          break;
+        default: {
+          const unexpected: never = state;
+          return unexpected;
+        }
+      }
+      const visible = await browserCanSeeMicrophone();
+      if (sessionEnded()) return;
+      if (!visible) {
+        fail(MIC_UNAVAILABLE_MESSAGE);
+        return;
+      }
+      promptedRef.current = true;
       try {
         await requestMicrophonePrompt();
-        if (!startingRef.current) return;
-        const rec = new Ctor();
-        rec.lang = "nl-NL";
-        rec.continuous = true;
-        rec.interimResults = true;
-        rec.onresult = (e) => {
-          let interimText = "";
-          for (let i = e.resultIndex; i < e.results.length; i++) {
-            const r = e.results[i];
-            if (r.isFinal) onFinalRef.current(r[0].transcript.trim());
-            else interimText += r[0].transcript;
-          }
-          setInterim(interimText);
-        };
-        rec.onerror = (e) => {
-          setError(
-            e.error === "not-allowed"
-              ? MIC_BLOCKED_MESSAGE
-              : MIC_INTERRUPTED_MESSAGE,
-          );
-          setListening(false);
-        };
-        rec.onend = () => {
-          setListening(false);
-          setInterim("");
-        };
-        recognitionRef.current = rec;
-        setError(null);
-        rec.start();
-        setListening(true);
-      } catch (reason) {
-        setError(dictationErrorMessage(reason));
-        setListening(false);
-      } finally {
-        startingRef.current = false;
+      } catch (reason: unknown) {
+        if (sessionEnded()) return;
+        fail(dictationErrorMessage(reason));
+        return;
       }
-    })();
+      if (sessionEnded()) return;
+      recoveringRef.current = false;
+      open();
+    }
+
+    function open(): void {
+      if (sessionEnded() || !Ctor) return;
+      const rec = new Ctor();
+      rec.lang = "nl-NL";
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.onresult = (e) => {
+        let interimText = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const phrase = e.results[i];
+          if (phrase.isFinal) onFinalRef.current(phrase[0].transcript.trim());
+          else interimText += phrase[0].transcript;
+        }
+        setInterim(interimText);
+      };
+      rec.onerror = (e) => {
+        if (sessionEnded()) return;
+        if (e.error === "not-allowed") {
+          if (recoveringRef.current) return;
+          recoveringRef.current = true;
+          void recover();
+          return;
+        }
+        if (e.error === "audio-capture") {
+          fail(MIC_UNAVAILABLE_MESSAGE);
+          return;
+        }
+        fail(MIC_INTERRUPTED_MESSAGE);
+      };
+      rec.onend = () => {
+        if (sessionEnded() || recoveringRef.current) return;
+        if (recognitionRef.current !== rec) return;
+        recognitionRef.current = null;
+        setListening(false);
+        setInterim("");
+        activeRef.current = false;
+      };
+      recognitionRef.current = rec;
+      try {
+        rec.start();
+      } catch (reason: unknown) {
+        if (sessionEnded()) return;
+        const denied =
+          reason instanceof DOMException &&
+          (reason.name === "NotAllowedError" ||
+            reason.name === "PermissionDeniedError" ||
+            reason.name === "SecurityError") &&
+          !isSystemMicrophoneBlock(reason);
+        if (denied) {
+          if (recoveringRef.current) return;
+          recoveringRef.current = true;
+          void recover();
+          return;
+        }
+        fail(dictationErrorMessage(reason));
+      }
+    }
+
+    open();
   }, []);
 
   return { supported, listening, interim, error, start, stop };
