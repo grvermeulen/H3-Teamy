@@ -54,7 +54,9 @@ export const drillStepSchema = z.object({
   roles: z.array(drillRoleSchema).default([]),
 });
 
-/** A player the drill is about: cap label and a short position name. */
+/** A player the drill is about: cap label and a short position name.
+ * AI `generateObject` schemas: see `src/lib/ai/speelboekGenerate.ts` (strict mode — no
+ * `.optional()`; cap numbers in `label`, not optional `number` — Sentry JAVASCRIPT-NEXTJS-4Z). */
 export const drillRosterEntrySchema = z.object({
   playerId: z.string().min(1),
   /** Short text inside the cap, usually the position number (`"1"`–`"6"`) or `"K"`. */
