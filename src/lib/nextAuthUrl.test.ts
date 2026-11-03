@@ -16,13 +16,11 @@ describe("resolveNextAuthUrl", () => {
     vi.unstubAllEnvs();
   });
 
-  it("uses VERCEL_URL for preview when set", () => {
+  it("does not pin VERCEL_URL on preview so git aliases can log in", () => {
     vi.stubEnv("VERCEL_ENV", "preview");
-    vi.stubEnv("VERCEL_URL", "my-app-git-branch-team.vercel.app");
+    vi.stubEnv("VERCEL_URL", "my-app-abc123-team.vercel.app");
     vi.stubEnv("NEXTAUTH_URL", "https://production.example.com");
-    expect(resolveNextAuthUrl()).toBe(
-      "https://my-app-git-branch-team.vercel.app",
-    );
+    expect(resolveNextAuthUrl()).toBeUndefined();
   });
 
   it("uses explicit NEXTAUTH_URL when not on Vercel preview", () => {
@@ -94,6 +92,14 @@ describe("applyNextAuthUrlEnv", () => {
   });
 
   it("does nothing when NEXTAUTH_URL is unset", () => {
+    applyNextAuthUrlEnv();
+    expect(process.env.NEXTAUTH_URL).toBeUndefined();
+  });
+
+  it("drops inherited Production NEXTAUTH_URL on Vercel preview", () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("VERCEL_URL", "my-app-abc123-team.vercel.app");
+    vi.stubEnv("NEXTAUTH_URL", "https://production.example.com");
     applyNextAuthUrlEnv();
     expect(process.env.NEXTAUTH_URL).toBeUndefined();
   });

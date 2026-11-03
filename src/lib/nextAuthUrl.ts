@@ -32,15 +32,18 @@ function toOrigin(value: string): string | undefined {
 
 /**
  * Resolves the canonical site URL for NextAuth on Vercel.
- * Preview deployments often inherit Production `NEXTAUTH_URL`, which breaks CSRF and OAuth redirects.
+ * Preview deployments often inherit Production `NEXTAUTH_URL`, which breaks CSRF
+ * and OAuth redirects. Preview must not pin `VERCEL_URL` either: that unique
+ * `*.vercel.app` host differs from the git-branch alias people actually open
+ * (`*-git-feat-…`), so credentials login then fails CSRF.
  *
- * @returns Origin without trailing slash, or `undefined` if nothing to apply.
+ * @returns Origin without trailing slash, or `undefined` if NextAuth should
+ *   infer the URL from the incoming request.
  */
 export function resolveNextAuthUrl(): string | undefined {
   const vercelEnv = process.env.VERCEL_ENV;
-  const vercelUrl = process.env.VERCEL_URL?.trim();
-  if (vercelUrl && (vercelEnv === "preview" || vercelEnv === "development")) {
-    return toOrigin(vercelUrl);
+  if (vercelEnv === "preview" || vercelEnv === "development") {
+    return undefined;
   }
 
   const explicit = process.env.NEXTAUTH_URL?.trim();
@@ -48,6 +51,7 @@ export function resolveNextAuthUrl(): string | undefined {
     return toOrigin(explicit);
   }
 
+  const vercelUrl = process.env.VERCEL_URL?.trim();
   if (vercelUrl && process.env.VERCEL === "1") {
     return toOrigin(vercelUrl);
   }
@@ -57,10 +61,16 @@ export function resolveNextAuthUrl(): string | undefined {
 
 /**
  * Past `process.env.NEXTAUTH_URL` aan vóór NextAuth het leest.
- * Zet een geldige origin indien beschikbaar; verwijdert ongeldige of lege waarden
- * zodat NextAuth de request-URL als fallback kan gebruiken.
+ * Op Vercel preview/development wordt de waarde gewist zodat NextAuth de
+ * request-host gebruikt (git-alias vs unieke `VERCEL_URL`).
  */
 export function applyNextAuthUrlEnv(): void {
+  const vercelEnv = process.env.VERCEL_ENV;
+  if (vercelEnv === "preview" || vercelEnv === "development") {
+    delete process.env.NEXTAUTH_URL;
+    return;
+  }
+
   const resolved = resolveNextAuthUrl();
   if (resolved) {
     process.env.NEXTAUTH_URL = resolved;
