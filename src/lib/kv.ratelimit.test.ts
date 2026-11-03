@@ -56,7 +56,26 @@ describe("kvIncrementWindow", () => {
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
   });
 
+  it("fails open without Sentry when Redis returns connection closed (JAVASCRIPT-NEXTJS-4W)", async () => {
+    vi.stubEnv("REDIS_URL", "redis://127.0.0.1:6379");
+    vi.doMock("ioredis", () => ({
+      default: class {
+        connect = vi.fn().mockResolvedValue(undefined);
+        incr = vi.fn().mockRejectedValue(new Error("Connection is closed."));
+        expire = vi.fn();
+        disconnect = vi.fn();
+      },
+    }));
+    const { kvIncrementWindow } = await import("./kv");
+    expect(await kvIncrementWindow("ratelimit:t:u:1", 60)).toBeNull();
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+    expect(vi.mocked(Sentry.addBreadcrumb)).toHaveBeenCalled();
+  });
+
   it("counts in memory when there is no store, and starts over once the window has passed", async () => {
+    vi.stubEnv("REDIS_URL", "");
+    vi.stubEnv("KV_REST_API_URL", "");
+    vi.stubEnv("KV_REST_API_TOKEN", "");
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-09T10:00:00Z"));
     const { kvIncrementWindow } = await import("./kv");

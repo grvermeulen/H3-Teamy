@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
-import { z } from "zod";
+import { buildWaapiJsonHeaders, loadWaapiRuntimeConfig } from "@/lib/waapiEnv";
+import { classifyWaapiHttpFailure } from "@/lib/waapiUpstreamError";
 
 type MatchReportNotificationInput = {
   eventId: string;
@@ -17,30 +18,11 @@ export type NotificationResult =
         | "disabled"
         | "missing_config"
         | "invalid_event_id"
+        | "api_unauthenticated"
         | "upstream_error"
         | "request_failed";
       details?: string;
     };
-
-type WaapiConfig = {
-  baseUrl: string;
-  instanceId: string;
-  apiToken: string;
-  groupChatId: string;
-  appUrl: string;
-};
-
-const WaapiConfigSchema = z.object({
-  WAAPI_BASE_URL: z.string().trim().url().default("https://waapi.app/api/v1"),
-  WAAPI_INSTANCE_ID: z.string().trim().min(1),
-  WAAPI_API_TOKEN: z.string().trim().min(1),
-  WAAPI_GROUP_CHAT_ID: z.string().trim().min(1),
-  APP_URL: z.string().trim().url(),
-});
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /**
  * Normalizes a WhatsApp group JID for WaAPI. Some tools return only the numeric id; WaAPI expects `...@g.us`.
@@ -54,6 +36,10 @@ export function normalizeWaapiGroupChatId(raw: string): string {
   if (trimmed.includes("@")) return trimmed;
   if (/^\d+$/.test(trimmed)) return `${trimmed}@g.us`;
   return trimmed;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -83,20 +69,6 @@ function interpretWaapiSendMessageBody(
     return { ok: true };
   }
   return { ok: true };
-}
-
-function getWaapiConfig(): WaapiConfig | null {
-  const parsed = WaapiConfigSchema.safeParse(process.env);
-  if (!parsed.success) return null;
-  const env = parsed.data;
-
-  return {
-    baseUrl: env.WAAPI_BASE_URL.replace(/\/$/, ""),
-    instanceId: env.WAAPI_INSTANCE_ID,
-    apiToken: env.WAAPI_API_TOKEN,
-    groupChatId: normalizeWaapiGroupChatId(env.WAAPI_GROUP_CHAT_ID),
-    appUrl: env.APP_URL.replace(/\/$/, ""),
-  };
 }
 
 function buildMessage(
@@ -130,7 +102,7 @@ export async function sendMatchReportToWhatsAppGroup(
     return { sent: false, reason: "disabled" };
   }
 
-  const config = getWaapiConfig();
+  const config = loadWaapiRuntimeConfig();
   if (!config) {
     return { sent: false, reason: "missing_config" };
   }
@@ -175,12 +147,9 @@ async function postToGroup(
   try {
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        Authorization: `Bearer ${config.apiToken}`,
-      },
+      headers: buildWaapiJsonHeaders(config.apiToken),
       body: JSON.stringify({
-        chatId: config.groupChatId,
+        chatId: normalizeWaapiGroupChatId(config.groupChatId),
         message,
       }),
       signal: controller.signal,
@@ -189,17 +158,16 @@ async function postToGroup(
 
     const bodyText = await response.text();
     if (!response.ok) {
-      Sentry.captureException(
-        new Error(`WaAPI send-message failed: ${response.status} ${bodyText}`),
-      );
-      return { sent: false, reason: "upstream_error", details: bodyText };
+      const classified = classifyWaapiHttpFailure(response.status, bodyText);
+      return {
+        sent: false,
+        reason: classified.reason,
+        details: classified.details,
+      };
     }
 
     const interpreted = interpretWaapiSendMessageBody(bodyText);
     if (!interpreted.ok) {
-      Sentry.captureException(
-        new Error(`WaAPI send-message rejected: ${interpreted.details}`),
-      );
       return {
         sent: false,
         reason: "upstream_error",

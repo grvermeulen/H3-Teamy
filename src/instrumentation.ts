@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { isNodeClientDisconnectWriteNoise } from "./lib/nodeClientDisconnectWriteNoise";
 
 /**
  * Next.js instrumentation hook: laadt runtime-specifieke Sentry-configuratie
@@ -19,4 +20,14 @@ export async function register(): Promise<void> {
  * Next.js `onRequestError`-hook: stuurt requestfouten door naar Sentry.
  * @see {@link https://docs.sentry.io/platforms/javascript/guides/nextjs/ | Sentry Next.js}
  */
-export const onRequestError = Sentry.captureRequestError;
+const captureRequestError = Sentry.captureRequestError;
+
+/** Slaat bekende client-disconnect `EPIPE`-writes over; stuurt overige requestfouten naar Sentry. */
+export const onRequestError: typeof captureRequestError = (
+  ...args: Parameters<typeof captureRequestError>
+) => {
+  if (isNodeClientDisconnectWriteNoise(args[0])) {
+    return;
+  }
+  return captureRequestError(...args);
+};

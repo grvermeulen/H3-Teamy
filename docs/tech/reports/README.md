@@ -98,11 +98,13 @@ Current behavior awaits the send result, returns `whatsappNotification` in the J
 
    Copy the exact `...@g.us` id for your team into `WAAPI_GROUP_CHAT_ID` in Vercel.
 
-2. **HTTP 200 but WaAPI rejects the send**: The API can return `200` with `{ "success": false, "message": "..." }`. The app now treats that as a failed send and surfaces `details` in the response / Sentry.
+2. **HTTP 401 Unauthenticated**: WaAPI rejected the API token (`{"message":"Unauthenticated."}`). Verify with `npx tsx scripts/waapi-list-instances.ts` (uses the same token as send-message). Create a new token under **API Tokens** in the WaAPI dashboard, update **`WAAPI_API_TOKEN`** in Vercel Production (and Preview if needed), and redeploy. Do not paste `Bearer` into the env value — the app adds that prefix. If you copied `Bearer …` anyway, recent app versions strip it automatically.
 
-3. **Config not loaded**: `WAAPI_NOTIFICATIONS_ENABLED` must be exactly `true`, and `APP_URL` must be a full URL (`https://...`) so Zod validation passes.
+3. **HTTP 200 but WaAPI rejects the send**: The API can return `200` with `{ "success": false, "message": "..." }`. The app now treats that as a failed send and surfaces `details` in the response / Sentry.
 
-4. **Instance offline**: If the WaAPI client is disconnected, sends fail until you reconnect (QR) in the WaAPI dashboard.
+4. **Config not loaded**: `WAAPI_NOTIFICATIONS_ENABLED` must be exactly `true`, and `APP_URL` must be a full URL (`https://...`) so Zod validation passes.
+
+5. **Instance offline**: If the WaAPI client is disconnected, sends fail until you reconnect (QR) in the WaAPI dashboard.
 
 ## WAAPI end-to-end test (safe mode)
 

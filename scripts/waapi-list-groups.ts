@@ -1,3 +1,8 @@
+import {
+  buildWaapiJsonHeaders,
+  normalizeWaapiApiToken,
+} from "../src/lib/waapiEnv";
+
 type WaapiChat = {
   id?: string;
   name?: string;
@@ -145,15 +150,12 @@ async function main(): Promise<void> {
     process.env.WAAPI_BASE_URL || "https://waapi.app/api/v1"
   ).replace(/\/$/, "");
   const instanceId = requiredEnv("WAAPI_INSTANCE_ID");
-  const apiToken = requiredEnv("WAAPI_API_TOKEN");
+  const apiToken = normalizeWaapiApiToken(requiredEnv("WAAPI_API_TOKEN"));
 
   const endpoint = `${baseUrl}/instances/${encodeURIComponent(instanceId)}/client/action/get-chats`;
   const response = await fetch(endpoint, {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      Authorization: `Bearer ${apiToken}`,
-    },
+    headers: buildWaapiJsonHeaders(apiToken),
     body: JSON.stringify({ limit: options.limit }),
   });
 
