@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Event, EventHint } from "@sentry/nextjs";
-import { shouldDropBenignClientFetchNoiseEvent } from "./sentryBenignClientFetchNoise";
+import {
+  BENIGN_TRANSIENT_CLIENT_FETCH_IGNORE_RE,
+  isBenignTransientClientFetchSentryIssueTitle,
+  shouldDropBenignClientFetchNoiseEvent,
+} from "./sentryBenignClientFetchNoise";
 
 const baseEvent = {} as Event;
 
@@ -48,5 +52,15 @@ describe("shouldDropBenignClientFetchNoiseEvent", () => {
   it("returns false when no fetch noise signals are present", () => {
     const hint: EventHint = {};
     expect(shouldDropBenignClientFetchNoiseEvent(baseEvent, hint)).toBe(false);
+  });
+
+  it("returns true for JAVASCRIPT-NEXTJS-57 preview Failed to fetch title", () => {
+    const title =
+      "TypeError: Failed to fetch (h3-teamy-85466ns8m-guido-vermeulens-projects.vercel.app)";
+    expect(isBenignTransientClientFetchSentryIssueTitle(title)).toBe(true);
+    expect(BENIGN_TRANSIENT_CLIENT_FETCH_IGNORE_RE.test(title)).toBe(true);
+    expect(
+      shouldDropBenignClientFetchNoiseEvent({ message: title } as Event, {}),
+    ).toBe(true);
   });
 });

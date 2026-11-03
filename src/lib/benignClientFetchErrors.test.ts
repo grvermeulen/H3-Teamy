@@ -14,9 +14,11 @@ describe("normalizeBenignClientFetchMessage", () => {
 });
 
 describe("isBenignTransientClientFetchMessage", () => {
-  it("returns true for WebKit Load failed with request host suffix", () => {
+  it("returns true for Chromium Failed to fetch with Vercel preview host suffix", () => {
     expect(
-      isBenignTransientClientFetchMessage("Load failed (heren-3-de-rijn.com)"),
+      isBenignTransientClientFetchMessage(
+        "Failed to fetch (h3-teamy-85466ns8m-guido-vermeulens-projects.vercel.app)",
+      ),
     ).toBe(true);
   });
 });

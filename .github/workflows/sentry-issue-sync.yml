@@ -27,6 +27,13 @@ jobs:
           SENTRY_PROJECT: javascript-nextjs
         run: npx tsx scripts/sentry-resolve-preview-uptime.ts
 
+      - name: Resolve benign client fetch noise (Sentry)
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: h3-teamy
+          SENTRY_PROJECT: javascript-nextjs
+        run: npx tsx scripts/sentry-resolve-benign-client-fetch.ts
+
       - name: Fetch unresolved Sentry issues
         id: sentry
         env:
