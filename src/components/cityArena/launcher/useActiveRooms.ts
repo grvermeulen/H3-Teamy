@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as Sentry from "@sentry/nextjs";
+import { readResponseJson } from "@/lib/safeClientJson";
 import type { LobbyRoom } from "@/lib/cityArena/net/lobbyPresence";
 import type { RoomsState } from "./RoomList";
 
@@ -54,13 +55,13 @@ export function useActiveRooms(enabled: boolean): RoomsState {
         // 503/429 are intentional degraded states from the route (DB down, rate limit);
         // the server already logs unexpected failures — do not double-report to Sentry.
         if (response.status === 503 || response.status === 429) {
-          const rooms = readRooms(await response.json());
+          const rooms = readRooms(await readResponseJson(response));
           if (!alive.current) return;
           setState(rooms ? { status: "ready", rooms } : { status: "offline" });
           return;
         }
         if (!response.ok) throw new Error(`rooms responded ${response.status}`);
-        const rooms = readRooms(await response.json());
+        const rooms = readRooms(await readResponseJson(response));
         if (!alive.current) return;
         setState(rooms ? { status: "ready", rooms } : { status: "offline" });
       } catch (error: unknown) {

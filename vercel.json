@@ -1,6 +1,11 @@
 {
   "installCommand": "npm ci --legacy-peer-deps",
   "framework": "nextjs",
+  "git": {
+    "deploymentEnabled": {
+      "jev-risk-data": false
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/idea-weekly",

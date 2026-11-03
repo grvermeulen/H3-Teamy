@@ -22,7 +22,7 @@ import {
   resample,
   weld,
 } from "@gltf-transform/functions";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
   PALETTE_ATTRIBUTE,
@@ -81,10 +81,8 @@ const NODE_SOURCE_IO: SourceIo = {
       throw error;
     }
   },
-  async write(file, bytes) {
-    await mkdir(path.dirname(file), { recursive: true });
-    await writeFile(file, bytes);
-  },
+  // Atomic, so an interrupted download never leaves a cut-off model the sha256 pin would refuse.
+  write: (file, bytes) => writeAtomic(file, bytes),
   async fetch(url) {
     const response = await fetch(url);
     return {

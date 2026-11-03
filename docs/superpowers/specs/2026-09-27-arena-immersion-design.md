@@ -16,13 +16,13 @@ Builds on the 3D mode (`docs/superpowers/specs/2026-09-26-arena-3d-mode-design.m
 
 ## 2. What the code does today (why each item happens)
 
-| Item | Cause |
-| --- | --- |
-| 1 | `cameraRig.firstPersonPose` puts the eye at `SEAT_EYE_HEIGHT_M` inside the car's closed exterior model. Its faces are culled from inside, so the driver floats over the road with a sliver of bonnet in view; there is no interior, wheel or hands. |
-| 2 | The flat sim fires every round from the shooter's position; `tracers.ts` draws them at `PERSON_CHEST_HEIGHT_M` (1.3 m) on the in-plane line, `bursts.ts` lights the muzzle flash at the body, and `projectiles3d.ts` starts rockets there. In first person the eye is at 1.65 m and the gun is drawn lower right, so rounds leave the centre of the screen. |
-| 3 | Characters are chamfered vertex-coloured blocks on a 17-bone rigid rig (`characterParts.ts`); peds have six fixed looks (`pedLook = id % 6`). Façades are four canvas styles; streets carry little clutter; vehicles are slabs. |
-| 4 | `audio/sound.ts` only reacts to sim events. There is no ambience. `footstep`, `skid` and `death` clips ship in `public/arena/audio/` but `clipFor` never plays them. |
-| 5 | Every voice goes straight into one master gain: a cop firing 150 m away is as loud as your own gun; the siren is one global loop switched on within 120 m. |
+| Item | Cause                                                                                                                                                                                                                                                                                                                                                       |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `cameraRig.firstPersonPose` puts the eye at `SEAT_EYE_HEIGHT_M` inside the car's closed exterior model. Its faces are culled from inside, so the driver floats over the road with a sliver of bonnet in view; there is no interior, wheel or hands.                                                                                                         |
+| 2    | The flat sim fires every round from the shooter's position; `tracers.ts` draws them at `PERSON_CHEST_HEIGHT_M` (1.3 m) on the in-plane line, `bursts.ts` lights the muzzle flash at the body, and `projectiles3d.ts` starts rockets there. In first person the eye is at 1.65 m and the gun is drawn lower right, so rounds leave the centre of the screen. |
+| 3    | Characters are chamfered vertex-coloured blocks on a 17-bone rigid rig (`characterParts.ts`); peds have six fixed looks (`pedLook = id % 6`). Façades are four canvas styles; streets carry little clutter; vehicles are slabs.                                                                                                                             |
+| 4    | `audio/sound.ts` only reacts to sim events. There is no ambience. `footstep`, `skid` and `death` clips ship in `public/arena/audio/` but `clipFor` never plays them.                                                                                                                                                                                        |
+| 5    | Every voice goes straight into one master gain: a cop firing 150 m away is as loud as your own gun; the siren is one global loop switched on within 120 m.                                                                                                                                                                                                  |
 
 ## 3. Decisions (owner, 2026-09-27)
 
@@ -44,6 +44,7 @@ Builds on the 3D mode (`docs/superpowers/specs/2026-09-26-arena-3d-mode-design.m
   The owner's "visual quality" track is split into 3 and 4 so each stays reviewable; a small
   release PR afterwards bumps `package.json` to **0.6.0** and adds the `CHANGELOG` entry for all
   four (no track bumps the version, so they never conflict on it).
+
 - **No spec review round**: the smaller rulings are made by the implementer and listed in each PR
   body.
 

@@ -20,40 +20,40 @@
 
 ## Approved sources (static.poly.pizza, Quaternius, Ultimate Modular Men/Women packs)
 
-| Key | GLB uuid | Poly Pizza page | Licence |
-| --- | --- | --- | --- |
-| `casual-man` | `90a9e2d4-053f-42f1-99a2-8f5e1180ea7f` | `/m/kZ3DmIoGip` | CC0 |
-| `business-man` | `e599abbe-7d73-488c-9d7e-3ead281e705c` | `/m/JFrLIKqvCH` | CC0 |
-| `hoodie-man` | `bcd66ec5-5e81-4901-a222-47abc875fe2a` | `/m/gKLBoRsyKe` | CC0 |
-| `worker-man` | `3a5f3056-ffe6-42eb-bd52-122afcbd22b2` | `/m/Yg2bQZO6Hj` | CC0 |
-| `punk-man` | `e56f23b5-3270-406f-8924-f77cad980c43` | `/m/BTALZymknF` | CC0 |
-| `beach-man` | `f771a536-1c18-4a47-bb56-ceea4b603455` | `/m/DojKLcO34E` | CC0 |
-| `farmer-man` | `81f2f0cf-6f53-4b57-92ea-dba0928620f2` | `/m/7pn3R6hPvE` | CC0 |
-| `swat` | `713f6535-f4f3-4367-a4c6-ced126ae0936` | `/m/Btfn3G5Xv4` | CC0 |
-| `woman-a` | `46d6db5a-3c9f-4238-8cdf-8eb7194498dc` | `/m/nIItLV9nxS` | CC0 |
-| `woman-b` | `ba7a1955-ea51-4cb9-a561-188bdef0a6c7` | `/m/qJ2gsTUBHL` | CC0 |
-| `punk-woman` | `1d368679-1d9a-4d5c-9095-877144b02d00` | `/m/djXoqejw6w` | CC0 |
-| `adventurer-woman` | `69689495-028d-4b81-8678-792338a5693e` | `/m/ZwF0K7WBmu` | CC0 |
-| `hooded-woman` | `3186b8e9-afd5-4d48-846c-b2b530cd23e2` | `/m/y9KWOVG21R` | CC0 |
-| `suit-woman` | `1bd7759c-ab76-4178-8fe6-7706dffa7d5f` | `/m/sOUciDsoVV` | CC-BY 3.0 (per poly.pizza) |
-| `worker-woman` | `c0253218-85f2-4d67-b3f2-a4611a7901fe` | `/m/E8079Ahx7k` | CC-BY 3.0 (per poly.pizza) |
+| Key                | GLB uuid                               | Poly Pizza page | Licence                    |
+| ------------------ | -------------------------------------- | --------------- | -------------------------- |
+| `casual-man`       | `90a9e2d4-053f-42f1-99a2-8f5e1180ea7f` | `/m/kZ3DmIoGip` | CC0                        |
+| `business-man`     | `e599abbe-7d73-488c-9d7e-3ead281e705c` | `/m/JFrLIKqvCH` | CC0                        |
+| `hoodie-man`       | `bcd66ec5-5e81-4901-a222-47abc875fe2a` | `/m/gKLBoRsyKe` | CC0                        |
+| `worker-man`       | `3a5f3056-ffe6-42eb-bd52-122afcbd22b2` | `/m/Yg2bQZO6Hj` | CC0                        |
+| `punk-man`         | `e56f23b5-3270-406f-8924-f77cad980c43` | `/m/BTALZymknF` | CC0                        |
+| `beach-man`        | `f771a536-1c18-4a47-bb56-ceea4b603455` | `/m/DojKLcO34E` | CC0                        |
+| `farmer-man`       | `81f2f0cf-6f53-4b57-92ea-dba0928620f2` | `/m/7pn3R6hPvE` | CC0                        |
+| `swat`             | `713f6535-f4f3-4367-a4c6-ced126ae0936` | `/m/Btfn3G5Xv4` | CC0                        |
+| `woman-a`          | `46d6db5a-3c9f-4238-8cdf-8eb7194498dc` | `/m/nIItLV9nxS` | CC0                        |
+| `woman-b`          | `ba7a1955-ea51-4cb9-a561-188bdef0a6c7` | `/m/qJ2gsTUBHL` | CC0                        |
+| `punk-woman`       | `1d368679-1d9a-4d5c-9095-877144b02d00` | `/m/djXoqejw6w` | CC0                        |
+| `adventurer-woman` | `69689495-028d-4b81-8678-792338a5693e` | `/m/ZwF0K7WBmu` | CC0                        |
+| `hooded-woman`     | `3186b8e9-afd5-4d48-846c-b2b530cd23e2` | `/m/y9KWOVG21R` | CC0                        |
+| `suit-woman`       | `1bd7759c-ab76-4178-8fe6-7706dffa7d5f` | `/m/sOUciDsoVV` | CC-BY 3.0 (per poly.pizza) |
+| `worker-woman`     | `c0253218-85f2-4d67-b3f2-a4611a7901fe` | `/m/E8079Ahx7k` | CC-BY 3.0 (per poly.pizza) |
 
 URL: `https://static.poly.pizza/<uuid>.glb`. The page ids were read from the bundle pages in listing order; confirm each page's model name matches its key before writing credits (the page's HTML contains its GLB uuid).
 
 ## File map
 
-| File | Change |
-| --- | --- |
-| `scripts/arena/pack-characters.ts` (+ `packCharacters.test.ts`) | **new** — download/verify/pack; `--probe` prints meshes, materials, skeleton bones, animations |
-| `scripts/arena/check-characters.ts` (+ test) | **new** — manifest ↔ files, sizes, credits; `npm run arena:check-characters` + CI verify step |
-| `public/arena/characters/*.glb`, `manifest.json`, `CREDITS.md` | packed output |
-| `src/lib/cityArena/render3d/characterAssets.ts` | **new** — lazy load, parse, cache, dispose |
-| `src/lib/cityArena/render3d/characterAppearance.ts` | **new** — pure: id/look → model key, tints, scale, extras |
-| `src/lib/cityArena/render3d/characterAnimation.ts` | **new** — pure: `PoseInput` + motion → clip weights/rates |
-| `src/lib/cityArena/render3d/gltfCharacter.ts` | **new** — `Character3d` over a cloned glTF + mixer |
-| `src/lib/cityArena/render3d/characters.ts`, `cast3d.ts`, `entities.ts`, `contacts3d.ts`, `sharedAssets.ts`, `index.ts` | factory with fallback + LOD; ped appearance by id; disposal |
-| `public/sw.js` | only if `/arena/characters/` is not already covered by the network-first `/arena/` rule (check) |
-| `docs/tech/arena/3D-MODE.md` | characters section, module map, screenshots |
+| File                                                                                                                   | Change                                                                                          |
+| ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `scripts/arena/pack-characters.ts` (+ `packCharacters.test.ts`)                                                        | **new** — download/verify/pack; `--probe` prints meshes, materials, skeleton bones, animations  |
+| `scripts/arena/check-characters.ts` (+ test)                                                                           | **new** — manifest ↔ files, sizes, credits; `npm run arena:check-characters` + CI verify step   |
+| `public/arena/characters/*.glb`, `manifest.json`, `CREDITS.md`                                                         | packed output                                                                                   |
+| `src/lib/cityArena/render3d/characterAssets.ts`                                                                        | **new** — lazy load, parse, cache, dispose                                                      |
+| `src/lib/cityArena/render3d/characterAppearance.ts`                                                                    | **new** — pure: id/look → model key, tints, scale, extras                                       |
+| `src/lib/cityArena/render3d/characterAnimation.ts`                                                                     | **new** — pure: `PoseInput` + motion → clip weights/rates                                       |
+| `src/lib/cityArena/render3d/gltfCharacter.ts`                                                                          | **new** — `Character3d` over a cloned glTF + mixer                                              |
+| `src/lib/cityArena/render3d/characters.ts`, `cast3d.ts`, `entities.ts`, `contacts3d.ts`, `sharedAssets.ts`, `index.ts` | factory with fallback + LOD; ped appearance by id; disposal                                     |
+| `public/sw.js`                                                                                                         | only if `/arena/characters/` is not already covered by the network-first `/arena/` rule (check) |
+| `docs/tech/arena/3D-MODE.md`                                                                                           | characters section, module map, screenshots                                                     |
 
 ---
 
@@ -77,9 +77,13 @@ export type Appearance = {
   tints: Readonly<Record<string, number>>;
   /** Uniform scale around 1 (0.92…1.08). */
   scale: number;
-  extras: readonly AppearanceExtra[];   // e.g. "cap" | "glasses" | "backpack" | "sunglasses-red" | "bracelet"
+  extras: readonly AppearanceExtra[]; // e.g. "cap" | "glasses" | "backpack" | "sunglasses-red" | "bracelet"
 };
-export function appearanceOf(look: CharacterLook, id: number, vestHue?: number): Appearance;
+export function appearanceOf(
+  look: CharacterLook,
+  id: number,
+  vestHue?: number,
+): Appearance;
 ```
 
 - Peds (`ped1…ped6` looks today, id-seeded): pick from the city set (all keys except `swat`), tints from curated palettes per material role (skin 8 tones; hair black/brown/blond/red/grey; tops; trousers; shoes), scale, 0–2 extras. `player`: `beach-man` with the splash-screen identity — bald (hide/skin-tint the hair material), mint shorts, red-lensed sunglasses, bead bracelet (reuse `characterExtras` geometry attached to head/wrist bones where practical). `otherPlayer`: a fixed male/female model with the vest hue on the top. `cop`: `swat` in Dutch police navy with light-blue shirt accents and the cap/badge of today's cop look where the model allows.
@@ -91,13 +95,28 @@ export function appearanceOf(look: CharacterLook, id: number, vestHue?: number):
 **Files:** create `render3d/characterAnimation.ts` (+ test).
 
 ```ts
-export type ClipRole = "idle" | "walk" | "run" | "death" | "punch" | "gunIdle" | "gunShoot" | "swing";
-export type ClipMix = { base: { role: ClipRole; weight: number; rate: number }[];
-  upper: { role: ClipRole; weight: number } | null; once: ClipRole | null };
-export function clipMix(pose: PoseInput, stride: { walkM: number; runM: number }): ClipMix;
+export type ClipRole =
+  | "idle"
+  | "walk"
+  | "run"
+  | "death"
+  | "punch"
+  | "gunIdle"
+  | "gunShoot"
+  | "swing";
+export type ClipMix = {
+  base: { role: ClipRole; weight: number; rate: number }[];
+  upper: { role: ClipRole; weight: number } | null;
+  once: ClipRole | null;
+};
+export function clipMix(
+  pose: PoseInput,
+  stride: { walkM: number; runM: number },
+): ClipMix;
 ```
 
 Idle ↔ walk ↔ run cross-weights from `pose.speed` (thresholds matching `characterPose.ts`'s walk/run), playback rate matched so feet do not slide (clip stride length measured from the probe or tuned by eye); aiming with a gun → upper-body `gunIdle` (use an upper-body mask: tracks of spine/arms/head bones only) and `gunShoot` on a fresh recoil; fists/bat on a fresh recoil → `punch`/`swing` once; dead → `death` once, clamped at the last frame.
+
 - [ ] Tests: speed 0 → idle only; walking speed → walk dominant with a rate that grows with speed; running → run; dead → death only and `once`; aiming pistol → upper `gunIdle`; recoil 1 with a pistol → `gunShoot` once; recoil with fists → punch.
 - [ ] Commit `feat(arena): map poses onto the characters' animation clips`.
 

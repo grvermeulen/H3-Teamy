@@ -45,8 +45,13 @@ export const generateObject: typeof ai.generateObject = (...args) =>
   (getSdk().generateObject as typeof ai.generateObject)(...args);
 
 /** AI SDK `streamText`, traced via Braintrust when configured. */
-export const streamText: typeof ai.streamText = (...args) =>
-  getSdk().streamText(...args);
+export const streamText: typeof ai.streamText = ((
+  ...args: Parameters<typeof ai.streamText>
+) =>
+  // 7.0.143 splits streamText into a full-result overload and a low-memory
+  // overload. Rest args erase that correlation, so the wrapper is asserted
+  // back to the SDK signature.
+  getSdk().streamText(...args)) as typeof ai.streamText;
 
 /** AI SDK `streamObject`, traced via Braintrust when configured. */
 export const streamObject: typeof ai.streamObject = (...args) =>

@@ -37,3 +37,9 @@ updates:
     directory: "/ocr-worker"
     schedule:
       interval: "weekly"
+    groups:
+      pytorch:
+        patterns:
+          - "torch"
+          - "torchvision"
+          - "torchaudio"

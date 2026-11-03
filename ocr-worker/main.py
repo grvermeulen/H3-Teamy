@@ -27,6 +27,12 @@ def _init_reader():
     return _reader
 
 
+def decode_image_bytes(data: bytes) -> Optional[np.ndarray]:
+    """Decode uploaded image bytes to a BGR OpenCV matrix, or None when invalid."""
+    npbuf = np.frombuffer(data, dtype=np.uint8)
+    return cv2.imdecode(npbuf, cv2.IMREAD_COLOR)
+
+
 def _require_auth(authorization: Optional[str]):
     token = os.getenv(APP_TOKEN_ENV, "").strip()
     if not token:
@@ -57,10 +63,8 @@ async def ocr(
 ):
     _require_auth(authorization)
 
-    # Read file into a numpy image (BGR for OpenCV)
     data = await image.read()
-    npbuf = np.frombuffer(data, dtype=np.uint8)
-    img = cv2.imdecode(npbuf, cv2.IMREAD_COLOR)
+    img = decode_image_bytes(data)
     if img is None:
         raise HTTPException(status_code=400, detail="invalid_image")
 

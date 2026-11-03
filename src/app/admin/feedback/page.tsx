@@ -63,7 +63,9 @@ export default function AdminFeedbackPage(): React.JSX.Element {
     "ALL" | FeedbackRow["status"]
   >("ALL");
   const filterStatusRef = useRef(filterStatus);
-  filterStatusRef.current = filterStatus;
+  useEffect(() => {
+    filterStatusRef.current = filterStatus;
+  }, [filterStatus]);
   const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set());
 
   async function load(): Promise<void> {

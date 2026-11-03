@@ -44,9 +44,9 @@ describe("arenaRoomService schema drift", () => {
   it("maps missing arena tables to DbUnavailableError for realtime tokens", async () => {
     vi.mocked(prisma.$transaction).mockRejectedValue(arenaSchemaDriftError());
 
-    await expect(
-      authorizeArenaToken("user-1", "member-1"),
-    ).rejects.toThrow(DbUnavailableError);
+    await expect(authorizeArenaToken("user-1", "member-1")).rejects.toThrow(
+      DbUnavailableError,
+    );
   });
 
   it("maps missing arena tables to DbUnavailableError for lobby listing", async () => {
