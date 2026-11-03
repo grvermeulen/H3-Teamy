@@ -119,6 +119,18 @@ describe("setupServiceWorker", () => {
     expect(cacheDelete).not.toHaveBeenCalled();
   });
 
+  it("ignores register resolving without a registration object", async () => {
+    const container = installFakeContainer();
+    container.register.mockResolvedValue(undefined);
+
+    setupServiceWorker("production");
+
+    await vi.waitFor(() => {
+      expect(container.register).toHaveBeenCalledWith(SERVICE_WORKER_URL);
+    });
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
   it("does not register the worker on development builds", async () => {
     const container = installFakeContainer();
 
