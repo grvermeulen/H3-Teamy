@@ -5,6 +5,10 @@ import { authOptions } from "../../../../lib/authOptions";
 import { prisma } from "../../../../lib/db";
 import { getActiveUser } from "../../../../lib/activeUser";
 import { APP_VERSION } from "../../../../lib/version";
+import {
+  isDbUnavailableError,
+  jsonDatabaseUnavailable,
+} from "../../../../lib/dbUnavailableError";
 
 /**
  * Records that the active user has seen the What's-new tour for the current
@@ -24,6 +28,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
     return NextResponse.json({ ok: true, version: APP_VERSION });
   } catch (err: unknown) {
+    if (isDbUnavailableError(err)) {
+      return jsonDatabaseUnavailable();
+    }
     Sentry.captureException(err, { tags: { component: "api-whats-new-ack" } });
     return NextResponse.json(
       { ok: false, error: "Ack failed" },

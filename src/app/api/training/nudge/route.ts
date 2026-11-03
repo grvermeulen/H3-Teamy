@@ -9,6 +9,7 @@ import {
   decideNudgeBucket,
   getOrCreateNudge,
 } from "../../../../lib/services/attendanceNudgeService";
+import { isDbUnavailableError } from "../../../../lib/dbUnavailableError";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ nudge });
   } catch (err: unknown) {
-    Sentry.captureException(err, { tags: { component: "api-training-nudge" } });
+    if (!isDbUnavailableError(err)) {
+      Sentry.captureException(err, {
+        tags: { component: "api-training-nudge" },
+      });
+    }
     return NextResponse.json({ nudge: null });
   }
 }

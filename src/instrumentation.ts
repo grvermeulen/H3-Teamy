@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { isDbUnavailableSentryNoise } from "./lib/sentryDbUnavailableNoise";
 import { isNodeClientDisconnectWriteNoise } from "./lib/nodeClientDisconnectWriteNoise";
 
 /**
@@ -22,10 +23,13 @@ export async function register(): Promise<void> {
  */
 const captureRequestError = Sentry.captureRequestError;
 
-/** Slaat bekende client-disconnect `EPIPE`-writes over; stuurt overige requestfouten naar Sentry. */
+/** Slaat verwachte DB-503 en client-disconnect `EPIPE`-writes over. */
 export const onRequestError: typeof captureRequestError = (
   ...args: Parameters<typeof captureRequestError>
 ) => {
+  if (isDbUnavailableSentryNoise(args[0])) {
+    return;
+  }
   if (isNodeClientDisconnectWriteNoise(args[0])) {
     return;
   }
