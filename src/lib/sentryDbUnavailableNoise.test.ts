@@ -3,17 +3,19 @@ import { DbUnavailableError } from "./dbUnavailableError";
 import {
   isDbUnavailableSentryNoise,
   shouldDropDbUnavailableErrorForSentry,
-} from "./dbUnavailableSentryNoise";
+} from "./sentryDbUnavailableNoise";
 
 describe("isDbUnavailableSentryNoise", () => {
   it("returns true for DbUnavailableError instances", () => {
     expect(isDbUnavailableSentryNoise(new DbUnavailableError())).toBe(true);
   });
 
-  it("returns true for plain errors with the DbUnavailable name", () => {
-    const err = new Error("Database tijdelijk niet beschikbaar");
-    err.name = "DbUnavailableError";
-    expect(isDbUnavailableSentryNoise(err)).toBe(true);
+  it("returns true for the default Dutch unavailable message", () => {
+    expect(
+      isDbUnavailableSentryNoise(
+        new Error("Database tijdelijk niet beschikbaar"),
+      ),
+    ).toBe(true);
   });
 
   it("returns false for unrelated errors", () => {
@@ -26,7 +28,7 @@ describe("shouldDropDbUnavailableErrorForSentry", () => {
     typeof shouldDropDbUnavailableErrorForSentry
   >[0];
 
-  it("drops events whose hint carries DbUnavailableError", () => {
+  it("drops JAVASCRIPT-NEXTJS-54 DbUnavailableError events", () => {
     expect(
       shouldDropDbUnavailableErrorForSentry(baseEvent, {
         originalException: new DbUnavailableError(),
@@ -34,24 +36,29 @@ describe("shouldDropDbUnavailableErrorForSentry", () => {
     ).toBe(true);
   });
 
-  it("drops events whose exception type is DbUnavailableError", () => {
+  it("drops when exception type is DbUnavailableError without hint instance", () => {
     expect(
       shouldDropDbUnavailableErrorForSentry(
         {
           ...baseEvent,
           exception: {
-            values: [{ type: "DbUnavailableError", value: "x" }],
+            values: [
+              {
+                type: "DbUnavailableError",
+                value: "Database tijdelijk niet beschikbaar",
+              },
+            ],
           },
         },
-        { originalException: null },
+        {},
       ),
     ).toBe(true);
   });
 
-  it("keeps unrelated server errors", () => {
+  it("keeps unrelated application errors", () => {
     expect(
       shouldDropDbUnavailableErrorForSentry(baseEvent, {
-        originalException: new Error("unexpected"),
+        originalException: new Error("Prisma schema drift"),
       }),
     ).toBe(false);
   });

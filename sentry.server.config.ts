@@ -2,10 +2,10 @@ import * as Sentry from "@sentry/nextjs";
 import { shouldDropBenignTurbopackDevCompileNoiseForSentry } from "@/lib/sentryBenignTurbopackDevCompileNoise";
 import { shouldDropDevLocalhostDbNoiseForSentry } from "@/lib/sentryDevDbNoise";
 import { shouldDropInvalidMultipartBodyNoiseForSentry } from "@/lib/sentryInvalidMultipartBodyNoise";
+import { shouldDropDbUnavailableErrorForSentry } from "@/lib/sentryDbUnavailableNoise";
 import { shouldDropNodeClientDisconnectWriteNoiseForSentry } from "@/lib/sentryClientDisconnectWriteNoise";
 import { shouldDropNodeTransformStreamNoiseForSentry } from "@/lib/sentryTransformStreamNoise";
 import { shouldDropPgPoolNoiseForSentry } from "@/lib/sentryPgPoolNoise";
-import { shouldDropDbUnavailableErrorForSentry } from "@/lib/dbUnavailableSentryNoise";
 import { shouldDropRedisNoiseForSentry } from "@/lib/sentryRedisNoise";
 
 /** Parseert traces sample rate (0–1) uit server-env; default 0.1. */

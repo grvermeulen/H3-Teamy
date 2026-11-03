@@ -42,7 +42,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
     return NextResponse.json({ id: created.id }, { status: 201 });
   } catch (err: unknown) {
-    if (isDbUnavailableError(err)) return jsonDatabaseUnavailable();
+    if (isDbUnavailableError(err)) {
+      return jsonDatabaseUnavailable();
+    }
     Sentry.captureException(err, { tags: { component: "api-feedback-post" } });
     return NextResponse.json({ error: "Save failed" }, { status: 500 });
   }
@@ -74,7 +76,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     });
     return NextResponse.json({ items });
   } catch (err: unknown) {
-    if (isDbUnavailableError(err)) return jsonDatabaseUnavailable();
+    if (isDbUnavailableError(err)) {
+      return jsonDatabaseUnavailable();
+    }
     Sentry.captureException(err, { tags: { component: "api-feedback-get" } });
     return NextResponse.json({ error: "Load failed" }, { status: 500 });
   }

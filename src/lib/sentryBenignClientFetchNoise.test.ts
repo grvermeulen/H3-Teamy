@@ -24,6 +24,20 @@ describe("shouldDropBenignClientFetchNoiseEvent", () => {
     expect(shouldDropBenignClientFetchNoiseEvent(baseEvent, hint)).toBe(true);
   });
 
+  it("returns true when only event.exception value is set (console logging)", () => {
+    const event = {
+      exception: { values: [{ value: "Load failed", type: "TypeError" }] },
+    } as Event;
+    expect(shouldDropBenignClientFetchNoiseEvent(event, {})).toBe(true);
+  });
+
+  it("returns true when only event.message is set", () => {
+    const event = {
+      message: "TypeError: Load failed (heren-3-de-rijn.com)",
+    } as Event;
+    expect(shouldDropBenignClientFetchNoiseEvent(event, {})).toBe(true);
+  });
+
   it("returns false for real application errors", () => {
     const hint: EventHint = {
       originalException: new Error("feedback POST failed: 500"),
@@ -31,7 +45,7 @@ describe("shouldDropBenignClientFetchNoiseEvent", () => {
     expect(shouldDropBenignClientFetchNoiseEvent(baseEvent, hint)).toBe(false);
   });
 
-  it("returns false when originalException is missing", () => {
+  it("returns false when no fetch noise signals are present", () => {
     const hint: EventHint = {};
     expect(shouldDropBenignClientFetchNoiseEvent(baseEvent, hint)).toBe(false);
   });
