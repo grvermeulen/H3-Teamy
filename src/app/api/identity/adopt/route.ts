@@ -50,13 +50,8 @@ export async function POST(req: NextRequest) {
         where: { userId: cookieIdentity.userId },
       });
       if (left === 0) {
-        try {
-          await tx.user.delete({ where: { id: cookieIdentity.userId } });
-        } catch (delErr: unknown) {
-          Sentry.captureException(delErr, {
-            extra: { context: "identity_adopt_delete_cookie_user" },
-          });
-        }
+        // deleteMany is idempotent when concurrent adopts already removed the row.
+        await tx.user.deleteMany({ where: { id: cookieIdentity.userId } });
       }
     });
 
