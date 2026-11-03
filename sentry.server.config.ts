@@ -3,6 +3,7 @@ import { shouldDropBenignTurbopackDevCompileNoiseForSentry } from "@/lib/sentryB
 import { shouldDropDevLocalhostDbNoiseForSentry } from "@/lib/sentryDevDbNoise";
 import { shouldDropInvalidMultipartBodyNoiseForSentry } from "@/lib/sentryInvalidMultipartBodyNoise";
 import { shouldDropDbUnavailableErrorForSentry } from "@/lib/sentryDbUnavailableNoise";
+import { shouldDropTransientPrismaConnectNoiseForSentry } from "@/lib/sentryTransientPrismaConnectNoise";
 import { shouldDropNodeClientDisconnectWriteNoiseForSentry } from "@/lib/sentryClientDisconnectWriteNoise";
 import { shouldDropNodeTransformStreamNoiseForSentry } from "@/lib/sentryTransformStreamNoise";
 import { shouldDropPgPoolNoiseForSentry } from "@/lib/sentryPgPoolNoise";
@@ -28,6 +29,9 @@ Sentry.init({
 
   beforeSend(event, hint) {
     if (shouldDropDbUnavailableErrorForSentry(event, hint)) return null;
+    if (shouldDropTransientPrismaConnectNoiseForSentry(event, hint)) {
+      return null;
+    }
     if (shouldDropDevLocalhostDbNoiseForSentry(event, hint)) return null;
     if (shouldDropInvalidMultipartBodyNoiseForSentry(event, hint)) return null;
     if (shouldDropPgPoolNoiseForSentry(event, hint)) return null;

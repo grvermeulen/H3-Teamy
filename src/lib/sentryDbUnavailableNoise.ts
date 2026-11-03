@@ -1,5 +1,5 @@
 import type { ErrorEvent, EventHint } from "@sentry/nextjs";
-import { isDbUnavailableError } from "./dbUnavailableError";
+import { DbUnavailableError, isDbUnavailableError } from "./dbUnavailableError";
 
 const DB_UNAVAILABLE_MESSAGE = "Database tijdelijk niet beschikbaar";
 
