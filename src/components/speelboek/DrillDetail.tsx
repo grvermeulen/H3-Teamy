@@ -6,9 +6,11 @@ import type { Route } from "next";
 import type { Drill } from "../../lib/schemas/speelboek";
 import { CATEGORY_LABELS, LEVEL_LABELS } from "../../lib/speelboek/lineup";
 import { rosterLabels, type LibraryDrill } from "../../lib/speelboek/library";
+import { playbackFrame } from "../../lib/speelboek/playback";
 import { AppBar, Button } from "../ui";
 import DrillEngagementPanel from "./DrillEngagementPanel";
 import PoolDiagram from "./PoolDiagram";
+import { usePlaybackClock } from "./usePlaybackClock";
 
 /** Milliseconds per step while the animation plays. */
 export const PLAY_INTERVAL_MS = 2500;
@@ -32,11 +34,25 @@ type Props = {
 export default function DrillDetail({ drill, counterpart }: Props) {
   const [stepIndex, setStepIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [holding, setHolding] = useState(false);
   const [myPlayerId, setMyPlayerId] = useState<string | null>(null);
   const storageKey = `${STORAGE_PREFIX}${drill.id}`;
   const labels = useMemo(() => rosterLabels(drill), [drill]);
-  const step = drill.steps[stepIndex];
   const last = drill.steps.length - 1;
+  const clock = usePlaybackClock(playing, drill.steps.length, PLAY_INTERVAL_MS);
+  useEffect(() => {
+    if (!clock.finished) return;
+    setPlaying(false);
+    setHolding(true);
+    setStepIndex(last);
+  }, [clock.finished, last]);
+  const viewIndex = playing ? clock.index : stepIndex;
+  const step = drill.steps[viewIndex];
+  const played = playing
+    ? playbackFrame(drill.steps, clock.index, clock.t)
+    : holding
+      ? playbackFrame(drill.steps, last, 1)
+      : null;
 
   useEffect(() => {
     try {
@@ -49,20 +65,6 @@ export default function DrillDetail({ drill, counterpart }: Props) {
     }
   }, [storageKey, drill.roster]);
 
-  useEffect(() => {
-    if (!playing) return;
-    const timer = window.setInterval(() => {
-      setStepIndex((i) => {
-        if (i >= last) {
-          setPlaying(false);
-          return i;
-        }
-        return i + 1;
-      });
-    }, PLAY_INTERVAL_MS);
-    return () => window.clearInterval(timer);
-  }, [playing, last]);
-
   function choosePosition(playerId: string): void {
     const next = playerId === myPlayerId ? null : playerId;
     setMyPlayerId(next);
@@ -74,7 +76,14 @@ export default function DrillDetail({ drill, counterpart }: Props) {
     }
   }
 
+  function showStep(index: number): void {
+    setHolding(false);
+    setPlaying(false);
+    setStepIndex(index);
+  }
+
   function play(): void {
+    setHolding(false);
     setStepIndex(0);
     setPlaying(true);
   }
@@ -99,10 +108,13 @@ export default function DrillDetail({ drill, counterpart }: Props) {
 
         <div className="speelboek-pool">
           <PoolDiagram
-            frame={step.frame}
+            frame={played?.frame ?? step.frame}
+            positions={played?.positions}
+            ballAt={played?.ballAt}
+            playback={playing || holding}
             labels={labels}
             selectedPlayerId={myPlayerId ?? undefined}
-            title={`Stap ${stepIndex + 1}: ${step.title}`}
+            title={`Stap ${viewIndex + 1}: ${step.title}`}
           />
         </div>
         <DiagramLegend attackColor={step.frame.attackColor} />
@@ -112,23 +124,20 @@ export default function DrillDetail({ drill, counterpart }: Props) {
             type="button"
             className="speelboek-stepper-nav"
             aria-label="Vorige stap"
-            disabled={stepIndex === 0}
-            onClick={() => {
-              setPlaying(false);
-              setStepIndex((i) => Math.max(0, i - 1));
-            }}
+            disabled={viewIndex === 0}
+            onClick={() => showStep(Math.max(0, viewIndex - 1))}
           >
             ‹
           </button>
           <div className="text-center min-w-0">
             <div className="font-semibold">
-              Stap {stepIndex + 1} van {drill.steps.length} · {step.title}
+              Stap {viewIndex + 1} van {drill.steps.length} · {step.title}
             </div>
             <div className="speelboek-dots" aria-hidden="true">
               {drill.steps.map((s, i) => (
                 <i
                   key={s.title}
-                  data-on={i === stepIndex ? "true" : undefined}
+                  data-on={i === viewIndex ? "true" : undefined}
                 />
               ))}
             </div>
@@ -137,11 +146,8 @@ export default function DrillDetail({ drill, counterpart }: Props) {
             type="button"
             className="speelboek-stepper-nav"
             aria-label="Volgende stap"
-            disabled={stepIndex === last}
-            onClick={() => {
-              setPlaying(false);
-              setStepIndex((i) => Math.min(last, i + 1));
-            }}
+            disabled={viewIndex === last}
+            onClick={() => showStep(Math.min(last, viewIndex + 1))}
           >
             ›
           </button>
@@ -199,7 +205,7 @@ export default function DrillDetail({ drill, counterpart }: Props) {
           <Button
             variant="primary"
             className="flex-1"
-            onClick={playing ? () => setPlaying(false) : play}
+            onClick={playing ? () => showStep(viewIndex) : play}
           >
             {playing ? "Stop animatie" : "▶ Speel animatie"}
           </Button>

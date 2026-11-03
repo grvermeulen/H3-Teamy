@@ -242,17 +242,28 @@ export function defaultRosterEntry(playerId: string): DrillRosterEntry {
   return { playerId, label: `V${n}`.slice(0, 2), name: `Verdediger ${n}` };
 }
 
-/** Sets or clears the role text of a player in a step. */
+/**
+ * Sets or clears the role text of a player in a step. Spaces are kept so a
+ * word can still be followed by the next one; only a blank value clears the role.
+ */
 export function setRole(
   step: DrillStep,
   playerId: string,
   text: string,
 ): DrillStep {
   const others = step.roles.filter((r) => r.playerId !== playerId);
-  const trimmed = text.trim();
+  if (!text.trim()) return { ...step, roles: others };
+  return { ...step, roles: [...others, { playerId, text }] };
+}
+
+/** Trims role lines and drops blanks. Used when saving, not while typing. */
+export function trimStepRoles(step: DrillStep): DrillStep {
   return {
     ...step,
-    roles: trimmed ? [...others, { playerId, text: trimmed }] : others,
+    roles: step.roles.flatMap((role) => {
+      const text = role.text.trim();
+      return text ? [{ ...role, text }] : [];
+    }),
   };
 }
 

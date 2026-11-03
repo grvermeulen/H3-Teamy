@@ -20,14 +20,17 @@ import {
   nextStepFrame,
   setRole,
   toggleAttackColor,
+  trimStepRoles,
   toggleRoster,
   validateDrillInput,
   type EditorTool,
 } from "../../lib/speelboek/editor";
 import { CATEGORY_LABELS, LEVEL_LABELS } from "../../lib/speelboek/lineup";
 import type { LibraryDrill } from "../../lib/speelboek/library";
+import { playbackFrame } from "../../lib/speelboek/playback";
 import { AppBar, Button, Input, Textarea, showToast } from "../ui";
 import PoolDiagram from "./PoolDiagram";
+import { usePlaybackClock } from "./usePlaybackClock";
 import PoolEditorCanvas from "./PoolEditorCanvas";
 
 const TOOLS: EditorTool[] = [
@@ -101,21 +104,15 @@ export default function DrillEditor({
     ? (step.roles.find((r) => r.playerId === selected)?.text ?? "")
     : "";
 
+  const previewing = previewIndex !== null;
+  const clock = usePlaybackClock(
+    previewing,
+    draft.steps.length,
+    PREVIEW_INTERVAL_MS,
+  );
   useEffect(() => {
-    if (previewIndex === null) return;
-    if (previewIndex >= draft.steps.length - 1) {
-      const t = window.setTimeout(
-        () => setPreviewIndex(null),
-        PREVIEW_INTERVAL_MS,
-      );
-      return () => window.clearTimeout(t);
-    }
-    const t = window.setTimeout(
-      () => setPreviewIndex(previewIndex + 1),
-      PREVIEW_INTERVAL_MS,
-    );
-    return () => window.clearTimeout(t);
-  }, [previewIndex, draft.steps.length]);
+    if (clock.finished) setPreviewIndex(null);
+  }, [clock.finished]);
 
   function updateFrame(frame: DiagramFrame): void {
     setDraft((d) => ({
@@ -187,12 +184,13 @@ export default function DrillEditor({
       steps: d.steps.filter((_, i) => i !== stepIndex),
     }));
     setStepIndex(Math.max(0, stepIndex - 1));
-    setPreviewIndex((pi) => (pi === null ? null : Math.min(pi, nextLen - 1)));
+    if (nextLen < 2) setPreviewIndex(null);
   }
 
   async function onSave(): Promise<void> {
     const body: DrillInput = {
       ...draft,
+      steps: draft.steps.map(trimStepRoles),
       keyPoints: linesToList(keyPointsText),
       commonMistakes: linesToList(mistakesText),
     };
@@ -251,9 +249,9 @@ export default function DrillEditor({
     }
   }
 
-  const previewFrame =
-    previewIndex !== null && previewIndex < draft.steps.length
-      ? draft.steps[previewIndex].frame
+  const played =
+    previewing && clock.index < draft.steps.length
+      ? playbackFrame(draft.steps, clock.index, clock.t)
       : null;
 
   return (
@@ -280,11 +278,14 @@ export default function DrillEditor({
         ) : null}
 
         <div className="speelboek-pool">
-          {previewFrame ? (
+          {played ? (
             <PoolDiagram
-              frame={previewFrame}
+              frame={played.frame}
+              positions={played.positions}
+              ballAt={played.ballAt}
+              playback
               labels={labels}
-              title={`Voorbeeld stap ${(previewIndex ?? 0) + 1}`}
+              title={`Voorbeeld stap ${clock.index + 1}`}
             />
           ) : (
             <PoolEditorCanvas

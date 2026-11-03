@@ -68,6 +68,10 @@ describe("DrillEditor", () => {
     expect(screen.getByLabelText("Rol in deze stap")).toHaveValue(
       "Drijf naar de paal",
     );
+    fireEvent.change(screen.getByLabelText("Rol in deze stap"), {
+      target: { value: "Drijf " },
+    });
+    expect(screen.getByLabelText("Rol in deze stap")).toHaveValue("Drijf ");
 
     fireEvent.click(screen.getByRole("button", { name: "Geen rol" }));
     expect(screen.getByTestId("player-panel")).toHaveTextContent("(geen rol)");

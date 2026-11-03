@@ -87,6 +87,22 @@ describe("DrillDetail", () => {
     expect(screen.getByText(/jij speelt 5/)).toBeInTheDocument();
   });
 
+  it("swims a player along the action while the animation plays", () => {
+    vi.useFakeTimers();
+    const { container } = render(
+      <DrillDetail drill={tipIn} counterpart={null} />,
+    );
+    const cap = () =>
+      container.querySelector('[data-player-id="p1"]') as SVGGElement;
+
+    fireEvent.click(screen.getByRole("button", { name: /Speel animatie/ }));
+    act(() => {
+      vi.advanceTimersByTime(PLAY_INTERVAL_MS / 2);
+    });
+
+    expect(cap().style.transform).toBe("translate(223.5px, 46px)");
+  });
+
   it("plays the animation to the last step and stops", () => {
     vi.useFakeTimers();
     render(<DrillDetail drill={tipIn} counterpart={null} />);

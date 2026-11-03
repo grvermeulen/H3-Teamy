@@ -13,6 +13,7 @@ import {
   nextStepFrame,
   removePlayer,
   setRole,
+  trimStepRoles,
   toggleAttackColor,
   toggleRoster,
   validateDrillInput,
@@ -149,16 +150,17 @@ describe("speelboek editor", () => {
     });
   });
 
-  it("sets, replaces and clears roles", () => {
+  it("sets, replaces and clears roles without eating spaces while typing", () => {
     const step = newDrillInput().steps[0];
-    const withRole = setRole(step, "p1", "  Drijf naar de paal ");
-    expect(withRole.roles).toEqual([
-      { playerId: "p1", text: "Drijf naar de paal" },
-    ]);
+    const withRole = setRole(step, "p1", "Drijf ");
+    expect(withRole.roles).toEqual([{ playerId: "p1", text: "Drijf " }]);
     expect(setRole(withRole, "p1", "Vraag de bal").roles).toEqual([
       { playerId: "p1", text: "Vraag de bal" },
     ]);
     expect(setRole(withRole, "p1", "   ").roles).toEqual([]);
+    expect(
+      trimStepRoles(setRole(step, "p1", "  Drijf naar de paal ")).roles,
+    ).toEqual([{ playerId: "p1", text: "Drijf naar de paal" }]);
   });
 
   it("toggles roster membership and drops roles of removed players", () => {

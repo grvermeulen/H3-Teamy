@@ -6,6 +6,7 @@ import {
   type DiagramFrame,
   type DiagramPlayer,
 } from "../../lib/schemas/speelboek";
+import type { PlayedFrame } from "../../lib/speelboek/playback";
 
 const CAP = {
   WHITE: { fill: "#f3f6fb", text: "#0b0f14" },
@@ -24,6 +25,12 @@ type Props = {
   selectedPlayerId?: string;
   /** Thumbnail mode: no distance labels, thinner strokes. */
   mini?: boolean;
+  /** Cap positions while a step is playing; arrows stay on `frame`. */
+  positions?: PlayedFrame["positions"];
+  /** Ball anchor while a pass travels; otherwise the ball stays with its holder. */
+  ballAt?: PlayedFrame["ballAt"];
+  /** Positions are already interpolated, so CSS transitions must not lag behind. */
+  playback?: boolean;
   /** Accessible description of the frame. */
   title?: string;
   className?: string;
@@ -64,13 +71,17 @@ function arrowPath(arrow: DiagramArrow, from: DiagramPlayer): string {
 /**
  * Top-down half-pool diagram (goal at the top) rendering one {@link DiagramFrame}:
  * caps in waterpolo colours (attack white or blue, defence the other colour, keeper red),
- * a yellow ball and swim/pass/shot arrows. Players are keyed by id so position changes
- * between frames animate with a short CSS transition.
+ * a yellow ball and swim/pass/shot arrows. Players are keyed by id so a static
+ * step change can ease with CSS. During playback, `positions` moves the caps
+ * along the step and CSS transitions stay off.
  *
  * @param frame - Positions, arrows and ball holder to draw.
  * @param labels - Cap text per player id; omitted players get a blank cap.
  * @param selectedPlayerId - Player to highlight with a dashed ring.
  * @param mini - Thumbnail rendering without distance labels.
+ * @param positions - Cap positions while playback interpolates a step.
+ * @param ballAt - Ball anchor while a pass is in flight.
+ * @param playback - Disables CSS transitions; the caller moves caps itself.
  * @param title - Accessible title for the SVG.
  * @param className - Extra classes on the `<svg>`.
  */
@@ -79,6 +90,9 @@ export default function PoolDiagram({
   labels = {},
   selectedPlayerId,
   mini = false,
+  positions,
+  ballAt = null,
+  playback = false,
   title,
   className,
 }: Props) {
@@ -91,7 +105,16 @@ export default function PoolDiagram({
   const ballHolder = frame.ballPlayerId
     ? byId.get(frame.ballPlayerId)
     : undefined;
+  const ballAnchor =
+    ballAt ??
+    (ballHolder
+      ? {
+          x: positions?.[ballHolder.id]?.x ?? ballHolder.x,
+          y: positions?.[ballHolder.id]?.y ?? ballHolder.y,
+        }
+      : null);
   const capRadius = mini ? 8 : 9.5;
+  const motion = playback ? undefined : "[transition:transform_500ms_ease]";
 
   return (
     <svg
@@ -237,13 +260,14 @@ export default function PoolDiagram({
       {frame.players.map((p) => {
         const colors = capColors(p, frame.attackColor);
         const label = labels[p.id] ?? "";
+        const at = positions?.[p.id] ?? p;
         return (
           <g
             key={p.id}
             data-player-id={p.id}
-            className="[transition:transform_500ms_ease]"
+            className={motion}
             // Geometry is data-driven; a Tailwind class cannot express a per-player translate.
-            style={{ transform: `translate(${p.x}px, ${p.y}px)` }}
+            style={{ transform: `translate(${at.x}px, ${at.y}px)` }}
           >
             {p.id === selectedPlayerId ? (
               <circle
@@ -275,12 +299,14 @@ export default function PoolDiagram({
         );
       })}
 
-      {ballHolder ? (
+      {ballAnchor ? (
         <circle
           data-ball=""
-          className="[transition:cx_500ms_ease,cy_500ms_ease]"
-          cx={ballHolder.x + 10}
-          cy={ballHolder.y - 9}
+          className={
+            playback ? undefined : "[transition:cx_500ms_ease,cy_500ms_ease]"
+          }
+          cx={ballAnchor.x + 10}
+          cy={ballAnchor.y - 9}
           r={mini ? 4 : 5.2}
           fill={BALL}
           stroke="#0b0f14"
