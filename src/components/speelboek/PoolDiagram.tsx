@@ -43,7 +43,7 @@ function capColors(
       // Red cap; the number takes the defending team's colour.
       return {
         fill: CAP.RED,
-        text: defenceColor === "BLUE" ? "#ffffff" : CAP.BLUE.fill,
+        text: CAP[defenceColor].text,
       };
     default: {
       const exhaustive: never = player.team;
