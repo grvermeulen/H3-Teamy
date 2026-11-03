@@ -12,7 +12,7 @@ const TRANSIENT_PRISMA_KNOWN_CODES = new Set([
 
 /**
  * Herkent Prisma-connectie- en schema-driftfouten die routes als 503 of retry afhandelen
- * en geen Sentry-issue mogen vormen (JAVASCRIPT-NEXTJS-58).
+ * en geen Sentry-issue mogen vormen (JAVASCRIPT-NEXTJS-55/58).
  *
  * @param error - Fout uit `catch`, `onRequestError` of Sentry-hint.
  * @returns `true` wanneer de melding verwachte DB-connectieruis is.
