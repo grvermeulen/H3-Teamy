@@ -1,19 +1,23 @@
 import type { ErrorEvent, EventHint } from "@sentry/core";
 
-/** Turbopack compile overlay / console when root `package.json` is not valid JSON during dev HMR. */
+/** Turbopack overlay / console when root `package.json` is not valid JSON during dev HMR. */
 const TURBOPACK_ROOT_PACKAGE_JSON_LOC_RE = /\.\/package\.json:\d+:\d+/;
 
+/** Turbopack compile location for a source file, e.g. `./src/lib/dbMetrics.ts:1:1`. */
+const TURBOPACK_SRC_FILE_LOC_RE = /\.\/src\/[^\s:]+:\d+:\d+/;
+
 /**
- * Bepaalt of een foutmelding Turbopack-ruis is rond het parsen van de root `package.json`
- * (typisch tijdelijk ongeldige JSON tijdens lokale bewerkingen of merge-conflicts in dev).
+ * Bepaalt of een foutmelding Turbopack-ruis is uit lokale dev/HMR (tijdelijk ongeldige bron
+ * of parse-fouten), geen productiebug.
  *
  * @param message - Gecombineerde exception- / eventtekst.
- * @returns `true` wanneer dit geen productiebug is.
+ * @returns `true` wanneer dit verwachte dev-compile-ruis is.
  */
-export function isBenignTurbopackRootPackageJsonParseNoise(
-  message: string,
-): boolean {
-  if (TURBOPACK_ROOT_PACKAGE_JSON_LOC_RE.test(message)) {
+export function isBenignTurbopackDevCompileNoise(message: string): boolean {
+  if (
+    TURBOPACK_ROOT_PACKAGE_JSON_LOC_RE.test(message) ||
+    TURBOPACK_SRC_FILE_LOC_RE.test(message)
+  ) {
     return true;
   }
   const lower = message.toLowerCase();
@@ -44,18 +48,19 @@ function isLocalDevRequest(event: ErrorEvent): boolean {
 }
 
 /**
- * Filtert Sentry-events van Turbopack `package.json`-parsefouten tijdens lokale ontwikkeling.
- * Productie-deploys falen al bij een ongeldige `package.json`; deze meldingen zijn dev/HMR-ruis.
+ * Filtert Sentry-events van Turbopack compile-/parsefouten tijdens lokale ontwikkeling.
+ * Productie-builds falen al bij echte compile-fouten; deze meldingen komen via
+ * `consoleLoggingIntegration` van de dev-overlay (ook wanneer de DSN naar productie wijst).
  *
  * @param event - Sentry-foutevent.
  * @param hint - Hint met oorspronkelijke exception.
  * @returns `true` wanneer het event niet naar ingest gestuurd moet worden.
  */
-export function shouldDropBenignTurbopackPackageJsonNoiseForSentry(
+export function shouldDropBenignTurbopackDevCompileNoiseForSentry(
   event: ErrorEvent,
   hint: EventHint,
 ): boolean {
-  if (!isBenignTurbopackRootPackageJsonParseNoise(eventMessage(event, hint))) {
+  if (!isBenignTurbopackDevCompileNoise(eventMessage(event, hint))) {
     return false;
   }
   if (process.env.NODE_ENV === "production" && !isLocalDevRequest(event)) {

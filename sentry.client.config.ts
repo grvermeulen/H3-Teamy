@@ -8,7 +8,7 @@ import {
   BENIGN_POINTER_LOCK_WRONG_DOCUMENT_IGNORE_RE,
   shouldDropBenignPointerLockNoiseEvent,
 } from "@/lib/sentryBenignPointerLockNoise";
-import { shouldDropBenignTurbopackPackageJsonNoiseForSentry } from "@/lib/sentryBenignTurbopackPackageJsonNoise";
+import { shouldDropBenignTurbopackDevCompileNoiseForSentry } from "@/lib/sentryBenignTurbopackDevCompileNoise";
 
 /**
  * Parseert traces sample rate (0–1) uit env; default 0.1 voor productie.
@@ -40,7 +40,7 @@ Sentry.init({
     if (shouldDropBenignPointerLockNoiseEvent(event, hint)) {
       return null;
     }
-    if (shouldDropBenignTurbopackPackageJsonNoiseForSentry(event, hint)) {
+    if (shouldDropBenignTurbopackDevCompileNoiseForSentry(event, hint)) {
       return null;
     }
     return event;

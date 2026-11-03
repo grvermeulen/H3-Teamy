@@ -1,41 +1,48 @@
 import type { ErrorEvent, EventHint } from "@sentry/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  isBenignTurbopackRootPackageJsonParseNoise,
-  shouldDropBenignTurbopackPackageJsonNoiseForSentry,
-} from "./sentryBenignTurbopackPackageJsonNoise";
+  isBenignTurbopackDevCompileNoise,
+  shouldDropBenignTurbopackDevCompileNoiseForSentry,
+} from "./sentryBenignTurbopackDevCompileNoise";
 
-describe("isBenignTurbopackRootPackageJsonParseNoise", () => {
+describe("isBenignTurbopackDevCompileNoise", () => {
   it("herkent Turbopack-locatieregels voor root package.json", () => {
+    expect(isBenignTurbopackDevCompileNoise("Error: ./package.json:3:1")).toBe(
+      true,
+    );
+    expect(isBenignTurbopackDevCompileNoise("⨯ ./package.json:3:3")).toBe(true);
+  });
+
+  it("herkent Turbopack-locatieregels voor src-bestanden (dbMetrics)", () => {
     expect(
-      isBenignTurbopackRootPackageJsonParseNoise("Error: ./package.json:3:1"),
+      isBenignTurbopackDevCompileNoise("Error: ./src/lib/dbMetrics.ts:1:1"),
     ).toBe(true);
     expect(
-      isBenignTurbopackRootPackageJsonParseNoise("⨯ ./package.json:3:3"),
+      isBenignTurbopackDevCompileNoise("⨯ ./src/lib/dbMetrics.ts:1:1"),
     ).toBe(true);
   });
 
-  it("herkent gecombineerde parse-fouttekst", () => {
+  it("herkent gecombineerde package.json parse-fouttekst", () => {
     expect(
-      isBenignTurbopackRootPackageJsonParseNoise(
+      isBenignTurbopackDevCompileNoise(
         "Error parsing package.json file package.json is not parseable: invalid JSON",
       ),
     ).toBe(true);
   });
 
   it("laat andere fouten door", () => {
-    expect(isBenignTurbopackRootPackageJsonParseNoise("TypeError: x")).toBe(
-      false,
-    );
+    expect(isBenignTurbopackDevCompileNoise("TypeError: x")).toBe(false);
   });
 });
 
-describe("shouldDropBenignTurbopackPackageJsonNoiseForSentry", () => {
+describe("shouldDropBenignTurbopackDevCompileNoiseForSentry", () => {
   const baseEvent: ErrorEvent = {
-    exception: { values: [{ value: "Error: ./package.json:3:1" }] },
+    exception: {
+      values: [{ value: "Error: ./src/lib/dbMetrics.ts:1:1" }],
+    },
   };
   const baseHint: EventHint = {
-    originalException: new Error("Error: ./package.json:3:1"),
+    originalException: new Error("Error: ./src/lib/dbMetrics.ts:1:1"),
   };
 
   beforeEach(() => {
@@ -48,7 +55,7 @@ describe("shouldDropBenignTurbopackPackageJsonNoiseForSentry", () => {
 
   it("dropt in development", () => {
     expect(
-      shouldDropBenignTurbopackPackageJsonNoiseForSentry(baseEvent, baseHint),
+      shouldDropBenignTurbopackDevCompileNoiseForSentry(baseEvent, baseHint),
     ).toBe(true);
   });
 
@@ -60,7 +67,7 @@ describe("shouldDropBenignTurbopackPackageJsonNoiseForSentry", () => {
       environment: "production",
     };
     expect(
-      shouldDropBenignTurbopackPackageJsonNoiseForSentry(event, baseHint),
+      shouldDropBenignTurbopackDevCompileNoiseForSentry(event, baseHint),
     ).toBe(true);
   });
 
@@ -72,7 +79,7 @@ describe("shouldDropBenignTurbopackPackageJsonNoiseForSentry", () => {
       environment: "production",
     };
     expect(
-      shouldDropBenignTurbopackPackageJsonNoiseForSentry(event, baseHint),
+      shouldDropBenignTurbopackDevCompileNoiseForSentry(event, baseHint),
     ).toBe(false);
   });
 });
