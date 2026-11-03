@@ -2,10 +2,10 @@
  * Resolves the Postgres URL for Prisma at runtime.
  *
  * Next.js can inline static `process.env.PRISMA_DATABASE_URL` reads at build
- * time. On Vercel preview the Neon/Prisma marketplace injects a per-deploy
- * URL that may have a stale password, while the dashboard `PREVIEW_*` vars
- * still point at the shared preview database. Dynamic lookup + an explicit
- * preview preference keeps that overlay intact.
+ * time. On Vercel preview the Neon marketplace also injects a per-deploy
+ * `PREVIEW_*` URL whose password is often stale. `SHARED_PREVIEW_DATABASE_URL`
+ * is a dashboard secret Neon does not overwrite; it pins the working shared
+ * preview database.
  */
 
 function envVar(name: string): string | undefined {
@@ -23,6 +23,7 @@ export function resolvePrismaDatasourceUrl(): string | undefined {
   const vercelEnv = envVar("VERCEL_ENV");
   if (vercelEnv === "preview" || vercelEnv === "development") {
     return (
+      envVar("SHARED_PREVIEW_DATABASE_URL") ||
       envVar("PREVIEW_POSTGRES_PRISMA_URL") ||
       envVar("PREVIEW_DATABASE_URL") ||
       envVar("PREVIEW_POSTGRES_URL") ||

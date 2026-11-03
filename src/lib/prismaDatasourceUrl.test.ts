@@ -6,6 +6,21 @@ describe("resolvePrismaDatasourceUrl", () => {
     vi.unstubAllEnvs();
   });
 
+  it("prefers SHARED_PREVIEW_DATABASE_URL over per-deploy PREVIEW_* injection", () => {
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv(
+      "PREVIEW_POSTGRES_PRISMA_URL",
+      "postgresql://bad:bad@ep-withered-cell.neon.tech/neondb",
+    );
+    vi.stubEnv(
+      "SHARED_PREVIEW_DATABASE_URL",
+      "postgresql://ok:ok@ep-noisy-pond.neon.tech/neondb",
+    );
+    expect(resolvePrismaDatasourceUrl()).toBe(
+      "postgresql://ok:ok@ep-noisy-pond.neon.tech/neondb",
+    );
+  });
+
   it("prefers PREVIEW_POSTGRES_PRISMA_URL on Vercel preview over injected PRISMA_DATABASE_URL", () => {
     vi.stubEnv("VERCEL_ENV", "preview");
     vi.stubEnv(
