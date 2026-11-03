@@ -6,6 +6,7 @@ import { getServerSession } from "next-auth";
 import { prisma } from "./db";
 import { authOptions } from "./authOptions";
 import { withPgConnectRetry } from "./prismaConnectRetry";
+import { isTransientPrismaConnectSentryNoise } from "./sentryTransientPrismaConnectNoise";
 import { USER_CORE_SELECT } from "./userPrismaSelect";
 import { isAnonCookieId } from "./anonCookieId";
 
@@ -64,6 +65,9 @@ async function resolveActiveUser(
           select: { userId: true },
         });
         if (exist) return exist.userId;
+      }
+      if (isTransientPrismaConnectSentryNoise(error)) {
+        throw error;
       }
       Sentry.captureException(error, {
         extra: {
@@ -226,6 +230,15 @@ async function resolveActiveUser(
                 where: { id: cookieIdentity.userId },
               });
             } catch (error: unknown) {
+              if (
+                error instanceof Prisma.PrismaClientKnownRequestError &&
+                error.code === "P2025"
+              ) {
+                return;
+              }
+              if (isTransientPrismaConnectSentryNoise(error)) {
+                return;
+              }
               Sentry.captureException(error, {
                 extra: {
                   context: "silent_adopt_delete_empty_cookie_user",

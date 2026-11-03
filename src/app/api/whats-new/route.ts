@@ -5,6 +5,7 @@ import { authOptions } from "../../../lib/authOptions";
 import { prisma } from "../../../lib/db";
 import { getActiveUser } from "../../../lib/activeUser";
 import { isDbUnavailableError } from "../../../lib/dbUnavailableError";
+import { shouldCaptureApiRouteException } from "../../../lib/sentryApiRouteCapture";
 import { APP_VERSION } from "../../../lib/version";
 import { getChangelogEntry } from "../../../lib/changelog";
 
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       payload: show ? entry : undefined,
     });
   } catch (err: unknown) {
-    if (!isDbUnavailableError(err)) {
+    if (shouldCaptureApiRouteException(err)) {
       Sentry.captureException(err, { tags: { component: "api-whats-new" } });
     }
     return NextResponse.json({ show: false, version: APP_VERSION });

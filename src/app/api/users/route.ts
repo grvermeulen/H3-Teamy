@@ -5,6 +5,7 @@ import {
   isDbUnavailableError,
   jsonDatabaseUnavailable,
 } from "@/lib/dbUnavailableError";
+import { shouldCaptureApiRouteException } from "@/lib/sentryApiRouteCapture";
 
 export async function GET(req: NextRequest) {
   const refresh = req.nextUrl.searchParams.get("refresh") === "1";
@@ -16,7 +17,9 @@ export async function GET(req: NextRequest) {
     if (isDbUnavailableError(error)) {
       return jsonDatabaseUnavailable();
     }
-    Sentry.captureException(error);
+    if (shouldCaptureApiRouteException(error)) {
+      Sentry.captureException(error);
+    }
     return NextResponse.json(
       { error: "Er ging iets mis bij het ophalen van gebruikers." },
       { status: 500 },

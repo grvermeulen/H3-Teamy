@@ -6,6 +6,7 @@ import {
   isDbUnavailableError,
   jsonDatabaseUnavailable,
 } from "../../../lib/dbUnavailableError";
+import { shouldCaptureApiRouteException } from "../../../lib/sentryApiRouteCapture";
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,7 +19,9 @@ export async function GET(req: NextRequest) {
     if (isDbUnavailableError(error)) {
       return jsonDatabaseUnavailable();
     }
-    Sentry.captureException(error);
+    if (shouldCaptureApiRouteException(error)) {
+      Sentry.captureException(error);
+    }
     return NextResponse.json({ error: "Er ging iets mis" }, { status: 500 });
   }
 }
@@ -38,7 +41,9 @@ export async function POST(req: NextRequest) {
     if (isDbUnavailableError(error)) {
       return jsonDatabaseUnavailable();
     }
-    Sentry.captureException(error);
+    if (shouldCaptureApiRouteException(error)) {
+      Sentry.captureException(error);
+    }
     return NextResponse.json({ error: "Er ging iets mis" }, { status: 500 });
   }
 }

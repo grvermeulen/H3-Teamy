@@ -1,5 +1,5 @@
 import type { ErrorEvent, EventHint } from "@sentry/nextjs";
-import { Prisma } from "@prisma/client";
+import { readPrismaKnownRequestCode } from "./prismaKnownRequestCode";
 import { isTransientPostgresConnectError } from "./prismaConnectRetry";
 import { isPrismaSchemaDriftError } from "./prismaSchemaDrift";
 
@@ -20,13 +20,26 @@ const TRANSIENT_PRISMA_KNOWN_CODES = new Set([
 export function isTransientPrismaConnectSentryNoise(error: unknown): boolean {
   if (isTransientPostgresConnectError(error)) return true;
   if (isPrismaSchemaDriftError(error)) return true;
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    TRANSIENT_PRISMA_KNOWN_CODES.has(error.code)
-  );
+  const code = readPrismaKnownRequestCode(error);
+  return code !== undefined && TRANSIENT_PRISMA_KNOWN_CODES.has(code);
+}
+
+function readTransientPrismaCodeFromEvent(
+  event: ErrorEvent,
+): string | undefined {
+  const tagCode = event.tags?.prismaCode;
+  if (typeof tagCode === "string") return tagCode;
+  const extra = event.extra as { prismaCode?: unknown } | undefined;
+  if (typeof extra?.prismaCode === "string") return extra.prismaCode;
+  return undefined;
 }
 
 function isSerializedTransientPrismaException(event: ErrorEvent): boolean {
+  const eventCode = readTransientPrismaCodeFromEvent(event);
+  if (eventCode !== undefined && TRANSIENT_PRISMA_KNOWN_CODES.has(eventCode)) {
+    return true;
+  }
+
   const values = event.exception?.values;
   if (!values?.length) return false;
   for (const value of values) {
@@ -50,8 +63,24 @@ function isSerializedTransientPrismaException(event: ErrorEvent): boolean {
 }
 
 /**
+ * Herkent Sentry-issue-titels die lege transient Prisma-connectieruis groeperen
+ * (JAVASCRIPT-NEXTJS-55/58/59).
+ *
+ * @param title - Sentry issue title (often `PrismaClientKnownRequestError:`).
+ */
+export function isTransientPrismaConnectSentryIssueTitle(
+  title: string,
+): boolean {
+  const normalized = title.trim();
+  return (
+    normalized === "PrismaClientKnownRequestError:" ||
+    normalized === "PrismaClientKnownRequestError: "
+  );
+}
+
+/**
  * Bepaalt of een server-side Sentry-event een transient Prisma/Postgres-connectiefout is
- * (JAVASCRIPT-NEXTJS-58: lege `PrismaClientKnownRequestError`-titel) en niet naar ingest
+ * (JAVASCRIPT-NEXTJS-58/59: lege `PrismaClientKnownRequestError`-titel) en niet naar ingest
  * gestuurd moet worden.
  *
  * @param event - Sentry-foutevent.

@@ -6,6 +6,7 @@ import {
   isDbUnavailableError,
   jsonDatabaseUnavailable,
 } from "../../../lib/dbUnavailableError";
+import { shouldCaptureApiRouteException } from "../../../lib/sentryApiRouteCapture";
 import { FeedbackCreateBodySchema } from "../../../lib/schemas/feedback";
 
 /**
@@ -45,7 +46,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (isDbUnavailableError(err)) {
       return jsonDatabaseUnavailable();
     }
-    Sentry.captureException(err, { tags: { component: "api-feedback-post" } });
+    if (shouldCaptureApiRouteException(err)) {
+      Sentry.captureException(err, {
+        tags: { component: "api-feedback-post" },
+      });
+    }
     return NextResponse.json({ error: "Save failed" }, { status: 500 });
   }
 }
@@ -79,7 +84,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (isDbUnavailableError(err)) {
       return jsonDatabaseUnavailable();
     }
-    Sentry.captureException(err, { tags: { component: "api-feedback-get" } });
+    if (shouldCaptureApiRouteException(err)) {
+      Sentry.captureException(err, { tags: { component: "api-feedback-get" } });
+    }
     return NextResponse.json({ error: "Load failed" }, { status: 500 });
   }
 }
