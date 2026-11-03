@@ -81,8 +81,8 @@ describe("callJevApi", () => {
       status: 401,
       text: async () => "unauthorized",
     });
-    await expect(
-      callJevApi({}, { apiKey: "bad", fetchFn }),
-    ).rejects.toThrow(/401/);
+    await expect(callJevApi({}, { apiKey: "bad", fetchFn })).rejects.toThrow(
+      /401/,
+    );
   });
 });

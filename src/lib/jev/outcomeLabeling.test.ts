@@ -7,9 +7,9 @@ import {
 
 describe("deriveHadProblem", () => {
   it("returns false for manual false alarm", () => {
-    expect(
-      deriveHadProblem({ manual_false_alarm: true, reverted: true }),
-    ).toBe(false);
+    expect(deriveHadProblem({ manual_false_alarm: true, reverted: true })).toBe(
+      false,
+    );
   });
 
   it("returns true for revert evidence", () => {

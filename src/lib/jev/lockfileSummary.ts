@@ -28,7 +28,7 @@ export function summarizeLockfileChanges(
 
   if (filename === "package-lock.json" || filename === "package.json") {
     for (const line of lines) {
-      const pkgMatch = line.match(/^[-+]\s+"([^"]+)":\s*\{/) ;
+      const pkgMatch = line.match(/^[-+]\s+"([^"]+)":\s*\{/);
       if (pkgMatch) {
         changes.push(pkgMatch[1]);
         continue;

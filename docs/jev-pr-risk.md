@@ -6,28 +6,28 @@ Geautomatiseerde, **niet-blokkerende** PR-risico-inschatting met [JEV](https://d
 
 ### Secrets
 
-| Secret | Waar | Verplicht |
-|--------|------|-----------|
-| `JEV_API_KEY` | **Settings → Secrets and variables → Actions** | Ja (anders skip + comment "JEV niet beschikbaar") |
+| Secret        | Waar                                              | Verplicht                                              |
+| ------------- | ------------------------------------------------- | ------------------------------------------------------ |
+| `JEV_API_KEY` | **Settings → Secrets and variables → Actions**    | Ja (anders skip + comment "JEV niet beschikbaar")      |
 | `JEV_API_KEY` | **Settings → Secrets and variables → Dependabot** | Ja voor Dependabot-PRs (die zien geen Actions-secrets) |
 
 Geen secret in logs of commits. Fork-PRs worden overgeslagen.
 
 ### Labels (handmatig)
 
-| Label | Betekenis |
-|-------|-----------|
-| `post-merge-issue` | Bevestigd probleem na merge |
-| `jev:incident` | Zelfde, expliciet voor JEV-evaluatie |
-| `jev:false-alarm` | Geen probleem — override negatieve signalen |
-| `jev:no-issue` | Geen probleem — override |
+| Label              | Betekenis                                   |
+| ------------------ | ------------------------------------------- |
+| `post-merge-issue` | Bevestigd probleem na merge                 |
+| `jev:incident`     | Zelfde, expliciet voor JEV-evaluatie        |
+| `jev:false-alarm`  | Geen probleem — override negatieve signalen |
+| `jev:no-issue`     | Geen probleem — override                    |
 
 ## Workflows
 
-| Workflow | Trigger | Doel |
-|----------|---------|------|
-| `.github/workflows/jev-pr-risk.yml` | `pull_request` → `image` | JEV-call, PR-comment, prediction append |
-| `.github/workflows/jev-outcome-labeling.yml` | Dagelijks 07:00 UTC + `workflow_dispatch` | Outcome labeling + rapport |
+| Workflow                                     | Trigger                                   | Doel                                    |
+| -------------------------------------------- | ----------------------------------------- | --------------------------------------- |
+| `.github/workflows/jev-pr-risk.yml`          | `pull_request` → `image`                  | JEV-call, PR-comment, prediction append |
+| `.github/workflows/jev-outcome-labeling.yml` | Dagelijks 07:00 UTC + `workflow_dispatch` | Outcome labeling + rapport              |
 
 De JEV-job **faalt nooit** de PR (script exit 0). Dependabot auto-merge (`statusCheckRollup: SUCCESS`) blijft werken.
 
@@ -72,30 +72,30 @@ Bij **N < 5** gekoppelde paren: rapport vermeldt dat metrics te klein zijn.
 
 Officiële TypeSafe-tariefkaart voor `jev-1.13.0` ([docs.typesafe.ai/models](https://docs.typesafe.ai/models), gecontroleerd 2026-10-06):
 
-| | Tarief |
-|---|--------|
-| Input | **$0,042 per miljoen tokens** ($42 per miljard) |
-| Output | **gratis** |
+|        | Tarief                                          |
+| ------ | ----------------------------------------------- |
+| Input  | **$0,042 per miljoen tokens** ($42 per miljard) |
+| Output | **gratis**                                      |
 
 De PR-comment toont gesomde tokens en **geschatte** kosten (`kosten ≈ $…`) op basis van deze tarieven. Bij een token-budget-retry worden alle API-calls opgeteld. Als de JEV API zelf een `cost`/`cost_usd` teruggeeft, heeft die voorrang.
 
 Configureerbaar via Actions-secrets of env:
 
-| Variabele | Default |
-|-----------|---------|
-| `JEV_PRICE_INPUT_PER_MTOK` | `0.042` |
-| `JEV_PRICE_OUTPUT_PER_MTOK` | `0` |
+| Variabele                   | Default |
+| --------------------------- | ------- |
+| `JEV_PRICE_INPUT_PER_MTOK`  | `0.042` |
+| `JEV_PRICE_OUTPUT_PER_MTOK` | `0`     |
 
 Typische PR-state: enkele duizenden input tokens (~$0,001–$0,002 per assessment).
 
 ## Code
 
-| Pad | Rol |
-|-----|-----|
-| `src/lib/jev/` | State building, JEV client, comment, dataset, outcomes, report (unit-tested) |
-| `scripts/jev/assess-pr.ts` | CI entry: assess + comment + dataset |
-| `scripts/jev/mark-merged.ts` | Final prediction marker |
-| `scripts/jev/label-outcomes.ts` | Outcome labeling |
-| `scripts/jev/report.ts` | Rapport CLI |
+| Pad                             | Rol                                                                          |
+| ------------------------------- | ---------------------------------------------------------------------------- |
+| `src/lib/jev/`                  | State building, JEV client, comment, dataset, outcomes, report (unit-tested) |
+| `scripts/jev/assess-pr.ts`      | CI entry: assess + comment + dataset                                         |
+| `scripts/jev/mark-merged.ts`    | Final prediction marker                                                      |
+| `scripts/jev/label-outcomes.ts` | Outcome labeling                                                             |
+| `scripts/jev/report.ts`         | Rapport CLI                                                                  |
 
 Zie [TypeSafe API docs](https://docs.typesafe.ai/api) voor vraagtypes (`choice`, `noul`, `score`).

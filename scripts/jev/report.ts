@@ -7,10 +7,15 @@ import { join } from "node:path";
 import { parseJsonl } from "@/lib/jev/dataset";
 import { tryRunGit } from "@/lib/jev/gitExec";
 import { computeReportMetrics, formatReportMarkdown } from "@/lib/jev/report";
-import { JEV_DATA_BRANCH, OUTCOMES_FILE, PREDICTIONS_FILE } from "@/lib/jev/types";
+import {
+  JEV_DATA_BRANCH,
+  OUTCOMES_FILE,
+  PREDICTIONS_FILE,
+} from "@/lib/jev/types";
 import type { OutcomeRecord, PredictionRecord } from "@/lib/jev/types";
 
-const DATA_DIR = process.env.JEV_DATA_DIR ?? join(process.cwd(), ".jev-report-data");
+const DATA_DIR =
+  process.env.JEV_DATA_DIR ?? join(process.cwd(), ".jev-report-data");
 const SUMMARY_PATH = process.env.GITHUB_STEP_SUMMARY;
 
 function main(): void {
@@ -41,16 +46,15 @@ function fetchDataset(dir: string): void {
   const repoRoot = process.cwd();
   const fetched = tryRunGit(repoRoot, ["fetch", "origin", JEV_DATA_BRANCH]);
   if (fetched === null) {
-    console.warn(`Could not fetch ${JEV_DATA_BRANCH}; reporting on empty dataset.`);
+    console.warn(
+      `Could not fetch ${JEV_DATA_BRANCH}; reporting on empty dataset.`,
+    );
     return;
   }
 
   for (const file of [PREDICTIONS_FILE, OUTCOMES_FILE]) {
     const content =
-      tryRunGit(repoRoot, [
-        "show",
-        `origin/${JEV_DATA_BRANCH}:${file}`,
-      ]) ?? "";
+      tryRunGit(repoRoot, ["show", `origin/${JEV_DATA_BRANCH}:${file}`]) ?? "";
     writeFileSync(join(dir, file), content, "utf8");
   }
 }

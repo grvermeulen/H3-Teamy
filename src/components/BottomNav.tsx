@@ -18,6 +18,7 @@ export default function BottomNav() {
   const icons = {
     calendar: <span aria-hidden="true">◫</span>,
     attendance: <span aria-hidden="true">✓</span>,
+    speelboek: <span aria-hidden="true">▣</span>,
     trainer: <span aria-hidden="true">＋</span>,
     admin: <span aria-hidden="true">◇</span>,
     profile: <span aria-hidden="true">○</span>,
@@ -42,6 +43,14 @@ export default function BottomNav() {
           >
             {icons.attendance}
             <small>Opkomst</small>
+          </Link>
+          <Link
+            href="/speelboek"
+            className={isActive("/speelboek") ? "navActive" : undefined}
+            aria-current={isActive("/speelboek") ? "page" : undefined}
+          >
+            {icons.speelboek}
+            <small>Speelboek</small>
           </Link>
           {loggedIn && isTrainer ? (
             <Link

@@ -20,10 +20,8 @@ export interface OutcomeSignalInput {
   vercelDeploymentUrl?: string;
 }
 
-const FIX_TITLE_RE =
-  /\b(fix|hotfix|revert|patch|rollback|regression)\b/i;
-const FIX_BRANCH_RE =
-  /\b(fix|hotfix|revert|patch)\b/i;
+const FIX_TITLE_RE = /\b(fix|hotfix|revert|patch|rollback|regression)\b/i;
+const FIX_BRANCH_RE = /\b(fix|hotfix|revert|patch)\b/i;
 
 /**
  * Classifies post-merge outcome signals into a labeled record.
@@ -110,11 +108,11 @@ export function deriveHadProblem(evidence: OutcomeEvidence): boolean {
   }
   return Boolean(
     evidence.reverted ||
-      evidence.follow_up_fix_pr ||
-      evidence.failed_checks_on_merge ||
-      evidence.vercel_production_failure ||
-      evidence.labeled_post_merge_issue ||
-      evidence.labeled_jev_incident,
+    evidence.follow_up_fix_pr ||
+    evidence.failed_checks_on_merge ||
+    evidence.vercel_production_failure ||
+    evidence.labeled_post_merge_issue ||
+    evidence.labeled_jev_incident,
   );
 }
 

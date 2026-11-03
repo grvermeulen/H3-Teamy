@@ -33,9 +33,10 @@ export function formatJevPrComment(
   const tests = response.answers.test_coverage_adequate;
 
   const riskLevel = getChoice(risk) as RiskLevel | undefined;
-  const riskProb = risk && risk.type === "choice"
-    ? formatTopProbability(risk.probabilities, risk.choice)
-    : "—";
+  const riskProb =
+    risk && risk.type === "choice"
+      ? formatTopProbability(risk.probabilities, risk.choice)
+      : "—";
 
   const flags = [
     formatNoulFlagLine("Beveiligingsrisico", security),
@@ -128,7 +129,9 @@ function buildWatchlist(
     items.push("Overweeg gerichte tests voor gewijzigde businesslogica.");
   }
   if (severity?.type === "score" && severity.score >= 2) {
-    items.push("Potentieel zware impact bij incident — extra review aanbevolen.");
+    items.push(
+      "Potentieel zware impact bij incident — extra review aanbevolen.",
+    );
   }
   if (items.length === 0) {
     items.push("Geen bijzondere aandachtspunten uit JEV-signalen.");

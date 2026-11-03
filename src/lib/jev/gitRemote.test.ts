@@ -18,9 +18,9 @@ describe("authenticatedRemoteUrl", () => {
   });
 
   it("converts git@github.com SSH URLs", () => {
-    expect(
-      authenticatedRemoteUrl("git@github.com:owner/repo.git", "tok"),
-    ).toBe("https://x-access-token:tok@github.com/owner/repo.git");
+    expect(authenticatedRemoteUrl("git@github.com:owner/repo.git", "tok")).toBe(
+      "https://x-access-token:tok@github.com/owner/repo.git",
+    );
   });
 
   it("returns unchanged URL without token", () => {

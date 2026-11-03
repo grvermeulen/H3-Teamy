@@ -1550,3 +1550,323 @@ select.ui-select[aria-invalid="true"] {
     opacity: 0.45;
   }
 }
+
+/* ───────────── Speelboek ───────────── */
+.speelboek-section {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 18px 0 8px;
+}
+.speelboek-section-note {
+  color: var(--accent);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  margin-left: 4px;
+}
+.speelboek-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 0 14px;
+}
+.speelboek-chips::-webkit-scrollbar {
+  display: none;
+}
+.speelboek-chip {
+  flex: none;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.speelboek-chip[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06121a;
+  font-weight: 600;
+}
+.speelboek-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.speelboek-drill-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  color: inherit;
+}
+.speelboek-drill-card:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.speelboek-thumb {
+  flex: none;
+  width: 64px;
+  height: 50px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.speelboek-thumb svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.speelboek-badge-new {
+  background: color-mix(in oklab, var(--accent) 18%, transparent);
+  color: var(--accent);
+  border: 1px solid color-mix(in oklab, var(--accent) 35%, transparent);
+}
+.speelboek-pool {
+  border-radius: 10px;
+  background: rgba(0, 212, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 6px;
+  margin-bottom: 8px;
+}
+.speelboek-pool svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.speelboek-legend {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0 2px 12px;
+  padding: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.speelboek-legend i {
+  display: inline-block;
+  vertical-align: -1px;
+  margin-right: 4px;
+}
+.speelboek-legend i[data-cap] {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+}
+.speelboek-legend i[data-cap="white"] {
+  background: #f3f6fb;
+}
+.speelboek-legend i[data-cap="blue"] {
+  background: #2563eb;
+}
+.speelboek-legend i[data-cap="red"] {
+  background: #dc2626;
+}
+.speelboek-legend i[data-cap="ball"] {
+  background: #ffd60a;
+}
+.speelboek-legend i[data-line] {
+  width: 16px;
+  height: 0;
+  border-top: 2px solid var(--text);
+  vertical-align: 3px;
+}
+.speelboek-legend i[data-line="pass"] {
+  border-top-style: dashed;
+  border-color: var(--accent);
+}
+.speelboek-stepper {
+  display: grid;
+  grid-template-columns: var(--hit) minmax(0, 1fr) var(--hit);
+  align-items: center;
+  gap: var(--space-2);
+  margin: 2px 0 10px;
+}
+.speelboek-stepper-nav {
+  width: var(--hit);
+  height: var(--hit);
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.speelboek-stepper-nav:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.speelboek-stepper-nav:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.speelboek-dots {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 6px;
+}
+.speelboek-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  transition: width 200ms ease;
+}
+.speelboek-dots i[data-on="true"] {
+  background: var(--accent);
+  width: 18px;
+  border-radius: var(--radius-pill);
+}
+.speelboek-roles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.speelboek-roles li[data-mine="true"] > button {
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  border-left-color: var(--accent);
+}
+.speelboek-roles button {
+  display: flex;
+  width: 100%;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 6px 8px;
+  border: 0;
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+.speelboek-roles button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.speelboek-cap {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #f3f6fb;
+  color: #0b0f14;
+  font-weight: 700;
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+}
+.speelboek-cap[data-cap="blue"] {
+  background: #2563eb;
+  color: #ffffff;
+}
+.speelboek-cap[data-cap="red"] {
+  background: #dc2626;
+  color: #ffffff;
+}
+.speelboek-role-pos {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .speelboek-pool svg * {
+    transition: none !important;
+  }
+}
+
+/* Speelboek – editor, programma, vragen */
+.speelboek-editor-canvas {
+  position: relative;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.speelboek-editor-canvas .speelboek-editor-static {
+  display: block;
+  width: 100%;
+}
+.speelboek-editor-canvas .speelboek-editor-static * {
+  transition: none !important;
+}
+.speelboek-editor-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+.speelboek-editor-overlay[data-tool="MOVE"],
+.speelboek-editor-overlay[data-tool="PASS"],
+.speelboek-editor-overlay[data-tool="SHOT"] {
+  cursor: crosshair;
+}
+.speelboek-editor-overlay[data-tool="DELETE"] {
+  cursor: not-allowed;
+}
+.speelboek-editor-overlay[data-tool="BALL"] {
+  cursor: pointer;
+}
+.speelboek-warnings {
+  border-color: color-mix(in oklab, var(--accent) 45%, transparent);
+}
+.speelboek-photo {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.25);
+  margin-bottom: 8px;
+}
+.speelboek-program-card {
+  border-left: 3px solid var(--accent);
+}
+.speelboek-program-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.speelboek-minutes {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.speelboek-minutes input {
+  width: 52px;
+  min-height: 36px;
+  padding: 4px 6px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: right;
+}
+.speelboek-questions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.speelboek-questions li[data-resolved="true"] {
+  opacity: 0.6;
+}

@@ -117,15 +117,11 @@ export async function upsertJevComment(
 ): Promise<void> {
   const existing = await findJevComment(client, prNumber, marker);
   if (existing) {
-    const res = await ghFetch(
-      client,
-      `/issues/comments/${existing.id}`,
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body }),
-      },
-    );
+    const res = await ghFetch(client, `/issues/comments/${existing.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ body }),
+    });
     if (!res.ok) {
       throw new Error(`GitHub update comment ${res.status}`);
     }

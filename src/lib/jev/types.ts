@@ -144,7 +144,11 @@ export interface ReportMetrics {
   };
   high_precision?: number;
   high_recall?: number;
-  calibration: Array<{ predicted: RiskLevel; actual_problem_rate: number; n: number }>;
+  calibration: Array<{
+    predicted: RiskLevel;
+    actual_problem_rate: number;
+    n: number;
+  }>;
   flag_hit_rates: Record<string, { hits: number; total: number; rate: number }>;
   dependabot_split: {
     dependabot: { predictions: number; problems: number };

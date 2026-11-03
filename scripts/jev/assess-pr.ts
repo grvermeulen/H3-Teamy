@@ -11,26 +11,19 @@ import {
   estimateStatePlusLongestQuestion,
   MAX_STATE_TOKENS,
 } from "@/lib/jev/stateBudget";
-import { formatJevPrComment, formatJevUnavailableComment } from "@/lib/jev/formatComment";
+import {
+  formatJevPrComment,
+  formatJevUnavailableComment,
+} from "@/lib/jev/formatComment";
 import { callJevApi, isMaxTokensExceededError } from "@/lib/jev/jevClient";
 import type { JevResponse } from "@/lib/jev/types";
-import {
-  aggregateJevAssessment,
-  buildApiCallRecords,
-} from "@/lib/jev/usage";
+import { aggregateJevAssessment, buildApiCallRecords } from "@/lib/jev/usage";
 import { buildJevRequest } from "@/lib/jev/questions";
 import { matchSensitivePaths } from "@/lib/jev/sensitivePaths";
 import { JEV_COMMENT_MARKER } from "@/lib/jev/types";
 import type { PredictionRecord } from "@/lib/jev/types";
-import {
-  commitPrediction,
-  ensureDatasetWorktree,
-} from "./datasetStore";
-import {
-  fetchPrDiff,
-  listPrFiles,
-  upsertJevComment,
-} from "./github";
+import { commitPrediction, ensureDatasetWorktree } from "./datasetStore";
+import { fetchPrDiff, listPrFiles, upsertJevComment } from "./github";
 
 const WORKTREE_DIR = join(process.cwd(), ".jev-data-worktree");
 
@@ -47,7 +40,9 @@ async function main(): Promise<void> {
   }
 
   if (!token || !repo || !prNumber) {
-    console.warn("Missing GITHUB_TOKEN, GITHUB_REPOSITORY, or PR_NUMBER — skip.");
+    console.warn(
+      "Missing GITHUB_TOKEN, GITHUB_REPOSITORY, or PR_NUMBER — skip.",
+    );
     return;
   }
 
@@ -67,9 +62,7 @@ async function main(): Promise<void> {
     const pr = await fetchPr(client, prNumber);
     const files = await listPrFiles(client, prNumber);
     const diff = await fetchPrDiff(client, prNumber);
-    const labels = (pr.labels ?? []).map(
-      (l: { name: string }) => l.name,
-    );
+    const labels = (pr.labels ?? []).map((l: { name: string }) => l.name);
 
     const stateInput = {
       title: pr.title,

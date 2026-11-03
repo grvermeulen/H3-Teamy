@@ -24,6 +24,32 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.7.0": {
+    title: "Het Speelboek",
+    steps: [
+      {
+        title: "Tactiek en techniek op je telefoon",
+        body: "Nieuw tabblad Speelboek: oefeningen van H3 met een bovenaanzicht van het bad, stap voor stap. Aanval in wit, verdediging in blauw, keeper in rood.",
+        target: 'a[href="/speelboek"]',
+      },
+      {
+        title: "Jouw rol per stap",
+        body: "Tik op je positie en zie bij elke stap wat jíj doet. Je positie wordt onthouden. Met 'Speel animatie' zie je de hele oefening in beweging.",
+      },
+      {
+        title: "Eerste oefeningen",
+        body: "De tip-in (idee van Henry via de ideeënbus), de 4-2 man-meer en de zone 5 tegen 6 als tegenhanger. Mis je een oefening? Stuur 'm in via de feedbackknop.",
+      },
+      {
+        title: "Snap je 'm? Zeg het",
+        body: "Onder elke oefening kun je 'Ik snap 'm' aanvinken of een vraag aan de trainer stellen. Staat er een training gepland, dan zie je bovenaan het speelboek wat we die avond oefenen.",
+      },
+      {
+        title: "Voor trainers: zelf oefeningen maken",
+        body: "Bouw een oefening stap voor stap in de editor, of beschrijf, spreek in of fotografeer het whiteboard en laat de AI een opzet maken. Koppel oefeningen aan een training via de opkomstpagina en deel het programma in de WhatsApp-groep.",
+      },
+    ],
+  },
   "0.6.0": {
     title: "GTA H3 komt tot leven",
     steps: [

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma as prismaClient } from "../../../../lib/db";
 import { listEventRsvps, getUserProfile } from "../../../../lib/kv";
+import { resolvePrismaDatasourceUrl } from "../../../../lib/prismaDatasourceUrl";
 
 export async function GET(req: NextRequest) {
   const cookie = req.cookies.get("anon_id")?.value || null;
-  const hasDb = Boolean(
-    process.env.PRISMA_DATABASE_URL || process.env.DATABASE_URL,
-  );
+  const datasourceUrl = resolvePrismaDatasourceUrl();
+  const hasDb = Boolean(datasourceUrl);
   let dbPing: string | null = null;
   let dbError: Record<string, unknown> | null = null;
   let counts: { users?: number; rsvps?: number } = {};
@@ -36,9 +36,8 @@ export async function GET(req: NextRequest) {
     };
   }
   const dbHostname = (() => {
-    const u = process.env.PRISMA_DATABASE_URL || process.env.DATABASE_URL || "";
     try {
-      return u ? new URL(u).hostname : null;
+      return datasourceUrl ? new URL(datasourceUrl).hostname : null;
     } catch {
       return "unparseable";
     }

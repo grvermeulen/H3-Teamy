@@ -34,6 +34,23 @@ describe("BottomNav", () => {
     );
   });
 
+  it("shows the Speelboek tab to everyone and marks it active on drill pages", () => {
+    vi.mocked(usePathname).mockReturnValue("/speelboek/tip-in");
+    vi.mocked(useSession).mockReturnValue({
+      loading: false,
+      loggedIn: false,
+      isTrainer: false,
+      isAdmin: false,
+      refresh: vi.fn(),
+    });
+
+    render(<BottomNav />);
+
+    const link = screen.getByRole("link", { name: "Speelboek" });
+    expect(link).toHaveAttribute("href", "/speelboek");
+    expect(link).toHaveAttribute("aria-current", "page");
+  });
+
   it("links authenticated users to their profile", () => {
     vi.mocked(useSession).mockReturnValue({
       loading: false,

@@ -7,7 +7,10 @@ export interface SensitivePathRule {
 /** Paths that warrant extra scrutiny in H3-Teamy PR risk assessment. */
 export const SENSITIVE_PATH_RULES: SensitivePathRule[] = [
   { pattern: /^src\/app\/api\/auth\//, label: "auth API" },
-  { pattern: /^src\/lib\/services\/passkeyService\.ts$/, label: "passkeys/WebAuthn" },
+  {
+    pattern: /^src\/lib\/services\/passkeyService\.ts$/,
+    label: "passkeys/WebAuthn",
+  },
   { pattern: /^src\/lib\/webAuthn/, label: "WebAuthn config" },
   { pattern: /^src\/lib\/passwordReset/, label: "password reset" },
   { pattern: /^src\/lib\/authOptions\.ts$/, label: "NextAuth options" },

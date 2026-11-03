@@ -8,6 +8,7 @@ import {
   isTransientPostgresConnectError,
   withPgConnectRetry,
 } from "./prismaConnectRetry";
+import { isPreviewSeedTrainerEmail } from "./roleBootstrapIds";
 import {
   getBootstrapAdminUserIds,
   getBootstrapTrainerUserIds,
@@ -17,8 +18,8 @@ import { displayName } from "./userUtils";
 
 /**
  * Checks if the current request is from a Trainer or Admin.
- * Verifies against env bootstrap user IDs (`ADMIN_USER_IDS`, `TRAINER_USER_IDS`)
- * and KV roles keyed by user ID.
+ * Verifies against env bootstrap user IDs (`ADMIN_USER_IDS`, `TRAINER_USER_IDS`),
+ * KV roles keyed by user ID, and the preview seed login `trainer@example.test`.
  *
  * @param req - The incoming Next.js request.
  * @returns An object containing `isTrainer` boolean and the user's identity `me`.
@@ -51,6 +52,7 @@ export async function isTrainer(
     const full = displayName(user ?? {});
     const envAdmin = getBootstrapAdminUserIds().has(userId);
     const envTrainer = getBootstrapTrainerUserIds().has(userId) || envAdmin;
+    const seedTrainer = isPreviewSeedTrainerEmail(user?.email);
     const roles: UserRoles = await getUserRoles(userId).catch(
       (err: unknown) => {
         Sentry.captureException(err, {
@@ -62,7 +64,7 @@ export async function isTrainer(
     );
     const byRole = Boolean(roles?.trainer || roles?.admin);
     return {
-      isTrainer: Boolean(envAdmin || envTrainer || byRole),
+      isTrainer: Boolean(envAdmin || envTrainer || byRole || seedTrainer),
       me: { id: userId, name: full },
     };
   } catch (err: unknown) {
@@ -78,7 +80,8 @@ export async function isTrainer(
 
 /**
  * Checks if the current request is from an Admin.
- * Verifies against env bootstrap user IDs (`ADMIN_USER_IDS`) and KV roles.
+ * Verifies against env bootstrap user IDs (`ADMIN_USER_IDS`), KV roles, and
+ * the preview seed login `trainer@example.test`.
  *
  * @param req - The incoming Next.js request.
  * @returns An object containing `isAdmin` boolean and the user's identity `me`.
@@ -109,6 +112,7 @@ export async function isAdminUser(
     );
     const full = displayName(user ?? {});
     const envAdmin = getBootstrapAdminUserIds().has(userId);
+    const seedTrainer = isPreviewSeedTrainerEmail(user?.email);
     const roles: UserRoles = await getUserRoles(userId).catch(
       (err: unknown) => {
         Sentry.captureException(err, {
@@ -120,7 +124,7 @@ export async function isAdminUser(
     );
     const byRole = Boolean(roles?.admin);
     return {
-      isAdmin: Boolean(envAdmin || byRole),
+      isAdmin: Boolean(envAdmin || byRole || seedTrainer),
       me: { id: userId, name: full },
     };
   } catch (err: unknown) {

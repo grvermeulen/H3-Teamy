@@ -35,4 +35,41 @@ test.describe("Read-only deploy smoke", () => {
       page.getByRole("heading", { level: 1, name: "Inloggen" }),
     ).toBeVisible();
   });
+
+  test("speelboek-bibliotheek toont oefeningen", async ({ page }) => {
+    await page.goto("/speelboek", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Speelboek" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("searchbox", { name: "Zoek in het speelboek" }),
+    ).toBeVisible();
+    await expect(
+      page.locator('a[href="/speelboek/tip-in"]').first(),
+    ).toBeVisible();
+    await expect(
+      page.locator('a[href="/speelboek/4-2-man-meer"]').first(),
+    ).toBeVisible();
+  });
+
+  test("speelboek tip-in heeft stepper en rollen", async ({ page }) => {
+    await page.goto("/speelboek/tip-in", { waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Tip-in" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Stap 1 van 3 · Actie voor de goal"),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Vorige stap" }),
+    ).toBeDisabled();
+    await page.getByRole("button", { name: "Volgende stap" }).click();
+    await expect(
+      page.getByText("Stap 2 van 3 · Bal hoog en droog"),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Speel animatie/ }),
+    ).toBeVisible();
+    await expect(page.getByText(/Rol per positie in deze stap/)).toBeVisible();
+  });
 });

@@ -42,10 +42,7 @@ describe("aggregateJevAssessment", () => {
 
 describe("buildApiCallRecords", () => {
   it("stores one record per API call", () => {
-    const records = buildApiCallRecords([
-      response(100, 1),
-      response(200, 2),
-    ]);
+    const records = buildApiCallRecords([response(100, 1), response(200, 2)]);
     expect(records).toHaveLength(2);
     expect(records[0].input_tokens).toBe(100);
     expect(records[1].model).toBe("jev-1.13.0");
@@ -102,13 +99,15 @@ describe("formatting", () => {
     expect(formatNlTokenCount(29_908)).toBe("29.908");
     expect(formatNlCostUsd(0.001256136)).toMatch(/\$0,001/);
     expect(formatNlCostUsd(0.001256136)).not.toContain("US$");
-    expect(formatAssessmentUsageLine({
-      input_tokens: 29_908,
-      output_tokens: 135,
-      cost_usd: 0.001256136,
-      cost_is_estimate: true,
-      model: "jev-1.13.0",
-      api_calls: 1,
-    })).toContain("Tokens: 29.908 in / 135 uit");
+    expect(
+      formatAssessmentUsageLine({
+        input_tokens: 29_908,
+        output_tokens: 135,
+        cost_usd: 0.001256136,
+        cost_is_estimate: true,
+        model: "jev-1.13.0",
+        api_calls: 1,
+      }),
+    ).toContain("Tokens: 29.908 in / 135 uit");
   });
 });

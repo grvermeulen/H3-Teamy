@@ -60,5 +60,7 @@ export function estimateRequestTokens(state: unknown): number {
  * @param state - Built JEV state object.
  */
 export function isStateWithinBudget(state: unknown): boolean {
-  return estimateStatePlusLongestQuestion(state) <= JEV_STATE_QUESTION_TOKEN_LIMIT;
+  return (
+    estimateStatePlusLongestQuestion(state) <= JEV_STATE_QUESTION_TOKEN_LIMIT
+  );
 }

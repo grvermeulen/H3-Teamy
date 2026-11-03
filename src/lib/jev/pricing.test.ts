@@ -56,7 +56,9 @@ describe("extractApiCostUsd", () => {
 
   it("reads nested usage.cost", () => {
     expect(
-      extractApiCostUsd({ usage: { input_tokens: 1, output_tokens: 1, cost: 0.1 } }),
+      extractApiCostUsd({
+        usage: { input_tokens: 1, output_tokens: 1, cost: 0.1 },
+      }),
     ).toBe(0.1);
   });
 });

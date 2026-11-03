@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { formatJevPrComment, formatJevUnavailableComment } from "./formatComment";
+import {
+  formatJevPrComment,
+  formatJevUnavailableComment,
+} from "./formatComment";
 import { aggregateJevAssessment } from "./usage";
 import { JEV_COMMENT_MARKER } from "./types";
 import type { JevResponse } from "./types";

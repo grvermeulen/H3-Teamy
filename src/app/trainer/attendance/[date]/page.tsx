@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { AppBar, Button, showToast } from "../../../../components/ui";
+import TrainingProgramEditor from "../../../../components/speelboek/TrainingProgramEditor";
 
 type User = { id: string; name: string };
 
@@ -207,6 +208,7 @@ export default function SessionChecklist() {
             <div className="muted">Geen leden gevonden.</div>
           ) : null}
         </div>
+        <TrainingProgramEditor date={date} />
       </div>
     </main>
   );

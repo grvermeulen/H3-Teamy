@@ -1,8 +1,4 @@
-import {
-  JEV_DATA_BRANCH,
-  OUTCOMES_FILE,
-  PREDICTIONS_FILE,
-} from "./types";
+import { JEV_DATA_BRANCH, OUTCOMES_FILE, PREDICTIONS_FILE } from "./types";
 import type { OutcomeRecord, PredictionRecord } from "./types";
 
 /**

@@ -51,7 +51,8 @@ export function formatSeverityAnswer(answer: JevScoreAnswer): string {
     indices[0],
     Math.min(indices[indices.length - 1], rounded),
   );
-  const english = answer.legend[String(clamped)] ?? answer.legend[String(indices[0])];
+  const english =
+    answer.legend[String(clamped)] ?? answer.legend[String(indices[0])];
   const dutch = SEVERITY_NL[english] ?? english;
 
   return `**${dutch}** (score ${answer.score.toFixed(2)}, vertrouwen ${(answer.confidence * 100).toFixed(0)}%)`;

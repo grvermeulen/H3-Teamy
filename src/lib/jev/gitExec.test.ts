@@ -11,11 +11,11 @@ describe("runGit", () => {
     const mock = vi.fn().mockReturnValue("ok");
     gitExecutor.execFile = mock as typeof execFileSync;
     runGit("/repo", ["status", "--porcelain"]);
-    expect(mock).toHaveBeenCalledWith(
-      "git",
-      ["status", "--porcelain"],
-      { cwd: "/repo", encoding: "utf8", stdio: "pipe" },
-    );
+    expect(mock).toHaveBeenCalledWith("git", ["status", "--porcelain"], {
+      cwd: "/repo",
+      encoding: "utf8",
+      stdio: "pipe",
+    });
   });
 });
 

@@ -39,7 +39,10 @@ function worktreeList(repoRoot: string): string {
  * @param repoRoot - Main repository checkout path.
  * @param worktreeDir - Candidate worktree path.
  */
-export function cleanupWorktreeDir(repoRoot: string, worktreeDir: string): void {
+export function cleanupWorktreeDir(
+  repoRoot: string,
+  worktreeDir: string,
+): void {
   const dirExists = existsSync(worktreeDir);
   const list = worktreeList(repoRoot);
 
@@ -105,7 +108,12 @@ function initOrphanBranch(repoRoot: string, worktreeDir: string): void {
   runGit(tempDir, ["checkout", "--orphan", JEV_DATA_BRANCH]);
   runGit(tempDir, ["add", "-A"]);
   gitActorCommit(tempDir, `jev: init ${JEV_DATA_BRANCH} dataset branch`);
-  runGit(tempDir, ["remote", "add", "origin", resolveAuthenticatedRemote(repoRoot)]);
+  runGit(tempDir, [
+    "remote",
+    "add",
+    "origin",
+    resolveAuthenticatedRemote(repoRoot),
+  ]);
   runGit(tempDir, ["push", "-u", "origin", JEV_DATA_BRANCH]);
 
   rmSync(tempDir, { recursive: true, force: true });
@@ -171,14 +179,19 @@ export function commitPrediction(
   record: PredictionRecord,
   message: string,
 ): void {
-  pushWithRetry(repoRoot, worktreeDir, () => {
-    const predictions = readPredictions(worktreeDir);
-    writeFileSync(
-      join(worktreeDir, PREDICTIONS_FILE),
-      serializeJsonl(upsertPrediction(predictions, record)),
-      "utf8",
-    );
-  }, message);
+  pushWithRetry(
+    repoRoot,
+    worktreeDir,
+    () => {
+      const predictions = readPredictions(worktreeDir);
+      writeFileSync(
+        join(worktreeDir, PREDICTIONS_FILE),
+        serializeJsonl(upsertPrediction(predictions, record)),
+        "utf8",
+      );
+    },
+    message,
+  );
 }
 
 /**
@@ -194,17 +207,22 @@ export function commitOutcomes(
   records: OutcomeRecord[],
   message: string,
 ): void {
-  pushWithRetry(repoRoot, worktreeDir, () => {
-    let outcomes = readOutcomes(worktreeDir);
-    for (const record of records) {
-      outcomes = upsertOutcome(outcomes, record);
-    }
-    writeFileSync(
-      join(worktreeDir, OUTCOMES_FILE),
-      serializeJsonl(outcomes),
-      "utf8",
-    );
-  }, message);
+  pushWithRetry(
+    repoRoot,
+    worktreeDir,
+    () => {
+      let outcomes = readOutcomes(worktreeDir);
+      for (const record of records) {
+        outcomes = upsertOutcome(outcomes, record);
+      }
+      writeFileSync(
+        join(worktreeDir, OUTCOMES_FILE),
+        serializeJsonl(outcomes),
+        "utf8",
+      );
+    },
+    message,
+  );
 }
 
 /**
@@ -227,9 +245,7 @@ export function commitMergeMark(
       const predictions = readPredictions(worktreeDir);
       writeFileSync(
         join(worktreeDir, PREDICTIONS_FILE),
-        serializeJsonl(
-          markFinalBeforeMerge(predictions, prNumber, mergedAt),
-        ),
+        serializeJsonl(markFinalBeforeMerge(predictions, prNumber, mergedAt)),
         "utf8",
       );
     },

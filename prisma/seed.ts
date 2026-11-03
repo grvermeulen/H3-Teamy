@@ -13,6 +13,7 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import ical from "ical";
+import IORedis from "ioredis";
 
 /**
  * Predictable login for the trainer account so anyone can sign into preview.
@@ -20,9 +21,11 @@ import ical from "ical";
  * Only ever runs against non-production envs (see `assertNonProd`).
  */
 const TRAINER_PASSWORD = process.env.SEED_TRAINER_PASSWORD || "preview123";
+const TRAINER_EMAIL = "trainer@example.test";
+const TRAINER_ROLES = { admin: true, trainer: true, player: true };
 
 const USERS = [
-  { firstName: "Test", lastName: "Trainer", email: "trainer@example.test" },
+  { firstName: "Test", lastName: "Trainer", email: TRAINER_EMAIL },
   { firstName: "Alex", lastName: "Aandracht", email: "alex@example.test" },
   { firstName: "Bram", lastName: "Bal", email: "bram@example.test" },
   { firstName: "Cas", lastName: "Coach", email: "cas@example.test" },
@@ -195,7 +198,7 @@ async function fetchSportlinkEvents(): Promise<SeedEvent[]> {
  * Distribution roughly: 60% yes, 20% maybe, 20% no — trainer always yes.
  */
 function rsvpFor(userEmail: string, eventId: string): "yes" | "no" | "maybe" {
-  if (userEmail === "trainer@example.test") return "yes";
+  if (userEmail === TRAINER_EMAIL) return "yes";
   let h = 0;
   const key = `${userEmail}|${eventId}`;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0;
@@ -203,6 +206,47 @@ function rsvpFor(userEmail: string, eventId: string): "yes" | "no" | "maybe" {
   if (bucket < 60) return "yes";
   if (bucket < 80) return "maybe";
   return "no";
+}
+
+/**
+ * Overwrites `roles:{userId}` so a previous player-only cache does not hide
+ * the seed trainer after a re-seed.
+ */
+async function writeTrainerRolesToCache(userId: string): Promise<void> {
+  const payload = JSON.stringify(TRAINER_ROLES);
+  const key = `roles:${userId}`;
+  const redisUrl = process.env.PREVIEW_REDIS_URL || process.env.REDIS_URL;
+  if (redisUrl) {
+    try {
+      const redis = new IORedis(redisUrl, {
+        maxRetriesPerRequest: 1,
+        lazyConnect: true,
+      });
+      await redis.connect();
+      await redis.set(key, payload);
+      await redis.quit();
+    } catch (err) {
+      console.warn(
+        `Redis role write skipped (${(err as Error).message}); Postgres UserRole is source of truth.`,
+      );
+    }
+  }
+  const kvUrl =
+    process.env.PREVIEW_KV_REST_API_URL || process.env.KV_REST_API_URL;
+  const kvToken =
+    process.env.PREVIEW_KV_REST_API_TOKEN || process.env.KV_REST_API_TOKEN;
+  if (!kvUrl || !kvToken) return;
+  try {
+    await fetch(`${kvUrl}/set/${encodeURIComponent(key)}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${kvToken}` },
+      body: payload,
+    });
+  } catch (err) {
+    console.warn(
+      `KV REST role write skipped (${(err as Error).message}); Postgres UserRole is source of truth.`,
+    );
+  }
 }
 
 async function main() {
@@ -223,8 +267,7 @@ async function main() {
     const trainerHash = await bcrypt.hash(TRAINER_PASSWORD, 10);
     const created = [] as { id: string; email: string }[];
     for (const u of USERS) {
-      const passwordHash =
-        u.email === "trainer@example.test" ? trainerHash : null;
+      const passwordHash = u.email === TRAINER_EMAIL ? trainerHash : null;
       const row = await prisma.user.upsert({
         where: { email: u.email },
         update: {
@@ -237,8 +280,25 @@ async function main() {
       created.push({ id: row.id, email: row.email ?? "" });
     }
     console.log(
-      `Upserted ${created.length} users. Login: trainer@example.test / ${TRAINER_PASSWORD}`,
+      `Upserted ${created.length} users. Login: ${TRAINER_EMAIL} (password not logged).`,
     );
+
+    const trainer = created.find((u) => u.email === TRAINER_EMAIL);
+    if (trainer) {
+      try {
+        await prisma.userRole.upsert({
+          where: { userId: trainer.id },
+          create: { userId: trainer.id, ...TRAINER_ROLES },
+          update: TRAINER_ROLES,
+        });
+      } catch (err) {
+        console.warn(
+          `UserRole upsert skipped (${(err as Error).message}); run migrations, then re-seed.`,
+        );
+      }
+      await writeTrainerRolesToCache(trainer.id);
+      console.log(`Granted trainer+admin roles to ${TRAINER_EMAIL}`);
+    }
 
     const today = toYMD(new Date());
     const trainingDates = recentTrainingDates();

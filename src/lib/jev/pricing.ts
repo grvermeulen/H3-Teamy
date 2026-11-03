@@ -50,10 +50,8 @@ export function estimateJevCostUsd(
   pricing?: JevPricingConfig,
 ): number {
   const rates = pricing ?? getJevPricingConfig();
-  const inputCost =
-    (usage.input_tokens / 1_000_000) * rates.inputPerMtok;
-  const outputCost =
-    (usage.output_tokens / 1_000_000) * rates.outputPerMtok;
+  const inputCost = (usage.input_tokens / 1_000_000) * rates.inputPerMtok;
+  const outputCost = (usage.output_tokens / 1_000_000) * rates.outputPerMtok;
   return inputCost + outputCost;
 }
 

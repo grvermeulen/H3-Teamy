@@ -4,7 +4,12 @@ import {
   getJevPricingConfig,
   type JevPricingConfig,
 } from "./pricing";
-import type { JevApiCallRecord, JevResponse, JevUsage, PredictionRecord } from "./types";
+import type {
+  JevApiCallRecord,
+  JevResponse,
+  JevUsage,
+  PredictionRecord,
+} from "./types";
 
 export interface AssessmentUsage {
   input_tokens: number;
@@ -39,8 +44,7 @@ export function aggregateJevAssessment(
     inputTokens += response.usage.input_tokens;
     outputTokens += response.usage.output_tokens;
 
-    const apiCost =
-      response.usage.cost_usd ?? extractApiCostUsd(response);
+    const apiCost = response.usage.cost_usd ?? extractApiCostUsd(response);
     if (apiCost !== undefined) {
       costUsd += apiCost;
     } else {
@@ -70,10 +74,8 @@ export function buildApiCallRecords(
 ): JevApiCallRecord[] {
   const rates = pricing ?? getJevPricingConfig();
   return responses.map((response) => {
-    const apiCost =
-      response.usage.cost_usd ?? extractApiCostUsd(response);
-    const costUsd =
-      apiCost ?? estimateJevCostUsd(response.usage, rates);
+    const apiCost = response.usage.cost_usd ?? extractApiCostUsd(response);
+    const costUsd = apiCost ?? estimateJevCostUsd(response.usage, rates);
     return {
       input_tokens: response.usage.input_tokens,
       output_tokens: response.usage.output_tokens,

@@ -218,9 +218,7 @@ export function formatReportMarkdown(metrics: ReportMetrics): string {
     );
   }
   if (metrics.high_recall !== undefined) {
-    lines.push(
-      `**Recall (high):** ${(metrics.high_recall * 100).toFixed(1)}%`,
-    );
+    lines.push(`**Recall (high):** ${(metrics.high_recall * 100).toFixed(1)}%`);
   }
   lines.push("");
 
@@ -295,7 +293,9 @@ export function computeUsageReportSummary(
     avg_input_tokens: count > 0 ? totalInput / count : 0,
     avg_output_tokens: count > 0 ? totalOutput / count : 0,
     avg_cost_usd: count > 0 ? totalCost / count : 0,
-    by_month: [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month)),
+    by_month: [...byMonth.values()].sort((a, b) =>
+      a.month.localeCompare(b.month),
+    ),
   };
 }
 

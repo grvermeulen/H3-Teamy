@@ -7,12 +7,10 @@ export const JEV_PR_QUESTIONS = {
     instructions:
       "How risky is merging this pull request for production stability and correctness?",
     criteria: {
-      low:
-        "Small, well-scoped change; unlikely to break runtime behavior; tests or docs only; trivial config.",
+      low: "Small, well-scoped change; unlikely to break runtime behavior; tests or docs only; trivial config.",
       medium:
         "Moderate scope; touches app logic but with plausible tests; some uncertainty about edge cases.",
-      high:
-        "Large or sensitive change; auth/security/data paths; missing tests for risky logic; migrations or infra.",
+      high: "Large or sensitive change; auth/security/data paths; missing tests for risky logic; migrations or infra.",
     },
   },
   severity: {

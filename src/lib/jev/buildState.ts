@@ -93,7 +93,10 @@ export function buildJevState(input: BuildStateInput): JevState {
         ? diff
         : `${diff.slice(0, mid)}\n\n[diff truncated for token budget]`;
     const state: JevState = { ...baseState(), diff: candidate };
-    if (isStateWithinBudget(state) && estimateJsonTokens(state) <= targetTokens) {
+    if (
+      isStateWithinBudget(state) &&
+      estimateJsonTokens(state) <= targetTokens
+    ) {
       bestDiff = candidate;
       truncated = mid < diff.length;
       low = mid + 1;

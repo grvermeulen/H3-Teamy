@@ -100,10 +100,7 @@ async function main(): Promise<void> {
   }
 }
 
-async function ghGet(
-  token: string,
-  path: string,
-): Promise<Response> {
+async function ghGet(token: string, path: string): Promise<Response> {
   return fetch(`${GH}${path}`, {
     headers: {
       Accept: "application/vnd.github+json",
@@ -185,10 +182,7 @@ async function findRevertRefs(
     .filter((i) => i.pull_request)
     .map((i) => i.number);
 
-  const commitRes = await ghGet(
-    token,
-    `/repos/${repo}/commits?per_page=30`,
-  );
+  const commitRes = await ghGet(token, `/repos/${repo}/commits?per_page=30`);
   const commits = (await commitRes.json()) as Array<{
     sha: string;
     commit: { message: string };
@@ -198,7 +192,9 @@ async function findRevertRefs(
       (c) =>
         /\brevert\b/i.test(c.commit.message) &&
         (c.commit.message.includes(`#${prNumber}`) ||
-          c.commit.message.toLowerCase().includes(title.toLowerCase().slice(0, 40))),
+          c.commit.message
+            .toLowerCase()
+            .includes(title.toLowerCase().slice(0, 40))),
     )
     .map((c) => c.sha);
 
@@ -222,11 +218,13 @@ async function findFollowUpPrs(
   }>;
 
   const within = filterFollowUpsWithinDays(
-    prs.filter((p) => p.merged_at).map((p) => ({
-      number: p.number,
-      title: p.title,
-      merged_at: p.merged_at!,
-    })),
+    prs
+      .filter((p) => p.merged_at)
+      .map((p) => ({
+        number: p.number,
+        title: p.title,
+        merged_at: p.merged_at!,
+      })),
     mergedAt,
     7,
   );
@@ -264,10 +262,7 @@ async function getVercelProductionFailure(
   repo: string,
   sha: string,
 ): Promise<{ failed: boolean; url?: string }> {
-  const res = await ghGet(
-    token,
-    `/repos/${repo}/commits/${sha}/status`,
-  );
+  const res = await ghGet(token, `/repos/${repo}/commits/${sha}/status`);
   const status = (await res.json()) as {
     state: string;
     statuses: Array<{

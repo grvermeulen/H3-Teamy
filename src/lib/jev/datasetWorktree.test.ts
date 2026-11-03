@@ -35,9 +35,9 @@ describe("cleanup decisions", () => {
   it("removes via git only when registered", () => {
     const dir = "/home/runner/work/H3-Teamy/H3-Teamy/.jev-data-worktree";
     expect(shouldGitWorktreeRemove(true, SAMPLE_LIST, dir)).toBe(true);
-    expect(
-      shouldGitWorktreeRemove(true, SAMPLE_LIST, "/tmp/plain-dir"),
-    ).toBe(false);
+    expect(shouldGitWorktreeRemove(true, SAMPLE_LIST, "/tmp/plain-dir")).toBe(
+      false,
+    );
   });
 
   it("deletes plain directory when not a worktree", () => {
