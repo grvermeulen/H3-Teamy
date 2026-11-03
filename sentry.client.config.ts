@@ -6,6 +6,7 @@ import {
 import {
   BENIGN_TRANSIENT_CLIENT_FETCH_IGNORE_RE,
   shouldDropBenignClientFetchNoiseEvent,
+  shouldDropBenignClientFetchNoiseLog,
 } from "@/lib/sentryBenignClientFetchNoise";
 import {
   BENIGN_POINTER_LOCK_WRONG_DOCUMENT_IGNORE_RE,
@@ -48,6 +49,13 @@ Sentry.init({
       return null;
     }
     return event;
+  },
+
+  beforeSendLog(log) {
+    if (shouldDropBenignClientFetchNoiseLog(log)) {
+      return null;
+    }
+    return log;
   },
 
   integrations: [

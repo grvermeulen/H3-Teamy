@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as Sentry from "@sentry/nextjs";
+import { isBenignTransientClientFetchError } from "@/lib/benignClientFetchErrors";
 import { readResponseJson } from "@/lib/safeClientJson";
 import type { LobbyRoom } from "@/lib/cityArena/net/lobbyPresence";
 import type { RoomsState } from "./RoomList";
@@ -65,9 +66,11 @@ export function useActiveRooms(enabled: boolean): RoomsState {
         if (!alive.current) return;
         setState(rooms ? { status: "ready", rooms } : { status: "offline" });
       } catch (error: unknown) {
-        Sentry.captureException(error, {
-          tags: { area: "arena", kind: "rooms-poll" },
-        });
+        if (!isBenignTransientClientFetchError(error)) {
+          Sentry.captureException(error, {
+            tags: { area: "arena", kind: "rooms-poll" },
+          });
+        }
         if (alive.current) setState({ status: "offline" });
       }
     };

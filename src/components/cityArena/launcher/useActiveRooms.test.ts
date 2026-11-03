@@ -85,6 +85,21 @@ describe("useActiveRooms", () => {
     );
   });
 
+  it("goes offline without Sentry on benign Chromium Failed to fetch", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError(
+          "Failed to fetch (h3-teamy-mi5xi63um-guido-vermeulens-projects.vercel.app)",
+        );
+      }),
+    );
+    const { result } = renderHook(() => useActiveRooms(true));
+    await settle();
+    expect(result.current).toEqual({ status: "offline" });
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
   it("treats 503 as an empty lobby without Sentry when the backend is degraded", async () => {
     vi.stubGlobal(
       "fetch",
