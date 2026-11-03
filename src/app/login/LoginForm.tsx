@@ -7,6 +7,7 @@ import { browserSupportsWebAuthn } from "@simplewebauthn/browser";
 import { signIn } from "next-auth/react";
 import { useEffect, useState, type JSX } from "react";
 import { Button, Card, Input, Stack } from "../../components/ui";
+import { captureBrowserException } from "../../lib/sentryClientCapture";
 import { isBenignWebAuthnClientError } from "../../lib/webAuthnClientErrors";
 
 type LoginFormProps = {
@@ -101,7 +102,7 @@ export default function LoginForm({
       // Navigeer expliciet — laat de "Inloggen…" spinner staan tijdens de redirect.
       window.location.assign(result?.url || callbackUrl);
     } catch (error: unknown) {
-      Sentry.captureException(error, { tags: { flow: "login-credentials" } });
+      captureBrowserException(error, { tags: { flow: "login-credentials" } });
       setNotice({
         tone: "error",
         text: "Netwerkfout bij inloggen. Probeer opnieuw.",
@@ -196,7 +197,7 @@ export default function LoginForm({
     try {
       await signIn("google", { callbackUrl });
     } catch (error: unknown) {
-      Sentry.captureException(error, { tags: { flow: "login-google" } });
+      captureBrowserException(error, { tags: { flow: "login-google" } });
       setNotice({
         tone: "error",
         text: "Google-inloggen mislukt (netwerk of server). Probeer het opnieuw.",

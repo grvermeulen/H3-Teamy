@@ -18,9 +18,14 @@ function isAbortError(error: unknown): boolean {
   return false;
 }
 
-function getEventExceptionMessage(event: Event): string | null {
-  const value = event.exception?.values?.[0]?.value;
-  return typeof value === "string" ? value : null;
+function getEventExceptionMessages(event: Event): string[] {
+  const values = event.exception?.values;
+  if (!values?.length) {
+    return [];
+  }
+  return values
+    .map((entry) => entry?.value)
+    .filter((value): value is string => typeof value === "string");
 }
 
 function shouldDropCandidate(candidate: unknown): boolean {
@@ -46,7 +51,7 @@ export function shouldDropBenignClientFetchNoiseEvent(
 ): boolean {
   const candidates: unknown[] = [
     hint.originalException,
-    getEventExceptionMessage(event),
+    ...getEventExceptionMessages(event),
     typeof event.message === "string" ? event.message : null,
   ];
   return candidates.some(shouldDropCandidate);
