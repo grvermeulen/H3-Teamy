@@ -1,4 +1,10 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Sentry from "@sentry/nextjs";
 import WhatsNewTour from "./WhatsNewTour";
@@ -41,6 +47,67 @@ describe("WhatsNewTour", () => {
     });
     expect(screen.getByText("Stap één")).toBeInTheDocument();
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
+  it("sluit de rondleiding bij klik op de backdrop en bevestigt de versie", async () => {
+    const fetchMock = vi
+      .spyOn(global, "fetch")
+      .mockImplementation((input, init) => {
+        const url = typeof input === "string" ? input : input.url;
+        if (url.includes("/api/whats-new/ack")) {
+          expect(init?.method).toBe("POST");
+          return Promise.resolve(jsonResponse({ ok: true }));
+        }
+        return Promise.resolve(
+          jsonResponse({
+            show: true,
+            version: "0.2.0",
+            payload: {
+              title: "Wat is er nieuw",
+              steps: [{ title: "Stap één", body: "Tekst" }],
+            },
+          }),
+        );
+      });
+    render(<WhatsNewTour />);
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("dialog"));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/whats-new/ack",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("sluit de rondleiding met Escape", async () => {
+    vi.spyOn(global, "fetch").mockImplementation((input, init) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/api/whats-new/ack")) {
+        return Promise.resolve(jsonResponse({ ok: true }));
+      }
+      return Promise.resolve(
+        jsonResponse({
+          show: true,
+          version: "0.2.0",
+          payload: {
+            title: "Wat is er nieuw",
+            steps: [{ title: "Stap één", body: "Tekst" }],
+          },
+        }),
+      );
+    });
+    render(<WhatsNewTour />);
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
   });
 
   it("does not report Chromium Failed to fetch for /api/whats-new (benign transient)", async () => {
