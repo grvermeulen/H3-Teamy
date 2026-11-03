@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { isDbUnavailableSentryNoise } from "./lib/dbUnavailableSentryNoise";
 import { isNodeClientDisconnectWriteNoise } from "./lib/nodeClientDisconnectWriteNoise";
 
 /**
@@ -27,6 +28,9 @@ export const onRequestError: typeof captureRequestError = (
   ...args: Parameters<typeof captureRequestError>
 ) => {
   if (isNodeClientDisconnectWriteNoise(args[0])) {
+    return;
+  }
+  if (isDbUnavailableSentryNoise(args[0])) {
     return;
   }
   return captureRequestError(...args);

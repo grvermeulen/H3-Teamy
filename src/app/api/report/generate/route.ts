@@ -5,6 +5,7 @@ import { getReport, setReport, kvGetJson } from "../../../../lib/kv";
 import { MVP_PLACEHOLDER } from "../../../../lib/mvpNarrative";
 import { sendMatchReportToWhatsAppGroup } from "../../../../lib/services/waapiService";
 import { getActiveUsers } from "../../../../lib/services/userService";
+import { isDbUnavailableError } from "../../../../lib/dbUnavailableError";
 import type { TeamEvent } from "../../../../types";
 
 type RawEvent = {
@@ -196,9 +197,11 @@ async function getRosterNames(): Promise<string[]> {
     const users = await getActiveUsers();
     return users.map((u) => u.name).filter(Boolean);
   } catch (error: unknown) {
-    Sentry.captureException(error, {
-      tags: { module: "report_generate", operation: "getRosterNames" },
-    });
+    if (!isDbUnavailableError(error)) {
+      Sentry.captureException(error, {
+        tags: { module: "report_generate", operation: "getRosterNames" },
+      });
+    }
     return [];
   }
 }

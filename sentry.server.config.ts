@@ -5,6 +5,7 @@ import { shouldDropInvalidMultipartBodyNoiseForSentry } from "@/lib/sentryInvali
 import { shouldDropNodeClientDisconnectWriteNoiseForSentry } from "@/lib/sentryClientDisconnectWriteNoise";
 import { shouldDropNodeTransformStreamNoiseForSentry } from "@/lib/sentryTransformStreamNoise";
 import { shouldDropPgPoolNoiseForSentry } from "@/lib/sentryPgPoolNoise";
+import { shouldDropDbUnavailableErrorForSentry } from "@/lib/dbUnavailableSentryNoise";
 import { shouldDropRedisNoiseForSentry } from "@/lib/sentryRedisNoise";
 
 /** Parseert traces sample rate (0–1) uit server-env; default 0.1. */
@@ -26,6 +27,7 @@ Sentry.init({
   tracesSampleRate: parseTracesSampleRate(),
 
   beforeSend(event, hint) {
+    if (shouldDropDbUnavailableErrorForSentry(event, hint)) return null;
     if (shouldDropDevLocalhostDbNoiseForSentry(event, hint)) return null;
     if (shouldDropInvalidMultipartBodyNoiseForSentry(event, hint)) return null;
     if (shouldDropPgPoolNoiseForSentry(event, hint)) return null;

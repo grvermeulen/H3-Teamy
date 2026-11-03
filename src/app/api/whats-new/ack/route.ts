@@ -4,6 +4,10 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../lib/authOptions";
 import { prisma } from "../../../../lib/db";
 import { getActiveUser } from "../../../../lib/activeUser";
+import {
+  isDbUnavailableError,
+  jsonDatabaseUnavailable,
+} from "../../../../lib/dbUnavailableError";
 import { APP_VERSION } from "../../../../lib/version";
 
 /**
@@ -24,6 +28,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
     return NextResponse.json({ ok: true, version: APP_VERSION });
   } catch (err: unknown) {
+    if (isDbUnavailableError(err)) return jsonDatabaseUnavailable();
     Sentry.captureException(err, { tags: { component: "api-whats-new-ack" } });
     return NextResponse.json(
       { ok: false, error: "Ack failed" },

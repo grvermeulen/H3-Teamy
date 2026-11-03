@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { getServerSession } from "next-auth";
 import { authOptions } from "../../../../lib/authOptions";
 import { getActiveUser } from "../../../../lib/activeUser";
+import { isDbUnavailableError } from "../../../../lib/dbUnavailableError";
 import { getUserProfile } from "../../../../lib/kv";
 import {
   computeRecentAttendance,
@@ -43,7 +44,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({ nudge });
   } catch (err: unknown) {
-    Sentry.captureException(err, { tags: { component: "api-training-nudge" } });
+    if (!isDbUnavailableError(err)) {
+      Sentry.captureException(err, {
+        tags: { component: "api-training-nudge" },
+      });
+    }
     return NextResponse.json({ nudge: null });
   }
 }

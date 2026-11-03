@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "../../../lib/authOptions";
 import { prisma } from "../../../lib/db";
 import { getActiveUser } from "../../../lib/activeUser";
+import { isDbUnavailableError } from "../../../lib/dbUnavailableError";
 import { APP_VERSION } from "../../../lib/version";
 import { getChangelogEntry } from "../../../lib/changelog";
 
@@ -38,7 +39,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       payload: show ? entry : undefined,
     });
   } catch (err: unknown) {
-    Sentry.captureException(err, { tags: { component: "api-whats-new" } });
+    if (!isDbUnavailableError(err)) {
+      Sentry.captureException(err, { tags: { component: "api-whats-new" } });
+    }
     return NextResponse.json({ show: false, version: APP_VERSION });
   }
 }
