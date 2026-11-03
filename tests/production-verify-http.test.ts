@@ -18,4 +18,14 @@ describe.skipIf(!baseUrl)("Production HTTP smoke (read-only)", () => {
     const res = await fetch(`${baseUrl}/login`, { method: "GET" });
     expect(res.status).toBe(200);
   });
+
+  it("GET /speelboek retourneert 200", async () => {
+    const res = await fetch(`${baseUrl}/speelboek`, { method: "GET" });
+    expect(res.status).toBe(200);
+  });
+
+  it("GET /speelboek/tip-in retourneert 200", async () => {
+    const res = await fetch(`${baseUrl}/speelboek/tip-in`, { method: "GET" });
+    expect(res.status).toBe(200);
+  });
 });
