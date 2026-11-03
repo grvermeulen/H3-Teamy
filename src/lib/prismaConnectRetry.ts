@@ -5,6 +5,7 @@ import { DbUnavailableError } from "./dbUnavailableError";
 const TRANSIENT_PRISMA_CONNECT_CODES = new Set<string>([
   "P1001",
   "P1002",
+  "P1008",
   "P1017",
 ]);
 

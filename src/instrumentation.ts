@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { isDbUnavailableSentryNoise } from "./lib/sentryDbUnavailableNoise";
 import { isNodeClientDisconnectWriteNoise } from "./lib/nodeClientDisconnectWriteNoise";
+import { isTransientPrismaConnectSentryNoise } from "./lib/sentryTransientPrismaConnectNoise";
 
 /**
  * Next.js instrumentation hook: laadt runtime-specifieke Sentry-configuratie
@@ -23,11 +24,14 @@ export async function register(): Promise<void> {
  */
 const captureRequestError = Sentry.captureRequestError;
 
-/** Slaat verwachte DB-503 en client-disconnect `EPIPE`-writes over. */
+/** Slaat verwachte DB-503, transient Prisma-connectie- en client-disconnect `EPIPE`-writes over. */
 export const onRequestError: typeof captureRequestError = (
   ...args: Parameters<typeof captureRequestError>
 ) => {
   if (isDbUnavailableSentryNoise(args[0])) {
+    return;
+  }
+  if (isTransientPrismaConnectSentryNoise(args[0])) {
     return;
   }
   if (isNodeClientDisconnectWriteNoise(args[0])) {
