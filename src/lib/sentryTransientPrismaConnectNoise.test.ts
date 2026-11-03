@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 import {
+  isTransientPrismaConnectSentryIssueTitle,
   isTransientPrismaConnectSentryNoise,
   shouldDropTransientPrismaConnectNoiseForSentry,
 } from "./sentryTransientPrismaConnectNoise";
@@ -20,6 +21,15 @@ describe("isTransientPrismaConnectSentryNoise", () => {
       clientVersion: "7.10.1",
     });
     expect(isTransientPrismaConnectSentryNoise(err)).toBe(true);
+  });
+
+  it("returns true for plain-object P1001 (JAVASCRIPT-NEXTJS-59)", () => {
+    expect(
+      isTransientPrismaConnectSentryNoise({
+        name: "PrismaClientKnownRequestError",
+        code: "P1001",
+      }),
+    ).toBe(true);
   });
 
   it("returns true for connect timeout message errors", () => {
@@ -72,5 +82,28 @@ describe("shouldDropTransientPrismaConnectNoiseForSentry", () => {
         originalException: err,
       }),
     ).toBe(false);
+  });
+
+  it("drops serialized empty Prisma error when extra prismaCode is P1017 (JAVASCRIPT-NEXTJS-59)", () => {
+    const event = {
+      ...baseEvent,
+      extra: { prismaCode: "P1017" },
+      exception: {
+        values: [{ type: "PrismaClientKnownRequestError", value: "" }],
+      },
+    } as typeof baseEvent;
+    expect(shouldDropTransientPrismaConnectNoiseForSentry(event, {})).toBe(
+      true,
+    );
+  });
+});
+
+describe("isTransientPrismaConnectSentryIssueTitle", () => {
+  it("matches empty PrismaClientKnownRequestError titles", () => {
+    expect(
+      isTransientPrismaConnectSentryIssueTitle(
+        "PrismaClientKnownRequestError:",
+      ),
+    ).toBe(true);
   });
 });

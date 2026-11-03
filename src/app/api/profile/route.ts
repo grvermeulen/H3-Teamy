@@ -6,6 +6,7 @@ import {
   isDbUnavailableError,
   jsonDatabaseUnavailable,
 } from "../../../lib/dbUnavailableError";
+import { shouldCaptureApiRouteException } from "../../../lib/sentryApiRouteCapture";
 import { USER_CORE_SELECT } from "../../../lib/userPrismaSelect";
 
 export async function GET(req: NextRequest) {
@@ -28,7 +29,9 @@ export async function GET(req: NextRequest) {
     if (isDbUnavailableError(error)) {
       return jsonDatabaseUnavailable();
     }
-    Sentry.captureException(error);
+    if (shouldCaptureApiRouteException(error)) {
+      Sentry.captureException(error);
+    }
     return NextResponse.json({ error: "Er ging iets mis" }, { status: 500 });
   }
 }
@@ -89,7 +92,9 @@ export async function POST(req: NextRequest) {
           { status: 409 },
         );
       }
-      Sentry.captureException(e);
+      if (shouldCaptureApiRouteException(e)) {
+        Sentry.captureException(e);
+      }
       return NextResponse.json(
         { error: "Opslaan is mislukt" },
         { status: 500 },
@@ -99,7 +104,9 @@ export async function POST(req: NextRequest) {
     if (isDbUnavailableError(error)) {
       return jsonDatabaseUnavailable();
     }
-    Sentry.captureException(error);
+    if (shouldCaptureApiRouteException(error)) {
+      Sentry.captureException(error);
+    }
     return NextResponse.json({ error: "Er ging iets mis" }, { status: 500 });
   }
 }
