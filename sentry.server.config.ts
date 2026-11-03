@@ -4,6 +4,7 @@ import { shouldDropInvalidMultipartBodyNoiseForSentry } from "@/lib/sentryInvali
 import { shouldDropPgPoolNoiseForSentry } from "@/lib/sentryPgPoolNoise";
 import { shouldDropRedisNoiseForSentry } from "@/lib/sentryRedisNoise";
 import { shouldDropNodeTransformStreamNoiseForSentry } from "@/lib/sentryTransformStreamNoise";
+import { shouldDropBenignTurbopackPackageJsonNoiseForSentry } from "@/lib/sentryBenignTurbopackPackageJsonNoise";
 
 /** Parseert traces sample rate (0–1) uit server-env; default 0.1. */
 function parseTracesSampleRate(): number {
@@ -29,6 +30,9 @@ Sentry.init({
     if (shouldDropPgPoolNoiseForSentry(event, hint)) return null;
     if (shouldDropRedisNoiseForSentry(event, hint)) return null;
     if (shouldDropNodeTransformStreamNoiseForSentry(event, hint)) return null;
+    if (shouldDropBenignTurbopackPackageJsonNoiseForSentry(event, hint)) {
+      return null;
+    }
     return event;
   },
 
