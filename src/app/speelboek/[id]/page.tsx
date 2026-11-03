@@ -35,5 +35,11 @@ export default async function DrillPage({
   const { id } = await params;
   const drill = getDrill(id);
   if (!drill) notFound();
-  return <DrillDetail drill={drill} counterpart={getCounterpart(drill)} />;
+  return (
+    <DrillDetail
+      key={drill.id}
+      drill={drill}
+      counterpart={getCounterpart(drill)}
+    />
+  );
 }
