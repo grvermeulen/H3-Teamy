@@ -13,7 +13,7 @@ export type PlayedFrame = {
   /** Where each cap is drawn. Missing ids keep `frame` coordinates. */
   positions: Record<string, { x: number; y: number }>;
   /**
-   * Ball anchor in diagram coordinates while a pass is in flight.
+   * Ball anchor in diagram coordinates while a pass or shot is in flight.
    * `null` keeps the ball on `frame.ballPlayerId`.
    */
   ballAt: { x: number; y: number } | null;
@@ -86,7 +86,8 @@ function travel(
 /**
  * Positions while step `index` plays toward the next one. Swim arrows
  * (including a curve) are the path; other position changes move in a
- * straight line. `t` is 0 at the start of the step and 1 on arrival.
+ * straight line. A pass or shot carries the ball along that arrow.
+ * `t` is 0 at the start of the step and 1 on arrival.
  */
 export function playbackFrame(
   steps: readonly DrillStep[],
@@ -120,18 +121,47 @@ export function playbackFrame(
     positions[player.id] = travel(start, end, move?.via, eased);
   }
 
-  const pass = lastArrow(from.arrows, "PASS");
-  const passer = playerById(from.players, pass?.playerId);
+  const flight = lastBallArrow(from.arrows);
+  const actor = playerById(from.players, flight?.playerId);
   const catcher = playerById(next?.players ?? [], next?.ballPlayerId);
   const ballAt =
-    pass && passer
+    flight && actor
       ? travel(
-          [passer.x, passer.y],
-          catcher ? [catcher.x, catcher.y] : pass.to,
-          pass.via,
+          [actor.x, actor.y],
+          ballTarget(flight, catcher),
+          flight.via,
           eased,
         )
       : null;
 
   return { frame: from, positions, ballAt };
+}
+
+/** The latest pass or shot; that is the ball's path for this step. */
+function lastBallArrow(
+  arrows: readonly DiagramArrow[],
+): DiagramArrow | undefined {
+  for (let i = arrows.length - 1; i >= 0; i--) {
+    const arrow = arrows[i];
+    if (arrow.kind === "PASS" || arrow.kind === "SHOT") return arrow;
+  }
+  return undefined;
+}
+
+/** Where the ball arrives: the catcher for a pass, the arrow tip for a shot. */
+function ballTarget(
+  flight: DiagramArrow,
+  catcher: DiagramPlayer | undefined,
+): DiagramPoint {
+  switch (flight.kind) {
+    case "PASS":
+      return catcher ? [catcher.x, catcher.y] : flight.to;
+    case "SHOT":
+    case "MOVE":
+      return flight.to;
+    default: {
+      const exhaustive: never = flight.kind;
+      return exhaustive;
+    }
+  }
 }

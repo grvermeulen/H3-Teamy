@@ -5,6 +5,7 @@ import {
   defenderId,
   KEEPER_ID,
   STANDARD_POSITIONS,
+  rosterCapTone,
   STANDARD_ROSTER,
   standardLineup,
 } from "./lineup";
@@ -55,5 +56,19 @@ describe("standardLineup", () => {
       label: "1",
       name: "Vleugel rechts",
     });
+  });
+
+  it("colours attack white, defence blue and the keeper red, and swaps with the attack", () => {
+    const frame = standardLineup();
+    expect(rosterCapTone("p1", frame)).toBe("white");
+    expect(rosterCapTone("d1", frame)).toBe("blue");
+    expect(rosterCapTone(KEEPER_ID, frame)).toBe("red");
+    expect(rosterCapTone("p1", { ...frame, attackColor: "BLUE" })).toBe("blue");
+    expect(rosterCapTone("d1", { ...frame, attackColor: "BLUE" })).toBe(
+      "white",
+    );
+    expect(
+      rosterCapTone("d9", { attackColor: "WHITE", players: frame.players }),
+    ).toBe("blue");
   });
 });

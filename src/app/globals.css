@@ -1771,6 +1771,14 @@ select.ui-select[aria-invalid="true"] {
   justify-content: center;
   border: 1px solid rgba(0, 0, 0, 0.5);
 }
+.speelboek-cap[data-cap="blue"] {
+  background: #2563eb;
+  color: #ffffff;
+}
+.speelboek-cap[data-cap="red"] {
+  background: #dc2626;
+  color: #ffffff;
+}
 .speelboek-role-pos {
   display: block;
   color: var(--muted);

@@ -1,6 +1,7 @@
 import type {
   DiagramFrame,
   DiagramPlayer,
+  DiagramTeam,
   DrillCategory,
   DrillLevel,
   DrillRosterEntry,
@@ -115,3 +116,33 @@ export const LEVEL_LABELS: Record<DrillLevel, string> = {
   GEMIDDELD: "Gemiddeld",
   GEVORDERD: "Gevorderd",
 };
+
+/** Cap colour used in the role list, matching the diagram. */
+export type CapTone = "white" | "blue" | "red";
+
+/**
+ * Cap colour for a roster player: attack wears `attackColor`, defence the
+ * other colour, the keeper red. A player missing from the frame is coloured
+ * from the id (`gk`, `d*`, otherwise attack).
+ */
+export function rosterCapTone(
+  playerId: string,
+  frame: Pick<DiagramFrame, "attackColor" | "players">,
+): CapTone {
+  const listed = frame.players.find((player) => player.id === playerId)?.team;
+  const team: DiagramTeam =
+    listed ??
+    (playerId === KEEPER_ID ? "GK" : playerId.startsWith("d") ? "DEF" : "OFF");
+  switch (team) {
+    case "GK":
+      return "red";
+    case "DEF":
+      return frame.attackColor === "WHITE" ? "blue" : "white";
+    case "OFF":
+      return frame.attackColor === "WHITE" ? "white" : "blue";
+    default: {
+      const exhaustive: never = team;
+      return exhaustive;
+    }
+  }
+}

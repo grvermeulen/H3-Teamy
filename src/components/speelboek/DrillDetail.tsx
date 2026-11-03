@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { Route } from "next";
 import type { Drill } from "../../lib/schemas/speelboek";
-import { CATEGORY_LABELS, LEVEL_LABELS } from "../../lib/speelboek/lineup";
+import {
+  CATEGORY_LABELS,
+  LEVEL_LABELS,
+  rosterCapTone,
+} from "../../lib/speelboek/lineup";
 import { rosterLabels, type LibraryDrill } from "../../lib/speelboek/library";
 import { playbackFrame } from "../../lib/speelboek/playback";
 import { AppBar, Button } from "../ui";
@@ -182,7 +186,11 @@ export default function DrillDetail({ drill, counterpart }: Props) {
                     aria-label={`${entry.name}${mine ? ", jouw positie" : ""}`}
                     onClick={() => choosePosition(entry.playerId)}
                   >
-                    <span className="speelboek-cap" aria-hidden="true">
+                    <span
+                      className="speelboek-cap"
+                      data-cap={rosterCapTone(entry.playerId, step.frame)}
+                      aria-hidden="true"
+                    >
                       {entry.label}
                     </span>
                     <span className="min-w-0">

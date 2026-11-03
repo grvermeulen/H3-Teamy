@@ -59,4 +59,19 @@ describe("playbackFrame", () => {
     expect(played.ballAt).toEqual({ x: 5, y: 10 });
     expect(played.frame.arrows).toHaveLength(2);
   });
+
+  it("carries the ball along a shot, including on the last step", () => {
+    const shooting = step(
+      [{ id: "p1", team: "OFF", x: 0, y: 0 }],
+      [
+        { kind: "PASS", playerId: "p1", to: [10, 10] },
+        { kind: "SHOT", playerId: "p1", to: [100, 0], via: [50, 40] },
+      ],
+      "p1",
+    );
+    const mid = playbackFrame([shooting], 0, 0.5).ballAt;
+    expect(mid?.x).toBeCloseTo(50);
+    expect(mid?.y).toBeCloseTo(20);
+    expect(playbackFrame([shooting], 0, 1).ballAt).toEqual({ x: 100, y: 0 });
+  });
 });

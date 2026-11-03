@@ -38,6 +38,14 @@ describe("DrillDetail", () => {
     vi.useRealTimers();
   });
 
+  it("colours role caps like the diagram", () => {
+    render(<DrillDetail drill={zone} counterpart={null} />);
+    const cap = (name: string) =>
+      screen.getByRole("button", { name }).querySelector(".speelboek-cap");
+    expect(cap("Paal rechts (voor)")).toHaveAttribute("data-cap", "blue");
+    expect(cap("Keeper")).toHaveAttribute("data-cap", "red");
+  });
+
   it("steps through the drill and shows the roles of that step", () => {
     render(<DrillDetail drill={manMeer} counterpart={zone} />);
 
