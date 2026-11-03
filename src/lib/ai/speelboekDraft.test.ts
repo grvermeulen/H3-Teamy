@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { drillInputSchema } from "../schemas/speelboek";
 import {
   AiDrillDraftSchema,
+  SPEELBOEK_DRAFT_SYSTEM_PROMPT,
+  SPEELBOEK_PHOTO_HINT,
   toDrillInput,
   type AiDrillDraft,
 } from "./speelboekDraft";
@@ -37,6 +39,7 @@ const base: AiDrillDraft = {
   ],
   keyPoints: ["Hand boven water"],
   commonMistakes: [],
+  unreadable: [],
 };
 
 describe("toDrillInput", () => {
@@ -102,5 +105,168 @@ describe("toDrillInput", () => {
     expect(
       draft.steps[0].frame.players.filter((p) => p.id === "gk"),
     ).toHaveLength(1);
+  });
+
+  it("keeps titles, step text, roles, key points and names from the board", () => {
+    const written: AiDrillDraft = {
+      ...base,
+      title: "Extra man 4-3",
+      summary: "Na de extra pass de bal naar 1.",
+      roster: [
+        { team: "OFF", number: 1, name: "Sem" },
+        { team: "OFF", number: 6, name: "Center" },
+      ],
+      steps: [
+        {
+          ...base.steps[0],
+          title: "Pass naar de vleugel",
+          text: "6 past naar 1, 1 schiet direct.",
+          roles: [
+            {
+              player: { team: "OFF", number: 1 },
+              text: "Schiet zonder te pakken.",
+            },
+            {
+              player: { team: "OFF", number: 6 },
+              text: "Kijk eerst naar de keeper.",
+            },
+          ],
+        },
+      ],
+      keyPoints: ["Bal niet pakken", "Keeper uit de goal lokken"],
+      commonMistakes: ["1 pakt de bal eerst"],
+      unreadable: [],
+    };
+    const { draft, warnings } = toDrillInput(written);
+    expect(draft.title).toBe("Extra man 4-3");
+    expect(draft.summary).toBe("Na de extra pass de bal naar 1.");
+    expect(draft.steps[0].title).toBe("Pass naar de vleugel");
+    expect(draft.steps[0].text).toBe("6 past naar 1, 1 schiet direct.");
+    expect(draft.steps[0].roles).toEqual([
+      { playerId: "p1", text: "Schiet zonder te pakken." },
+      { playerId: "p6", text: "Kijk eerst naar de keeper." },
+    ]);
+    expect(draft.keyPoints).toEqual([
+      "Bal niet pakken",
+      "Keeper uit de goal lokken",
+    ]);
+    expect(draft.commonMistakes).toEqual(["1 pakt de bal eerst"]);
+    expect(draft.roster.map((r) => r.name)).toEqual(["Sem", "Center"]);
+    expect(warnings).toEqual([]);
+  });
+
+  it("warns in Dutch when writing on the photo could not be read", () => {
+    const { draft, warnings } = toDrillInput({
+      ...base,
+      unreadable: ["rol bij 6", "titel van stap 2"],
+    });
+    expect(warnings).toEqual([
+      'Stap "Actie": geen rol voor Vleugel links – wil je er een toevoegen?',
+      "Tekst op de foto niet leesbaar (rol bij 6) – wil je die aanvullen?",
+      "Tekst op de foto niet leesbaar (titel van stap 2) – wil je die aanvullen?",
+    ]);
+    expect(draft.title).toBe(base.title);
+    expect(draft.steps[0].text).toBe(base.steps[0].text);
+    expect(draft.steps[0].text).not.toContain("rol bij 6");
+  });
+});
+
+describe("whiteboard photo instructions", () => {
+  it("requires the model to use written text on the image and not invent it", () => {
+    for (const prompt of [
+      SPEELBOEK_DRAFT_SYSTEM_PROMPT,
+      SPEELBOEK_PHOTO_HINT,
+    ]) {
+      expect(prompt).toContain("geschreven");
+      expect(prompt.toLowerCase()).toContain("titel");
+      expect(prompt.toLowerCase()).toContain("rol");
+      expect(prompt.toLowerCase()).toContain("kernpunt");
+      expect(prompt.toLowerCase()).toContain("namen");
+      expect(prompt.toLowerCase()).toContain("verzin geen");
+      expect(prompt.toLowerCase()).toContain("onleesbaar");
+    }
+  });
+});
+
+const PHOTO =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+describe("draftDrill", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it("sends the photo hint and the image without calling a live model", async () => {
+    const generateObject = vi.fn(async () => ({ object: base }));
+    vi.doMock("./client", () => ({ generateObject }));
+    const mod = await import("./speelboekDraft");
+    const { draft } = await mod.draftDrill({
+      description: "Center noemt de extra.",
+      imageDataUrl: PHOTO,
+    });
+    expect(draft.title).toBe("Tip-in");
+    expect(generateObject).toHaveBeenCalledTimes(1);
+    const args = generateObject.mock.calls[0][0] as {
+      system: string;
+      messages: {
+        content: { type: string; text?: string; mediaType?: string }[];
+      }[];
+    };
+    expect(args.system).toBe(mod.SPEELBOEK_DRAFT_SYSTEM_PROMPT);
+    const text = args.messages[0].content.find(
+      (part) => part.type === "text",
+    )?.text;
+    expect(text).toContain("Center noemt de extra.");
+    expect(text).toContain(mod.SPEELBOEK_PHOTO_HINT);
+    expect(text).not.toContain("Er is geen tekst;");
+    expect(
+      args.messages[0].content.find((part) => part.type === "image")?.mediaType,
+    ).toBe("image/png");
+  });
+
+  it("tells a photo-only draft to read the writing on the board", async () => {
+    const generateObject = vi.fn(async () => ({ object: base }));
+    vi.doMock("./client", () => ({ generateObject }));
+    const mod = await import("./speelboekDraft");
+    await mod.draftDrill({ description: "", imageDataUrl: PHOTO });
+    const args = generateObject.mock.calls[0][0] as {
+      messages: { content: { type: string; text?: string }[] }[];
+    };
+    const text = args.messages[0].content.find(
+      (part) => part.type === "text",
+    )?.text;
+    expect(text).toContain(
+      "Er is geen getypte beschrijving; lees de oefening van de whiteboardfoto, inclusief de tekst die erop geschreven staat.",
+    );
+    expect(text).toContain(mod.SPEELBOEK_PHOTO_HINT);
+  });
+
+  it("omits the photo hint when there is no image", async () => {
+    const generateObject = vi.fn(async () => ({ object: base }));
+    vi.doMock("./client", () => ({ generateObject }));
+    const mod = await import("./speelboekDraft");
+    await mod.draftDrill({ description: "1 past naar 6." });
+    const args = generateObject.mock.calls[0][0] as {
+      messages: { content: { type: string; text?: string }[] }[];
+    };
+    const text =
+      args.messages[0].content.find((part) => part.type === "text")?.text ?? "";
+    expect(text).toContain("1 past naar 6.");
+    expect(text).not.toContain(mod.SPEELBOEK_PHOTO_HINT);
+    expect(args.messages[0].content.some((part) => part.type === "image")).toBe(
+      false,
+    );
+  });
+
+  it("propagates errors from the model call", async () => {
+    vi.doMock("./client", () => ({
+      generateObject: () => {
+        throw new Error("boom");
+      },
+    }));
+    const mod = await import("./speelboekDraft");
+    await expect(
+      mod.draftDrill({ description: "1 past naar 6." }),
+    ).rejects.toThrow("boom");
   });
 });

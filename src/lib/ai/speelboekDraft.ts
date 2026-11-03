@@ -71,6 +71,12 @@ export const AiDrillDraftSchema = z.object({
   steps: z.array(aiStepSchema).min(1).max(8),
   keyPoints: z.array(z.string().min(1).max(200)).max(6),
   commonMistakes: z.array(z.string().min(1).max(200)).max(6),
+  /**
+   * Writing on the photo that could not be read, as short Dutch labels
+   * (for example "rol bij 6"). Empty when there is no photo or the text was
+   * legible. {@link toDrillInput} turns each label into a trainer warning.
+   */
+  unreadable: z.array(z.string().min(1).max(80)).max(6),
 });
 
 export type AiDrillDraft = z.infer<typeof AiDrillDraftSchema>;
@@ -86,10 +92,20 @@ const positionsTable = POSITION_NUMBERS.map(
     `${n} = ${STANDARD_POSITIONS[n].name} (x ${STANDARD_POSITIONS[n].x}, y ${STANDARD_POSITIONS[n].y})`,
 ).join("\n");
 
+/**
+ * User-message hint when the draft includes a whiteboard photo.
+ * Diagram marks stay positions and arrows; writing on the board fills the copy.
+ * Illegible writing is listed in `unreadable`, not guessed into the drill text.
+ */
+export const SPEELBOEK_PHOTO_HINT = `Op de foto: cirkels/nummers zijn spelers, pijlen zijn acties (gestippeld = pass).
+Lees ook de geschreven of handgeschreven tekst (titel, stapnotities, rolregels, kernpunten, namen en nummers) en neem die letterlijk over in titel, samenvatting, staptitel, staptekst, rollen, kernpunten en namen.
+Verzin geen zinnen die niet op de foto of in de beschrijving staan. Is tekst onleesbaar, raad de woorden niet: zet een korte aanduiding in unreadable (bijvoorbeeld "rol bij 6").`;
+
 /** System prompt for drafting a drill from a description and/or whiteboard photo. */
 export const SPEELBOEK_DRAFT_SYSTEM_PROMPT = `Je bent assistent-trainer van waterpoloteam H3. Je zet de beschrijving van een trainer
 (gesproken of getypt, soms met whiteboardfoto) om in een oefening voor het speelboek: stappen met
 posities, acties en een korte rol per positie. Schrijf alles in het Nederlands, kort en concreet.
+Bij een foto gebruik je ook de geschreven tekst op het bord, niet alleen de getekende posities en pijlen.
 
 Diagram: bovenaanzicht van een half bad, ${DIAGRAM_WIDTH} breed en ${DIAGRAM_HEIGHT} hoog, doel bovenaan in het
 midden (x 150, y 10). Lijnen: 2 m op y 40, 5 m op y 85, 6 m op y 100. Keeper op x 150, y 19.
@@ -107,7 +123,13 @@ Regels:
 - De volgende stap begint met de eindposities van de vorige.
 - roster: alleen de spelers waar de oefening over gaat; geef elke rosterspeler in elke stap één rol-zin.
 - Categorie: AANVAL, VERDEDIGING, TECHNIEK of KEEPER. Niveau: BASIS, GEMIDDELD of GEVORDERD.
-- Teksten: titel ≤ 60 tekens, samenvatting ≤ 120, staptekst ≤ 400, rol ≤ 200.`;
+- Teksten: titel ≤ 60 tekens, samenvatting ≤ 120, staptekst ≤ 400, rol ≤ 200.
+- Bij een whiteboardfoto: lees naast cirkels, nummers en pijlen de geschreven of handgeschreven tekst
+(titel, stapnotities, rolregels, kernpunten, namen en nummers). Neem die letterlijk over. Beschrijf een
+getekende actie alleen kort als het bord daar geen zin bij heeft. Verzin geen coachingstekst, namen of
+kernpunten die niet op de foto of in de beschrijving staan. Veelgemaakte fouten die erbij geschreven
+staan horen in commonMistakes. Is een stuk tekst onleesbaar, raad de woorden niet en zet een korte
+aanduiding in unreadable (bijvoorbeeld "rol bij 6"); anders unreadable als lege lijst.`;
 
 function refId(ref: {
   team: "OFF" | "DEF" | "GK";
@@ -158,6 +180,8 @@ function toFrame(step: AiDrillDraft["steps"][number]): DiagramFrame {
 /**
  * Converts the model output into a validated {@link DrillInput}, filling gaps
  * (missing keeper, unknown ball holder) and collecting hints for the trainer.
+ * Titles, step copy, roles, key points and names are kept as returned.
+ * Each `unreadable` label becomes a warning in the same Dutch style as a missing role.
  *
  * @param ai - Structured model output.
  */
@@ -190,6 +214,11 @@ export function toDrillInput(ai: AiDrillDraft): DrillDraftResult {
     }
     return { title: s.title, text: s.text, frame, roles };
   });
+  for (const note of ai.unreadable) {
+    warnings.push(
+      `Tekst op de foto niet leesbaar (${note}) – wil je die aanvullen?`,
+    );
+  }
   const draft = drillInputSchema.parse({
     title: ai.title,
     summary: ai.summary,
@@ -229,8 +258,9 @@ function dataUrlToBuffer(dataUrl: string): {
 
 /**
  * Drafts a drill from a trainer's description and/or whiteboard photo via the
- * AI Gateway (structured output). The result is unpublished and meant to be
- * reviewed in the editor.
+ * AI Gateway (structured output). A photo contributes drawn positions and
+ * arrows and the written text on the board. The result is unpublished and
+ * meant to be reviewed in the editor.
  *
  * @param input - Description (may be a speech transcript) and optional image data URL.
  */
@@ -244,10 +274,8 @@ export async function draftDrill(input: {
     `Standaardopstelling (team, nummer, x, y): ${lineupHint()}`,
     input.description
       ? `Beschrijving van de trainer:\n${input.description}`
-      : "Er is geen tekst; lees de oefening van de whiteboardfoto.",
-    input.imageDataUrl
-      ? "Op de foto: cirkels/nummers zijn spelers, pijlen zijn acties (gestippeld = pass)."
-      : "",
+      : "Er is geen getypte beschrijving; lees de oefening van de whiteboardfoto, inclusief de tekst die erop geschreven staat.",
+    input.imageDataUrl ? SPEELBOEK_PHOTO_HINT : "",
   ]
     .filter(Boolean)
     .join("\n\n");
