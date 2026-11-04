@@ -136,6 +136,7 @@ describe("DrillDetail", () => {
     fireEvent.click(screen.getByRole("button", { name: "Volledig scherm" }));
     const dialog = screen.getByRole("dialog", { name: "Volledig scherm" });
     expect(dialog).toHaveFocus();
+    expect(dialog.querySelector(".speelboek-legend")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /Speel animatie/ }));
     expect(
@@ -154,6 +155,40 @@ describe("DrillDetail", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Volledig scherm" }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the fullscreen controls while the animation plays", () => {
+    vi.useFakeTimers();
+    render(<DrillDetail drill={tipIn} counterpart={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Volledig scherm" }));
+    const chrome = () =>
+      document.querySelector(".speelboek-fullscreen-chrome") as HTMLElement;
+
+    fireEvent.click(screen.getByRole("button", { name: /Speel animatie/ }));
+    expect(chrome()).toHaveAttribute("data-chrome", "on");
+
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(chrome()).toHaveAttribute("data-chrome", "off");
+
+    fireEvent.pointerDown(
+      screen.getByRole("dialog", { name: "Volledig scherm" }),
+    );
+    expect(chrome()).toHaveAttribute("data-chrome", "on");
+
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(chrome()).toHaveAttribute("data-chrome", "off");
+
+    act(() => {
+      vi.advanceTimersByTime(PLAY_INTERVAL_MS * 3);
+    });
+    expect(chrome()).toHaveAttribute("data-chrome", "on");
+    expect(
+      screen.getByRole("button", { name: /Speel animatie/ }),
     ).toBeInTheDocument();
   });
 

@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type PointerEvent,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -36,11 +37,12 @@ type Props = {
 };
 
 /**
- * Drill detail: diagram with a step-by-step stepper, fullscreen playback
- * (portrait stacks the pool above the controls, landscape places them side by
- * side), the role of every roster position per step (with the reader's own
- * position highlighted and remembered per drill in `localStorage`), key points,
- * common mistakes and a link to the counterpart drill (attack <-> defence).
+ * Drill detail: diagram with a step-by-step stepper, fullscreen playback (the
+ * pool fills the screen; the step navigator and play button sit on the bottom
+ * and fade out while the animation runs), the role of every roster position per
+ * step (with the reader's own position highlighted and remembered per drill in
+ * `localStorage`), key points, common mistakes and a link to the counterpart
+ * drill (attack <-> defence).
  *
  * @param drill - Drill to show.
  * @param counterpart - Drill showing the same situation from the other side, if any.
@@ -277,12 +279,11 @@ export default function DrillDetail({ drill, counterpart }: Props) {
         ? createPortal(
             <DrillFullscreen
               title={drill.title}
+              playing={playing}
               onClose={closeFullscreen}
+              onTogglePlay={playing ? () => showStep(viewIndex) : play}
               diagram={diagram()}
               stepper={stepper()}
-              legend={<DiagramLegend attackColor={step.frame.attackColor} />}
-              text={step.text}
-              playButton={playButton()}
             />,
             document.body,
           )
@@ -291,25 +292,48 @@ export default function DrillDetail({ drill, counterpart }: Props) {
   );
 }
 
+/** How long the fullscreen controls stay up after play starts or a tap. */
+const CHROME_HIDE_MS = 1000;
+
 function DrillFullscreen({
   title,
+  playing,
   onClose,
+  onTogglePlay,
   diagram,
-  legend,
   stepper,
-  text,
-  playButton,
 }: {
   title: string;
+  playing: boolean;
   onClose: () => void;
+  onTogglePlay: () => void;
   diagram: ReactNode;
-  legend: ReactNode;
   stepper: ReactNode;
-  text: string;
-  playButton: ReactNode;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const hideTimer = useRef<number | null>(null);
+  const [chromeOn, setChromeOn] = useState(true);
+  const clearHide = useCallback(() => {
+    if (hideTimer.current != null) window.clearTimeout(hideTimer.current);
+    hideTimer.current = null;
+  }, []);
+  const armHide = useCallback(() => {
+    clearHide();
+    hideTimer.current = window.setTimeout(
+      () => setChromeOn(false),
+      CHROME_HIDE_MS,
+    );
+  }, [clearHide]);
   useDialogFocusTrap(dialogRef, onClose);
+  useEffect(() => {
+    if (!playing) {
+      clearHide();
+      setChromeOn(true);
+      return;
+    }
+    armHide();
+    return clearHide;
+  }, [playing, armHide, clearHide]);
   useEffect(() => {
     const node = dialogRef.current;
     const previousOverflow = document.body.style.overflow;
@@ -330,6 +354,13 @@ function DrillFullscreen({
     };
   }, [onClose]);
 
+  const revealChrome = (event: PointerEvent<HTMLDivElement>) => {
+    if (!playing || chromeOn) return;
+    if ((event.target as Element).closest("button, a")) return;
+    setChromeOn(true);
+    armHide();
+  };
+
   return (
     <div
       ref={dialogRef}
@@ -338,27 +369,35 @@ function DrillFullscreen({
       aria-modal="true"
       aria-label="Volledig scherm"
       tabIndex={-1}
+      onPointerDown={revealChrome}
     >
-      <div className="speelboek-fullscreen-bar">
-        <strong className="min-w-0 truncate">{title}</strong>
-        <button
-          type="button"
-          className="speelboek-stepper-nav"
-          aria-label="Sluit volledig scherm"
-          onClick={onClose}
-        >
-          ×
-        </button>
+      <div className="speelboek-fullscreen-stage">
+        <div className="speelboek-pool">{diagram}</div>
       </div>
-      <div className="speelboek-fullscreen-body">
-        <div className="speelboek-fullscreen-stage">
-          <div className="speelboek-pool">{diagram}</div>
+      <div
+        className="speelboek-fullscreen-chrome"
+        data-chrome={chromeOn ? "on" : "off"}
+      >
+        <div className="speelboek-fullscreen-bar">
+          <strong className="min-w-0 truncate">{title}</strong>
+          <button
+            type="button"
+            className="speelboek-stepper-nav"
+            aria-label="Sluit volledig scherm"
+            onClick={onClose}
+          >
+            ×
+          </button>
         </div>
-        <div className="speelboek-fullscreen-controls">
-          {legend}
+        <div className="speelboek-fullscreen-dock">
           {stepper}
-          <p className="speelboek-fullscreen-text">{text}</p>
-          <div className="flex gap-2">{playButton}</div>
+          <Button
+            variant="primary"
+            className="speelboek-fullscreen-play"
+            onClick={onTogglePlay}
+          >
+            {playing ? "Stop animatie" : "▶ Speel animatie"}
+          </Button>
         </div>
       </div>
     </div>
