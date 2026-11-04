@@ -1,7 +1,7 @@
 import { prisma } from "../db";
 import type { Drill, ProgramItemInput } from "../schemas/speelboek";
 import { toYMD } from "../training";
-import { findDrill, getAllDrills } from "./speelboekService";
+import { getAllDrills } from "./speelboekService";
 import {
   getWaapiAppUrl,
   sendWhatsAppGroupMessage,
@@ -40,6 +40,29 @@ async function resolveItems(
   const all = await getAllDrills(includeDrafts);
   const byId = new Map(all.map((d) => [d.id, d]));
   return rows.map((r) => ({ ...r, drill: byId.get(r.drillId) ?? null }));
+}
+
+/** Unique training dates in first-seen order (matches legacy getUpcomingProgram scan). */
+function distinctTrainingDates(dateRows: { date: string }[]): string[] {
+  const dates: string[] = [];
+  const seen = new Set<string>();
+  for (const row of dateRows) {
+    if (seen.has(row.date)) continue;
+    seen.add(row.date);
+    dates.push(row.date);
+  }
+  return dates;
+}
+
+/** Validates drill slugs with one library load instead of per-id lookups. */
+async function drillIdsExist(
+  drillIds: string[],
+  includeDrafts: boolean,
+): Promise<boolean> {
+  if (drillIds.length === 0) return true;
+  const all = await getAllDrills(includeDrafts);
+  const byId = new Map(all.map((d) => [d.id, d]));
+  return drillIds.every((id) => byId.has(id));
 }
 
 /**
@@ -81,7 +104,14 @@ export async function setProgram(
   for (const item of items) {
     if (seen.has(item.drillId)) return null;
     seen.add(item.drillId);
-    if (!(await findDrill(item.drillId))) return null;
+  }
+  if (
+    !(await drillIdsExist(
+      items.map((item) => item.drillId),
+      true,
+    ))
+  ) {
+    return null;
   }
   await prisma.$transaction([
     prisma.trainingProgramItem.deleteMany({ where: { date } }),
@@ -120,13 +150,35 @@ export async function getUpcomingProgram(
     orderBy: { date: "asc" },
   });
   if (dateRows.length === 0) return null;
-  const seen = new Set<string>();
-  for (const row of dateRows) {
-    if (seen.has(row.date)) continue;
-    seen.add(row.date);
-    const program = await getProgram(row.date, false);
-    program.items = program.items.filter((i) => i.drill !== null);
-    if (program.items.length > 0) return program;
+  const datesInOrder = distinctTrainingDates(dateRows);
+  const itemRows = await prisma.trainingProgramItem.findMany({
+    where: { date: { in: datesInOrder } },
+    select: {
+      id: true,
+      date: true,
+      drillId: true,
+      position: true,
+      minutes: true,
+      note: true,
+    },
+    orderBy: [{ date: "asc" }, { position: "asc" }],
+  });
+  const drills = await getAllDrills(false);
+  const drillById = new Map(drills.map((d) => [d.id, d]));
+  for (const date of datesInOrder) {
+    const rows = itemRows.filter((row) => row.date === date);
+    const items: ProgramItem[] = rows.map((row) => ({
+      id: row.id,
+      drillId: row.drillId,
+      position: row.position,
+      minutes: row.minutes,
+      note: row.note,
+      drill: drillById.get(row.drillId) ?? null,
+    }));
+    const published = items.filter((item) => item.drill !== null);
+    if (published.length > 0) {
+      return { date, items: published };
+    }
   }
   return null;
 }
