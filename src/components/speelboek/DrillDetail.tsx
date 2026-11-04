@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Route } from "next";
 import type { Drill } from "../../lib/schemas/speelboek";
 import {
@@ -27,10 +28,11 @@ type Props = {
 };
 
 /**
- * Drill detail: diagram with a step-by-step stepper, the role of every roster
- * position per step (with the reader's own position highlighted and remembered
- * per drill in `localStorage`), key points, common mistakes and a link to the
- * counterpart drill (attack <-> defence).
+ * Drill detail: diagram with a step-by-step stepper, fullscreen playback
+ * (portrait stacks the pool above the controls, landscape places them side by
+ * side), the role of every roster position per step (with the reader's own
+ * position highlighted and remembered per drill in `localStorage`), key points,
+ * common mistakes and a link to the counterpart drill (attack <-> defence).
  *
  * @param drill - Drill to show.
  * @param counterpart - Drill showing the same situation from the other side, if any.
@@ -39,7 +41,9 @@ export default function DrillDetail({ drill, counterpart }: Props) {
   const [stepIndex, setStepIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [holding, setHolding] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [myPlayerId, setMyPlayerId] = useState<string | null>(null);
+  const fullscreenRef = useRef<HTMLDivElement>(null);
   const storageKey = `${STORAGE_PREFIX}${drill.id}`;
   const labels = useMemo(() => rosterLabels(drill), [drill]);
   const last = drill.steps.length - 1;
@@ -50,6 +54,33 @@ export default function DrillDetail({ drill, counterpart }: Props) {
     setHolding(true);
     setStepIndex(last);
   }, [clock.finished, last]);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const node = fullscreenRef.current;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFullscreen(false);
+    };
+    let enteredNative = false;
+    const onFullscreenChange = () => {
+      if (document.fullscreenElement === node) enteredNative = true;
+      else if (enteredNative) setFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    void node?.requestFullscreen?.().catch(() => undefined);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      if (document.fullscreenElement === node) {
+        void document.exitFullscreen?.().catch(() => undefined);
+      }
+    };
+  }, [fullscreen]);
+
   const viewIndex = playing ? clock.index : stepIndex;
   const step = drill.steps[viewIndex];
   const played = playing
@@ -94,9 +125,40 @@ export default function DrillDetail({ drill, counterpart }: Props) {
 
   const roleByPlayer = new Map(step.roles.map((r) => [r.playerId, r.text]));
 
+  const diagram = () => (
+    <PoolDiagram
+      frame={played?.frame ?? step.frame}
+      positions={played?.positions}
+      ballAt={played?.ballAt}
+      playback={playing || holding}
+      labels={labels}
+      selectedPlayerId={myPlayerId ?? undefined}
+      title={`Stap ${viewIndex + 1}: ${step.title}`}
+    />
+  );
+  const stepper = () => (
+    <DrillStepper
+      steps={drill.steps}
+      viewIndex={viewIndex}
+      last={last}
+      title={step.title}
+      onPrev={() => showStep(Math.max(0, viewIndex - 1))}
+      onNext={() => showStep(Math.min(last, viewIndex + 1))}
+    />
+  );
+  const playButton = () => (
+    <Button
+      variant="primary"
+      className="flex-1"
+      onClick={playing ? () => showStep(viewIndex) : play}
+    >
+      {playing ? "Stop animatie" : "▶ Speel animatie"}
+    </Button>
+  );
+
   return (
     <main>
-      <div className="container">
+      <div className="container" hidden={fullscreen}>
         <AppBar title={drill.title} fallbackHref="/speelboek" />
 
         <div className="flex flex-wrap gap-1.5 mb-3">
@@ -110,64 +172,22 @@ export default function DrillDetail({ drill, counterpart }: Props) {
           ) : null}
         </div>
 
-        <div className="speelboek-pool">
-          <PoolDiagram
-            frame={played?.frame ?? step.frame}
-            positions={played?.positions}
-            ballAt={played?.ballAt}
-            playback={playing || holding}
-            labels={labels}
-            selectedPlayerId={myPlayerId ?? undefined}
-            title={`Stap ${viewIndex + 1}: ${step.title}`}
-          />
-        </div>
+        <div className="speelboek-pool">{diagram()}</div>
         <DiagramLegend attackColor={step.frame.attackColor} />
-
-        <div className="speelboek-stepper" aria-live="polite">
-          <button
-            type="button"
-            className="speelboek-stepper-nav"
-            aria-label="Vorige stap"
-            disabled={viewIndex === 0}
-            onClick={() => showStep(Math.max(0, viewIndex - 1))}
-          >
-            ‹
-          </button>
-          <div className="text-center min-w-0">
-            <div className="font-semibold">
-              Stap {viewIndex + 1} van {drill.steps.length} · {step.title}
-            </div>
-            <div className="speelboek-dots" aria-hidden="true">
-              {drill.steps.map((s, i) => (
-                <i
-                  key={s.title}
-                  data-on={i === viewIndex ? "true" : undefined}
-                />
-              ))}
-            </div>
-          </div>
-          <button
-            type="button"
-            className="speelboek-stepper-nav"
-            aria-label="Volgende stap"
-            disabled={viewIndex === last}
-            onClick={() => showStep(Math.min(last, viewIndex + 1))}
-          >
-            ›
-          </button>
-        </div>
+        {stepper()}
 
         <div className="card">
           <p className="m-0 text-[14px]">{step.text}</p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {playButton()}
           <Button
-            variant="primary"
-            className="flex-1"
-            onClick={playing ? () => showStep(viewIndex) : play}
+            variant="secondary"
+            className="flex-1 basis-[140px]"
+            onClick={() => setFullscreen(true)}
           >
-            {playing ? "Stop animatie" : "▶ Speel animatie"}
+            Volledig scherm
           </Button>
           {counterpart ? (
             <Link
@@ -271,7 +291,91 @@ export default function DrillDetail({ drill, counterpart }: Props) {
           </p>
         ) : null}
       </div>
+      {fullscreen
+        ? createPortal(
+            <div
+              ref={fullscreenRef}
+              className="speelboek-fullscreen"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Volledig scherm"
+            >
+              <div className="speelboek-fullscreen-bar">
+                <strong className="min-w-0 truncate">{drill.title}</strong>
+                <button
+                  type="button"
+                  className="speelboek-stepper-nav"
+                  aria-label="Sluit volledig scherm"
+                  onClick={() => setFullscreen(false)}
+                >
+                  ×
+                </button>
+              </div>
+              <div className="speelboek-fullscreen-body">
+                <div className="speelboek-fullscreen-stage">
+                  <div className="speelboek-pool">{diagram()}</div>
+                </div>
+                <div className="speelboek-fullscreen-controls">
+                  <DiagramLegend attackColor={step.frame.attackColor} />
+                  {stepper()}
+                  <p className="speelboek-fullscreen-text">{step.text}</p>
+                  <div className="flex gap-2">{playButton()}</div>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </main>
+  );
+}
+
+function DrillStepper({
+  steps,
+  viewIndex,
+  last,
+  title,
+  onPrev,
+  onNext,
+}: {
+  steps: Drill["steps"];
+  viewIndex: number;
+  last: number;
+  title: string;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="speelboek-stepper" aria-live="polite">
+      <button
+        type="button"
+        className="speelboek-stepper-nav"
+        aria-label="Vorige stap"
+        disabled={viewIndex === 0}
+        onClick={onPrev}
+      >
+        ‹
+      </button>
+      <div className="text-center min-w-0">
+        <div className="font-semibold">
+          Stap {viewIndex + 1} van {steps.length} · {title}
+        </div>
+        <div className="speelboek-dots" aria-hidden="true">
+          {steps.map((s, i) => (
+            <i key={s.title} data-on={i === viewIndex ? "true" : undefined} />
+          ))}
+        </div>
+      </div>
+      <button
+        type="button"
+        className="speelboek-stepper-nav"
+        aria-label="Volgende stap"
+        disabled={viewIndex === last}
+        onClick={onNext}
+      >
+        ›
+      </button>
+    </div>
   );
 }
 

@@ -130,6 +130,33 @@ describe("DrillDetail", () => {
     ).toBeInTheDocument();
   });
 
+  it("plays and stops the animation from the fullscreen view, then returns", () => {
+    render(<DrillDetail drill={tipIn} counterpart={null} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Volledig scherm" }));
+    const dialog = screen.getByRole("dialog", { name: "Volledig scherm" });
+    expect(dialog).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Speel animatie/ }));
+    expect(
+      screen.getByRole("button", { name: "Stop animatie" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Stop animatie" }));
+    expect(
+      screen.getByRole("button", { name: /Speel animatie/ }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sluit volledig scherm" }),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Volledig scherm" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Volledig scherm" }),
+    ).toBeInTheDocument();
+  });
+
   it("links to the counterpart drill", () => {
     render(<DrillDetail drill={manMeer} counterpart={zone} />);
     expect(

@@ -1639,6 +1639,72 @@ select.ui-select[aria-invalid="true"] {
   height: auto;
   display: block;
 }
+.speelboek-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1600;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg);
+  color: var(--text);
+  padding: max(10px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  overscroll-behavior: none;
+}
+.speelboek-fullscreen-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.speelboek-fullscreen-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.speelboek-fullscreen-stage {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  container-type: size;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.speelboek-fullscreen-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+@media (orientation: landscape) {
+  .speelboek-fullscreen-body {
+    flex-direction: row;
+    align-items: stretch;
+  }
+  .speelboek-fullscreen-controls {
+    width: min(340px, 42%);
+    justify-content: center;
+    overflow: auto;
+  }
+}
+.speelboek-fullscreen-stage .speelboek-pool {
+  width: min(100cqi, calc(100cqh * 2));
+  max-height: 100%;
+  margin: 0;
+}
+.speelboek-fullscreen-text {
+  margin: 0;
+  font-size: 14px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .speelboek-legend {
   list-style: none;
   display: flex;
