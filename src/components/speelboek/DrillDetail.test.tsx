@@ -135,7 +135,7 @@ describe("DrillDetail", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Volledig scherm" }));
     const dialog = screen.getByRole("dialog", { name: "Volledig scherm" });
-    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveFocus();
 
     fireEvent.click(screen.getByRole("button", { name: /Speel animatie/ }));
     expect(

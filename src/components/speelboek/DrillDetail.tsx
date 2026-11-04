@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import type { Route } from "next";
 import type { Drill } from "../../lib/schemas/speelboek";
@@ -12,6 +19,7 @@ import {
 } from "../../lib/speelboek/lineup";
 import { rosterLabels, type LibraryDrill } from "../../lib/speelboek/library";
 import { playbackFrame } from "../../lib/speelboek/playback";
+import { useDialogFocusTrap } from "../cityArena/useDialogFocusTrap";
 import { AppBar, Button } from "../ui";
 import DrillEngagementPanel from "./DrillEngagementPanel";
 import PoolDiagram from "./PoolDiagram";
@@ -43,7 +51,7 @@ export default function DrillDetail({ drill, counterpart }: Props) {
   const [holding, setHolding] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [myPlayerId, setMyPlayerId] = useState<string | null>(null);
-  const fullscreenRef = useRef<HTMLDivElement>(null);
+  const closeFullscreen = useCallback(() => setFullscreen(false), []);
   const storageKey = `${STORAGE_PREFIX}${drill.id}`;
   const labels = useMemo(() => rosterLabels(drill), [drill]);
   const last = drill.steps.length - 1;
@@ -54,32 +62,6 @@ export default function DrillDetail({ drill, counterpart }: Props) {
     setHolding(true);
     setStepIndex(last);
   }, [clock.finished, last]);
-
-  useEffect(() => {
-    if (!fullscreen) return;
-    const node = fullscreenRef.current;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setFullscreen(false);
-    };
-    let enteredNative = false;
-    const onFullscreenChange = () => {
-      if (document.fullscreenElement === node) enteredNative = true;
-      else if (enteredNative) setFullscreen(false);
-    };
-    window.addEventListener("keydown", onKey);
-    document.addEventListener("fullscreenchange", onFullscreenChange);
-    void node?.requestFullscreen?.().catch(() => undefined);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKey);
-      document.removeEventListener("fullscreenchange", onFullscreenChange);
-      if (document.fullscreenElement === node) {
-        void document.exitFullscreen?.().catch(() => undefined);
-      }
-    };
-  }, [fullscreen]);
 
   const viewIndex = playing ? clock.index : stepIndex;
   const step = drill.steps[viewIndex];
@@ -293,40 +275,93 @@ export default function DrillDetail({ drill, counterpart }: Props) {
       </div>
       {fullscreen
         ? createPortal(
-            <div
-              ref={fullscreenRef}
-              className="speelboek-fullscreen"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Volledig scherm"
-            >
-              <div className="speelboek-fullscreen-bar">
-                <strong className="min-w-0 truncate">{drill.title}</strong>
-                <button
-                  type="button"
-                  className="speelboek-stepper-nav"
-                  aria-label="Sluit volledig scherm"
-                  onClick={() => setFullscreen(false)}
-                >
-                  ×
-                </button>
-              </div>
-              <div className="speelboek-fullscreen-body">
-                <div className="speelboek-fullscreen-stage">
-                  <div className="speelboek-pool">{diagram()}</div>
-                </div>
-                <div className="speelboek-fullscreen-controls">
-                  <DiagramLegend attackColor={step.frame.attackColor} />
-                  {stepper()}
-                  <p className="speelboek-fullscreen-text">{step.text}</p>
-                  <div className="flex gap-2">{playButton()}</div>
-                </div>
-              </div>
-            </div>,
+            <DrillFullscreen
+              title={drill.title}
+              onClose={closeFullscreen}
+              diagram={diagram()}
+              stepper={stepper()}
+              legend={<DiagramLegend attackColor={step.frame.attackColor} />}
+              text={step.text}
+              playButton={playButton()}
+            />,
             document.body,
           )
         : null}
     </main>
+  );
+}
+
+function DrillFullscreen({
+  title,
+  onClose,
+  diagram,
+  legend,
+  stepper,
+  text,
+  playButton,
+}: {
+  title: string;
+  onClose: () => void;
+  diagram: ReactNode;
+  legend: ReactNode;
+  stepper: ReactNode;
+  text: string;
+  playButton: ReactNode;
+}) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocusTrap(dialogRef, onClose);
+  useEffect(() => {
+    const node = dialogRef.current;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    let enteredNative = false;
+    const onFullscreenChange = () => {
+      if (document.fullscreenElement === node) enteredNative = true;
+      else if (enteredNative) onClose();
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    void node?.requestFullscreen?.().catch(() => undefined);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      if (document.fullscreenElement === node) {
+        void document.exitFullscreen?.().catch(() => undefined);
+      }
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      ref={dialogRef}
+      className="speelboek-fullscreen"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Volledig scherm"
+      tabIndex={-1}
+    >
+      <div className="speelboek-fullscreen-bar">
+        <strong className="min-w-0 truncate">{title}</strong>
+        <button
+          type="button"
+          className="speelboek-stepper-nav"
+          aria-label="Sluit volledig scherm"
+          onClick={onClose}
+        >
+          ×
+        </button>
+      </div>
+      <div className="speelboek-fullscreen-body">
+        <div className="speelboek-fullscreen-stage">
+          <div className="speelboek-pool">{diagram}</div>
+        </div>
+        <div className="speelboek-fullscreen-controls">
+          {legend}
+          {stepper}
+          <p className="speelboek-fullscreen-text">{text}</p>
+          <div className="flex gap-2">{playButton}</div>
+        </div>
+      </div>
+    </div>
   );
 }
 

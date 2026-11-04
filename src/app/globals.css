@@ -1651,10 +1651,12 @@ select.ui-select[aria-invalid="true"] {
   padding: max(10px, env(safe-area-inset-top))
     max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom))
     max(12px, env(safe-area-inset-left));
+  overflow: hidden;
   overscroll-behavior: none;
 }
 .speelboek-fullscreen-bar {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -1680,6 +1682,9 @@ select.ui-select[aria-invalid="true"] {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-height: 0;
+  max-height: 46%;
+  overflow: auto;
 }
 @media (orientation: landscape) {
   .speelboek-fullscreen-body {
@@ -1688,7 +1693,8 @@ select.ui-select[aria-invalid="true"] {
   }
   .speelboek-fullscreen-controls {
     width: min(340px, 42%);
-    justify-content: center;
+    max-height: none;
+    justify-content: safe center;
     overflow: auto;
   }
 }
@@ -1700,10 +1706,6 @@ select.ui-select[aria-invalid="true"] {
 .speelboek-fullscreen-text {
   margin: 0;
   font-size: 14px;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 .speelboek-legend {
   list-style: none;
