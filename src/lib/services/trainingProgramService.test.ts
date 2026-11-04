@@ -7,6 +7,8 @@ import {
   setProgram,
   shareProgram,
 } from "./trainingProgramService";
+import { getAllDrills } from "./speelboekService";
+import { getStoredDrill } from "./speelboekStore";
 import { getWaapiAppUrl, sendWhatsAppGroupMessage } from "./waapiService";
 
 const { db } = vi.hoisted(() => ({
@@ -26,6 +28,13 @@ vi.mock("./speelboekStore", () => ({
   listStoredDrills: vi.fn().mockResolvedValue([]),
   getStoredDrill: vi.fn().mockResolvedValue(null),
 }));
+vi.mock("./speelboekService", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./speelboekService")>();
+  return {
+    ...actual,
+    getAllDrills: vi.fn(actual.getAllDrills),
+  };
+});
 vi.mock("./waapiService", () => ({
   sendWhatsAppGroupMessage: vi.fn(),
   getWaapiAppUrl: vi.fn(),
@@ -99,17 +108,33 @@ describe("trainingProgramService", () => {
   it("finds the next planned training within the window", async () => {
     db.trainingProgramItem.findMany
       .mockResolvedValueOnce([{ date: "2026-11-05" }])
-      .mockResolvedValueOnce([row("tip-in", 0)]);
+      .mockResolvedValueOnce([
+        {
+          ...row("tip-in", 0),
+          date: "2026-11-05",
+        },
+      ]);
     const program = await getUpcomingProgram(new Date("2026-11-03T10:00:00"));
     expect(program?.date).toBe("2026-11-05");
-    expect(db.trainingProgramItem.findMany).toHaveBeenCalledWith(
+    expect(db.trainingProgramItem.findMany).toHaveBeenCalledTimes(2);
+    expect(db.trainingProgramItem.findMany).toHaveBeenNthCalledWith(
+      2,
       expect.objectContaining({
-        where: { date: { gte: "2026-11-03", lte: "2026-11-17" } },
-        select: { date: true },
+        where: { date: { in: ["2026-11-05"] } },
       }),
     );
     db.trainingProgramItem.findMany.mockResolvedValueOnce([]);
     expect(await getUpcomingProgram()).toBeNull();
+  });
+
+  it("validates programme drills with one library load (no per-id DB lookups)", async () => {
+    db.trainingProgramItem.findMany.mockResolvedValue([row("tip-in", 0)]);
+    await setProgram("2026-11-04", [
+      { drillId: "tip-in" },
+      { drillId: "4-2-man-meer" },
+    ]);
+    expect(vi.mocked(getAllDrills)).toHaveBeenCalled();
+    expect(vi.mocked(getStoredDrill)).not.toHaveBeenCalled();
   });
 
   it("builds a WhatsApp message with deep links", () => {
