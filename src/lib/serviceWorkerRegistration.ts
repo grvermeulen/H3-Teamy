@@ -59,6 +59,9 @@ async function registerServiceWorker(
 ): Promise<void> {
   try {
     const registration = await container.register(SERVICE_WORKER_URL);
+    if (!registration) {
+      return;
+    }
     reloadOnControllerChange(container);
     if (registration.waiting) {
       activateWorker(registration.waiting);
