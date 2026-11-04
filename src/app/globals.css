@@ -1643,69 +1643,82 @@ select.ui-select[aria-invalid="true"] {
   position: fixed;
   inset: 0;
   z-index: 1600;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
   background: var(--bg);
   color: var(--text);
-  padding: max(10px, env(safe-area-inset-top))
-    max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom))
-    max(12px, env(safe-area-inset-left));
   overflow: hidden;
   overscroll-behavior: none;
 }
-.speelboek-fullscreen-bar {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.speelboek-fullscreen-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 .speelboek-fullscreen-stage {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
   container-type: size;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-}
-.speelboek-fullscreen-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 0;
-  max-height: 46%;
-  overflow: auto;
-}
-@media (orientation: landscape) {
-  .speelboek-fullscreen-body {
-    flex-direction: row;
-    align-items: stretch;
-  }
-  .speelboek-fullscreen-controls {
-    width: min(340px, 42%);
-    max-height: none;
-    justify-content: safe center;
-    overflow: auto;
-  }
 }
 .speelboek-fullscreen-stage .speelboek-pool {
   width: min(100cqi, calc(100cqh * 2));
   max-height: 100%;
   margin: 0;
 }
-.speelboek-fullscreen-text {
+.speelboek-fullscreen-chrome {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  padding: max(10px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  pointer-events: none;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 280ms ease;
+}
+.speelboek-fullscreen-chrome[data-chrome="off"] {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 280ms ease,
+    visibility 0s linear 280ms;
+}
+.speelboek-fullscreen-chrome > * {
+  pointer-events: auto;
+}
+.speelboek-fullscreen-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.speelboek-fullscreen-dock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+}
+.speelboek-fullscreen-dock .speelboek-stepper {
+  flex: 1;
+  min-width: 0;
   margin: 0;
-  font-size: 14px;
+}
+.speelboek-fullscreen-dock .speelboek-stepper .font-semibold {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.speelboek-fullscreen-play {
+  flex: 0 0 auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .speelboek-fullscreen-chrome,
+  .speelboek-fullscreen-chrome[data-chrome="off"] {
+    transition: none;
+  }
 }
 .speelboek-legend {
   list-style: none;
