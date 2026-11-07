@@ -6,6 +6,11 @@ import { TeamEvent } from "../types";
 import { canonicalEventId } from "./eventId";
 import { fetchWithTimeoutAndRetries } from "./fetchWithRetry";
 import { kvGetJson, kvSetJson } from "./kv";
+import {
+  fetchTeamEventsFromDb,
+  persistTeamEventsToDb,
+  teamEventsNeedingDbPersist,
+} from "./services/teamEventPersistenceService";
 
 type IcalDate = Date & { tz?: string };
 
@@ -79,63 +84,10 @@ function pruneTeamEventsByStartWindow(
   });
 }
 
-/**
- * Best-effort Postgres copy of merged calendar metadata for history when
- * Sportlink drops past VEVENTs from the live feed.
- */
-async function persistTeamEventsToDb(events: TeamEvent[]): Promise<void> {
+async function loadTeamEventsFromDb(): Promise<TeamEvent[]> {
   const p = await getLazyPrisma();
-  if (!p || events.length === 0) return;
-  await Promise.all(
-    events.map((e) =>
-      p.event.upsert({
-        where: { id: e.id },
-        create: {
-          id: e.id,
-          title: e.title,
-          description: e.description ?? null,
-          startDate: new Date(e.start),
-          endDate: e.end ? new Date(e.end) : null,
-        },
-        update: {
-          title: e.title,
-          description: e.description ?? null,
-          startDate: new Date(e.start),
-          endDate: e.end ? new Date(e.end) : null,
-        },
-      }),
-    ),
-  );
-}
-
-/**
- * Loads historical events from the database when the iCal feed and cache are
- * both empty. Only returns events that have a title and startDate populated.
- */
-async function fetchEventsFromDb(): Promise<TeamEvent[]> {
-  try {
-    const p = await getLazyPrisma();
-    if (!p) return [];
-    const rows = await p.event.findMany({
-      where: { title: { not: null }, startDate: { not: null } },
-      orderBy: { startDate: "asc" },
-    });
-    return rows
-      .filter((r) => r.title && r.startDate)
-      .map((r) => ({
-        id: r.id,
-        title: r.title!,
-        start: r.startDate!.toISOString(),
-        end: r.endDate?.toISOString(),
-        description: r.description ?? undefined,
-      }));
-  } catch (err: unknown) {
-    Sentry.captureException(
-      err instanceof Error ? err : new Error(String(err)),
-      { tags: { source: "event_db_fallback" } },
-    );
-    return [];
-  }
+  if (!p) return [];
+  return fetchTeamEventsFromDb(p);
 }
 
 function icalDateToIso(value: IcalDate | string | number): string {
@@ -207,7 +159,7 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
   }
 
   const cached = (await kvGetJson<TeamEvent[]>(cacheKey)) || [];
-  const dbEvents = await fetchEventsFromDb();
+  const dbEvents = await loadTeamEventsFromDb();
 
   // Sportlink feed is future-only; KV + Postgres keep past matches for RSVP/verslagen.
   const now = Date.now();
@@ -220,12 +172,24 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
         error instanceof Error ? error : new Error(String(error)),
       );
     });
-    void persistTeamEventsToDb(merged).catch((error: unknown) => {
-      Sentry.captureException(
-        error instanceof Error ? error : new Error(String(error)),
-        { tags: { source: "event_db_persist" } },
-      );
-    });
+  }
+
+  const toPersist = parsed
+    ? merged
+    : teamEventsNeedingDbPersist(cached, dbEvents);
+
+  if (toPersist.length > 0) {
+    const p = await getLazyPrisma();
+    if (p) {
+      try {
+        await persistTeamEventsToDb(p, toPersist);
+      } catch (error: unknown) {
+        Sentry.captureException(
+          error instanceof Error ? error : new Error(String(error)),
+          { tags: { source: "event_db_persist" } },
+        );
+      }
+    }
   }
 
   if (sportlinkFetchError && merged.length === 0) {
