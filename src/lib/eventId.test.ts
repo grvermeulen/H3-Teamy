@@ -33,6 +33,12 @@ describe("eventId", () => {
       );
     });
 
+    it("uses the Europe/Amsterdam match day for late-evening UTC instants", () => {
+      expect(canonicalEventId("De Rijn H3", "2026-11-07T23:30:00.000Z")).toBe(
+        "20261108--de-rijn-h3",
+      );
+    });
+
     it("handles empty title", () => {
       // Depending on implementation, might return just date or trailing dashes
       // Let's see what it does. Implementation: `${y}${m}${day}--${slug}`

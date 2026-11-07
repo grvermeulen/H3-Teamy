@@ -24,6 +24,8 @@ type Props = {
   events: TeamEvent[];
   /** Toont de GTA H3-kaart als de admin-feature-toggle aan staat (standaard verborgen). */
   gtaH3Enabled?: boolean;
+  /** Server-tijd (ms) zodat recente wedstrijden direct kloppen vóór hydration. */
+  nowMs?: number;
 };
 
 type RsvpMap = Record<string, RsvpStatus>;
@@ -42,6 +44,7 @@ type RsvpMap = Record<string, RsvpStatus>;
 export default function EventList({
   events,
   gtaH3Enabled = false,
+  nowMs: nowMsFromServer,
 }: Props): React.JSX.Element {
   const [rsvpMap, setRsvpMap] = useState<RsvpMap>({});
   const [counts, setCounts] = useState<
@@ -265,9 +268,12 @@ export default function EventList({
     void loadRsvpListDetail(id);
   }
 
+  const effectiveNowMs =
+    nowTs > 0 ? nowTs : (nowMsFromServer ?? 0) || Date.now();
+
   const { recentPast, olderPast, future } = useMemo(
-    () => splitPastAndFutureByStart(events, nowTs || 0, 3),
-    [events, nowTs],
+    () => splitPastAndFutureByStart(events, effectiveNowMs, 3),
+    [events, effectiveNowMs],
   );
 
   const visibleCount = recentPast.length + olderPast.length + future.length;
