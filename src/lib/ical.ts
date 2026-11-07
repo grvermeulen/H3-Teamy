@@ -40,6 +40,75 @@ async function getLazyPrisma(): Promise<PrismaClient | null> {
 }
 
 /**
+ * Merges team event lists. Feed data wins by id; also reconciles uid when Sportlink
+ * ids drift after timezone fixes.
+ */
+export function mergeTeamEventLists(
+  ...sources: Array<TeamEvent[] | null | undefined>
+): TeamEvent[] {
+  const byId = new Map<string, TeamEvent>();
+  const idByUid = new Map<string, string>();
+
+  for (const source of sources) {
+    if (!source?.length) continue;
+    for (const raw of source) {
+      let targetId = raw.id;
+      if (raw.uid && idByUid.has(raw.uid)) {
+        targetId = idByUid.get(raw.uid)!;
+      }
+      const prev = byId.get(targetId);
+      const merged: TeamEvent = { ...prev, ...raw, id: targetId };
+      byId.set(targetId, merged);
+      if (merged.uid) idByUid.set(merged.uid, targetId);
+      if (prev?.uid && !merged.uid) idByUid.set(prev.uid, targetId);
+    }
+  }
+
+  return Array.from(byId.values()).sort(
+    (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+  );
+}
+
+function pruneTeamEventsByStartWindow(
+  events: TeamEvent[],
+  nowMs: number,
+): TeamEvent[] {
+  return events.filter((e) => {
+    const t = new Date(e.start).getTime();
+    return t >= nowMs - PRUNE_PAST_MS && t <= nowMs + PRUNE_FUTURE_MS;
+  });
+}
+
+/**
+ * Best-effort Postgres copy of merged calendar metadata for history when
+ * Sportlink drops past VEVENTs from the live feed.
+ */
+async function persistTeamEventsToDb(events: TeamEvent[]): Promise<void> {
+  const p = await getLazyPrisma();
+  if (!p || events.length === 0) return;
+  await Promise.all(
+    events.map((e) =>
+      p.event.upsert({
+        where: { id: e.id },
+        create: {
+          id: e.id,
+          title: e.title,
+          description: e.description ?? null,
+          startDate: new Date(e.start),
+          endDate: e.end ? new Date(e.end) : null,
+        },
+        update: {
+          title: e.title,
+          description: e.description ?? null,
+          startDate: new Date(e.start),
+          endDate: e.end ? new Date(e.end) : null,
+        },
+      }),
+    ),
+  );
+}
+
+/**
  * Loads historical events from the database when the iCal feed and cache are
  * both empty. Only returns events that have a title and startDate populated.
  */
@@ -138,39 +207,25 @@ export async function fetchTeamEvents(): Promise<TeamEvent[]> {
   }
 
   const cached = (await kvGetJson<TeamEvent[]>(cacheKey)) || [];
+  const dbEvents = await fetchEventsFromDb();
 
-  // Merge: new data overrides cached entries by id; cached preserves past events missing from current feed
-  const map = new Map<string, TeamEvent>();
-  for (const e of cached) map.set(e.id, e);
-  if (parsed) {
-    for (const e of parsed) map.set(e.id, e);
-  }
-  let merged = Array.from(map.values()).sort(
-    (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
-  );
-
-  // Prune to a bounded window so Redis does not grow without limit (asymmetric: feeds can list far-future matches).
+  // Sportlink feed is future-only; KV + Postgres keep past matches for RSVP/verslagen.
   const now = Date.now();
-  merged = merged.filter((e) => {
-    const t = new Date(e.start).getTime();
-    return t >= now - PRUNE_PAST_MS && t <= now + PRUNE_FUTURE_MS;
-  });
+  let merged = mergeTeamEventLists(cached, parsed ?? undefined, dbEvents);
 
-  // Update cache if we had a successful parse; otherwise return cached as-is
   if (parsed) {
+    merged = pruneTeamEventsByStartWindow(merged, now);
     await kvSetJson(cacheKey, merged).catch((error: unknown) => {
       Sentry.captureException(
         error instanceof Error ? error : new Error(String(error)),
       );
     });
-  } else if (cached.length) {
-    merged = cached;
-  }
-
-  // Fallback: when both iCal feed and cache are empty, load from the database
-  // so historical events with RSVPs remain visible.
-  if (merged.length === 0) {
-    merged = await fetchEventsFromDb();
+    void persistTeamEventsToDb(merged).catch((error: unknown) => {
+      Sentry.captureException(
+        error instanceof Error ? error : new Error(String(error)),
+        { tags: { source: "event_db_persist" } },
+      );
+    });
   }
 
   if (sportlinkFetchError && merged.length === 0) {

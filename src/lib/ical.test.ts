@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Sentry from "@sentry/nextjs";
-import { fetchTeamEvents } from "./ical";
+import { fetchTeamEvents, mergeTeamEventLists } from "./ical";
 import { kvGetJson, kvSetJson } from "./kv";
 import { formatEventTime } from "./datetime";
 
@@ -42,6 +42,37 @@ LOCATION:Pool A
 END:VEVENT
 END:VCALENDAR`;
 }
+
+describe("mergeTeamEventLists", () => {
+  it("reconciles the same Sportlink fixture when the canonical id changes", () => {
+    const uid = "uid-today";
+    const merged = mergeTeamEventLists(
+      [
+        {
+          id: "20261107--old-slug",
+          uid,
+          title: "De Rijn H3-Opponent",
+          start: "2026-11-07T17:50:00.000Z",
+        },
+      ],
+      [
+        {
+          id: "20261107--de-rijn-h3-opponent",
+          uid,
+          title: "De Rijn H3-Opponent",
+          start: "2026-11-07T17:50:00.000Z",
+          location: "Thuis",
+        },
+      ],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({
+      id: "20261107--old-slug",
+      uid,
+      location: "Thuis",
+    });
+  });
+});
 
 describe("fetchTeamEvents", () => {
   beforeEach(() => {
@@ -201,6 +232,35 @@ describe("fetchTeamEvents", () => {
     expect(events).toHaveLength(1);
     expect(events[0].title).toBe("Cached Match");
     expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it("retains past fixtures from cache when the live feed only lists future matches", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-07T20:59:00.000Z"));
+    vi.mocked(kvGetJson).mockResolvedValue([
+      {
+        id: "20261107--de-rijn-h3",
+        title: "De Rijn H3-Opponent",
+        start: "2026-11-07T17:50:00.000Z",
+        end: "2026-11-07T19:50:00.000Z",
+      },
+      {
+        id: "20261031--away",
+        title: "Away",
+        start: "2026-10-31T17:50:00.000Z",
+        end: "2026-10-31T19:50:00.000Z",
+      },
+    ]);
+    const events = await fetchTeamEvents();
+    expect(events.some((e) => e.id === "20261107--de-rijn-h3")).toBe(true);
+    expect(events.some((e) => e.id === "20261031--away")).toBe(true);
+    expect(kvSetJson).toHaveBeenCalledWith(
+      "calendar:events:v1",
+      expect.arrayContaining([
+        expect.objectContaining({ id: "20261107--de-rijn-h3" }),
+      ]),
+    );
+    vi.useRealTimers();
   });
 
   it("merges new data with cache", async () => {

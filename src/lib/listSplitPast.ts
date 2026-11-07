@@ -7,7 +7,25 @@
  * @param recentPastCount - How many past items stay visible (the last N before `nowMs`).
  * @returns `recentPast` and `olderPast` in chronological order (oldest first); `future` chronological.
  */
-export function splitPastAndFutureByStart<T extends { start: string }>(
+function eventEndMs(end: string | undefined): number | null {
+  if (!end) return null;
+  const t = new Date(end).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+/** Match still in progress at `nowMs` (started but not ended). */
+export function isMatchInProgressAt<T extends { start: string; end?: string }>(
+  event: T,
+  nowMs: number,
+): boolean {
+  const startMs = new Date(event.start).getTime();
+  const endMs = eventEndMs(event.end);
+  return startMs < nowMs && endMs !== null && endMs >= nowMs;
+}
+
+export function splitPastAndFutureByStart<
+  T extends { start: string; end?: string },
+>(
   items: T[],
   nowMs: number,
   recentPastCount: number,
@@ -18,13 +36,25 @@ export function splitPastAndFutureByStart<T extends { start: string }>(
   const idx = allSorted.findIndex((e) => new Date(e.start).getTime() >= nowMs);
   const pastAll = idx === -1 ? allSorted : allSorted.slice(0, idx);
   const future = idx === -1 ? [] : allSorted.slice(idx);
-  const recentPast =
+  const defaultRecent =
     pastAll.length <= recentPastCount
       ? pastAll
       : pastAll.slice(-recentPastCount);
-  const olderPast =
-    pastAll.length > recentPastCount
-      ? pastAll.slice(0, pastAll.length - recentPastCount)
-      : [];
+  const livePast = pastAll.filter((e) => isMatchInProgressAt(e, nowMs));
+  const pinnedIds = new Set<string | number>();
+  const recentPast: T[] = [];
+  for (const e of [...livePast, ...defaultRecent]) {
+    const key = (e as { id?: string }).id ?? e.start;
+    if (pinnedIds.has(key)) continue;
+    pinnedIds.add(key);
+    recentPast.push(e);
+  }
+  recentPast.sort(
+    (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+  );
+  const olderPast = pastAll.filter((e) => {
+    const key = (e as { id?: string }).id ?? e.start;
+    return !pinnedIds.has(key);
+  });
   return { recentPast, olderPast, future };
 }
