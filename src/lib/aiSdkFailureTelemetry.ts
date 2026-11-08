@@ -19,6 +19,18 @@ const ALLOWLISTED_REQUEST_ID_HEADERS = [
 
 const MAX_CAUSE_DEPTH = 4;
 
+/** Veilige provider request-ids (geen vrije tekst / token-achtige strings). */
+const PROVIDER_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
+function isAllowlistedProviderRequestId(value: string): boolean {
+  if (!PROVIDER_REQUEST_ID_PATTERN.test(value)) return false;
+  const lower = value.toLowerCase();
+  if (lower.includes("bearer")) return false;
+  if (lower.startsWith("sk-")) return false;
+  if (value.includes("@") || value.includes("=")) return false;
+  return true;
+}
+
 export type ProviderFailureKind =
   | "auth"
   | "quota"
@@ -52,7 +64,12 @@ function readProviderRequestId(
   if (!headers) return undefined;
   for (const key of ALLOWLISTED_REQUEST_ID_HEADERS) {
     const raw = headers[key] ?? headers[key.toLowerCase()];
-    if (typeof raw === "string" && raw.length > 0 && raw.length <= 128) {
+    if (
+      typeof raw === "string" &&
+      raw.length > 0 &&
+      raw.length <= 128 &&
+      isAllowlistedProviderRequestId(raw)
+    ) {
       return raw;
     }
   }
@@ -78,8 +95,15 @@ function failureKindFromStatus(status: number): ProviderFailureKind {
 function classifyErrorInstance(
   error: unknown,
   depth: number,
+  seen: WeakSet<object>,
 ): AllowlistedProviderTelemetry | null {
   if (depth > MAX_CAUSE_DEPTH || error == null) return null;
+  if (typeof error === "object" && seen.has(error)) {
+    return null;
+  }
+  if (typeof error === "object") {
+    seen.add(error);
+  }
 
   if (isGatewayFreeTierAccessError(error)) {
     return {
@@ -115,7 +139,8 @@ function classifyErrorInstance(
   if (NoObjectGeneratedError.isInstance(error)) {
     const usage = error.usage;
     const responseId =
-      typeof error.response?.id === "string" && error.response.id.length <= 128
+      typeof error.response?.id === "string" &&
+      isAllowlistedProviderRequestId(error.response.id)
         ? error.response.id
         : undefined;
     return {
@@ -148,7 +173,9 @@ function classifyErrorInstance(
 
   if (RetryError.isInstance(error)) {
     const nested = error.errors?.[error.errors.length - 1];
-    const fromNested = nested ? classifyErrorInstance(nested, depth + 1) : null;
+    const fromNested = nested
+      ? classifyErrorInstance(nested, depth + 1, seen)
+      : null;
     if (fromNested) {
       return {
         ...fromNested,
@@ -174,7 +201,7 @@ function classifyErrorInstance(
   }
 
   if (error instanceof Error && error.cause != null) {
-    const fromCause = classifyErrorInstance(error.cause, depth + 1);
+    const fromCause = classifyErrorInstance(error.cause, depth + 1, seen);
     if (fromCause) {
       return {
         ...fromCause,
@@ -192,7 +219,8 @@ function classifyErrorInstance(
 export function parseAiSdkFailure(
   error: unknown,
 ): AllowlistedProviderTelemetry {
-  const parsed = classifyErrorInstance(error, 0);
+  const seen = new WeakSet<object>();
+  const parsed = classifyErrorInstance(error, 0, seen);
   if (parsed) return parsed;
 
   if (error instanceof Error) {

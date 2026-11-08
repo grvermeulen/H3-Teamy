@@ -44,6 +44,8 @@ export default function GenerateReportButton({
   const [notice, setNotice] = useState<string | null>(null);
   const materializeGeneration = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  /** Correlatie voor materialisatie vóór klik op genereren; hergebruikt als flowId bij submit. */
+  const selectionFlowIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -56,11 +58,19 @@ export default function GenerateReportButton({
     const generation = materializeGeneration.current;
     abortControllerRef.current?.abort();
     if (!file) {
+      selectionFlowIdRef.current = null;
       setImageFile(null);
       setImageMaterializing(false);
       setNotice(null);
       return;
     }
+
+    const selectionFlowId = createReportExtractAttemptId();
+    selectionFlowIdRef.current = selectionFlowId;
+    logReportFlowClientTrace({
+      flowId: selectionFlowId,
+      phase: "materialize_start",
+    });
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -83,7 +93,7 @@ export default function GenerateReportButton({
         return;
       }
       logReportFlowClientTrace({
-        flowId: "client-local",
+        flowId: selectionFlowId,
         phase: "materialize_fail",
         outcome: "error",
         materializeErrorClass: result.errorClass,
@@ -91,6 +101,11 @@ export default function GenerateReportButton({
       setNotice(formatMaterializeScreenshotError(result.errorClass));
       return;
     }
+    logReportFlowClientTrace({
+      flowId: selectionFlowId,
+      phase: "materialize_ok",
+      outcome: "success",
+    });
     setImageFile(result.file);
   }
 
@@ -100,7 +115,8 @@ export default function GenerateReportButton({
     }
     setLoading(true);
     setNotice(null);
-    const flowId = createReportExtractAttemptId();
+    const flowId =
+      selectionFlowIdRef.current ?? createReportExtractAttemptId();
     logReportFlowClientTrace({
       flowId,
       phase: "flow_start",

@@ -86,6 +86,55 @@ describe("parseAiSdkFailure", () => {
     ).toBe("parse");
   });
 
+  it("lekt geen ruwe provider-tekst of token-achtige request-ids", () => {
+    const err = new APICallError({
+      message: "PLAYER Jan scored; Bearer sk-live-abcdef",
+      url: "https://ai-gateway.vercel.sh/v1",
+      requestBodyValues: { prompt: "SECRET PROMPT WITH TEAM NAMES" },
+      statusCode: 500,
+      responseHeaders: {
+        "x-request-id": "sk-live-not-allowed",
+        authorization: "Bearer sk-abc",
+        "x-request-id-real": "req-valid-001",
+      },
+      responseBody: '{"players":["secret"]}',
+      isRetryable: false,
+    });
+    const telemetry = parseAiSdkFailure(err);
+    const serialized = JSON.stringify(telemetry);
+    expect(serialized).not.toMatch(/PLAYER|secret|Bearer|sk-live-abcdef/i);
+    expect(telemetry.providerRequestId).toBeUndefined();
+    expect(serialized).not.toContain("prompt");
+  });
+
+  it("accepteert allowlisted provider request-id vormen", () => {
+    const err = new APICallError({
+      message: "x",
+      url: "u",
+      requestBodyValues: {},
+      statusCode: 502,
+      responseHeaders: { "x-request-id": "req-valid-001" },
+      responseBody: "",
+      isRetryable: false,
+    });
+    expect(parseAiSdkFailure(err).providerRequestId).toBe("req-valid-001");
+  });
+
+  it("beperkt geneste causes en voorkomt cycli", () => {
+    const a = new Error("outer");
+    const b = new Error("inner");
+    a.cause = b;
+    b.cause = a;
+    const telemetry = parseAiSdkFailure(a);
+    expect(telemetry.sdkErrorName).toBeDefined();
+    const deep: Error[] = [];
+    for (let i = 0; i < 8; i++) {
+      deep[i] = new Error(`e${i}`);
+      if (i > 0) deep[i - 1].cause = deep[i];
+    }
+    expect(parseAiSdkFailure(deep[0]).failureKind).toBe("unknown");
+  });
+
   it("sanitizeReportFlowSentryExtra dropt ruwe velden maar bewaart telemetrie", () => {
     const sanitized = sanitizeReportFlowSentryExtra({
       flowId: "11111111-1111-4111-8111-111111111111",
