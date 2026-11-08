@@ -6,6 +6,7 @@
 - /api/admin/feedback
 - /api/admin/feedback/[id]
 - /api/admin/status
+- /api/admin/team-events/import
 - /api/admin/users
 - /api/arena/display-matches
 - /api/arena/display-token
