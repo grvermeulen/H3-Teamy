@@ -101,11 +101,17 @@ describe("reportExtractProvider", () => {
       expect(cfg.openAiModelSubstitutedFrom).toBe("gpt-5-chat-latest");
     });
 
-    it("remaps gpt-5.6-sol naar gpt-4o na gateway-visiofouten", () => {
+    it("honors expliciete gpt-5.6-sol env zonder stille herschrijving", () => {
       vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "gpt-5.6-sol");
       const cfg = getExtractProviderConfig();
-      expect(cfg.openAiModel).toBe("openai/gpt-4o");
-      expect(cfg.openAiModelSubstitutedFrom).toBe("gpt-5.6-sol");
+      expect(cfg.openAiModel).toBe("openai/gpt-5.6-sol");
+      expect(cfg.openAiModelSubstitutedFrom).toBeUndefined();
+    });
+
+    it("leest vision-fallback uit REPORT_EXTRACT_VISION_FALLBACK_MODEL", () => {
+      vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "gpt-4o");
+      const cfg = getExtractProviderConfig();
+      expect(cfg.visionFallbackModel).toBe("openai/gpt-4o");
     });
 
     it("remaps claude-sonnet-4-6 to the OpenAI extraction default", () => {

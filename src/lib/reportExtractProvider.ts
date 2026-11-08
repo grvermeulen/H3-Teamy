@@ -4,7 +4,10 @@ import {
   parseAiSdkFailure,
   type AllowlistedProviderTelemetry,
 } from "./aiSdkFailureTelemetry";
-import { resolveReportExtractGatewayModel } from "./ai/gatewayModels";
+import {
+  getReportExtractVisionFallbackModel,
+  resolveReportExtractGatewayModel,
+} from "./ai/gatewayModels";
 
 // OpenAI's structured-output (strict mode) via the Vercel AI Gateway requires
 // every property listed in `properties` to also appear in `required`. Optional
@@ -40,6 +43,8 @@ export type ExtractProviderConfig = {
   openAiModel: string;
   /** Present when `REPORT_EXTRACT_OPENAI_MODEL` was rewritten (e.g. removed gateway snapshot). */
   openAiModelSubstitutedFrom?: string;
+  /** When set via `REPORT_EXTRACT_VISION_FALLBACK_MODEL`, retry VLM once after primary failure. */
+  visionFallbackModel?: string;
   ocrWorkerUrl?: string;
   ocrWorkerToken?: string;
 };
@@ -159,9 +164,10 @@ export function resolveReportExtractOpenAiModel(
  * through the Vercel AI Gateway, which handles upstream auth via OIDC in
  * production or `AI_GATEWAY_API_KEY` locally.
  *
- * When `REPORT_EXTRACT_OPENAI_MODEL` is unset, defaults to
- * `openai/gpt-5.6-sol` (vision). A removed snapshot or non-OpenAI model is remapped to
- * the same default so production does not depend on stale Vercel env values.
+ * When `REPORT_EXTRACT_OPENAI_MODEL` is unset, gebruikt
+ * {@link DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL}. Expliciete env-waarden (incl.
+ * `gpt-5.6-sol`) worden niet stil herschreven. Optioneel
+ * `REPORT_EXTRACT_VISION_FALLBACK_MODEL` voor één retry na VLM-fout.
  */
 export function getExtractProviderConfig(): ExtractProviderConfig {
   const provider = parseProvider(process.env.REPORT_EXTRACT_PROVIDER);
@@ -169,6 +175,7 @@ export function getExtractProviderConfig(): ExtractProviderConfig {
     resolveReportExtractOpenAiModel(
       process.env.REPORT_EXTRACT_OPENAI_MODEL || "",
     );
+  const visionFallbackModel = getReportExtractVisionFallbackModel();
   const ocrWorkerUrl = (process.env.OCR_WORKER_URL || "").trim();
   const ocrWorkerToken = (process.env.OCR_WORKER_TOKEN || "").trim();
 
@@ -195,6 +202,7 @@ export function getExtractProviderConfig(): ExtractProviderConfig {
     provider,
     openAiModel,
     openAiModelSubstitutedFrom,
+    visionFallbackModel,
     ocrWorkerUrl: ocrWorkerUrl || undefined,
     ocrWorkerToken: ocrWorkerToken || undefined,
   };
@@ -487,26 +495,72 @@ async function runVlm(
   options?: ExtractReportFromImageOptions,
 ): Promise<ExtractProviderSuccess> {
   const startedAt = nowMs();
-  const result = await callAiVisionExtraction({
-    model: config.openAiModel,
-    file,
-    onStage: options?.onStage,
-  });
-  const latencyMs = nowMs() - startedAt;
-  options?.onStage?.({
-    phase: "provider_done",
-    providerUsed: "vlm",
-    latencyMs,
-  });
-  return {
-    result,
-    rawText: "",
-    providerUsed: "vlm",
-    model: config.openAiModel,
-    openAiModelSubstitutedFrom: config.openAiModelSubstitutedFrom,
-    fallbackUsed: false,
-    latencyMs,
-  };
+  const invoke = (model: string) =>
+    callAiVisionExtraction({
+      model,
+      file,
+      onStage: options?.onStage,
+    });
+
+  try {
+    const result = await invoke(config.openAiModel);
+    const latencyMs = nowMs() - startedAt;
+    options?.onStage?.({
+      phase: "provider_done",
+      providerUsed: "vlm",
+      latencyMs,
+    });
+    return {
+      result,
+      rawText: "",
+      providerUsed: "vlm",
+      model: config.openAiModel,
+      openAiModelSubstitutedFrom: config.openAiModelSubstitutedFrom,
+      fallbackUsed: false,
+      latencyMs,
+    };
+  } catch (primaryError: unknown) {
+    const fallbackModel = config.visionFallbackModel;
+    if (
+      !fallbackModel ||
+      fallbackModel === config.openAiModel ||
+      !(primaryError instanceof ExtractProviderError)
+    ) {
+      throw primaryError;
+    }
+
+    console.info("report_flow_trace", {
+      event: "report_flow_trace",
+      flowId: options?.flowId ?? "server-generated",
+      scope: "extract",
+      phase: "vision_model_fallback",
+      outcome: "error",
+      provider: {
+        providerUsed: "vlm",
+        model: config.openAiModel,
+        fallbackUsed: true,
+      },
+      providerTelemetry: primaryError.providerTelemetry,
+      errorCode: primaryError.code,
+    });
+
+    const result = await invoke(fallbackModel);
+    const latencyMs = nowMs() - startedAt;
+    options?.onStage?.({
+      phase: "provider_done",
+      providerUsed: "vlm",
+      latencyMs,
+    });
+    return {
+      result,
+      rawText: "",
+      providerUsed: "vlm",
+      model: fallbackModel,
+      openAiModelSubstitutedFrom: config.openAiModel,
+      fallbackUsed: true,
+      latencyMs,
+    };
+  }
 }
 
 async function runOcr(

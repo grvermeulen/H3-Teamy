@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   gatewayModelId,
   getReportExtractGatewayModel,
+  getReportExtractVisionFallbackModel,
   getReportGenerateGatewayModel,
   getStructuredGatewayModel,
   inferGatewayProvider,
@@ -156,9 +157,9 @@ describe("getReportExtractGatewayModel", () => {
     expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
   });
 
-  it("remaps gpt-5.6-sol env override to gpt-4o", () => {
+  it("honors explicit gpt-5.6-sol env override", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/gpt-5.6-sol");
-    expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
+    expect(getReportExtractGatewayModel()).toBe("openai/gpt-5.6-sol");
   });
 
   it("remaps the legacy GPT-5 chat alias", () => {
@@ -179,6 +180,16 @@ describe("getReportExtractGatewayModel", () => {
   it("remaps a bare Claude env override to the OpenAI extraction default", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "claude-sonnet-4-6");
     expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
+  });
+
+  it("returns undefined fallback when env unset", () => {
+    vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "");
+    expect(getReportExtractVisionFallbackModel()).toBeUndefined();
+  });
+
+  it("resolves vision fallback model from env", () => {
+    vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "gpt-4o");
+    expect(getReportExtractVisionFallbackModel()).toBe("openai/gpt-4o");
   });
 });
 

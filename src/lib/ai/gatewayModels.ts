@@ -12,9 +12,9 @@ export const DEFAULT_STRUCTURED_GATEWAY_MODEL = "openai/gpt-4o";
 export const DEFAULT_TEXT_GATEWAY_MODEL = "openai/gpt-4o";
 
 /**
- * Screenshot extraction default: OpenAI vision + structured output via gateway.
- * `openai/gpt-5.6-sol` fails ~7s/502 on stitched tall JPEGs in prod (Nov 2026);
- * `openai/gpt-4o` succeeds on the same image/gateway auth. Override via env.
+ * Screenshot extraction default when `REPORT_EXTRACT_OPENAI_MODEL` is unset.
+ * Prod #914 used `openai/gpt-5.6-sol` in code; preview met `gpt-4o` faalde minder
+ * vaak op dezelfde gateway — geen geïsoleerde model-A/B. Expliciete env blijft leidend.
  */
 export const DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL = "openai/gpt-4o";
 
@@ -27,12 +27,6 @@ const FREE_TIER_BLOCKED_IDS = new Set([
   "claude-sonnet-4",
   "gpt-5-chat-latest",
   "gpt-5.2-2025-12-11",
-]);
-
-/** Gateway vision extract ids that fail stitched-score screenshots (see DEFAULT_REPORT_EXTRACT). */
-const EXTRACT_VISION_REMAP_IDS = new Set([
-  "gpt-5.6-sol",
-  "gpt-5.6-sol-fast",
 ]);
 
 /**
@@ -176,6 +170,16 @@ export function getReportExtractGatewayModel(): string {
   return resolveReportExtractGatewayModel(fromEnv ?? "").model;
 }
 
+/**
+ * Optionele vision-fallback na primaire VLM-fout. Alleen gebruikt wanneer
+ * `REPORT_EXTRACT_VISION_FALLBACK_MODEL` is gezet (niet stil overschreven).
+ */
+export function getReportExtractVisionFallbackModel(): string | undefined {
+  const fromEnv = process.env.REPORT_EXTRACT_VISION_FALLBACK_MODEL?.trim();
+  if (!fromEnv) return undefined;
+  return resolveReportExtractGatewayModel(fromEnv).model;
+}
+
 /** Keeps screenshot extraction on OpenAI and repairs stale/provider-mismatched overrides. */
 export function resolveReportExtractGatewayModel(
   raw: string,
@@ -192,13 +196,6 @@ export function resolveReportExtractGatewayModel(
     id.startsWith("claude-") ||
     id === "gpt-5-chat-latest" ||
     id === "gpt-5.2-2025-12-11";
-
-  if (id && EXTRACT_VISION_REMAP_IDS.has(id)) {
-    return {
-      model: DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL,
-      substitutedFrom: requested || id,
-    };
-  }
 
   if (!invalidForOpenAi) {
     return { model: toGatewayModelString(id, "openai") };
