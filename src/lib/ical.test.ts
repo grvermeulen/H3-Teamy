@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { fetchTeamEvents, mergeTeamEventLists } from "./ical";
 import { kvGetJson, kvSetJson } from "./kv";
 import { formatEventTime } from "./datetime";
+import { canonicalEventId } from "./eventId";
 
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
@@ -269,15 +270,12 @@ describe("fetchTeamEvents", () => {
       Date.now() + 1000 * 60 * 60 * 24,
     ).toISOString();
 
-    const d = new Date(futureDateIso);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    const id = `${y}${m}${day}--match-1`;
+    const parsedStart = futureDate.toISOString().replace(/\.\d{3}Z$/, ".000Z");
+    const id = canonicalEventId("Match 1", parsedStart);
 
     vi.mocked(kvGetJson).mockResolvedValue([
       { id: "old-1", title: "Old Match", start: pastDate },
-      { id, title: "Match 1 (Old)", start: futureDateIso },
+      { id, title: "Match 1 (Old)", start: parsedStart },
     ]);
 
     const events = await fetchTeamEvents();
