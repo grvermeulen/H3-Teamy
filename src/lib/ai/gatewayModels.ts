@@ -14,6 +14,12 @@ export const DEFAULT_TEXT_GATEWAY_MODEL = "openai/gpt-4o";
 /** Screenshot extraction default: strongest current OpenAI vision model. */
 export const DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL = "openai/gpt-5.6-sol";
 
+/**
+ * Vision-capable fallback when the primary extract model fails on AI Gateway
+ * (free-tier denial, missing snapshot, etc.) — see Sentry JAVASCRIPT-NEXTJS-5J.
+ */
+export const REPORT_EXTRACT_VISION_FALLBACK_MODEL = DEFAULT_TEXT_GATEWAY_MODEL;
+
 const STRUCTURED_FALLBACK = DEFAULT_STRUCTURED_GATEWAY_MODEL;
 const TEXT_FALLBACK = DEFAULT_TEXT_GATEWAY_MODEL;
 
@@ -205,5 +211,29 @@ export function isGatewayFreeTierAccessError(error: unknown): boolean {
   return (
     message.includes("Free tier users do not have access to this model") ||
     message.includes("Upgrade to paid credits")
+  );
+}
+
+function gatewayErrorMessage(error: unknown): string {
+  return error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : "";
+}
+
+/**
+ * True when a report-extract `generateObject` call should retry on the
+ * vision fallback model (`gpt-4o`) instead of surfacing immediately.
+ */
+export function isReportExtractGatewayModelError(error: unknown): boolean {
+  if (isGatewayFreeTierAccessError(error)) return true;
+  const message = gatewayErrorMessage(error);
+  if (!message) return false;
+  return (
+    /model.*not found|model_not_found|invalid model|does not exist/i.test(
+      message,
+    ) ||
+    (/403/.test(message) && /model|access|credits/i.test(message))
   );
 }

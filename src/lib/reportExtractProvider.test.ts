@@ -322,6 +322,30 @@ describe("reportExtractProvider", () => {
       });
     });
 
+    it("retries vision extraction on gpt-4o when the primary model is blocked", async () => {
+      mockedGenerateObject
+        .mockRejectedValueOnce(
+          new Error(
+            "Free tier users do not have access to this model. Upgrade to paid credits",
+          ),
+        )
+        .mockResolvedValueOnce({
+          object: {
+            homeTeam: "Home",
+            awayTeam: "Away",
+            homeScore: 1,
+            awayScore: 0,
+          },
+        } as never);
+
+      const out = await extractReportFromImage(makeImageFile());
+      expect(mockedGenerateObject).toHaveBeenCalledTimes(2);
+      expect(
+        (mockedGenerateObject.mock.calls[1][0] as { model: string }).model,
+      ).toBe("openai/gpt-4o");
+      expect(out.result.homeTeam).toBe("Home");
+    });
+
     it("surfaces OCR worker errors as typed provider errors", async () => {
       process.env.REPORT_EXTRACT_PROVIDER = "ocr";
       process.env.OCR_WORKER_URL = "https://ocr.example.com";
