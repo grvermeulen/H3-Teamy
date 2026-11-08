@@ -18,6 +18,14 @@ const sessionState = {
 
 vi.mock("./SessionContext", () => ({ useSession: () => sessionState }));
 
+async function waitForMaterializedGenerateButton() {
+  await waitFor(() => {
+    expect(
+      screen.getByRole("button", { name: /Verslag genereren/i }),
+    ).not.toBeDisabled();
+  });
+}
+
 describe("GenerateReportButton integratie", () => {
   afterEach(() => {
     cleanup();
@@ -62,6 +70,7 @@ describe("GenerateReportButton integratie", () => {
         files: [new File(["x"], "fixture.jpeg", { type: "image/jpeg" })],
       },
     });
+    await waitForMaterializedGenerateButton();
     await fireEvent.click(
       screen.getByRole("button", { name: /Verslag genereren/i }),
     );
@@ -116,6 +125,7 @@ describe("GenerateReportButton integratie", () => {
       type: "image/jpeg",
     });
     await fireEvent.change(fileInput, { target: { files: [file] } });
+    await waitForMaterializedGenerateButton();
     await fireEvent.click(
       screen.getByRole("button", { name: /Verslag genereren/i }),
     );
