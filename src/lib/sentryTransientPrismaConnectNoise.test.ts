@@ -84,6 +84,18 @@ describe("shouldDropTransientPrismaConnectNoiseForSentry", () => {
     ).toBe(false);
   });
 
+  it("drops serialized empty Prisma error without hint (JAVASCRIPT-NEXTJS-5M)", () => {
+    const event = {
+      ...baseEvent,
+      exception: {
+        values: [{ type: "PrismaClientKnownRequestError", value: "" }],
+      },
+    } as typeof baseEvent;
+    expect(shouldDropTransientPrismaConnectNoiseForSentry(event, {})).toBe(
+      true,
+    );
+  });
+
   it("drops serialized empty Prisma error when extra prismaCode is P1017 (JAVASCRIPT-NEXTJS-59)", () => {
     const event = {
       ...baseEvent,

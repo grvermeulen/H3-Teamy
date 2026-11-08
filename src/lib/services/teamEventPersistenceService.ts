@@ -1,6 +1,8 @@
 import * as Sentry from "@sentry/nextjs";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { TeamEvent } from "../../types";
+import { isDbUnavailableError } from "../dbUnavailableError";
+import { isTransientPrismaConnectSentryNoise } from "../sentryTransientPrismaConnectNoise";
 
 export type TeamEventDbClient = Pick<PrismaClient, "event" | "$executeRaw">;
 
@@ -25,10 +27,15 @@ export async function fetchTeamEventsFromDb(
         description: r.description ?? undefined,
       }));
   } catch (err: unknown) {
-    Sentry.captureException(
-      err instanceof Error ? err : new Error(String(err)),
-      { tags: { source: "event_db_fallback" } },
-    );
+    if (
+      !isDbUnavailableError(err) &&
+      !isTransientPrismaConnectSentryNoise(err)
+    ) {
+      Sentry.captureException(
+        err instanceof Error ? err : new Error(String(err)),
+        { tags: { source: "event_db_fallback" } },
+      );
+    }
     return [];
   }
 }
