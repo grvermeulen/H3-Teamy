@@ -65,6 +65,14 @@ jobs:
           SENTRY_RESOLVE_ISSUE_IDS: ${{ github.event_name == 'workflow_dispatch' && inputs.resolve_issue_ids || '' }}
         run: npx tsx scripts/sentry-resolve-report-extract-openai-failed.ts
 
+      - name: Resolve WaAPI api_unauthenticated noise (Sentry)
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: h3-teamy
+          SENTRY_PROJECT: javascript-nextjs
+          SENTRY_RESOLVE_ISSUE_IDS: ${{ github.event_name == 'workflow_dispatch' && inputs.resolve_issue_ids || '' }}
+        run: npx tsx scripts/sentry-resolve-waapi-api-unauthenticated.ts
+
       - name: Fetch unresolved Sentry issues
         id: sentry
         env:

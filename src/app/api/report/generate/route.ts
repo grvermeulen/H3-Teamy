@@ -14,6 +14,7 @@ import {
 } from "../../../../lib/reportGenerateDiagnostics";
 import { getReport, setReport, kvGetJson } from "../../../../lib/kv";
 import { MVP_PLACEHOLDER } from "../../../../lib/mvpNarrative";
+import { reportWaapiNotificationToSentry } from "../../../../lib/waapiNotificationSentry";
 import { sendMatchReportToWhatsAppGroup } from "../../../../lib/services/waapiService";
 import { getActiveUsers } from "../../../../lib/services/userService";
 import { isDbUnavailableError } from "../../../../lib/dbUnavailableError";
@@ -117,26 +118,6 @@ type NarrativeInput = {
   events: PreparedEvent[];
   sourceTeams: { homeTeam?: string; awayTeam?: string };
 };
-
-function reportNotificationOutcome(
-  result: Awaited<ReturnType<typeof sendMatchReportToWhatsAppGroup>>,
-): void {
-  if (result.sent) return;
-  Sentry.setTag("waapi_notification_reason", result.reason);
-
-  if (
-    result.reason === "disabled" ||
-    result.reason === "missing_config" ||
-    result.reason === "invalid_event_id"
-  ) {
-    return;
-  }
-
-  const details = result.details ? `: ${result.details}` : "";
-  Sentry.captureException(
-    new Error(`WaAPI notification not sent (${result.reason})${details}`),
-  );
-}
 
 const OUR_TEAM_KEYWORDS = [
   "de rijn",
@@ -881,7 +862,7 @@ Regels:
       ourScore: narrativeInput.ourScore,
       opponentScore: narrativeInput.opponentScore,
     });
-    reportNotificationOutcome(notificationResult);
+    reportWaapiNotificationToSentry(notificationResult);
 
     logReportGenerateTrace({
       flowId,

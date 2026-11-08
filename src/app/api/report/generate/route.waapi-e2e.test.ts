@@ -11,6 +11,7 @@ import screenshotThree from "./__fixtures__/waapi-e2e-screenshot-3.json";
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
   setTag: vi.fn(),
+  addBreadcrumb: vi.fn(),
 }));
 
 vi.mock("../../../../lib/kv", () => ({
@@ -205,5 +206,41 @@ describe("POST /api/report/generate WAAPI e2e", () => {
       expect.any(Object),
     );
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(0);
+  });
+
+  it("does not capture Sentry when WaAPI returns 401 (invalid token)", async () => {
+    mockedGenerateText.mockResolvedValue({
+      text: "Verslag na 401.\nDe MVP-stemming staat nog open via de knop hieronder!",
+    } as never);
+
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.includes("/client/action/send-message")) {
+        return new Response(JSON.stringify({ message: "Unauthenticated." }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      throw new Error(`Unexpected fetch URL in e2e test: ${url}`);
+    });
+
+    const testCase = screenshotCases[0];
+    const req = new Request("http://localhost/api/report/generate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(makeRequestBody(testCase)),
+    });
+
+    const response = await POST(req as NextRequest);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      whatsappNotification: {
+        sent: false,
+        reason: "api_unauthenticated",
+      },
+    });
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+    expect(vi.mocked(Sentry.addBreadcrumb)).toHaveBeenCalled();
   });
 });
