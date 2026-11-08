@@ -135,8 +135,8 @@ export type ResolvedReportExtractOpenAiModel = {
 
 /**
  * Resolves `REPORT_EXTRACT_OPENAI_MODEL` to a gateway-supported `provider/model`
- * string. Uses `openai/gpt-5.6-sol` when unset and remaps stale, legacy, or
- * non-OpenAI ids to that vision-capable default.
+ * string. Uses `openai/gpt-4o` when unset and remaps stale, legacy, unstable
+ * vision ids, or non-OpenAI ids to that gateway default.
  *
  * @param raw - Value of `REPORT_EXTRACT_OPENAI_MODEL` (may be empty).
  * @returns Full gateway model string for `generateObject`, and the original env value when rewritten.
@@ -360,6 +360,21 @@ export type ExtractReportFromImageOptions = {
   flowId?: string;
 };
 
+/** AI SDK 7 vision user content: `file` i.p.v. deprecated `image` part. */
+export function buildReportExtractVisionUserContent(
+  buffer: Buffer,
+  mimeType: string,
+  promptText: string,
+): Array<
+  | { type: "text"; text: string }
+  | { type: "file"; data: Buffer; mediaType: string }
+> {
+  return [
+    { type: "text", text: promptText },
+    { type: "file", data: buffer, mediaType: mimeType },
+  ];
+}
+
 async function callAiVisionExtraction(args: {
   model: string;
   file: File;
@@ -419,10 +434,11 @@ async function callAiVisionExtraction(args: {
       messages: [
         {
           role: "user",
-          content: [
-            { type: "text", text: buildVisionPrompt() },
-            { type: "image", image: buffer, mediaType: mimeType },
-          ],
+          content: buildReportExtractVisionUserContent(
+            buffer,
+            mimeType,
+            buildVisionPrompt(),
+          ),
         },
       ],
     });

@@ -11,8 +11,12 @@ export const DEFAULT_STRUCTURED_GATEWAY_MODEL = "openai/gpt-4o";
 /** `generateText` default (match report narrative). */
 export const DEFAULT_TEXT_GATEWAY_MODEL = "openai/gpt-4o";
 
-/** Screenshot extraction default: strongest current OpenAI vision model. */
-export const DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL = "openai/gpt-5.6-sol";
+/**
+ * Screenshot extraction default: OpenAI vision + structured output via gateway.
+ * `openai/gpt-5.6-sol` fails ~7s/502 on stitched tall JPEGs in prod (Nov 2026);
+ * `openai/gpt-4o` succeeds on the same image/gateway auth. Override via env.
+ */
+export const DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL = "openai/gpt-4o";
 
 const STRUCTURED_FALLBACK = DEFAULT_STRUCTURED_GATEWAY_MODEL;
 const TEXT_FALLBACK = DEFAULT_TEXT_GATEWAY_MODEL;
@@ -23,6 +27,12 @@ const FREE_TIER_BLOCKED_IDS = new Set([
   "claude-sonnet-4",
   "gpt-5-chat-latest",
   "gpt-5.2-2025-12-11",
+]);
+
+/** Gateway vision extract ids that fail stitched-score screenshots (see DEFAULT_REPORT_EXTRACT). */
+const EXTRACT_VISION_REMAP_IDS = new Set([
+  "gpt-5.6-sol",
+  "gpt-5.6-sol-fast",
 ]);
 
 /**
@@ -182,6 +192,13 @@ export function resolveReportExtractGatewayModel(
     id.startsWith("claude-") ||
     id === "gpt-5-chat-latest" ||
     id === "gpt-5.2-2025-12-11";
+
+  if (id && EXTRACT_VISION_REMAP_IDS.has(id)) {
+    return {
+      model: DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL,
+      substitutedFrom: requested || id,
+    };
+  }
 
   if (!invalidForOpenAi) {
     return { model: toGatewayModelString(id, "openai") };

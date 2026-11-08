@@ -22,7 +22,7 @@ The app uses `await Promise.resolve(params)` for `eventId` so Next.js 15+ async 
 `/api/report/extract` supports a runtime provider flag so extraction can switch without code changes.
 
 - `REPORT_EXTRACT_PROVIDER=vlm|ocr|hybrid` (default: `vlm`)
-- `REPORT_EXTRACT_OPENAI_MODEL=<model-name>` (optional; defaults to `openai/gpt-5.6-sol` when unset. Removed snapshots and non-OpenAI model ids are remapped to this vision-capable default.)
+- `REPORT_EXTRACT_OPENAI_MODEL=<model-name>` (optional; defaults to `openai/gpt-4o` when unset. `gpt-5.6-sol` ids are remapped to that default after gateway vision failures on tall stitched screenshots.)
 
 ### Flow-telemetrie (screenshot → extract → generate)
 
