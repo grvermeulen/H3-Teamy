@@ -20,10 +20,14 @@ for (const width of widths) {
   await page.waitForTimeout(1500);
   const metrics = await page.evaluate(() => {
     const doc = document.documentElement;
+    const body = document.body;
+    const scrollWidth = Math.max(doc.scrollWidth, body.scrollWidth);
+    const clientWidth = doc.clientWidth;
     return {
-      scrollWidth: doc.scrollWidth,
-      clientWidth: doc.clientWidth,
-      bodyScrollWidth: document.body.scrollWidth,
+      scrollWidth,
+      clientWidth,
+      bodyScrollWidth: body.scrollWidth,
+      docScrollWidth: doc.scrollWidth,
     };
   });
   const overflow = metrics.scrollWidth - metrics.clientWidth;
