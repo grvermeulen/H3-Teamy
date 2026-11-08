@@ -7,6 +7,7 @@ import { sendMatchReportToWhatsAppGroup } from "../../../../lib/services/waapiSe
 import { getActiveUsers } from "../../../../lib/services/userService";
 import { isDbUnavailableError } from "../../../../lib/dbUnavailableError";
 import type { TeamEvent } from "../../../../types";
+import { extractTeamsFromEventTitle } from "../../../../lib/matchTitleTeams";
 
 type RawEvent = {
   quarter: 1 | 2 | 3 | 4;
@@ -30,6 +31,7 @@ type RawEventInput = {
 
 type ReportBody = {
   eventId?: unknown;
+  matchTitle?: unknown;
   homeTeam?: unknown;
   awayTeam?: unknown;
   opponent?: unknown;
@@ -247,16 +249,6 @@ function guessPerspectiveFromEvents(
 
 type TitleTeams = { home?: string; away?: string };
 
-function extractTeamsFromTitle(title?: string | null): TitleTeams | null {
-  if (!title) return null;
-  const parts = title.split(/[-–—]/);
-  if (parts.length < 2) return null;
-  const home = parts[0]?.trim();
-  const away = parts.slice(1).join("-").trim();
-  if (!home || !away) return null;
-  return { home, away };
-}
-
 function inferHomeFromTitle(teams?: TitleTeams | null): boolean | null {
   if (!teams?.home || !teams?.away) return null;
   const homeIsUs = isOurTeamName(teams.home);
@@ -283,7 +275,7 @@ function prepareNarrativeInput(
   const awayIsUs = isOurTeamName(awayTeam);
   let weAreHome: boolean | null = null;
 
-  const titleTeams = extractTeamsFromTitle(eventMeta?.title);
+  const titleTeams = extractTeamsFromEventTitle(eventMeta?.title);
   const titleGuess = inferHomeFromTitle(titleTeams);
   if (titleGuess !== null) {
     weAreHome = titleGuess;
@@ -400,6 +392,7 @@ export async function POST(req: NextRequest) {
       );
     }
     const eventId = toStringValue(body?.eventId);
+    const matchTitle = toStringValue(body.matchTitle);
     const source: ResultBody = isRecord(body.result)
       ? (body.result as ResultBody)
       : {};
@@ -440,6 +433,30 @@ export async function POST(req: NextRequest) {
     if (!eventId)
       return NextResponse.json({ error: "eventId required" }, { status: 400 });
 
+    let eventMeta: TeamEvent | null = null;
+    try {
+      const cachedEvents = await kvGetJson<TeamEvent[]>("calendar:events:v1");
+      eventMeta = cachedEvents?.find((evt) => evt.id === eventId) ?? null;
+    } catch {
+      eventMeta = null;
+    }
+
+    const fixtureTitle = matchTitle ?? eventMeta?.title ?? null;
+    const titleTeams = extractTeamsFromEventTitle(fixtureTitle);
+    const unknownAway = "Onbekende tegenstander";
+    if (titleTeams) {
+      if (!toStringValue(body.homeTeam) && !toStringValue(source.homeTeam)) {
+        input.homeTeam = titleTeams.home;
+      }
+      if (
+        input.awayTeam === unknownAway &&
+        !toStringValue(body.awayTeam) &&
+        !toStringValue(source.awayTeam)
+      ) {
+        input.awayTeam = titleTeams.away;
+      }
+    }
+
     // Always (re)generate a fresh report on request
 
     // Validate that we actually have meaningful JSON for the model
@@ -451,21 +468,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           error: "report_input_incomplete",
-          message: "Missing scores or events in JSON",
-          received: input,
+          message:
+            "De screenshot mist een herkenbare eindstand of wedstrijdgebeurtenissen. Kies een volledige KNZB/Sportlink-screenshot bij deze wedstrijd.",
         },
         { status: 422 },
       );
     }
     const rosterNames = await getRosterNames();
-    let eventMeta: TeamEvent | null = null;
-    try {
-      const cachedEvents = await kvGetJson<TeamEvent[]>("calendar:events:v1");
-      eventMeta = cachedEvents?.find((evt) => evt.id === eventId) ?? null;
-    } catch {
-      eventMeta = null;
-    }
-    const narrativeInput = prepareNarrativeInput(input, rosterNames, eventMeta);
+    const narrativeEventMeta: TeamEvent | null =
+      fixtureTitle != null
+        ? eventMeta
+          ? { ...eventMeta, title: fixtureTitle }
+          : {
+              id: eventId,
+              title: fixtureTitle,
+              start: new Date(0).toISOString(),
+            }
+        : eventMeta;
+    const narrativeInput = prepareNarrativeInput(
+      input,
+      rosterNames,
+      narrativeEventMeta,
+    );
     const prompt = `Je krijgt JSON met wedstrijdgegevens in dit schema:
 {
   "ourTeam": string,          // altijd "De Rijn Heren 3"

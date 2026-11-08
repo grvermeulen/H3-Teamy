@@ -420,6 +420,34 @@ h3 {
   flex-wrap: wrap;
 }
 
+.event-report-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.event-report-row input[type="file"] {
+  flex: 1 1 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.event-report-notice {
+  flex-basis: 100%;
+  margin-top: 4px;
+  color: var(--negative);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+  min-width: 0;
+}
+
 .rsvp button {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.12);
