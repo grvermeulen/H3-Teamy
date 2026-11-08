@@ -386,6 +386,41 @@ describe("reportExtractProvider", () => {
       });
     });
 
+    it("retries met REPORT_EXTRACT_VISION_FALLBACK_MODEL na primaire VLM-fout", async () => {
+      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/gpt-5.6-sol");
+      vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "gpt-4o");
+      const { APICallError } = await import("ai");
+      mockedGenerateObject
+        .mockRejectedValueOnce(
+          new APICallError({
+            message: "quota",
+            url: "u",
+            requestBodyValues: {},
+            statusCode: 429,
+            responseHeaders: {},
+            responseBody: "",
+            isRetryable: false,
+          }),
+        )
+        .mockResolvedValueOnce({
+          object: {
+            homeTeam: "Home",
+            awayTeam: "Away",
+            homeScore: 1,
+            awayScore: 0,
+            events: [],
+          },
+        } as never);
+
+      const out = await extractReportFromImage(makeImageFile());
+      expect(mockedGenerateObject).toHaveBeenCalledTimes(2);
+      expect(
+        (mockedGenerateObject.mock.calls[1][0] as { model: string }).model,
+      ).toBe("openai/gpt-4o");
+      expect(out.fallbackUsed).toBe(true);
+      expect(out.result.homeTeam).toBe("Home");
+    });
+
     it("surfaces OCR worker errors as typed provider errors", async () => {
       process.env.REPORT_EXTRACT_PROVIDER = "ocr";
       process.env.OCR_WORKER_URL = "https://ocr.example.com";

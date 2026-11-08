@@ -7,6 +7,7 @@ import {
   getStructuredGatewayModel,
   inferGatewayProvider,
   isGatewayFreeTierAccessError,
+  isReportExtractGatewayModelError,
   normalizeGatewayModelId,
   resolveGatewayModel,
   toGatewayModelString,
@@ -190,6 +191,26 @@ describe("getReportExtractGatewayModel", () => {
   it("resolves vision fallback model from env", () => {
     vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "gpt-4o");
     expect(getReportExtractVisionFallbackModel()).toBe("openai/gpt-4o");
+  });
+});
+
+describe("isReportExtractGatewayModelError", () => {
+  it("detects free-tier gateway denial", () => {
+    expect(
+      isReportExtractGatewayModelError(
+        new Error(
+          "Free tier users do not have access to this model. Upgrade to paid credits",
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("detects missing model responses", () => {
+    expect(
+      isReportExtractGatewayModelError(
+        new Error("Model not found: gpt-5.6-sol"),
+      ),
+    ).toBe(true);
   });
 });
 

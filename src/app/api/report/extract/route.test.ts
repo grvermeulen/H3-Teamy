@@ -11,6 +11,7 @@ import {
 
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
+  addBreadcrumb: vi.fn(),
 }));
 
 vi.mock("@/lib/reportExtractProvider", async (importOriginal) => {
@@ -228,7 +229,7 @@ describe("POST /api/report/extract", () => {
     infoSpy.mockRestore();
   });
 
-  it("returns provider errors and reports them to Sentry", async () => {
+  it("returns provider errors with trace breadcrumb instead of Sentry exception", async () => {
     const form = new FormData();
     form.set(
       "image",
@@ -251,12 +252,11 @@ describe("POST /api/report/extract", () => {
     expect(body.error).toBe("provider_failed");
     expect(body.diagnostic?.errorClass).toBe("provider_request_failed");
     expect(body).not.toHaveProperty("info");
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
-      expect.any(ExtractProviderError),
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+    expect(vi.mocked(Sentry.addBreadcrumb)).toHaveBeenCalledWith(
       expect.objectContaining({
-        tags: expect.objectContaining({ module: "report_extract" }),
-        extra: expect.not.objectContaining({ info: expect.anything() }),
+        category: "report_extract",
+        level: "warning",
       }),
     );
   });

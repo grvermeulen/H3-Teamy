@@ -58,7 +58,7 @@ No deploy is needed when env vars can be changed at runtime by your platform.
 
 The extract route records:
 
-- Sentry exceptions with provider/model/fallback/latency metadata.
+- Operational provider 502s (`openai_failed`) log via `report_extract_trace` and a Sentry breadcrumb only — not grouped issues (see JAVASCRIPT-NEXTJS-5J). Misconfiguration and unexpected failures still call `captureException`.
 - Structured server log event `report_extract_completed` for successful calls.
 - Trace lines `report_extract_trace` with correlators `attemptId`, `requestId`, optional `vercelRequestId` (`x-vercel-id`), phases (`entry`, `multipart_*`, `preprocess_*`, `provider_*`, `completed`/`failed`), allowlisted `errorClass`, and safe image metadata (MIME, bytes, dimensions only — no filenames, pixels, or team/player text).
 

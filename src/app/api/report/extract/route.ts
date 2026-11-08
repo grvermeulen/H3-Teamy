@@ -17,6 +17,7 @@ import {
   extractReportFromImage,
   ExtractProviderError,
 } from "../../../../lib/reportExtractProvider";
+import { shouldCaptureReportExtractProviderForSentry } from "../../../../lib/reportExtractSentryCapture";
 
 export const runtime = "nodejs";
 
@@ -332,29 +333,53 @@ export async function POST(req: NextRequest) {
         },
         providerTelemetry: error.providerTelemetry,
       });
-      Sentry.captureException(error, {
-        tags: {
-          module: "report_extract",
-          provider: error.providerUsed || error.provider || "unknown",
-          operation: "extract",
-          error_class: errorClass,
-          sdk_error: error.providerTelemetry?.sdkErrorName ?? "unknown",
-          failure_kind: error.providerTelemetry?.failureKind ?? "unknown",
-        },
-        extra: sanitizeExtractSentryExtra({
-          attemptId,
-          requestId,
-          vercelRequestId,
-          flowId: attemptId,
-          code: error.code,
-          appHttpStatus: error.status,
-          upstreamHttpStatus: error.providerTelemetry?.upstreamHttpStatus,
-          model: error.model,
-          fallbackUsed: error.fallbackUsed,
-          latencyMs,
-          providerTelemetry: error.providerTelemetry,
-        }),
+      const sentryExtra = sanitizeExtractSentryExtra({
+        attemptId,
+        requestId,
+        vercelRequestId,
+        flowId: attemptId,
+        code: error.code,
+        appHttpStatus: error.status,
+        upstreamHttpStatus: error.providerTelemetry?.upstreamHttpStatus,
+        model: error.model,
+        fallbackUsed: error.fallbackUsed,
+        latencyMs,
+        providerTelemetry: error.providerTelemetry,
       });
+      const captureForSentry = shouldCaptureReportExtractProviderForSentry(
+        error.code,
+        errorClass,
+      );
+      const sentryTags = {
+        module: "report_extract",
+        provider: error.providerUsed || error.provider || "unknown",
+        operation: "extract",
+        error_class: errorClass,
+        ...(captureForSentry
+          ? {
+              sdk_error: error.providerTelemetry?.sdkErrorName ?? "unknown",
+              failure_kind: error.providerTelemetry?.failureKind ?? "unknown",
+            }
+          : {}),
+      };
+      if (captureForSentry) {
+        Sentry.captureException(error, {
+          tags: sentryTags,
+          extra: sentryExtra,
+        });
+      } else {
+        Sentry.addBreadcrumb({
+          category: "report_extract",
+          message: error.message,
+          level: "warning",
+          data: {
+            ...sentryTags,
+            code: error.code,
+            attemptId,
+            requestId,
+          },
+        });
+      }
       return jsonWithDiagnostic(
         {
           error: error.code,
