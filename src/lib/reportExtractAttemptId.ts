@@ -1,5 +1,4 @@
-const ATTEMPT_ID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+import { ATTEMPT_ID_PATTERN } from "./reportExtractAttemptIdPattern";
 
 /**
  * Maakt een client-side correlatie-id voor een screenshot-extractpoging.

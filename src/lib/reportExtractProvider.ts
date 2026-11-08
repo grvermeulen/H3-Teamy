@@ -1,5 +1,9 @@
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
+import {
+  parseAiSdkFailure,
+  type AllowlistedProviderTelemetry,
+} from "./aiSdkFailureTelemetry";
 import { resolveReportExtractGatewayModel } from "./ai/gatewayModels";
 
 // OpenAI's structured-output (strict mode) via the Vercel AI Gateway requires
@@ -64,6 +68,7 @@ export class ExtractProviderError extends Error {
   readonly providerUsed?: ConcreteProvider;
   readonly model?: string;
   readonly fallbackUsed?: boolean;
+  readonly providerTelemetry?: AllowlistedProviderTelemetry;
 
   constructor(args: {
     message: string;
@@ -74,6 +79,7 @@ export class ExtractProviderError extends Error {
     providerUsed?: ConcreteProvider;
     model?: string;
     fallbackUsed?: boolean;
+    providerTelemetry?: AllowlistedProviderTelemetry;
   }) {
     super(args.message);
     this.code = args.code;
@@ -83,7 +89,25 @@ export class ExtractProviderError extends Error {
     this.providerUsed = args.providerUsed;
     this.model = args.model;
     this.fallbackUsed = args.fallbackUsed;
+    this.providerTelemetry = args.providerTelemetry;
   }
+}
+
+function buildOpenAiExtractProviderError(args: {
+  error: unknown;
+  model: string;
+  providerUsed: ConcreteProvider;
+}): ExtractProviderError {
+  const providerTelemetry = parseAiSdkFailure(args.error);
+  return new ExtractProviderError({
+    message: "OpenAI request failed",
+    code: "openai_failed",
+    status: 502,
+    info: args.error instanceof Error ? args.error.message : String(args.error),
+    model: args.model,
+    providerUsed: args.providerUsed,
+    providerTelemetry,
+  });
 }
 
 function nowMs(): number {
@@ -266,12 +290,10 @@ async function callAiTextNormalization(args: {
     });
     return object;
   } catch (error: unknown) {
-    throw new ExtractProviderError({
-      message: "OpenAI request failed",
-      code: "openai_failed",
-      status: 502,
-      info: error instanceof Error ? error.message : String(error),
+    throw buildOpenAiExtractProviderError({
+      error,
       model: args.model,
+      providerUsed: "ocr",
     });
   }
 }
@@ -334,6 +356,8 @@ export type ExtractReportStage =
 
 export type ExtractReportFromImageOptions = {
   onStage?: (stage: ExtractReportStage) => void;
+  /** Correlatie-id van de client-flow (extract → generate). */
+  flowId?: string;
 };
 
 async function callAiVisionExtraction(args: {
@@ -404,12 +428,10 @@ async function callAiVisionExtraction(args: {
     });
     return object;
   } catch (error: unknown) {
-    throw new ExtractProviderError({
-      message: "OpenAI request failed",
-      code: "openai_failed",
-      status: 502,
-      info: error instanceof Error ? error.message : String(error),
+    throw buildOpenAiExtractProviderError({
+      error,
       model: args.model,
+      providerUsed: "ocr",
     });
   }
 }
@@ -518,6 +540,19 @@ export async function extractReportFromImage(
     const primary = await runVlm(file, config, options);
     return { ...primary, fallbackUsed: false, latencyMs: nowMs() - startedAt };
   } catch (vlmError: unknown) {
+    const telemetry =
+      vlmError instanceof ExtractProviderError
+        ? vlmError.providerTelemetry
+        : parseAiSdkFailure(vlmError);
+    console.info("report_flow_trace", {
+      event: "report_flow_trace",
+      flowId: options?.flowId ?? "server-generated",
+      scope: "extract",
+      phase: "provider_hybrid_fallback",
+      outcome: "error",
+      providerTelemetry: telemetry,
+      provider: { fallbackUsed: true },
+    });
     Sentry.captureException(vlmError, {
       tags: {
         module: "report_extract",
@@ -525,6 +560,7 @@ export async function extractReportFromImage(
         operation: "hybrid_fallback",
       },
       level: "warning",
+      extra: telemetry ? { providerTelemetry: telemetry } : undefined,
     });
     const fallback = await runOcr(file, config);
     return { ...fallback, fallbackUsed: true, latencyMs: nowMs() - startedAt };

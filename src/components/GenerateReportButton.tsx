@@ -11,6 +11,8 @@ import {
   createReportExtractAttemptId,
   reportExtractSupportRef,
 } from "../lib/reportExtractAttemptId";
+import { REPORT_FLOW_ID_HEADER } from "../lib/reportFlowCorrelation";
+import { logReportFlowClientTrace } from "../lib/reportFlowClientTrace";
 import type { ReportExtractDiagnosticResponse } from "../lib/reportExtractDiagnostics";
 import {
   extractedTeamsMismatchFixture,
@@ -80,6 +82,12 @@ export default function GenerateReportButton({
       if (result.errorClass === "read_aborted") {
         return;
       }
+      logReportFlowClientTrace({
+        flowId: "client-local",
+        phase: "materialize_fail",
+        outcome: "error",
+        materializeErrorClass: result.errorClass,
+      });
       setNotice(formatMaterializeScreenshotError(result.errorClass));
       return;
     }
@@ -92,33 +100,53 @@ export default function GenerateReportButton({
     }
     setLoading(true);
     setNotice(null);
+    const flowId = createReportExtractAttemptId();
+    logReportFlowClientTrace({
+      flowId,
+      phase: "flow_start",
+      outcome: "success",
+    });
     try {
       const titleTeams = extractTeamsFromEventTitle(opponent);
-      let payload: Record<string, unknown> = { eventId };
+      let payload: Record<string, unknown> = { eventId, reportFlowId: flowId };
       if (opponent) {
         payload.matchTitle = opponent;
       }
       if (imageFile) {
-        const attemptId = createReportExtractAttemptId();
+        const attemptId = flowId;
         const form = new FormData();
         form.set("extractAttemptId", attemptId);
         form.set("image", imageFile);
+        logReportFlowClientTrace({
+          flowId,
+          phase: "extract_request_start",
+        });
         let er: Response;
         try {
           er = await fetch("/api/report/extract", {
             method: "POST",
-            headers: { "X-Report-Extract-Attempt": attemptId },
+            headers: {
+              "X-Report-Extract-Attempt": attemptId,
+              [REPORT_FLOW_ID_HEADER]: flowId,
+            },
             body: form,
           });
         } catch (error: unknown) {
           const isAbort =
             (error instanceof DOMException && error.name === "AbortError") ||
             (error instanceof Error && error.name === "AbortError");
+          logReportFlowClientTrace({
+            flowId,
+            phase: "extract_request_fail",
+            outcome: "error",
+            networkKind: isAbort ? "abort" : "network",
+          });
           setNotice(
             formatReportExtractClientError({
               kind: isAbort ? "abort" : "network",
               diagnostic: {
                 attemptId,
+                flowId,
                 requestId: "",
                 supportRef: attemptId.replace(/-/g, "").slice(0, 8),
               },
@@ -143,12 +171,19 @@ export default function GenerateReportButton({
           }
         };
         if (!er.ok) {
+          logReportFlowClientTrace({
+            flowId,
+            phase: "extract_request_fail",
+            outcome: "error",
+            httpStatus: er.status,
+          });
           const parsed = parseBody();
           const diagnostic =
             parsed?.diagnostic ??
             (headerRequestId
               ? {
                   attemptId,
+                  flowId,
                   requestId: headerRequestId,
                   supportRef: reportExtractSupportRef(
                     attemptId,
@@ -157,6 +192,7 @@ export default function GenerateReportButton({
                 }
               : {
                   attemptId,
+                  flowId,
                   requestId: "",
                   supportRef: attemptId.replace(/-/g, "").slice(0, 8),
                 });
@@ -174,6 +210,13 @@ export default function GenerateReportButton({
         }
         const data = parseBody();
         if (!data?.result) {
+          logReportFlowClientTrace({
+            flowId,
+            phase: "extract_request_fail",
+            outcome: "error",
+            httpStatus: er.status,
+            errorClass: "missing_result",
+          });
           setNotice(
             formatReportExtractClientError({
               kind: "non_json",
@@ -184,12 +227,24 @@ export default function GenerateReportButton({
           );
           return;
         }
+        logReportFlowClientTrace({
+          flowId,
+          phase: "extract_request_ok",
+          outcome: "success",
+          httpStatus: er.status,
+        });
         setExtracted(
           (data.result as { homeScore?: number; awayScore?: number }) || null,
         );
         const result = data.result as ExtractedMatchResult;
 
         if (titleTeams && extractedTeamsMismatchFixture(titleTeams, result)) {
+          logReportFlowClientTrace({
+            flowId,
+            phase: "extract_validation_fail",
+            outcome: "error",
+            extractValidationReason: "team_mismatch",
+          });
           setNotice(
             "De gekozen screenshot lijkt niet bij deze wedstrijd te horen (andere teamnamen). Kies de screenshot van deze wedstrijd of selecteer de juiste kaart.",
           );
@@ -197,6 +252,12 @@ export default function GenerateReportButton({
         }
 
         if (!extractHasScoresAndEvents(result)) {
+          logReportFlowClientTrace({
+            flowId,
+            phase: "extract_validation_fail",
+            outcome: "error",
+            extractValidationReason: "incomplete_scores_events",
+          });
           setNotice(
             "In de screenshot ontbreken een herkenbare eindstand en wedstrijdgebeurtenissen. Controleer of je de volledige KNZB/Sportlink-score hebt gekozen.",
           );
@@ -233,16 +294,35 @@ export default function GenerateReportButton({
         if (!payload.awayTeam) payload.awayTeam = titleTeams.away;
       }
 
+      logReportFlowClientTrace({
+        flowId,
+        phase: "generate_request_start",
+      });
       const res = await fetch("/api/report/generate", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          [REPORT_FLOW_ID_HEADER]: flowId,
+        },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
+        logReportFlowClientTrace({
+          flowId,
+          phase: "generate_request_fail",
+          outcome: "error",
+          httpStatus: res.status,
+        });
         const info = await res.text();
         setNotice(formatReportGenerateError(res.status, info));
         return;
       }
+      logReportFlowClientTrace({
+        flowId,
+        phase: "generate_request_ok",
+        outcome: "success",
+        httpStatus: res.status,
+      });
       const data = (await res.json()) as {
         whatsappNotification?: {
           sent: boolean;
@@ -264,6 +344,11 @@ export default function GenerateReportButton({
           );
         }
       }
+      logReportFlowClientTrace({
+        flowId,
+        phase: "flow_completed",
+        outcome: "success",
+      });
       setDone(true);
       window.dispatchEvent(
         new CustomEvent("report:updated", { detail: { eventId } }),

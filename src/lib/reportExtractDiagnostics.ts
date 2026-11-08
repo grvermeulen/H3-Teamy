@@ -1,8 +1,14 @@
+import type { AllowlistedProviderTelemetry } from "./aiSdkFailureTelemetry";
+import {
+  providerTelemetryToErrorClass,
+  sanitizeReportFlowSentryExtra,
+} from "./aiSdkFailureTelemetry";
 import type { MultipartIngressDiagnostics } from "./multipartIngressDiagnostics";
 import {
   reportExtractSupportRef,
   resolveReportExtractAttemptId,
 } from "./reportExtractAttemptId";
+import { logReportFlowTrace } from "./reportFlowTelemetry";
 
 export type ReportExtractTracePhase =
   | "entry"
@@ -49,10 +55,14 @@ export type ReportExtractTracePayload = {
     fallbackUsed?: boolean;
   };
   uploadIngress?: MultipartIngressDiagnostics;
+  providerTelemetry?: AllowlistedProviderTelemetry;
+  upstreamHttpStatus?: number;
 };
 
 export type ReportExtractDiagnosticResponse = {
   attemptId: string;
+  /** Zelfde id als attemptId; koppelt aan generate/save. */
+  flowId: string;
   requestId: string;
   supportRef: string;
   errorClass?: string;
@@ -70,10 +80,16 @@ const PROVIDER_INFO_PATTERNS: { pattern: RegExp; errorClass: string }[] = [
 ];
 
 /**
- * Classificeert providerfouten zonder ruwe provider-tekst te loggen of terug te geven.
+ * Classificeert providerfouten: eerst getypeerde SDK-telemetrie, anders legacy regex op message.
  */
-export function classifyExtractProviderFailure(info: unknown): string {
-  const text = typeof info === "string" ? info : "";
+export function classifyExtractProviderFailure(args: {
+  info?: unknown;
+  providerTelemetry?: AllowlistedProviderTelemetry;
+}): string {
+  if (args.providerTelemetry) {
+    return providerTelemetryToErrorClass(args.providerTelemetry);
+  }
+  const text = typeof args.info === "string" ? args.info : "";
   if (!text) return "provider_request_failed";
   for (const { pattern, errorClass } of PROVIDER_INFO_PATTERNS) {
     if (pattern.test(text)) return errorClass;
@@ -102,6 +118,27 @@ export function logReportExtractTrace(
   payload: ReportExtractTracePayload,
 ): void {
   console.info(payload.event, payload);
+  logReportFlowTrace({
+    event: "report_flow_trace",
+    flowId: payload.attemptId,
+    scope: "extract",
+    phase: payload.phase,
+    requestId: payload.requestId,
+    vercelRequestId: payload.vercelRequestId,
+    outcome: payload.outcome,
+    durationMs: payload.durationMs,
+    stageDurationMs: payload.stageDurationMs,
+    appHttpStatus: payload.httpStatus,
+    upstreamHttpStatus:
+      payload.upstreamHttpStatus ??
+      payload.providerTelemetry?.upstreamHttpStatus,
+    errorClass: payload.errorClass,
+    errorCode: payload.errorCode,
+    image: payload.image,
+    provider: payload.provider,
+    uploadIngress: payload.uploadIngress,
+    providerTelemetry: payload.providerTelemetry,
+  });
 }
 
 export function buildExtractDiagnosticResponse(args: {
@@ -111,6 +148,7 @@ export function buildExtractDiagnosticResponse(args: {
 }): ReportExtractDiagnosticResponse {
   return {
     attemptId: args.attemptId,
+    flowId: args.attemptId,
     requestId: args.requestId,
     supportRef: reportExtractSupportRef(args.attemptId, args.requestId),
     ...(args.errorClass ? { errorClass: args.errorClass } : {}),
@@ -128,10 +166,5 @@ export function extractDiagnosticResponseHeaders(
 export function sanitizeExtractSentryExtra(
   extra: Record<string, unknown>,
 ): Record<string, unknown> {
-  const out = { ...extra };
-  delete out.info;
-  delete out.rawText;
-  delete out.prompt;
-  delete out.responseBody;
-  return out;
+  return sanitizeReportFlowSentryExtra(extra);
 }

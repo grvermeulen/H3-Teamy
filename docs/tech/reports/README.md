@@ -23,6 +23,13 @@ The app uses `await Promise.resolve(params)` for `eventId` so Next.js 15+ async 
 
 - `REPORT_EXTRACT_PROVIDER=vlm|ocr|hybrid` (default: `vlm`)
 - `REPORT_EXTRACT_OPENAI_MODEL=<model-name>` (optional; defaults to `openai/gpt-5.6-sol` when unset. Removed snapshots and non-OpenAI model ids are remapped to this vision-capable default.)
+
+### Flow-telemetrie (screenshot → extract → generate)
+
+- Eén **`flowId`** (client `createReportExtractAttemptId`, headers `X-Report-Flow-Id` / `X-Report-Extract-Attempt`, body `reportFlowId`) koppelt extract, generate en client-traces.
+- Server: `report_extract_trace` (extract) en `report_flow_trace` (scope `extract`|`generate`|`client`) met allowlisted `providerTelemetry` (`sdkErrorName`, `upstreamHttpStatus`, `failureKind`, `isRetryable`, request-id uit allowlisted headers, token counts zonder prompt/body).
+- App-HTTP (`appHttpStatus` / route status) staat los van `upstreamHttpStatus` (bijv. app 502 `openai_failed` met upstream 429).
+- Sentry extras via `sanitizeReportFlowSentryExtra` — geen `info`, prompts, response bodies of modeltekst.
 - `REPORT_GENERATE_MODEL=<model-name>` (optional; defaults to `openai/gpt-4o` for `/api/report/generate`. Premium GPT-5 chat ids are remapped in code — see Sentry JAVASCRIPT-NEXTJS-1S.)
 - `OPENAI_API_KEY=<secret>` (required)
 - `OCR_WORKER_URL=<url>` (required for `ocr` and `hybrid`)

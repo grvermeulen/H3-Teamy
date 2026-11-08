@@ -103,7 +103,14 @@ describe("POST /api/report/extract", () => {
           typeof p === "object" &&
           p !== null &&
           (p as { phase?: string }).phase === "multipart_fail",
-      ) as { uploadIngress?: { contentTypeHasBoundary?: boolean; contentLength?: { present: boolean; value?: number } } } | undefined;
+      ) as
+      | {
+          uploadIngress?: {
+            contentTypeHasBoundary?: boolean;
+            contentLength?: { present: boolean; value?: number };
+          };
+        }
+      | undefined;
     expect(failPayload?.uploadIngress?.contentTypeHasBoundary).toBe(true);
     expect(failPayload?.uploadIngress?.contentLength).toEqual({
       present: true,
@@ -168,6 +175,57 @@ describe("POST /api/report/extract", () => {
     );
     expect(response.headers.get("X-Report-Extract-Request-Id")).toBeTruthy();
     expect(vi.mocked(extractReportFromImage)).toHaveBeenCalledTimes(1);
+  });
+
+  it("logt upstreamHttpStatus in provider_fail trace", async () => {
+    const { APICallError } = await import("ai");
+    const { parseAiSdkFailure } = await import("@/lib/aiSdkFailureTelemetry");
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const form = new FormData();
+    form.set(
+      "image",
+      new File(["pixels"], "match.jpg", { type: "image/jpeg" }),
+    );
+    vi.mocked(extractReportFromImage).mockRejectedValue(
+      new ExtractProviderError({
+        message: "provider failed",
+        code: "openai_failed",
+        status: 502,
+        providerUsed: "vlm",
+        model: "openai/gpt-5.6-sol",
+        providerTelemetry: parseAiSdkFailure(
+          new APICallError({
+            message: "upstream",
+            url: "u",
+            requestBodyValues: {},
+            statusCode: 403,
+            responseHeaders: { "x-request-id": "p-req" },
+            responseBody: "SECRET",
+            isRetryable: false,
+          }),
+        ),
+      }),
+    );
+
+    const response = await POST(makeRequest({ body: form }));
+    expect(response.status).toBe(502);
+    const fail = infoSpy.mock.calls
+      .map((c) => c[1])
+      .find(
+        (p) =>
+          typeof p === "object" &&
+          p !== null &&
+          (p as { phase?: string }).phase === "provider_fail",
+      ) as
+      | {
+          providerTelemetry?: { upstreamHttpStatus?: number };
+          upstreamHttpStatus?: number;
+          errorClass?: string;
+        }
+      | undefined;
+    expect(fail?.providerTelemetry?.upstreamHttpStatus).toBe(403);
+    expect(fail?.errorClass).toBe("gateway_unauthenticated");
+    infoSpy.mockRestore();
   });
 
   it("returns provider errors and reports them to Sentry", async () => {

@@ -1,19 +1,32 @@
 import type { ReportExtractDiagnosticResponse } from "./reportExtractDiagnostics";
+import type { ReportGenerateDiagnosticResponse } from "./reportGenerateDiagnostics";
 
 type ApiErrorPayload = {
   error?: string;
   message?: string;
-  diagnostic?: ReportExtractDiagnosticResponse;
+  diagnostic?:
+    ReportExtractDiagnosticResponse | ReportGenerateDiagnosticResponse;
 };
+
+function flowSupportSuffix(
+  diagnostic:
+    | ReportExtractDiagnosticResponse
+    | ReportGenerateDiagnosticResponse
+    | null
+    | undefined,
+): string {
+  if (!diagnostic?.supportRef) return "";
+  return ` (referentie: ${diagnostic.supportRef})`;
+}
 
 export type ReportExtractClientFailureKind =
   "http" | "network" | "abort" | "non_json";
 
 function supportSuffix(
-  diagnostic: ReportExtractDiagnosticResponse | null,
+  diagnostic:
+    ReportExtractDiagnosticResponse | ReportGenerateDiagnosticResponse | null,
 ): string {
-  if (!diagnostic?.supportRef) return "";
-  return ` (referentie: ${diagnostic.supportRef})`;
+  return flowSupportSuffix(diagnostic ?? undefined);
 }
 
 function parseExtractErrorPayload(bodyText: string): ApiErrorPayload | null {
@@ -60,7 +73,13 @@ export function formatReportExtractClientError(args: {
   const diagnostic = payload?.diagnostic ?? args.diagnostic ?? null;
   const ref2 = supportSuffix(diagnostic);
   const code = payload?.error ?? "";
-  const errorClass = diagnostic?.errorClass ?? args.diagnostic?.errorClass;
+  const errorClass =
+    diagnostic?.errorClass ??
+    (args.diagnostic &&
+    "errorClass" in args.diagnostic &&
+    typeof args.diagnostic.errorClass === "string"
+      ? args.diagnostic.errorClass
+      : undefined);
 
   if (code === "invalid_content_type" || code === "invalid_form_data") {
     return `Kon de upload niet verwerken. Kies opnieuw een afbeelding en probeer het nog eens${ref2}.`;
@@ -129,38 +148,53 @@ export function formatReportGenerateError(
     payload = null;
   }
 
+  const ref = flowSupportSuffix(payload?.diagnostic);
+
   if (payload?.error === "report_input_incomplete") {
     return (
-      payload.message ??
-      "De screenshot mist een herkenbare eindstand of wedstrijdgebeurtenissen. " +
-        "Kies een volledige KNZB/Sportlink-screenshot bij deze wedstrijd."
+      (payload.message ??
+        "De screenshot mist een herkenbare eindstand of wedstrijdgebeurtenissen. " +
+          "Kies een volledige KNZB/Sportlink-screenshot bij deze wedstrijd.") +
+      ref
     );
   }
 
   if (payload?.error === "invalid_json") {
-    return "Ongeldige invoer naar de server. Probeer opnieuw.";
+    return `Ongeldige invoer naar de server. Probeer opnieuw${ref}.`;
+  }
+
+  if (payload?.error === "openai_failed") {
+    const errorClass = payload.diagnostic?.errorClass;
+    const hint =
+      errorClass === "gateway_unauthenticated"
+        ? " De AI-koppeling is niet geauthenticeerd."
+        : errorClass === "provider_timeout"
+          ? " De verwerking duurde te lang."
+          : "";
+    return `Het verslag kon niet worden gegenereerd door de tekst-dienst.${hint} Probeer het later opnieuw${ref}.`;
   }
 
   if (status === 422) {
     return (
-      payload?.message ??
-      "De wedstrijdgegevens zijn onvolledig. Controleer de screenshot en probeer opnieuw."
+      (payload?.message ??
+        "De wedstrijdgegevens zijn onvolledig. Controleer de screenshot en probeer opnieuw.") +
+      ref
     );
   }
 
   if (status === 401 || status === 403) {
-    return "Je bent niet gemachtigd om een verslag te genereren.";
+    return `Je bent niet gemachtigd om een verslag te genereren${ref}.`;
   }
 
   if (payload?.message) {
-    return payload.message;
+    return `${payload.message}${ref}`;
   }
 
-  if (bodyText.length > 240) {
-    return "Verslag genereren mislukt. Probeer het later opnieuw.";
+  if (bodyText.length > 240 || payload == null) {
+    return `Verslag genereren mislukt. Probeer het later opnieuw${ref}.`;
   }
 
   return bodyText.trim()
-    ? `Verslag genereren mislukt: ${bodyText.trim()}`
-    : "Verslag genereren mislukt. Probeer het later opnieuw.";
+    ? `Verslag genereren mislukt: ${bodyText.trim()}${ref}`
+    : `Verslag genereren mislukt. Probeer het later opnieuw${ref}.`;
 }
