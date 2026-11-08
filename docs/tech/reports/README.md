@@ -52,6 +52,8 @@ The extract route records:
 
 Clients send header `X-Report-Extract-Attempt` (UUID); responses include `X-Report-Extract-Request-Id` and JSON `diagnostic.supportRef` for UI support references.
 
+Mobile uploads materialize the selected image into an in-memory `File` on selection (`GenerateReportButton` + `reportScreenshotUploadFile.ts`) so uploads do not depend on a stale OS file reference. Multipart parse failures log safe `uploadIngress` metadata (`contentTypeHasBoundary`, `contentLength` present/value).
+
 ## WhatsApp Notification (WaAPI)
 
 After a successful report generation, the API can send a WhatsApp group notification with a deep link to the report.

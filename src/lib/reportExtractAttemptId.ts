@@ -15,10 +15,15 @@ export function createReportExtractAttemptId(): string {
  */
 export function resolveReportExtractAttemptId(
   headerValue: string | null | undefined,
+  formValue?: string | null,
 ): string {
   const trimmed = headerValue?.trim();
   if (trimmed && ATTEMPT_ID_PATTERN.test(trimmed)) {
     return trimmed.toLowerCase();
+  }
+  const fromForm = formValue?.trim();
+  if (fromForm && ATTEMPT_ID_PATTERN.test(fromForm)) {
+    return fromForm.toLowerCase();
   }
   return crypto.randomUUID();
 }

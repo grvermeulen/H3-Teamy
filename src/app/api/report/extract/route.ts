@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
+import { readMultipartIngressDiagnostics } from "../../../../lib/multipartIngressDiagnostics";
 import { parseMultipartFormData } from "../../../../lib/multipartFormData";
 import { probeExtractImageUpload } from "../../../../lib/reportExtractImageProbe";
 import {
@@ -36,7 +37,7 @@ function jsonWithDiagnostic(
 export async function POST(req: NextRequest) {
   const startedAt = Date.now();
   const requestId = createReportExtractRequestId();
-  const { attemptId, vercelRequestId } = readExtractAttemptFromRequest(
+  let { attemptId, vercelRequestId } = readExtractAttemptFromRequest(
     req,
     requestId,
   );
@@ -63,6 +64,7 @@ export async function POST(req: NextRequest) {
       durationMs: Date.now() - startedAt,
     });
 
+    const uploadIngress = readMultipartIngressDiagnostics(req);
     const parsedForm = await parseMultipartFormData(req);
     if (!parsedForm.ok) {
       const httpStatus = parsedForm.status;
@@ -78,6 +80,7 @@ export async function POST(req: NextRequest) {
         httpStatus,
         errorClass: "multipart_rejected",
         errorCode: parsedForm.error,
+        uploadIngress,
       });
       return jsonWithDiagnostic(
         {
@@ -102,6 +105,17 @@ export async function POST(req: NextRequest) {
       durationMs: Date.now() - startedAt,
       stageDurationMs: Date.now() - multipartStartedAt,
     });
+
+    const formAttemptField = parsedForm.form.get("extractAttemptId");
+    const formAttempt =
+      typeof formAttemptField === "string" ? formAttemptField : null;
+    const resolvedAttempt = readExtractAttemptFromRequest(
+      req,
+      requestId,
+      formAttempt,
+    );
+    attemptId = resolvedAttempt.attemptId;
+    vercelRequestId = resolvedAttempt.vercelRequestId ?? vercelRequestId;
 
     const file = parsedForm.form.get("image") as File | null;
     if (!file) {

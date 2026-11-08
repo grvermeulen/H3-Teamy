@@ -81,9 +81,13 @@ describe("POST /api/report/extract", () => {
   });
 
   it("returns 400 for malformed multipart bodies without reporting to Sentry", async () => {
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
     const response = await POST(
       makeRequest({
-        headers: { "content-type": "multipart/form-data; boundary=bad" },
+        headers: {
+          "content-type": "multipart/form-data; boundary=bad",
+          "content-length": "12",
+        },
         body: "not-multipart",
       }),
     );
@@ -92,6 +96,20 @@ describe("POST /api/report/extract", () => {
     const body = await response.json();
     expect(body.error).toBe("invalid_form_data");
     expect(body.diagnostic?.errorClass).toBe("multipart_rejected");
+    const failPayload = infoSpy.mock.calls
+      .map((c) => c[1])
+      .find(
+        (p) =>
+          typeof p === "object" &&
+          p !== null &&
+          (p as { phase?: string }).phase === "multipart_fail",
+      ) as { uploadIngress?: { contentTypeHasBoundary?: boolean; contentLength?: { present: boolean; value?: number } } } | undefined;
+    expect(failPayload?.uploadIngress?.contentTypeHasBoundary).toBe(true);
+    expect(failPayload?.uploadIngress?.contentLength).toEqual({
+      present: true,
+      value: 12,
+    });
+    infoSpy.mockRestore();
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
     expect(vi.mocked(extractReportFromImage)).not.toHaveBeenCalled();
   });
