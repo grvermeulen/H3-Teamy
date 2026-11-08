@@ -45,7 +45,13 @@ export function generateTrainingDates(from: Date, to: Date): string[] {
   return dates;
 }
 
-export function defaultSeasonWindow(): { from: string; to: string } {
+/**
+ * Match/training season window around `reference` (default: now).
+ * Env `SEASON_START` / `SEASON_END` override; otherwise 1 juli t/m 1 juli volgend jaar.
+ */
+export function defaultSeasonWindowAt(
+  reference: Date = new Date(),
+): { from: string; to: string } {
   const envStart = parseDdMmYyyy(process.env.SEASON_START);
   const envEnd = parseDdMmYyyy(process.env.SEASON_END);
 
@@ -61,10 +67,8 @@ export function defaultSeasonWindow(): { from: string; to: string } {
     return { from: toYMD(start), to: toYMD(envEnd) };
   }
 
-  // Fallback: Season runs July 1st to July 1st next year
-  const now = new Date();
-  const year = now.getFullYear();
-  const isBeforeJuly = now.getMonth() < 6; // 0-indexed months, 6 = July
+  const year = reference.getFullYear();
+  const isBeforeJuly = reference.getMonth() < 6;
   const seasonStart = isBeforeJuly
     ? new Date(year - 1, 6, 1)
     : new Date(year, 6, 1);
@@ -72,6 +76,11 @@ export function defaultSeasonWindow(): { from: string; to: string } {
     ? new Date(year, 6, 1)
     : new Date(year + 1, 6, 1);
   return { from: toYMD(seasonStart), to: toYMD(seasonEnd) };
+}
+
+/** @deprecated Prefer {@link defaultSeasonWindowAt} when tests need a fixed clock. */
+export function defaultSeasonWindow(): { from: string; to: string } {
+  return defaultSeasonWindowAt(new Date());
 }
 
 /**

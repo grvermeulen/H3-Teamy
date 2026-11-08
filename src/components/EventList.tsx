@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import type { TeamEvent, RsvpStatus } from "../types";
 import { splitPastAndFutureByStart } from "../lib/listSplitPast";
+import { splitTeamEventsByMatchSeason } from "../lib/matchSeason";
 import GenerateReportButton from "./GenerateReportButton";
 import ReportPreview from "./ReportPreview";
 import MvpVoteButton from "./MvpVoteButton";
@@ -271,12 +272,19 @@ export default function EventList({
   const effectiveNowMs =
     nowTs > 0 ? nowTs : (nowMsFromServer ?? 0) || Date.now();
 
+  const { currentSeason, previousSeason, currentHeading, previousHeading } =
+    useMemo(
+      () => splitTeamEventsByMatchSeason(events, effectiveNowMs),
+      [events, effectiveNowMs],
+    );
+
   const { recentPast, olderPast, future } = useMemo(
-    () => splitPastAndFutureByStart(events, effectiveNowMs, 3),
-    [events, effectiveNowMs],
+    () => splitPastAndFutureByStart(currentSeason, effectiveNowMs, 3),
+    [currentSeason, effectiveNowMs],
   );
 
-  const visibleCount = recentPast.length + olderPast.length + future.length;
+  const currentVisibleCount =
+    recentPast.length + olderPast.length + future.length;
 
   function renderEventCard(evt: TeamEvent) {
     const start = new Date(evt.start);
@@ -453,14 +461,50 @@ export default function EventList({
           {notice}
         </div>
       ) : null}
-      {recentPast.map((evt) => renderEventCard(evt))}
-      {olderPast.length > 0 ? (
-        <details style={{ marginBottom: 12 }}>
+      <section aria-labelledby="current-season-heading" style={{ marginBottom: 16 }}>
+        <h3
+          id="current-season-heading"
+          style={{ margin: "0 0 12px", fontSize: 18 }}
+        >
+          {currentHeading}
+        </h3>
+        {recentPast.map((evt) => renderEventCard(evt))}
+        {olderPast.length > 0 ? (
+          <details style={{ marginBottom: 12 }}>
+            <summary
+              className="muted"
+              style={{ cursor: "pointer", fontWeight: 600 }}
+            >
+              Eerdere wedstrijden dit seizoen ({olderPast.length})
+            </summary>
+            <div
+              style={{
+                marginTop: 12,
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
+              {olderPast.map((evt) => renderEventCard(evt))}
+            </div>
+          </details>
+        ) : null}
+        {future.map((evt) => renderEventCard(evt))}
+        {currentVisibleCount === 0 ? (
+          <div className="muted">
+            Geen wedstrijden voor dit seizoen in de kalender. Oudere wedstrijden
+            kunnen ontbreken in Sportlink; import is dan nodig (niet automatisch
+            aangevuld).
+          </div>
+        ) : null}
+      </section>
+      {previousSeason.length > 0 ? (
+        <details style={{ marginBottom: 16 }}>
           <summary
-            className="muted"
-            style={{ cursor: "pointer", fontWeight: 600 }}
+            style={{ cursor: "pointer", fontWeight: 600, fontSize: 18 }}
+            id="previous-season-heading"
           >
-            Vorige wedstrijden ({olderPast.length})
+            {previousHeading} ({previousSeason.length})
           </summary>
           <div
             style={{
@@ -470,16 +514,12 @@ export default function EventList({
               gap: 12,
             }}
           >
-            {olderPast.map((evt) => renderEventCard(evt))}
+            {previousSeason.map((evt) => renderEventCard(evt))}
           </div>
         </details>
       ) : null}
-      {future.map((evt) => renderEventCard(evt))}
       <SpaceInvadersLauncher />
       {gtaH3Enabled ? <CityArenaLauncher /> : null}
-      {visibleCount === 0 ? (
-        <div className="muted">Geen recente of aankomende wedstrijden.</div>
-      ) : null}
     </div>
   );
 }
