@@ -237,8 +237,36 @@ describe("fetchJsonOr", () => {
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(SyntaxError),
-      { tags: { clientFetch: "test-bad-json" } },
+      expect.objectContaining({
+        tags: { clientFetch: "test-bad-json" },
+      }),
     );
+  });
+
+  it("returns fallback without Sentry when OK body is empty", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const fallback = { ok: false };
+    const result = await fetchJsonOr("/x", {}, fallback, "test-empty-json");
+    expect(result).toEqual(fallback);
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
+  it("returns fallback without Sentry when OK body is HTML", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("<!DOCTYPE html><html></html>", {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      }),
+    );
+    const fallback = { ok: false };
+    const result = await fetchJsonOr("/x", {}, fallback, "test-html-json");
+    expect(result).toEqual(fallback);
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });
 });
 
@@ -336,7 +364,25 @@ describe("fetchJsonIfOkOr", () => {
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(SyntaxError),
-      { tags: { clientFetch: "test-ifok-bad-json" } },
+      expect.objectContaining({
+        tags: { clientFetch: "test-ifok-bad-json" },
+      }),
     );
+  });
+
+  it("returns null without Sentry when OK JSON body is empty", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response("   ", {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const result = await fetchJsonIfOkOr<{ x: number }>(
+      "/x",
+      {},
+      "test-ifok-empty",
+    );
+    expect(result).toBeNull();
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });
 });

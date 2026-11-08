@@ -1,5 +1,10 @@
 import * as Sentry from "@sentry/nextjs";
 import { isBenignTransientClientFetchError } from "./benignClientFetchErrors";
+import {
+  isBenignNonJsonOkResponseBody,
+  isBenignNonJsonOkResponseContentType,
+  NON_JSON_OK_RESPONSE_SYNTAX_MESSAGE,
+} from "./benignNonJsonOkResponse";
 
 function isAbortError(error: unknown): boolean {
   if (error instanceof DOMException && error.name === "AbortError") {
@@ -37,6 +42,59 @@ function isBenignTransientFetchTypeError(error: unknown): boolean {
   return isBenignTransientClientFetchError(error);
 }
 
+type ResponseJsonDetails =
+  { ok: true; value: unknown } | { ok: false; bodyText: string };
+
+async function readResponseJsonDetails(
+  response: Response,
+): Promise<ResponseJsonDetails> {
+  let text: string;
+  try {
+    text = await response.text();
+  } catch {
+    return { ok: false, bodyText: "" };
+  }
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return { ok: false, bodyText: text };
+  }
+  try {
+    return { ok: true, value: JSON.parse(trimmed) as unknown };
+  } catch {
+    return { ok: false, bodyText: text };
+  }
+}
+
+function shouldSkipSentryForInvalidJsonOkResponse(
+  response: Response,
+  bodyText: string,
+): boolean {
+  return (
+    isBenignNonJsonOkResponseBody(bodyText) ||
+    isBenignNonJsonOkResponseContentType(response.headers.get("content-type"))
+  );
+}
+
+function reportInvalidJsonOkResponse(
+  url: string,
+  response: Response,
+  bodyText: string,
+  context: string,
+): void {
+  Sentry.captureException(
+    new SyntaxError(NON_JSON_OK_RESPONSE_SYNTAX_MESSAGE),
+    {
+      tags: { clientFetch: context },
+      extra: {
+        url,
+        status: response.status,
+        contentType: response.headers.get("content-type"),
+        bodyPrefix: bodyText.slice(0, 160),
+      },
+    },
+  );
+}
+
 /**
  * Parses JSON from a `fetch` response body. Returns `null` when the body is empty
  * or not valid JSON (for example Vercel edge `Error 429:` plain-text rate limits).
@@ -47,11 +105,8 @@ function isBenignTransientFetchTypeError(error: unknown): boolean {
 export async function readResponseJson(
   response: Response,
 ): Promise<unknown | null> {
-  try {
-    return await response.json();
-  } catch {
-    return null;
-  }
+  const details = await readResponseJsonDetails(response);
+  return details.ok ? details.value : null;
 }
 
 /**
@@ -65,7 +120,8 @@ export async function readResponseJson(
  * `TypeError: Failed to fetch` while the `AbortSignal` is already aborted; those
  * are treated as cancellation too. Chromium `TypeError: Failed to fetch` and
  * WebKit `TypeError: Load failed` from transient connectivity are treated as
- * benign and do not create a Sentry event.
+ * benign and do not create a Sentry event. HTML or empty 2xx bodies (preview/WAF)
+ * return `fallback` without Sentry.
  *
  * @param url - Request URL (same as `fetch` first argument).
  * @param init - Optional `fetch` init; pass `undefined` when not needed.
@@ -84,11 +140,14 @@ export async function fetchJsonOr<T>(
     if (!res.ok) {
       return fallback;
     }
-    const parsed = await readResponseJson(res);
-    if (parsed === null) {
-      throw new SyntaxError("Response body is not valid JSON");
+    const details = await readResponseJsonDetails(res);
+    if (!details.ok) {
+      if (!shouldSkipSentryForInvalidJsonOkResponse(res, details.bodyText)) {
+        reportInvalidJsonOkResponse(url, res, details.bodyText, context);
+      }
+      return fallback;
     }
-    return parsed as T;
+    return details.value as T;
   } catch (error: unknown) {
     if (
       !isCancelledClientFetch(error, init?.signal ?? undefined) &&
@@ -125,11 +184,14 @@ export async function fetchJsonIfOkOr<T>(
     if (!res.ok) {
       return null;
     }
-    const parsed = await readResponseJson(res);
-    if (parsed === null) {
-      throw new SyntaxError("Response body is not valid JSON");
+    const details = await readResponseJsonDetails(res);
+    if (!details.ok) {
+      if (!shouldSkipSentryForInvalidJsonOkResponse(res, details.bodyText)) {
+        reportInvalidJsonOkResponse(url, res, details.bodyText, context);
+      }
+      return null;
     }
-    return parsed as T;
+    return details.value as T;
   } catch (error: unknown) {
     if (
       !isCancelledClientFetch(error, init?.signal ?? undefined) &&
