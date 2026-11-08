@@ -1,9 +1,11 @@
 #!/usr/bin/env -S npx tsx
 /**
  * Local gateway A/B (same code, same image, OIDC as Vercel AI Gateway).
- * Usage: `npx tsx scripts/run-vision-model-ab-once.ts openai/gpt-5.6-sol`
+ * Usage: `VISION_AB_IMAGE=./tests/fixtures/Home-Match-1.JPG npx tsx scripts/run-vision-model-ab-once.ts openai/gpt-5.6-sol`
  */
 import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   extractReportFromImage,
   ExtractProviderError,
@@ -13,7 +15,7 @@ import { getReportExtractGatewayModel } from "../src/lib/ai/gatewayModels";
 const modelArg = process.argv[2] ?? "";
 if (modelArg === "--help" || modelArg === "-h") {
   console.log(
-    "Usage: npx tsx scripts/run-vision-model-ab-once.ts <model|default>",
+    "Usage: VISION_AB_IMAGE=<path> npx tsx scripts/run-vision-model-ab-once.ts <model|default>",
   );
   process.exit(0);
 }
@@ -34,15 +36,58 @@ if (modelArg && modelArg !== "default") {
 delete process.env.REPORT_EXTRACT_VISION_FALLBACK_MODEL;
 delete process.env.REPORT_EXTRACT_PROVIDER;
 
-const img =
-  process.env.VISION_AB_IMAGE ??
-  "/home/ubuntu/.cursor/projects/agent-repos-H3-Teamy/uploads/h3-original-picsew_cc81.jpg";
+const repoRoot = path.dirname(fileURLToPath(import.meta.url));
+const defaultFixture = path.join(
+  repoRoot,
+  "..",
+  "tests",
+  "fixtures",
+  "Home-Match-1.JPG",
+);
+const img = process.env.VISION_AB_IMAGE?.trim() || defaultFixture;
 
 async function main(): Promise<void> {
-  const buf = fs.readFileSync(img);
-  const file = new File([buf], "vision-ab.jpg", { type: "image/jpeg" });
   const effectiveModel = getReportExtractGatewayModel();
   const started = Date.now();
+
+  let buf: Buffer;
+  try {
+    if (!fs.existsSync(img)) {
+      console.log(
+        JSON.stringify(
+          {
+            outcome: "error",
+            effectiveModel,
+            code: "image_missing",
+            message:
+              "VISION_AB_IMAGE ontbreekt of bestand niet gevonden; geef een pad naar een test-JPEG.",
+          },
+          null,
+          2,
+        ),
+      );
+      process.exitCode = 2;
+      return;
+    }
+    buf = fs.readFileSync(img);
+  } catch (error: unknown) {
+    console.log(
+      JSON.stringify(
+        {
+          outcome: "error",
+          effectiveModel,
+          code: "image_read_failed",
+          errorName: error instanceof Error ? error.name : "Error",
+        },
+        null,
+        2,
+      ),
+    );
+    process.exitCode = 2;
+    return;
+  }
+
+  const file = new File([buf], "vision-ab.jpg", { type: "image/jpeg" });
 
   try {
     const out = await extractReportFromImage(file);
@@ -74,6 +119,7 @@ async function main(): Promise<void> {
         httpStatus: error.status,
         providerTelemetry: error.providerTelemetry,
         fallbackUsed: error.fallbackUsed,
+        providerUsed: error.providerUsed,
       });
     } else if (error instanceof Error) {
       Object.assign(safe, {

@@ -174,6 +174,28 @@ describe("reportExtractProvider", () => {
   });
 
   describe("extractReportFromImage", () => {
+    it("labels vision failures with providerUsed vlm", async () => {
+      const { APICallError } = await import("ai");
+      mockedGenerateObject.mockRejectedValueOnce(
+        new APICallError({
+          message: "upstream",
+          url: "u",
+          requestBodyValues: {},
+          statusCode: 502,
+          responseHeaders: {},
+          responseBody: "",
+          isRetryable: false,
+        }),
+      );
+
+      await expect(
+        extractReportFromImage(makeImageFile()),
+      ).rejects.toMatchObject({
+        code: "openai_failed",
+        providerUsed: "vlm",
+      });
+    });
+
     it("uses VLM flow by default and returns parsed result via the AI SDK", async () => {
       mockedGenerateObject.mockResolvedValueOnce({
         object: {
@@ -283,6 +305,35 @@ describe("reportExtractProvider", () => {
       expect(args.model).toBe("openai/gpt-4o");
       expect(out.model).toBe("openai/gpt-4o");
       expect(out.openAiModelSubstitutedFrom).toBe("claude-sonnet-4-6");
+    });
+
+    it("behoudt vision fallbackUsed in hybrid mode na succesvolle VLM-retry", async () => {
+      process.env.REPORT_EXTRACT_PROVIDER = "hybrid";
+      process.env.OCR_WORKER_URL = "https://ocr.example.com";
+      process.env.OCR_WORKER_TOKEN = "ocr-token";
+      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/gpt-5.6-sol");
+      vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "gpt-4o");
+      const { APICallError } = await import("ai");
+
+      mockedGenerateObject
+        .mockRejectedValueOnce(
+          new APICallError({
+            message: "upstream",
+            url: "u",
+            requestBodyValues: {},
+            statusCode: 502,
+            responseHeaders: {},
+            responseBody: "",
+            isRetryable: false,
+          }),
+        )
+        .mockResolvedValueOnce({
+          object: { homeTeam: "H", awayTeam: "A", homeScore: 1, awayScore: 2 },
+        } as never);
+
+      const out = await extractReportFromImage(makeImageFile());
+      expect(out.fallbackUsed).toBe(true);
+      expect(out.providerUsed).toBe("vlm");
     });
 
     it("falls back to OCR in hybrid mode when VLM fails and reports the failure to Sentry", async () => {

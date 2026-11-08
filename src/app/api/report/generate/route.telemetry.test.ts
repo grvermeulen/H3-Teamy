@@ -74,6 +74,48 @@ describe("POST /api/report/generate telemetry", () => {
     );
   }
 
+  it("behoudt client flowId bij invalid JSON via X-Report-Flow-Id", async () => {
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const response = await POST(
+      new NextRequest(
+        new Request("http://localhost/api/report/generate", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "X-Report-Flow-Id": flowId,
+          },
+          body: "{not-json",
+        }),
+      ),
+    );
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.diagnostic?.flowId).toBe(flowId);
+    const fail = infoSpy.mock.calls
+      .map((c) => c[1])
+      .find(
+        (p) =>
+          typeof p === "object" &&
+          p !== null &&
+          (p as { phase?: string }).phase === "json_fail",
+      ) as { flowId?: string } | undefined;
+    expect(fail?.flowId).toBe(flowId);
+    infoSpy.mockRestore();
+  });
+
+  it("faalt veilig wanneer getReport faalt (geen overschrijven zonder MVP)", async () => {
+    getReport.mockRejectedValueOnce(new Error("kv read failed"));
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const response = await POST(makeRequest(validBody));
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.error).toBe("persist_failed");
+    expect(body.message).toMatch(/kon niet worden geladen/i);
+    expect(body.diagnostic?.errorClass).toBe("persist_read_failed");
+    expect(setReport).not.toHaveBeenCalled();
+    infoSpy.mockRestore();
+  });
+
   it("logt validate_fail bij incomplete input", async () => {
     const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
     const response = await POST(
@@ -169,11 +211,11 @@ describe("POST /api/report/generate telemetry", () => {
           p !== null &&
           (p as { event?: string }).event === "report_flow_trace",
       ) as {
-        phase?: string;
-        flowId?: string;
-        persistence?: { outcome?: string };
-        outcome?: string;
-      }[];
+      phase?: string;
+      flowId?: string;
+      persistence?: { outcome?: string };
+      outcome?: string;
+    }[];
 
     const persistStart = traces.findIndex((t) => t.phase === "persist_start");
     const persistFail = traces.findIndex((t) => t.phase === "persist_fail");
@@ -189,13 +231,12 @@ describe("POST /api/report/generate telemetry", () => {
   });
 
   it("markeert db_unavailable in trace bij DbUnavailableError", async () => {
-    const { DbUnavailableError } = await import(
-      "../../../../lib/dbUnavailableError"
-    );
+    const { DbUnavailableError } =
+      await import("../../../../lib/dbUnavailableError");
     setReport.mockRejectedValueOnce(new DbUnavailableError("schema drift"));
     const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
     const response = await POST(makeRequest(validBody));
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(503);
     const fail = infoSpy.mock.calls
       .map((c) => c[1])
       .find(
@@ -203,7 +244,8 @@ describe("POST /api/report/generate telemetry", () => {
           typeof p === "object" &&
           p !== null &&
           (p as { phase?: string }).phase === "persist_fail",
-      ) as { errorClass?: string; persistence?: { category?: string } } | undefined;
+      ) as
+      { errorClass?: string; persistence?: { category?: string } } | undefined;
     expect(fail?.errorClass).toBe("db_unavailable");
     expect(fail?.persistence?.category).toBe("unavailable");
     infoSpy.mockRestore();

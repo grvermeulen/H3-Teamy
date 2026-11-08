@@ -430,8 +430,9 @@ function prepareNarrativeInput(
 export async function POST(req: NextRequest) {
   const startedAt = Date.now();
   const requestId = createReportFlowRequestId();
-  const vercelRequestId = req.headers.get("x-vercel-id")?.trim() || undefined;
-  let flowId = crypto.randomUUID();
+  const headerFlow = readGenerateFlowFromRequest(req);
+  let flowId = headerFlow.flowId;
+  const vercelRequestId = headerFlow.vercelRequestId;
 
   try {
     let body: ReportBody;
@@ -454,7 +455,7 @@ export async function POST(req: NextRequest) {
       return jsonGenerateResponse(
         {
           error: "invalid_json",
-          message: "Invalid JSON payload.",
+          message: "Ongeldige invoer naar de server. Probeer opnieuw.",
           diagnostic: buildGenerateDiagnosticResponse({
             flowId,
             requestId,
@@ -757,6 +758,8 @@ Regels:
       return jsonGenerateResponse(
         {
           error: "no_content",
+          message:
+            "Het verslag kon niet worden gegenereerd (lege tekst van de AI). Probeer het later opnieuw.",
           diagnostic: buildGenerateDiagnosticResponse({
             flowId,
             requestId,
@@ -780,8 +783,40 @@ Regels:
     let previous;
     try {
       previous = await getReport(eventId);
-    } catch {
-      previous = null;
+    } catch (readError: unknown) {
+      logReportGenerateTrace({
+        flowId,
+        requestId,
+        vercelRequestId,
+        phase: "persist_fail",
+        startedAt,
+        stageStartedAt: persistStartedAt,
+        outcome: "error",
+        appHttpStatus: 503,
+        errorClass: isDbUnavailableError(readError)
+          ? "db_unavailable"
+          : "persist_read_failed",
+        errorCode: "persist_read_failed",
+        persistence: { outcome: "failed", category: "kv" },
+      });
+      Sentry.captureException(readError, {
+        tags: { module: "report_generate", operation: "getReport" },
+        extra: sanitizeReportFlowSentryExtra({ flowId, requestId }),
+      });
+      return jsonGenerateResponse(
+        {
+          error: "persist_failed",
+          message:
+            "Het bestaande verslag kon niet worden geladen. Probeer het later opnieuw.",
+          diagnostic: buildGenerateDiagnosticResponse({
+            flowId,
+            requestId,
+            errorClass: "persist_read_failed",
+          }),
+        },
+        isDbUnavailableError(readError) ? 503 : 500,
+        requestId,
+      );
     }
     const report = {
       content,
@@ -817,13 +852,15 @@ Regels:
       return jsonGenerateResponse(
         {
           error: "persist_failed",
+          message:
+            "Het verslag kon niet worden opgeslagen. Probeer het later opnieuw.",
           diagnostic: buildGenerateDiagnosticResponse({
             flowId,
             requestId,
             errorClass: "persist_failed",
           }),
         },
-        500,
+        isDbUnavailableError(persistError) ? 503 : 500,
         requestId,
       );
     }

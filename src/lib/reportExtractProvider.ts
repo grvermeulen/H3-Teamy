@@ -455,7 +455,7 @@ async function callAiVisionExtraction(args: {
     throw buildOpenAiExtractProviderError({
       error,
       model: args.model,
-      providerUsed: "ocr",
+      providerUsed: "vlm",
     });
   }
 }
@@ -608,7 +608,7 @@ export async function extractReportFromImage(
   const startedAt = nowMs();
   try {
     const primary = await runVlm(file, config, options);
-    return { ...primary, fallbackUsed: false, latencyMs: nowMs() - startedAt };
+    return { ...primary, latencyMs: nowMs() - startedAt };
   } catch (vlmError: unknown) {
     const telemetry =
       vlmError instanceof ExtractProviderError

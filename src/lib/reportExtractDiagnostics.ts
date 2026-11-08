@@ -86,14 +86,14 @@ export function classifyExtractProviderFailure(args: {
   info?: unknown;
   providerTelemetry?: AllowlistedProviderTelemetry;
 }): string {
+  const text = typeof args.info === "string" ? args.info : "";
+  for (const { pattern, errorClass } of PROVIDER_INFO_PATTERNS) {
+    if (text && pattern.test(text)) return errorClass;
+  }
   if (args.providerTelemetry) {
     return providerTelemetryToErrorClass(args.providerTelemetry);
   }
-  const text = typeof args.info === "string" ? args.info : "";
   if (!text) return "provider_request_failed";
-  for (const { pattern, errorClass } of PROVIDER_INFO_PATTERNS) {
-    if (pattern.test(text)) return errorClass;
-  }
   return "provider_request_failed";
 }
 

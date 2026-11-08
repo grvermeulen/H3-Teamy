@@ -163,6 +163,22 @@ export function formatReportGenerateError(
     return `Ongeldige invoer naar de server. Probeer opnieuw${ref}.`;
   }
 
+  if (payload?.error === "persist_failed") {
+    return (
+      (payload.message ??
+        "Het verslag kon niet worden opgeslagen. Probeer het later opnieuw.") +
+      ref
+    );
+  }
+
+  if (payload?.error === "no_content") {
+    return (
+      (payload.message ??
+        "Het verslag kon niet worden gegenereerd (lege tekst). Probeer het later opnieuw.") +
+      ref
+    );
+  }
+
   if (payload?.error === "openai_failed") {
     const errorClass = payload.diagnostic?.errorClass;
     const hint =

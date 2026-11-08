@@ -25,7 +25,7 @@ The app uses `await Promise.resolve(params)` for `eventId` so Next.js 15+ async 
 - `REPORT_EXTRACT_OPENAI_MODEL=<model-name>` (optional; default `openai/gpt-4o` wanneer unset — prod #914 gebruikte in code `gpt-5.6-sol`; expliciete env blijft leidend).
 - `REPORT_EXTRACT_VISION_FALLBACK_MODEL=<model-name>` (optional; één VLM-retry na primaire falen, met `fallbackUsed: true` en `vision_model_fallback`-trace).
 
-**Gecontroleerde model-vergelijking (preview):** zet per branch `REPORT_EXTRACT_OPENAI_MODEL` op preview (Vercel dashboard of `vercel env add … --environment preview --git-branch <branch>`), redeploy, `POST /api/report/extract` met hetzelfde bestand, geen fallback-env. Agent-hulp: `npx tsx scripts/run-vision-model-ab-once.ts <model|default>` werkt alleen met geldige gateway-credentials (`AI_GATEWAY_API_KEY` of Vercel-runtime OIDC — lokale OIDC faalt vaak met `GatewayAuthenticationError`).
+**Gecontroleerde model-vergelijking (preview):** zet per branch `REPORT_EXTRACT_OPENAI_MODEL` op preview (Vercel dashboard of `vercel env add … --environment preview --git-branch <branch>`), redeploy, `POST /api/report/extract` met hetzelfde bestand, geen fallback-env. Lokaal: `VISION_AB_IMAGE=tests/fixtures/Home-Match-1.JPG npx tsx scripts/run-vision-model-ab-once.ts <model|default>` met `AI_GATEWAY_API_KEY` of Vercel-runtime OIDC.
 
 ### Flow-telemetrie (screenshot → extract → generate)
 

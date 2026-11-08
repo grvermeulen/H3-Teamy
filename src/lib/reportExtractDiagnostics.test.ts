@@ -30,6 +30,16 @@ describe("reportExtractDiagnostics", () => {
       classifyExtractProviderFailure({ info: "something timed out" }),
     ).toBe("provider_timeout");
     expect(classifyExtractProviderFailure({})).toBe("provider_request_failed");
+    expect(
+      classifyExtractProviderFailure({
+        info: "Image dimensions exceed 8000px limit",
+        providerTelemetry: {
+          sdkErrorName: "APICallError",
+          failureKind: "transport",
+          upstreamHttpStatus: 502,
+        },
+      }),
+    ).toBe("image_dimension_rejected");
   });
 
   it("bouwt supportRef uit attempt en request id", () => {
