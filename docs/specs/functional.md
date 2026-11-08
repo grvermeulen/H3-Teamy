@@ -126,6 +126,7 @@ This document reflects the features that exist in the code today. Planned or fut
 - /attendance
 - /docs
 - /login
+- /mobile-layout-fixture
 - /privacy
 - /profile
 - /report/[eventId]

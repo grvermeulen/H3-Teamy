@@ -13,6 +13,7 @@ import {
   shouldDropBenignPointerLockNoiseEvent,
 } from "@/lib/sentryBenignPointerLockNoise";
 import { shouldDropBenignTurbopackDevCompileNoiseForSentry } from "@/lib/sentryBenignTurbopackDevCompileNoise";
+import { shouldDropBenignNonJsonOkResponseNoiseForSentry } from "@/lib/sentryBenignNonJsonOkResponse";
 
 /**
  * Parseert traces sample rate (0–1) uit env; default 0.1 voor productie.
@@ -46,6 +47,9 @@ Sentry.init({
       return null;
     }
     if (shouldDropBenignTurbopackDevCompileNoiseForSentry(event, hint)) {
+      return null;
+    }
+    if (shouldDropBenignNonJsonOkResponseNoiseForSentry(event, hint)) {
       return null;
     }
     return event;

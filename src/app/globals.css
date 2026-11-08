@@ -286,6 +286,11 @@ body {
   box-sizing: border-box;
 }
 
+main {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .container {
   box-sizing: border-box;
   max-width: 720px;
@@ -295,6 +300,7 @@ body {
   padding-bottom: 64px;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
+  min-width: 0;
 }
 
 header.container > div:last-child {
@@ -448,7 +454,9 @@ h3 {
   min-width: 0;
 }
 
-.rsvp button {
+.rsvp button,
+.event-rsvp-toggle button,
+.event-report-row button {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: var(--text);
@@ -459,20 +467,26 @@ h3 {
   font: inherit;
   font-weight: 600;
 }
-.rsvp button:focus-visible {
+.rsvp button:focus-visible,
+.event-rsvp-toggle button:focus-visible,
+.event-report-row button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-.rsvp button.active-yes {
+.rsvp button.active-yes,
+.event-rsvp-toggle button.active-yes,
+.event-report-row button.active-yes {
   border-color: var(--positive);
   color: var(--positive);
 }
-.rsvp button.active-no {
+.rsvp button.active-no,
+.event-rsvp-toggle button.active-no {
   border-color: var(--negative);
   color: var(--negative);
 }
-.rsvp button.active-maybe {
+.rsvp button.active-maybe,
+.event-rsvp-toggle button.active-maybe {
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -590,6 +604,105 @@ h3 {
   gap: 10px;
   flex-wrap: wrap;
   min-width: 0;
+  max-width: 100%;
+}
+
+.event-card-top {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.event-card-main {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Ja / Misschien / Nee — full-width row; mobiel drie kolommen zonder overflow */
+.event-rsvp-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.event-card-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.event-report-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.event-report-row input[type="file"] {
+  flex: 1 1 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.event-report-notice {
+  flex-basis: 100%;
+  margin-top: 4px;
+  color: var(--negative);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.event-list-refresh {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.event-refresh-tip {
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.event-description {
+  margin-top: 8px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.eventMeta .badge {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* RSVP-lijst onder details: was één flex-rij → op iPhone te breed */
@@ -802,17 +915,53 @@ body.modal-open .card {
   .row {
     gap: 8px;
   }
-  /* Keep RSVP as a 3-up segmented row even on narrow screens. Each button is
-     ~33% wide so the controls never stack vertically and waste space. */
-  .rsvp {
+  /* Segmented Ja/Misschien/Nee op smalle schermen (niet op report-toolbars). */
+  .event-rsvp-toggle {
     flex-wrap: nowrap;
-    width: 100%;
   }
-  .rsvp button {
+  .event-rsvp-toggle button {
     flex: 1 1 0;
     min-width: 0;
     padding-left: 6px;
     padding-right: 6px;
+  }
+  .event-report-row button {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .list {
+    width: 100%;
+    overflow-x: clip;
+  }
+  .list > section {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .list .card {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .event-list-refresh {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    max-width: 100%;
+  }
+  .event-list-refresh > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .event-list-refresh button {
+    justify-self: start;
+    max-width: 100%;
+  }
+  .event-refresh-tip {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
   }
   .modalOverlay {
     padding: 12px;

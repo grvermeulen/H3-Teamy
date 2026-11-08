@@ -78,6 +78,7 @@
 - /attendance
 - /docs
 - /login
+- /mobile-layout-fixture
 - /privacy
 - /profile
 - /report/[eventId]
