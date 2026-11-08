@@ -11,6 +11,7 @@ import {
 
 vi.mock("@sentry/nextjs", () => ({
   captureException: vi.fn(),
+  addBreadcrumb: vi.fn(),
 }));
 
 vi.mock("@/lib/reportExtractProvider", async (importOriginal) => {
@@ -103,7 +104,14 @@ describe("POST /api/report/extract", () => {
           typeof p === "object" &&
           p !== null &&
           (p as { phase?: string }).phase === "multipart_fail",
-      ) as { uploadIngress?: { contentTypeHasBoundary?: boolean; contentLength?: { present: boolean; value?: number } } } | undefined;
+      ) as
+      | {
+          uploadIngress?: {
+            contentTypeHasBoundary?: boolean;
+            contentLength?: { present: boolean; value?: number };
+          };
+        }
+      | undefined;
     expect(failPayload?.uploadIngress?.contentTypeHasBoundary).toBe(true);
     expect(failPayload?.uploadIngress?.contentLength).toEqual({
       present: true,
@@ -170,7 +178,7 @@ describe("POST /api/report/extract", () => {
     expect(vi.mocked(extractReportFromImage)).toHaveBeenCalledTimes(1);
   });
 
-  it("returns provider errors and reports them to Sentry", async () => {
+  it("returns provider errors with trace breadcrumb instead of Sentry exception", async () => {
     const form = new FormData();
     form.set(
       "image",
@@ -193,12 +201,11 @@ describe("POST /api/report/extract", () => {
     expect(body.error).toBe("provider_failed");
     expect(body.diagnostic?.errorClass).toBe("provider_request_failed");
     expect(body).not.toHaveProperty("info");
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
-      expect.any(ExtractProviderError),
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+    expect(vi.mocked(Sentry.addBreadcrumb)).toHaveBeenCalledWith(
       expect.objectContaining({
-        tags: expect.objectContaining({ module: "report_extract" }),
-        extra: expect.not.objectContaining({ info: expect.anything() }),
+        category: "report_extract",
+        level: "warning",
       }),
     );
   });

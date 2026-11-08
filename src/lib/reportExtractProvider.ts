@@ -1,6 +1,10 @@
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
-import { resolveReportExtractGatewayModel } from "./ai/gatewayModels";
+import {
+  isReportExtractGatewayModelError,
+  REPORT_EXTRACT_VISION_FALLBACK_MODEL,
+  resolveReportExtractGatewayModel,
+} from "./ai/gatewayModels";
 
 // OpenAI's structured-output (strict mode) via the Vercel AI Gateway requires
 // every property listed in `properties` to also appear in `required`. Optional
@@ -252,28 +256,95 @@ Regels:
 const SYSTEM_PROMPT =
   "Je bent een nauwkeurige parser die alleen geldige JSON terugstuurt.";
 
-async function callAiTextNormalization(args: {
-  model: string;
-  rawText: string;
-}): Promise<ExtractResult> {
+type GenerateExtractObjectArgs =
+  | {
+      kind: "text";
+      model: string;
+      rawText: string;
+    }
+  | {
+      kind: "vision";
+      model: string;
+      buffer: Buffer;
+      mimeType: string;
+    };
+
+async function generateExtractObject(
+  args: GenerateExtractObjectArgs,
+): Promise<ExtractResult> {
   const { generateObject } = await import("./ai/client");
-  try {
+
+  const run = async (model: string): Promise<ExtractResult> => {
+    if (args.kind === "text") {
+      const { object } = await generateObject({
+        model,
+        schema: ExtractResultSchema,
+        system: SYSTEM_PROMPT,
+        prompt: buildNormalizationPrompt(args.rawText),
+      });
+      return object;
+    }
     const { object } = await generateObject({
-      model: args.model,
+      model,
       schema: ExtractResultSchema,
       system: SYSTEM_PROMPT,
-      prompt: buildNormalizationPrompt(args.rawText),
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: buildVisionPrompt() },
+            { type: "image", image: args.buffer, mediaType: args.mimeType },
+          ],
+        },
+      ],
     });
     return object;
-  } catch (error: unknown) {
+  };
+
+  try {
+    return await run(args.model);
+  } catch (primaryError: unknown) {
+    const shouldRetry =
+      args.model !== REPORT_EXTRACT_VISION_FALLBACK_MODEL &&
+      isReportExtractGatewayModelError(primaryError);
+    if (shouldRetry) {
+      try {
+        return await run(REPORT_EXTRACT_VISION_FALLBACK_MODEL);
+      } catch (fallbackError: unknown) {
+        throw new ExtractProviderError({
+          message: "OpenAI request failed",
+          code: "openai_failed",
+          status: 502,
+          info:
+            fallbackError instanceof Error
+              ? fallbackError.message
+              : String(fallbackError),
+          model: REPORT_EXTRACT_VISION_FALLBACK_MODEL,
+        });
+      }
+    }
     throw new ExtractProviderError({
       message: "OpenAI request failed",
       code: "openai_failed",
       status: 502,
-      info: error instanceof Error ? error.message : String(error),
+      info:
+        primaryError instanceof Error
+          ? primaryError.message
+          : String(primaryError),
       model: args.model,
     });
   }
+}
+
+async function callAiTextNormalization(args: {
+  model: string;
+  rawText: string;
+}): Promise<ExtractResult> {
+  return generateExtractObject({
+    kind: "text",
+    model: args.model,
+    rawText: args.rawText,
+  });
 }
 
 /**
@@ -341,7 +412,6 @@ async function callAiVisionExtraction(args: {
   file: File;
   onStage?: ExtractReportFromImageOptions["onStage"];
 }): Promise<ExtractResult> {
-  const { generateObject } = await import("./ai/client");
   const rawBuffer = Buffer.from(await args.file.arrayBuffer());
   const rawMimeType = args.file.type || "image/png";
   let inputWidth = 0;
@@ -387,31 +457,12 @@ async function callAiVisionExtraction(args: {
       });
     }
   }
-  try {
-    const { object } = await generateObject({
-      model: args.model,
-      schema: ExtractResultSchema,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: buildVisionPrompt() },
-            { type: "image", image: buffer, mediaType: mimeType },
-          ],
-        },
-      ],
-    });
-    return object;
-  } catch (error: unknown) {
-    throw new ExtractProviderError({
-      message: "OpenAI request failed",
-      code: "openai_failed",
-      status: 502,
-      info: error instanceof Error ? error.message : String(error),
-      model: args.model,
-    });
-  }
+  return generateExtractObject({
+    kind: "vision",
+    model: args.model,
+    buffer,
+    mimeType,
+  });
 }
 
 async function callOcrWorker(args: {

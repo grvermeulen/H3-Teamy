@@ -12,6 +12,7 @@ import { shouldDropNodeClientDisconnectWriteNoiseForSentry } from "@/lib/sentryC
 import { shouldDropNodeTransformStreamNoiseForSentry } from "@/lib/sentryTransformStreamNoise";
 import { shouldDropPgPoolNoiseForSentry } from "@/lib/sentryPgPoolNoise";
 import { shouldDropRedisNoiseForSentry } from "@/lib/sentryRedisNoise";
+import { shouldDropReportExtractProviderNoiseForSentry } from "@/lib/sentryReportExtractProviderNoise";
 
 /** Parseert traces sample rate (0–1) uit server-env; default 0.1. */
 function parseTracesSampleRate(): number {
@@ -46,6 +47,9 @@ Sentry.init({
       return null;
     }
     if (shouldDropBenignTurbopackDevCompileNoiseForSentry(event, hint)) {
+      return null;
+    }
+    if (shouldDropReportExtractProviderNoiseForSentry(event, hint)) {
       return null;
     }
     return event;

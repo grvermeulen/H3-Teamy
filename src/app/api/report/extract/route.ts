@@ -17,6 +17,7 @@ import {
   extractReportFromImage,
   ExtractProviderError,
 } from "../../../../lib/reportExtractProvider";
+import { shouldCaptureReportExtractProviderForSentry } from "../../../../lib/reportExtractSentryCapture";
 
 export const runtime = "nodejs";
 
@@ -326,24 +327,40 @@ export async function POST(req: NextRequest) {
           fallbackUsed: error.fallbackUsed,
         },
       });
-      Sentry.captureException(error, {
-        tags: {
-          module: "report_extract",
-          provider: error.providerUsed || error.provider || "unknown",
-          operation: "extract",
-          error_class: errorClass,
-        },
-        extra: sanitizeExtractSentryExtra({
-          attemptId,
-          requestId,
-          vercelRequestId,
-          code: error.code,
-          status: error.status,
-          model: error.model,
-          fallbackUsed: error.fallbackUsed,
-          latencyMs,
-        }),
+      const sentryExtra = sanitizeExtractSentryExtra({
+        attemptId,
+        requestId,
+        vercelRequestId,
+        code: error.code,
+        status: error.status,
+        model: error.model,
+        fallbackUsed: error.fallbackUsed,
+        latencyMs,
       });
+      const sentryTags = {
+        module: "report_extract",
+        provider: error.providerUsed || error.provider || "unknown",
+        operation: "extract",
+        error_class: errorClass,
+      };
+      if (shouldCaptureReportExtractProviderForSentry(error.code, errorClass)) {
+        Sentry.captureException(error, {
+          tags: sentryTags,
+          extra: sentryExtra,
+        });
+      } else {
+        Sentry.addBreadcrumb({
+          category: "report_extract",
+          message: error.message,
+          level: "warning",
+          data: {
+            ...sentryTags,
+            code: error.code,
+            attemptId,
+            requestId,
+          },
+        });
+      }
       return jsonWithDiagnostic(
         {
           error: error.code,
