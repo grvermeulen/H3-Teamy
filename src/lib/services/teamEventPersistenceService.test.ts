@@ -23,8 +23,8 @@ const dbEvents: TeamEvent[] = [
 
 describe("teamEventPersistenceService", () => {
   const findMany = vi.fn();
-  const upsert = vi.fn().mockResolvedValue({});
-  const prisma = { event: { findMany, upsert } };
+  const executeRaw = vi.fn().mockResolvedValue(1);
+  const prisma = { event: { findMany }, $executeRaw: executeRaw };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -85,25 +85,27 @@ describe("teamEventPersistenceService", () => {
   });
 
   describe("persistTeamEventsToDb", () => {
-    it("upserts complete metadata and returns the write count", async () => {
+    it("bulk-upserts complete metadata in one query and returns the write count", async () => {
       const written = await persistTeamEventsToDb(prisma, dbEvents);
       expect(written).toBe(1);
-      expect(upsert).toHaveBeenCalledTimes(1);
-      expect(upsert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: "20261107--thuis" },
-          create: expect.objectContaining({
-            title: "De Rijn H3-Opponent",
-            startDate: new Date("2026-11-07T17:50:00.000Z"),
-          }),
-        }),
-      );
+      expect(executeRaw).toHaveBeenCalledTimes(1);
+    });
+
+    it("uses a single query for many events (no N+1 upserts)", async () => {
+      const many: TeamEvent[] = Array.from({ length: 12 }, (_, i) => ({
+        id: `2026110${i}--thuis`,
+        title: `Wedstrijd ${i}`,
+        start: "2026-11-07T17:50:00.000Z",
+      }));
+      const written = await persistTeamEventsToDb(prisma, many);
+      expect(written).toBe(12);
+      expect(executeRaw).toHaveBeenCalledTimes(1);
     });
 
     it("skips empty candidate lists", async () => {
       const written = await persistTeamEventsToDb(prisma, []);
       expect(written).toBe(0);
-      expect(upsert).not.toHaveBeenCalled();
+      expect(executeRaw).not.toHaveBeenCalled();
     });
   });
 

@@ -1,8 +1,8 @@
 import * as Sentry from "@sentry/nextjs";
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import type { TeamEvent } from "../../types";
 
-export type TeamEventDbClient = Pick<PrismaClient, "event">;
+export type TeamEventDbClient = Pick<PrismaClient, "event" | "$executeRaw">;
 
 /**
  * Returns calendar events from Postgres that have complete display metadata.
@@ -71,26 +71,21 @@ export async function persistTeamEventsToDb(
   const persistable = events.filter(isPersistableTeamEvent);
   if (persistable.length === 0) return 0;
 
-  await Promise.all(
-    persistable.map((e) =>
-      prisma.event.upsert({
-        where: { id: e.id },
-        create: {
-          id: e.id,
-          title: e.title,
-          description: e.description ?? null,
-          startDate: new Date(e.start),
-          endDate: e.end ? new Date(e.end) : null,
-        },
-        update: {
-          title: e.title,
-          description: e.description ?? null,
-          startDate: new Date(e.start),
-          endDate: e.end ? new Date(e.end) : null,
-        },
-      }),
-    ),
+  const valueRows = persistable.map(
+    (e) =>
+      Prisma.sql`(${e.id}, ${e.title}, ${e.description ?? null}, ${new Date(e.start)}, ${e.end ? new Date(e.end) : null}, NOW(), NOW())`,
   );
+
+  await prisma.$executeRaw`
+    INSERT INTO "Event" ("id", "title", "description", "startDate", "endDate", "createdAt", "updatedAt")
+    VALUES ${Prisma.join(valueRows)}
+    ON CONFLICT ("id") DO UPDATE SET
+      "title" = EXCLUDED."title",
+      "description" = EXCLUDED."description",
+      "startDate" = EXCLUDED."startDate",
+      "endDate" = EXCLUDED."endDate",
+      "updatedAt" = NOW()
+  `;
 
   return persistable.length;
 }
