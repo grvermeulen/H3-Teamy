@@ -161,7 +161,9 @@ describe("WhatsNewTour", () => {
     });
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(SyntaxError),
-      { tags: { clientFetch: "whats-new-tour" } },
+      expect.objectContaining({
+        tags: { clientFetch: "whats-new-tour" },
+      }),
     );
   });
 
