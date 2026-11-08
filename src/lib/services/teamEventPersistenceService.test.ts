@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Sentry from "@sentry/nextjs";
 import type { TeamEvent } from "../../types";
@@ -129,7 +130,7 @@ describe("teamEventPersistenceService", () => {
       });
     });
 
-    it("reports Prisma failures and returns an empty list", async () => {
+    it("reports unexpected Prisma failures and returns an empty list", async () => {
       findMany.mockRejectedValue(new Error("db down"));
       const rows = await fetchTeamEventsFromDb(prisma);
       expect(rows).toEqual([]);
@@ -137,6 +138,18 @@ describe("teamEventPersistenceService", () => {
         expect.any(Error),
         expect.objectContaining({ tags: { source: "event_db_fallback" } }),
       );
+    });
+
+    it("skips Sentry on transient connect errors (JAVASCRIPT-NEXTJS-5M)", async () => {
+      findMany.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError("", {
+          code: "P1001",
+          clientVersion: "7.10.1",
+        }),
+      );
+      const rows = await fetchTeamEventsFromDb(prisma);
+      expect(rows).toEqual([]);
+      expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
     });
   });
 });

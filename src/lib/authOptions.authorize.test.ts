@@ -179,7 +179,7 @@ describe("Credentials authorize", () => {
     expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
-  it("returns null on P2022 schema drift and reports to Sentry", async () => {
+  it("returns null on P2022 schema drift without Sentry noise", async () => {
     const err = new Prisma.PrismaClientKnownRequestError("column missing", {
       code: "P2022",
       clientVersion: "7",
@@ -192,10 +192,7 @@ describe("Credentials authorize", () => {
     });
 
     expect(result).toBeNull();
-    expect(Sentry.captureException).toHaveBeenCalledWith(err, {
-      tags: { context: "credentials_authorize" },
-      extra: { prismaCode: "P2022" },
-    });
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   describe("passkeyExchange credentials", () => {
