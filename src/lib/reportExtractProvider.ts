@@ -1,8 +1,11 @@
 import * as Sentry from "@sentry/nextjs";
 import { z } from "zod";
 import {
-  isReportExtractGatewayModelError,
-  REPORT_EXTRACT_VISION_FALLBACK_MODEL,
+  parseAiSdkFailure,
+  type AllowlistedProviderTelemetry,
+} from "./aiSdkFailureTelemetry";
+import {
+  getReportExtractVisionFallbackModel,
   resolveReportExtractGatewayModel,
 } from "./ai/gatewayModels";
 
@@ -40,6 +43,8 @@ export type ExtractProviderConfig = {
   openAiModel: string;
   /** Present when `REPORT_EXTRACT_OPENAI_MODEL` was rewritten (e.g. removed gateway snapshot). */
   openAiModelSubstitutedFrom?: string;
+  /** When set via `REPORT_EXTRACT_VISION_FALLBACK_MODEL`, retry VLM once after primary failure. */
+  visionFallbackModel?: string;
   ocrWorkerUrl?: string;
   ocrWorkerToken?: string;
 };
@@ -68,6 +73,7 @@ export class ExtractProviderError extends Error {
   readonly providerUsed?: ConcreteProvider;
   readonly model?: string;
   readonly fallbackUsed?: boolean;
+  readonly providerTelemetry?: AllowlistedProviderTelemetry;
 
   constructor(args: {
     message: string;
@@ -78,6 +84,7 @@ export class ExtractProviderError extends Error {
     providerUsed?: ConcreteProvider;
     model?: string;
     fallbackUsed?: boolean;
+    providerTelemetry?: AllowlistedProviderTelemetry;
   }) {
     super(args.message);
     this.code = args.code;
@@ -87,7 +94,25 @@ export class ExtractProviderError extends Error {
     this.providerUsed = args.providerUsed;
     this.model = args.model;
     this.fallbackUsed = args.fallbackUsed;
+    this.providerTelemetry = args.providerTelemetry;
   }
+}
+
+function buildOpenAiExtractProviderError(args: {
+  error: unknown;
+  model: string;
+  providerUsed: ConcreteProvider;
+}): ExtractProviderError {
+  const providerTelemetry = parseAiSdkFailure(args.error);
+  return new ExtractProviderError({
+    message: "OpenAI request failed",
+    code: "openai_failed",
+    status: 502,
+    info: args.error instanceof Error ? args.error.message : String(args.error),
+    model: args.model,
+    providerUsed: args.providerUsed,
+    providerTelemetry,
+  });
 }
 
 function nowMs(): number {
@@ -115,8 +140,8 @@ export type ResolvedReportExtractOpenAiModel = {
 
 /**
  * Resolves `REPORT_EXTRACT_OPENAI_MODEL` to a gateway-supported `provider/model`
- * string. Uses `openai/gpt-5.6-sol` when unset and remaps stale, legacy, or
- * non-OpenAI ids to that vision-capable default.
+ * string. Uses `openai/gpt-4o` when unset and remaps stale, legacy, unstable
+ * vision ids, or non-OpenAI ids to that gateway default.
  *
  * @param raw - Value of `REPORT_EXTRACT_OPENAI_MODEL` (may be empty).
  * @returns Full gateway model string for `generateObject`, and the original env value when rewritten.
@@ -139,9 +164,10 @@ export function resolveReportExtractOpenAiModel(
  * through the Vercel AI Gateway, which handles upstream auth via OIDC in
  * production or `AI_GATEWAY_API_KEY` locally.
  *
- * When `REPORT_EXTRACT_OPENAI_MODEL` is unset, defaults to
- * `openai/gpt-5.6-sol` (vision). A removed snapshot or non-OpenAI model is remapped to
- * the same default so production does not depend on stale Vercel env values.
+ * When `REPORT_EXTRACT_OPENAI_MODEL` is unset, gebruikt
+ * {@link DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL}. Expliciete env-waarden (incl.
+ * `gpt-5.6-sol`) worden niet stil herschreven. Optioneel
+ * `REPORT_EXTRACT_VISION_FALLBACK_MODEL` voor één retry na VLM-fout.
  */
 export function getExtractProviderConfig(): ExtractProviderConfig {
   const provider = parseProvider(process.env.REPORT_EXTRACT_PROVIDER);
@@ -149,6 +175,7 @@ export function getExtractProviderConfig(): ExtractProviderConfig {
     resolveReportExtractOpenAiModel(
       process.env.REPORT_EXTRACT_OPENAI_MODEL || "",
     );
+  const visionFallbackModel = getReportExtractVisionFallbackModel();
   const ocrWorkerUrl = (process.env.OCR_WORKER_URL || "").trim();
   const ocrWorkerToken = (process.env.OCR_WORKER_TOKEN || "").trim();
 
@@ -175,6 +202,7 @@ export function getExtractProviderConfig(): ExtractProviderConfig {
     provider,
     openAiModel,
     openAiModelSubstitutedFrom,
+    visionFallbackModel,
     ocrWorkerUrl: ocrWorkerUrl || undefined,
     ocrWorkerToken: ocrWorkerToken || undefined,
   };
@@ -256,95 +284,26 @@ Regels:
 const SYSTEM_PROMPT =
   "Je bent een nauwkeurige parser die alleen geldige JSON terugstuurt.";
 
-type GenerateExtractObjectArgs =
-  | {
-      kind: "text";
-      model: string;
-      rawText: string;
-    }
-  | {
-      kind: "vision";
-      model: string;
-      buffer: Buffer;
-      mimeType: string;
-    };
-
-async function generateExtractObject(
-  args: GenerateExtractObjectArgs,
-): Promise<ExtractResult> {
-  const { generateObject } = await import("./ai/client");
-
-  const run = async (model: string): Promise<ExtractResult> => {
-    if (args.kind === "text") {
-      const { object } = await generateObject({
-        model,
-        schema: ExtractResultSchema,
-        system: SYSTEM_PROMPT,
-        prompt: buildNormalizationPrompt(args.rawText),
-      });
-      return object;
-    }
-    const { object } = await generateObject({
-      model,
-      schema: ExtractResultSchema,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: buildVisionPrompt() },
-            { type: "image", image: args.buffer, mediaType: args.mimeType },
-          ],
-        },
-      ],
-    });
-    return object;
-  };
-
-  try {
-    return await run(args.model);
-  } catch (primaryError: unknown) {
-    const shouldRetry =
-      args.model !== REPORT_EXTRACT_VISION_FALLBACK_MODEL &&
-      isReportExtractGatewayModelError(primaryError);
-    if (shouldRetry) {
-      try {
-        return await run(REPORT_EXTRACT_VISION_FALLBACK_MODEL);
-      } catch (fallbackError: unknown) {
-        throw new ExtractProviderError({
-          message: "OpenAI request failed",
-          code: "openai_failed",
-          status: 502,
-          info:
-            fallbackError instanceof Error
-              ? fallbackError.message
-              : String(fallbackError),
-          model: REPORT_EXTRACT_VISION_FALLBACK_MODEL,
-        });
-      }
-    }
-    throw new ExtractProviderError({
-      message: "OpenAI request failed",
-      code: "openai_failed",
-      status: 502,
-      info:
-        primaryError instanceof Error
-          ? primaryError.message
-          : String(primaryError),
-      model: args.model,
-    });
-  }
-}
-
 async function callAiTextNormalization(args: {
   model: string;
   rawText: string;
 }): Promise<ExtractResult> {
-  return generateExtractObject({
-    kind: "text",
-    model: args.model,
-    rawText: args.rawText,
-  });
+  const { generateObject } = await import("./ai/client");
+  try {
+    const { object } = await generateObject({
+      model: args.model,
+      schema: ExtractResultSchema,
+      system: SYSTEM_PROMPT,
+      prompt: buildNormalizationPrompt(args.rawText),
+    });
+    return object;
+  } catch (error: unknown) {
+    throw buildOpenAiExtractProviderError({
+      error,
+      model: args.model,
+      providerUsed: "ocr",
+    });
+  }
 }
 
 /**
@@ -405,13 +364,31 @@ export type ExtractReportStage =
 
 export type ExtractReportFromImageOptions = {
   onStage?: (stage: ExtractReportStage) => void;
+  /** Correlatie-id van de client-flow (extract → generate). */
+  flowId?: string;
 };
+
+/** AI SDK 7 vision user content: `file` i.p.v. deprecated `image` part. */
+export function buildReportExtractVisionUserContent(
+  buffer: Buffer,
+  mimeType: string,
+  promptText: string,
+): Array<
+  | { type: "text"; text: string }
+  | { type: "file"; data: Buffer; mediaType: string }
+> {
+  return [
+    { type: "text", text: promptText },
+    { type: "file", data: buffer, mediaType: mimeType },
+  ];
+}
 
 async function callAiVisionExtraction(args: {
   model: string;
   file: File;
   onStage?: ExtractReportFromImageOptions["onStage"];
 }): Promise<ExtractResult> {
+  const { generateObject } = await import("./ai/client");
   const rawBuffer = Buffer.from(await args.file.arrayBuffer());
   const rawMimeType = args.file.type || "image/png";
   let inputWidth = 0;
@@ -457,12 +434,30 @@ async function callAiVisionExtraction(args: {
       });
     }
   }
-  return generateExtractObject({
-    kind: "vision",
-    model: args.model,
-    buffer,
-    mimeType,
-  });
+  try {
+    const { object } = await generateObject({
+      model: args.model,
+      schema: ExtractResultSchema,
+      system: SYSTEM_PROMPT,
+      messages: [
+        {
+          role: "user",
+          content: buildReportExtractVisionUserContent(
+            buffer,
+            mimeType,
+            buildVisionPrompt(),
+          ),
+        },
+      ],
+    });
+    return object;
+  } catch (error: unknown) {
+    throw buildOpenAiExtractProviderError({
+      error,
+      model: args.model,
+      providerUsed: "vlm",
+    });
+  }
 }
 
 async function callOcrWorker(args: {
@@ -500,26 +495,72 @@ async function runVlm(
   options?: ExtractReportFromImageOptions,
 ): Promise<ExtractProviderSuccess> {
   const startedAt = nowMs();
-  const result = await callAiVisionExtraction({
-    model: config.openAiModel,
-    file,
-    onStage: options?.onStage,
-  });
-  const latencyMs = nowMs() - startedAt;
-  options?.onStage?.({
-    phase: "provider_done",
-    providerUsed: "vlm",
-    latencyMs,
-  });
-  return {
-    result,
-    rawText: "",
-    providerUsed: "vlm",
-    model: config.openAiModel,
-    openAiModelSubstitutedFrom: config.openAiModelSubstitutedFrom,
-    fallbackUsed: false,
-    latencyMs,
-  };
+  const invoke = (model: string) =>
+    callAiVisionExtraction({
+      model,
+      file,
+      onStage: options?.onStage,
+    });
+
+  try {
+    const result = await invoke(config.openAiModel);
+    const latencyMs = nowMs() - startedAt;
+    options?.onStage?.({
+      phase: "provider_done",
+      providerUsed: "vlm",
+      latencyMs,
+    });
+    return {
+      result,
+      rawText: "",
+      providerUsed: "vlm",
+      model: config.openAiModel,
+      openAiModelSubstitutedFrom: config.openAiModelSubstitutedFrom,
+      fallbackUsed: false,
+      latencyMs,
+    };
+  } catch (primaryError: unknown) {
+    const fallbackModel = config.visionFallbackModel;
+    if (
+      !fallbackModel ||
+      fallbackModel === config.openAiModel ||
+      !(primaryError instanceof ExtractProviderError)
+    ) {
+      throw primaryError;
+    }
+
+    console.info("report_flow_trace", {
+      event: "report_flow_trace",
+      flowId: options?.flowId ?? "server-generated",
+      scope: "extract",
+      phase: "vision_model_fallback",
+      outcome: "error",
+      provider: {
+        providerUsed: "vlm",
+        model: config.openAiModel,
+        fallbackUsed: true,
+      },
+      providerTelemetry: primaryError.providerTelemetry,
+      errorCode: primaryError.code,
+    });
+
+    const result = await invoke(fallbackModel);
+    const latencyMs = nowMs() - startedAt;
+    options?.onStage?.({
+      phase: "provider_done",
+      providerUsed: "vlm",
+      latencyMs,
+    });
+    return {
+      result,
+      rawText: "",
+      providerUsed: "vlm",
+      model: fallbackModel,
+      openAiModelSubstitutedFrom: config.openAiModel,
+      fallbackUsed: true,
+      latencyMs,
+    };
+  }
 }
 
 async function runOcr(
@@ -567,8 +608,21 @@ export async function extractReportFromImage(
   const startedAt = nowMs();
   try {
     const primary = await runVlm(file, config, options);
-    return { ...primary, fallbackUsed: false, latencyMs: nowMs() - startedAt };
+    return { ...primary, latencyMs: nowMs() - startedAt };
   } catch (vlmError: unknown) {
+    const telemetry =
+      vlmError instanceof ExtractProviderError
+        ? vlmError.providerTelemetry
+        : parseAiSdkFailure(vlmError);
+    console.info("report_flow_trace", {
+      event: "report_flow_trace",
+      flowId: options?.flowId ?? "server-generated",
+      scope: "extract",
+      phase: "provider_hybrid_fallback",
+      outcome: "error",
+      providerTelemetry: telemetry,
+      provider: { fallbackUsed: true },
+    });
     Sentry.captureException(vlmError, {
       tags: {
         module: "report_extract",
@@ -576,6 +630,7 @@ export async function extractReportFromImage(
         operation: "hybrid_fallback",
       },
       level: "warning",
+      extra: telemetry ? { providerTelemetry: telemetry } : undefined,
     });
     const fallback = await runOcr(file, config);
     return { ...fallback, fallbackUsed: true, latencyMs: nowMs() - startedAt };

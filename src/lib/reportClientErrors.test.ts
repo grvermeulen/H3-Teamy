@@ -5,6 +5,34 @@ import {
 } from "./reportClientErrors";
 
 describe("formatReportGenerateError", () => {
+  it("vertaalt persist_failed naar NL zonder JSON dump", () => {
+    const msg = formatReportGenerateError(
+      500,
+      JSON.stringify({
+        error: "persist_failed",
+        diagnostic: {
+          flowId: "11111111-1111-4111-8111-111111111111",
+          requestId: "22222222-2222-4222-8222-222222222222",
+          supportRef: "11111111-22222222",
+        },
+      }),
+    );
+    expect(msg).toMatch(/niet worden opgeslagen/i);
+    expect(msg).not.toContain("diagnostic");
+    expect(msg).toMatch(/referentie: 11111111-22222222/);
+  });
+
+  it("vertaalt no_content naar NL", () => {
+    const msg = formatReportGenerateError(
+      500,
+      JSON.stringify({
+        error: "no_content",
+        message: "Lege tekst.",
+      }),
+    );
+    expect(msg).toContain("Lege tekst.");
+  });
+
   it("vertaalt report_input_incomplete naar NL zonder JSON dump", () => {
     const msg = formatReportGenerateError(
       422,

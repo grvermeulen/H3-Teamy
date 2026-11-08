@@ -22,7 +22,19 @@ The app uses `await Promise.resolve(params)` for `eventId` so Next.js 15+ async 
 `/api/report/extract` supports a runtime provider flag so extraction can switch without code changes.
 
 - `REPORT_EXTRACT_PROVIDER=vlm|ocr|hybrid` (default: `vlm`)
-- `REPORT_EXTRACT_OPENAI_MODEL=<model-name>` (optional; defaults to `openai/gpt-5.6-sol` when unset. Removed snapshots and non-OpenAI model ids are remapped to this vision-capable default.)
+- `REPORT_EXTRACT_OPENAI_MODEL=<model-name>` (optional; default `openai/gpt-4o` wanneer unset — prod #914 gebruikte in code `gpt-5.6-sol`; expliciete env blijft leidend).
+- `REPORT_EXTRACT_VISION_FALLBACK_MODEL=<model-name>` (optional; één VLM-retry na primaire falen, met `fallbackUsed: true` en `vision_model_fallback`-trace).
+
+**Gecontroleerde model-vergelijking (preview):** zet per branch `REPORT_EXTRACT_OPENAI_MODEL` op preview (Vercel dashboard of `vercel env add … --environment preview --git-branch <branch>`), redeploy, `POST /api/report/extract` met hetzelfde bestand, geen fallback-env. Lokaal: `VISION_AB_IMAGE=tests/fixtures/Home-Match-1.JPG npx tsx scripts/run-vision-model-ab-once.ts <model|default>` met `AI_GATEWAY_API_KEY` of Vercel-runtime OIDC.
+
+### Flow-telemetrie (screenshot → extract → generate)
+
+- Eén **`flowId`** (client `createReportExtractAttemptId`, headers `X-Report-Flow-Id` / `X-Report-Extract-Attempt`, body `reportFlowId`) koppelt extract, generate en client-traces.
+- Server: `report_extract_trace` (extract) en `report_flow_trace` (scope `extract`|`generate`|`client`) met allowlisted `providerTelemetry` (`sdkErrorName`, `upstreamHttpStatus`, `failureKind`, `isRetryable`, request-id uit allowlisted headers, token counts zonder prompt/body).
+- App-HTTP (`appHttpStatus` / route status) staat los van `upstreamHttpStatus` (bijv. app 502 `openai_failed` met upstream 429).
+- Sentry extras via `sanitizeReportFlowSentryExtra` — geen `info`, prompts, response bodies of modeltekst.
+- **Client** `report_flow_trace` (scope `client`) gaat alleen naar de **browserconsole** (admin-UI); zoekbaar in Vercel/serverlogs blijven `report_extract_trace` en `report_flow_trace` met scope `extract`|`generate`. Geen apart telemetry-endpoint.
+- **Materialisatie vóór genereren**: bij bestandskeuze wordt een `selectionFlowId` gezet; `materialize_fail`/`materialize_ok` gebruiken die id; dezelfde id wordt bij “Verslag genereren” hergebruikt.
 - `REPORT_GENERATE_MODEL=<model-name>` (optional; defaults to `openai/gpt-4o` for `/api/report/generate`. Premium GPT-5 chat ids are remapped in code — see Sentry JAVASCRIPT-NEXTJS-1S.)
 - `OPENAI_API_KEY=<secret>` (required)
 - `OCR_WORKER_URL=<url>` (required for `ocr` and `hybrid`)

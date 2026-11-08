@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   gatewayModelId,
   getReportExtractGatewayModel,
+  getReportExtractVisionFallbackModel,
   getReportGenerateGatewayModel,
   getStructuredGatewayModel,
   inferGatewayProvider,
@@ -152,29 +153,44 @@ describe("getReportExtractGatewayModel", () => {
     vi.unstubAllEnvs();
   });
 
-  it("uses gpt-5.6-sol default when env unset", () => {
+  it("uses gpt-4o default when env unset", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "");
+    expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
+  });
+
+  it("honors explicit gpt-5.6-sol env override", () => {
+    vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/gpt-5.6-sol");
     expect(getReportExtractGatewayModel()).toBe("openai/gpt-5.6-sol");
   });
 
   it("remaps the legacy GPT-5 chat alias", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/gpt-5-chat-latest");
-    expect(getReportExtractGatewayModel()).toBe("openai/gpt-5.6-sol");
+    expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
   });
 
   it("remaps provider-mismatched Claude ids", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/claude-sonnet-4-6");
-    expect(getReportExtractGatewayModel()).toBe("openai/gpt-5.6-sol");
+    expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
   });
 
   it("remaps an empty OpenAI model id", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/");
-    expect(getReportExtractGatewayModel()).toBe("openai/gpt-5.6-sol");
+    expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
   });
 
   it("remaps a bare Claude env override to the OpenAI extraction default", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "claude-sonnet-4-6");
-    expect(getReportExtractGatewayModel()).toBe("openai/gpt-5.6-sol");
+    expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
+  });
+
+  it("returns undefined fallback when env unset", () => {
+    vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "");
+    expect(getReportExtractVisionFallbackModel()).toBeUndefined();
+  });
+
+  it("resolves vision fallback model from env", () => {
+    vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "gpt-4o");
+    expect(getReportExtractVisionFallbackModel()).toBe("openai/gpt-4o");
   });
 });
 

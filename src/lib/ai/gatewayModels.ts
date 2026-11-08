@@ -11,8 +11,12 @@ export const DEFAULT_STRUCTURED_GATEWAY_MODEL = "openai/gpt-4o";
 /** `generateText` default (match report narrative). */
 export const DEFAULT_TEXT_GATEWAY_MODEL = "openai/gpt-4o";
 
-/** Screenshot extraction default: strongest current OpenAI vision model. */
-export const DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL = "openai/gpt-5.6-sol";
+/**
+ * Screenshot extraction default when `REPORT_EXTRACT_OPENAI_MODEL` is unset.
+ * Prod #914 used `openai/gpt-5.6-sol` in code; preview met `gpt-4o` faalde minder
+ * vaak op dezelfde gateway — geen geïsoleerde model-A/B. Expliciete env blijft leidend.
+ */
+export const DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL = "openai/gpt-4o";
 
 /**
  * Vision-capable fallback when the primary extract model fails on AI Gateway
@@ -170,6 +174,16 @@ export function getReportGenerateGatewayModel(): string {
 export function getReportExtractGatewayModel(): string {
   const fromEnv = process.env.REPORT_EXTRACT_OPENAI_MODEL?.trim();
   return resolveReportExtractGatewayModel(fromEnv ?? "").model;
+}
+
+/**
+ * Optionele vision-fallback na primaire VLM-fout. Alleen gebruikt wanneer
+ * `REPORT_EXTRACT_VISION_FALLBACK_MODEL` is gezet (niet stil overschreven).
+ */
+export function getReportExtractVisionFallbackModel(): string | undefined {
+  const fromEnv = process.env.REPORT_EXTRACT_VISION_FALLBACK_MODEL?.trim();
+  if (!fromEnv) return undefined;
+  return resolveReportExtractGatewayModel(fromEnv).model;
 }
 
 /** Keeps screenshot extraction on OpenAI and repairs stale/provider-mismatched overrides. */

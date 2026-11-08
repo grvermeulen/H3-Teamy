@@ -226,6 +226,7 @@ export async function POST(req: NextRequest) {
     });
 
     const extracted = await extractReportFromImage(file, {
+      flowId: attemptId,
       onStage: (stage) => {
         if (stage.phase === "vision_preprocess") {
           logReportExtractTrace({
@@ -309,7 +310,10 @@ export async function POST(req: NextRequest) {
   } catch (error: unknown) {
     const latencyMs = Date.now() - startedAt;
     if (error instanceof ExtractProviderError) {
-      const errorClass = classifyExtractProviderFailure(error.info);
+      const errorClass = classifyExtractProviderFailure({
+        info: error.info,
+        providerTelemetry: error.providerTelemetry,
+      });
       logReportExtractTrace({
         event: "report_extract_trace",
         attemptId,
@@ -319,6 +323,7 @@ export async function POST(req: NextRequest) {
         outcome: "error",
         durationMs: latencyMs,
         httpStatus: error.status,
+        upstreamHttpStatus: error.providerTelemetry?.upstreamHttpStatus,
         errorClass,
         errorCode: error.code,
         provider: {
@@ -326,24 +331,38 @@ export async function POST(req: NextRequest) {
           model: error.model,
           fallbackUsed: error.fallbackUsed,
         },
+        providerTelemetry: error.providerTelemetry,
       });
       const sentryExtra = sanitizeExtractSentryExtra({
         attemptId,
         requestId,
         vercelRequestId,
+        flowId: attemptId,
         code: error.code,
-        status: error.status,
+        appHttpStatus: error.status,
+        upstreamHttpStatus: error.providerTelemetry?.upstreamHttpStatus,
         model: error.model,
         fallbackUsed: error.fallbackUsed,
         latencyMs,
+        providerTelemetry: error.providerTelemetry,
       });
+      const captureForSentry = shouldCaptureReportExtractProviderForSentry(
+        error.code,
+        errorClass,
+      );
       const sentryTags = {
         module: "report_extract",
         provider: error.providerUsed || error.provider || "unknown",
         operation: "extract",
         error_class: errorClass,
+        ...(captureForSentry
+          ? {
+              sdk_error: error.providerTelemetry?.sdkErrorName ?? "unknown",
+              failure_kind: error.providerTelemetry?.failureKind ?? "unknown",
+            }
+          : {}),
       };
-      if (shouldCaptureReportExtractProviderForSentry(error.code, errorClass)) {
+      if (captureForSentry) {
         Sentry.captureException(error, {
           tags: sentryTags,
           extra: sentryExtra,

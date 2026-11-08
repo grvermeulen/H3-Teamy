@@ -121,4 +121,36 @@ describe("GenerateReportButton materialisatie", () => {
 
     readDelayResolve?.();
   });
+
+  it("logt materialize_fail met vaste selectionFlowId vóór klik genereren", async () => {
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    render(
+      <GenerateReportButton eventId="evt-1" opponent="De Rijn H3 - Flevo H3" />,
+    );
+    const fileInput = screen
+      .getByRole("button", { name: /Verslag genereren/i })
+      .parentElement!.querySelector(
+        'input[type="file"]',
+      ) as HTMLInputElement;
+    const empty = new File([], "empty.jpg", { type: "image/jpeg" });
+    await fireEvent.change(fileInput, { target: { files: [empty] } });
+
+    await waitFor(() => {
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+    });
+
+    const fail = infoSpy.mock.calls
+      .map((c) => c[1])
+      .find(
+        (p) =>
+          typeof p === "object" &&
+          p !== null &&
+          (p as { phase?: string }).phase === "materialize_fail",
+      ) as { flowId?: string; client?: { materializeErrorClass?: string } } | undefined;
+    expect(fail?.flowId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    expect(fail?.client?.materializeErrorClass).toBe("empty_file");
+    infoSpy.mockRestore();
+  });
 });

@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
+import {
+  parseAiSdkFailure,
+  sanitizeReportFlowSentryExtra,
+} from "../../../../lib/aiSdkFailureTelemetry";
 import { getReportGenerateGatewayModel } from "../../../../lib/ai/gatewayModels";
+import {
+  buildGenerateDiagnosticResponse,
+  classifyGenerateAiFailure,
+  createReportFlowRequestId,
+  logReportGenerateTrace,
+  readGenerateFlowFromRequest,
+} from "../../../../lib/reportGenerateDiagnostics";
 import { getReport, setReport, kvGetJson } from "../../../../lib/kv";
 import { MVP_PLACEHOLDER } from "../../../../lib/mvpNarrative";
 import { sendMatchReportToWhatsAppGroup } from "../../../../lib/services/waapiService";
@@ -42,7 +53,43 @@ type ReportBody = {
   date?: unknown;
   events?: unknown;
   result?: unknown;
+  reportFlowId?: unknown;
 };
+
+function jsonGenerateResponse(
+  body: Record<string, unknown>,
+  status: number,
+  requestId: string,
+): NextResponse {
+  const res = NextResponse.json(body, { status });
+  res.headers.set("X-Report-Flow-Request-Id", requestId);
+  return res;
+}
+
+function summarizeReportInput(
+  body: ReportBody,
+  input: {
+    homeScore?: number;
+    awayScore?: number;
+    events?: unknown[];
+  },
+): {
+  hasEventId: boolean;
+  hasMatchTitle: boolean;
+  hasHomeScore: boolean;
+  hasAwayScore: boolean;
+  eventsCount?: number;
+  hasFlowId: boolean;
+} {
+  return {
+    hasEventId: Boolean(toStringValue(body.eventId)),
+    hasMatchTitle: Boolean(toStringValue(body.matchTitle)),
+    hasHomeScore: typeof input.homeScore === "number",
+    hasAwayScore: typeof input.awayScore === "number",
+    eventsCount: Array.isArray(input.events) ? input.events.length : 0,
+    hasFlowId: Boolean(toStringValue(body.reportFlowId)),
+  };
+}
 
 type ResultBody = {
   homeTeam?: unknown;
@@ -381,16 +428,58 @@ function prepareNarrativeInput(
  *   500 bij een onverwachte fout.
  */
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now();
+  const requestId = createReportFlowRequestId();
+  const headerFlow = readGenerateFlowFromRequest(req);
+  let flowId = headerFlow.flowId;
+  const vercelRequestId = headerFlow.vercelRequestId;
+
   try {
     let body: ReportBody;
+    const jsonStartedAt = Date.now();
     try {
       body = (await req.json()) as ReportBody;
     } catch (error: unknown) {
-      return NextResponse.json(
-        { error: "invalid_json", message: "Invalid JSON payload." },
-        { status: 400 },
+      logReportGenerateTrace({
+        flowId,
+        requestId,
+        vercelRequestId,
+        phase: "json_fail",
+        startedAt,
+        stageStartedAt: jsonStartedAt,
+        outcome: "error",
+        appHttpStatus: 400,
+        errorClass: "invalid_json",
+        errorCode: "invalid_json",
+      });
+      return jsonGenerateResponse(
+        {
+          error: "invalid_json",
+          message: "Ongeldige invoer naar de server. Probeer opnieuw.",
+          diagnostic: buildGenerateDiagnosticResponse({
+            flowId,
+            requestId,
+            errorClass: "invalid_json",
+          }),
+        },
+        400,
+        requestId,
       );
     }
+    const resolvedFlow = readGenerateFlowFromRequest(
+      req,
+      toStringValue(body.reportFlowId),
+    );
+    flowId = resolvedFlow.flowId;
+
+    logReportGenerateTrace({
+      flowId,
+      requestId,
+      vercelRequestId,
+      phase: "entry",
+      startedAt,
+    });
+
     const eventId = toStringValue(body?.eventId);
     const matchTitle = toStringValue(body.matchTitle);
     const source: ResultBody = isRecord(body.result)
@@ -430,8 +519,35 @@ export async function POST(req: NextRequest) {
         player?: string;
       }>;
     };
-    if (!eventId)
-      return NextResponse.json({ error: "eventId required" }, { status: 400 });
+    const inputSummary = summarizeReportInput(body, input);
+
+    if (!eventId) {
+      logReportGenerateTrace({
+        flowId,
+        requestId,
+        vercelRequestId,
+        phase: "validate_fail",
+        startedAt,
+        outcome: "error",
+        appHttpStatus: 400,
+        errorClass: "event_id_missing",
+        errorCode: "event_id_required",
+        inputSummary,
+      });
+      return jsonGenerateResponse(
+        {
+          error: "event_id_required",
+          message: "eventId required",
+          diagnostic: buildGenerateDiagnosticResponse({
+            flowId,
+            requestId,
+            errorClass: "event_id_missing",
+          }),
+        },
+        400,
+        requestId,
+      );
+    }
 
     let eventMeta: TeamEvent | null = null;
     try {
@@ -465,15 +581,42 @@ export async function POST(req: NextRequest) {
       typeof input.awayScore === "number";
     const hasEvents = Array.isArray(input.events) && input.events.length > 0;
     if (!hasScores || !hasEvents) {
-      return NextResponse.json(
+      logReportGenerateTrace({
+        flowId,
+        requestId,
+        vercelRequestId,
+        phase: "validate_fail",
+        startedAt,
+        outcome: "error",
+        appHttpStatus: 422,
+        errorClass: "report_input_incomplete",
+        errorCode: "report_input_incomplete",
+        inputSummary,
+      });
+      return jsonGenerateResponse(
         {
           error: "report_input_incomplete",
           message:
             "De screenshot mist een herkenbare eindstand of wedstrijdgebeurtenissen. Kies een volledige KNZB/Sportlink-screenshot bij deze wedstrijd.",
+          diagnostic: buildGenerateDiagnosticResponse({
+            flowId,
+            requestId,
+            errorClass: "report_input_incomplete",
+          }),
         },
-        { status: 422 },
+        422,
+        requestId,
       );
     }
+
+    logReportGenerateTrace({
+      flowId,
+      requestId,
+      vercelRequestId,
+      phase: "input_ok",
+      startedAt,
+      inputSummary,
+    });
     const rosterNames = await getRosterNames();
     const narrativeEventMeta: TeamEvent | null =
       fixtureTitle != null
@@ -518,10 +661,20 @@ Regels:
 - Gebruik uitsluitend de gegevens uit de JSON; geen eigen aannames of extra bronnen.`;
 
     let content = "";
+    const aiStartedAt = Date.now();
+    const generateModel = getReportGenerateGatewayModel();
+    logReportGenerateTrace({
+      flowId,
+      requestId,
+      vercelRequestId,
+      phase: "ai_start",
+      startedAt,
+      provider: { model: generateModel },
+    });
     try {
       const { generateText } = await import("../../../../lib/ai/client");
       const { text } = await generateText({
-        model: getReportGenerateGatewayModel(),
+        model: generateModel,
         temperature: 0.2,
         system:
           "You are an enthusiastic, pro–De Rijn Heren 3 reporter. Write energetic, respectful Dutch match reports using only the provided JSON.",
@@ -534,23 +687,193 @@ Regels:
         ],
       });
       content = text.trim();
-    } catch (aiError: unknown) {
-      Sentry.captureException(aiError, {
-        tags: { module: "report_generate", operation: "generateText" },
+      logReportGenerateTrace({
+        flowId,
+        requestId,
+        vercelRequestId,
+        phase: "ai_ok",
+        startedAt,
+        stageStartedAt: aiStartedAt,
+        provider: { model: generateModel },
       });
-      return NextResponse.json({ error: "openai_failed" }, { status: 502 });
+    } catch (aiError: unknown) {
+      const providerTelemetry = parseAiSdkFailure(aiError);
+      const errorClass = classifyGenerateAiFailure(providerTelemetry);
+      logReportGenerateTrace({
+        flowId,
+        requestId,
+        vercelRequestId,
+        phase: "ai_fail",
+        startedAt,
+        stageStartedAt: aiStartedAt,
+        outcome: "error",
+        appHttpStatus: 502,
+        errorClass,
+        errorCode: "openai_failed",
+        provider: { model: generateModel },
+        providerTelemetry,
+      });
+      Sentry.captureException(aiError, {
+        tags: {
+          module: "report_generate",
+          operation: "generateText",
+          error_class: errorClass,
+          sdk_error: providerTelemetry.sdkErrorName,
+          failure_kind: providerTelemetry.failureKind,
+        },
+        extra: sanitizeReportFlowSentryExtra({
+          flowId,
+          requestId,
+          vercelRequestId,
+          appHttpStatus: 502,
+          upstreamHttpStatus: providerTelemetry.upstreamHttpStatus,
+          providerTelemetry,
+        }),
+      });
+      return jsonGenerateResponse(
+        {
+          error: "openai_failed",
+          diagnostic: buildGenerateDiagnosticResponse({
+            flowId,
+            requestId,
+            errorClass,
+          }),
+        },
+        502,
+        requestId,
+      );
     }
-    if (!content)
-      return NextResponse.json({ error: "no_content" }, { status: 500 });
+    if (!content) {
+      logReportGenerateTrace({
+        flowId,
+        requestId,
+        vercelRequestId,
+        phase: "ai_fail",
+        startedAt,
+        outcome: "error",
+        appHttpStatus: 500,
+        errorClass: "no_content",
+        errorCode: "no_content",
+      });
+      return jsonGenerateResponse(
+        {
+          error: "no_content",
+          message:
+            "Het verslag kon niet worden gegenereerd (lege tekst van de AI). Probeer het later opnieuw.",
+          diagnostic: buildGenerateDiagnosticResponse({
+            flowId,
+            requestId,
+            errorClass: "no_content",
+          }),
+        },
+        500,
+        requestId,
+      );
+    }
 
-    const previous = await getReport(eventId);
+    const persistStartedAt = Date.now();
+    logReportGenerateTrace({
+      flowId,
+      requestId,
+      vercelRequestId,
+      phase: "persist_start",
+      startedAt,
+    });
+
+    let previous;
+    try {
+      previous = await getReport(eventId);
+    } catch (readError: unknown) {
+      logReportGenerateTrace({
+        flowId,
+        requestId,
+        vercelRequestId,
+        phase: "persist_fail",
+        startedAt,
+        stageStartedAt: persistStartedAt,
+        outcome: "error",
+        appHttpStatus: 503,
+        errorClass: isDbUnavailableError(readError)
+          ? "db_unavailable"
+          : "persist_read_failed",
+        errorCode: "persist_read_failed",
+        persistence: { outcome: "failed", category: "kv" },
+      });
+      Sentry.captureException(readError, {
+        tags: { module: "report_generate", operation: "getReport" },
+        extra: sanitizeReportFlowSentryExtra({ flowId, requestId }),
+      });
+      return jsonGenerateResponse(
+        {
+          error: "persist_failed",
+          message:
+            "Het bestaande verslag kon niet worden geladen. Probeer het later opnieuw.",
+          diagnostic: buildGenerateDiagnosticResponse({
+            flowId,
+            requestId,
+            errorClass: "persist_read_failed",
+          }),
+        },
+        isDbUnavailableError(readError) ? 503 : 500,
+        requestId,
+      );
+    }
     const report = {
       content,
       createdAt: new Date().toISOString(),
       authorId: previous?.authorId,
       mvpResult: previous?.mvpResult,
     };
-    await setReport(eventId, report);
+    try {
+      await setReport(eventId, report);
+    } catch (persistError: unknown) {
+      logReportGenerateTrace({
+        flowId,
+        requestId,
+        vercelRequestId,
+        phase: "persist_fail",
+        startedAt,
+        stageStartedAt: persistStartedAt,
+        outcome: "error",
+        appHttpStatus: 500,
+        errorClass: isDbUnavailableError(persistError)
+          ? "db_unavailable"
+          : "persist_failed",
+        errorCode: "persist_failed",
+        persistence: {
+          outcome: "failed",
+          category: isDbUnavailableError(persistError) ? "unavailable" : "kv",
+        },
+      });
+      Sentry.captureException(persistError, {
+        tags: { module: "report_generate", operation: "setReport" },
+        extra: sanitizeReportFlowSentryExtra({ flowId, requestId }),
+      });
+      return jsonGenerateResponse(
+        {
+          error: "persist_failed",
+          message:
+            "Het verslag kon niet worden opgeslagen. Probeer het later opnieuw.",
+          diagnostic: buildGenerateDiagnosticResponse({
+            flowId,
+            requestId,
+            errorClass: "persist_failed",
+          }),
+        },
+        isDbUnavailableError(persistError) ? 503 : 500,
+        requestId,
+      );
+    }
+
+    logReportGenerateTrace({
+      flowId,
+      requestId,
+      vercelRequestId,
+      phase: "persist_ok",
+      startedAt,
+      stageStartedAt: persistStartedAt,
+      persistence: { outcome: "saved", category: "kv" },
+    });
 
     const notificationResult = await sendMatchReportToWhatsAppGroup({
       eventId,
@@ -560,22 +883,76 @@ Regels:
     });
     reportNotificationOutcome(notificationResult);
 
-    return NextResponse.json({
-      ok: true,
-      report,
-      whatsappNotification: notificationResult.sent
-        ? { sent: true as const }
-        : {
-            sent: false as const,
-            reason: notificationResult.reason,
-            ...(notificationResult.details
-              ? { details: notificationResult.details }
-              : {}),
-          },
+    logReportGenerateTrace({
+      flowId,
+      requestId,
+      vercelRequestId,
+      phase: "notify",
+      startedAt,
+      persistence: { outcome: "saved", category: "kv" },
     });
+
+    logReportGenerateTrace({
+      flowId,
+      requestId,
+      vercelRequestId,
+      phase: "completed",
+      startedAt,
+      outcome: "success",
+      appHttpStatus: 200,
+      persistence: { outcome: "saved", category: "kv" },
+    });
+
+    return jsonGenerateResponse(
+      {
+        ok: true,
+        report,
+        diagnostic: buildGenerateDiagnosticResponse({ flowId, requestId }),
+        whatsappNotification: notificationResult.sent
+          ? { sent: true as const }
+          : {
+              sent: false as const,
+              reason: notificationResult.reason,
+              ...(notificationResult.details
+                ? { details: notificationResult.details }
+                : {}),
+            },
+      },
+      200,
+      requestId,
+    );
   } catch (error: unknown) {
-    Sentry.captureException(error);
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: "failed", message }, { status: 500 });
+    logReportGenerateTrace({
+      flowId,
+      requestId,
+      vercelRequestId,
+      phase: "failed",
+      startedAt,
+      outcome: "error",
+      appHttpStatus: 500,
+      errorClass: "unexpected",
+      errorCode: "failed",
+    });
+    Sentry.captureException(error, {
+      tags: { module: "report_generate", error_class: "unexpected" },
+      extra: sanitizeReportFlowSentryExtra({
+        flowId,
+        requestId,
+        vercelRequestId,
+      }),
+    });
+    return jsonGenerateResponse(
+      {
+        error: "failed",
+        message: "Verslag genereren mislukt.",
+        diagnostic: buildGenerateDiagnosticResponse({
+          flowId,
+          requestId,
+          errorClass: "unexpected",
+        }),
+      },
+      500,
+      requestId,
+    );
   }
 }
