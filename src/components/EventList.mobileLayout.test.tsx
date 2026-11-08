@@ -38,7 +38,7 @@ function wrapNarrow(ui: React.ReactNode) {
 describe("EventList mobiele layout (imported fixtures)", () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
-    vi.stubEnv("SEASON_START", "[REDACTED]");
+    vi.stubEnv("SEASON_START", "01-07-2026");
     vi.stubEnv("SEASON_END", "01-07-2027");
     sessionState.loggedIn = true;
     global.fetch = vi.fn().mockResolvedValue({

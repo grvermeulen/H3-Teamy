@@ -650,11 +650,14 @@ h3 {
   margin-bottom: 12px;
   min-width: 0;
   max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .event-refresh-tip {
   flex: 1 1 12rem;
   min-width: 0;
+  max-width: 100%;
   font-size: 13px;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -898,6 +901,39 @@ body.modal-open .card {
     flex: 1 1 auto;
     min-width: 0;
     max-width: 100%;
+  }
+  .list {
+    width: 100%;
+    overflow-x: clip;
+  }
+  .list > section {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .list .card {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .event-list-refresh {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    max-width: 100%;
+  }
+  .event-list-refresh > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .event-list-refresh button {
+    justify-self: start;
+    max-width: 100%;
+  }
+  .event-refresh-tip {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
   }
   .modalOverlay {
     padding: 12px;

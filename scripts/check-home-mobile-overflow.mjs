@@ -5,6 +5,7 @@
 import { chromium, devices } from "playwright";
 
 const url = process.env.HOME_OVERFLOW_URL ?? "http://127.0.0.1:3000";
+const artifactTag = process.env.HOME_OVERFLOW_TAG ?? "unlabeled";
 const widths = [320, 375, 390, 430];
 
 const browser = await chromium.launch();
@@ -33,7 +34,7 @@ for (const width of widths) {
   const overflow = metrics.scrollWidth - metrics.clientWidth;
   results.push({ width, ...metrics, overflow });
   await page.screenshot({
-    path: `/opt/cursor/artifacts/home-mobile-${width}-after.png`,
+    path: `/opt/cursor/artifacts/home-mobile-${artifactTag}-${width}px.png`,
     fullPage: true,
   });
   await context.close();
