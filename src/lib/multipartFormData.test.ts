@@ -72,6 +72,26 @@ describe("parseMultipartFormData", () => {
     });
   });
 
+  it("rejecteert lege multipart-body met boundary", async () => {
+    const result = await parseMultipartFormData(
+      new Request("http://localhost/api/report/extract", {
+        method: "POST",
+        headers: {
+          "content-type":
+            "multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW",
+          "content-length": "0",
+        },
+        body: "",
+      }),
+    );
+    expect(result).toEqual({
+      ok: false,
+      status: 400,
+      error: "invalid_form_data",
+      message: "Kon het uploadformulier niet verwerken.",
+    });
+  });
+
   it("returns parsed form data for valid multipart requests", async () => {
     const form = new FormData();
     form.set(

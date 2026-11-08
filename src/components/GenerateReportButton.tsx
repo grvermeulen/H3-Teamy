@@ -1,40 +1,95 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession } from "./SessionContext";
 import { extractTeamsFromEventTitle } from "../lib/matchTitleTeams";
 import {
   formatReportExtractClientError,
   formatReportGenerateError,
 } from "../lib/reportClientErrors";
-import { createReportExtractAttemptId } from "../lib/reportExtractAttemptId";
+import {
+  createReportExtractAttemptId,
+  reportExtractSupportRef,
+} from "../lib/reportExtractAttemptId";
 import type { ReportExtractDiagnosticResponse } from "../lib/reportExtractDiagnostics";
 import {
   extractedTeamsMismatchFixture,
   extractHasScoresAndEvents,
   type ExtractedMatchResult,
 } from "../lib/reportExtractValidation";
-import { reportExtractSupportRef } from "../lib/reportExtractAttemptId";
+import {
+  formatMaterializeScreenshotError,
+  materializeScreenshotUploadFile,
+} from "../lib/reportScreenshotUploadFile";
 
 export default function GenerateReportButton({
   eventId,
   opponent,
 }: {
   eventId: string;
-  /** Kalenderwedstrijdtitel (thuis/uit) voor fallback en mismatch-check. */
+  /** Kalenderwedstrijdtitel (thuis/uit) voor mismatch-check. */
   opponent?: string;
 }) {
   const { isAdmin } = useSession();
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageMaterializing, setImageMaterializing] = useState(false);
   const [extracted, setExtracted] = useState<{
     homeScore?: number;
     awayScore?: number;
   } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const materializeGeneration = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
+  async function onImageSelected(file: File | undefined) {
+    materializeGeneration.current += 1;
+    const generation = materializeGeneration.current;
+    abortControllerRef.current?.abort();
+    if (!file) {
+      setImageFile(null);
+      setImageMaterializing(false);
+      setNotice(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setImageMaterializing(true);
+    setImageFile(null);
+    setNotice(null);
+    setDone(false);
+
+    const result = await materializeScreenshotUploadFile(file, {
+      signal: controller.signal,
+    });
+
+    if (generation !== materializeGeneration.current) {
+      return;
+    }
+    setImageMaterializing(false);
+
+    if (!result.ok) {
+      if (result.errorClass === "read_aborted") {
+        return;
+      }
+      setNotice(formatMaterializeScreenshotError(result.errorClass));
+      return;
+    }
+    setImageFile(result.file);
+  }
 
   async function onGenerate() {
+    if (imageMaterializing) {
+      return;
+    }
     setLoading(true);
     setNotice(null);
     try {
@@ -46,6 +101,7 @@ export default function GenerateReportButton({
       if (imageFile) {
         const attemptId = createReportExtractAttemptId();
         const form = new FormData();
+        form.set("extractAttemptId", attemptId);
         form.set("image", imageFile);
         let er: Response;
         try {
@@ -219,19 +275,31 @@ export default function GenerateReportButton({
 
   if (!isAdmin) return null;
 
+  const buttonDisabled = loading || imageMaterializing;
+
   return (
     <div className="event-report-row">
       <input
         type="file"
         accept="image/*"
-        onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+        onChange={(e) => {
+          void onImageSelected(e.target.files?.[0]);
+        }}
       />
       <button
-        onClick={onGenerate}
-        disabled={loading}
+        onClick={() => {
+          void onGenerate();
+        }}
+        disabled={buttonDisabled}
         className={done ? "active-yes" : undefined}
       >
-        {loading ? "Genereren…" : done ? "Gegenereerd" : "Verslag genereren"}
+        {imageMaterializing
+          ? "Afbeelding laden…"
+          : loading
+            ? "Genereren…"
+            : done
+              ? "Gegenereerd"
+              : "Verslag genereren"}
       </button>
       {notice ? (
         <div role="alert" className="event-report-notice muted">

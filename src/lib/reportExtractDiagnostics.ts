@@ -1,3 +1,4 @@
+import type { MultipartIngressDiagnostics } from "./multipartIngressDiagnostics";
 import {
   reportExtractSupportRef,
   resolveReportExtractAttemptId,
@@ -47,6 +48,7 @@ export type ReportExtractTracePayload = {
     model?: string;
     fallbackUsed?: boolean;
   };
+  uploadIngress?: MultipartIngressDiagnostics;
 };
 
 export type ReportExtractDiagnosticResponse = {
@@ -86,9 +88,11 @@ export function createReportExtractRequestId(): string {
 export function readExtractAttemptFromRequest(
   req: Request,
   requestId: string,
+  formAttemptId?: string | null,
 ): { attemptId: string; vercelRequestId?: string } {
   const attemptId = resolveReportExtractAttemptId(
     req.headers.get("X-Report-Extract-Attempt"),
+    formAttemptId ?? null,
   );
   const vercelRequestId = req.headers.get("x-vercel-id")?.trim() || undefined;
   return { attemptId, vercelRequestId };
