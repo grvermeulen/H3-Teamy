@@ -292,8 +292,8 @@ export default function EventList({
     const status = rsvpMap[evt.id] || null;
     return (
       <div className="card" key={evt.id}>
-        <div className="row" style={{ flexWrap: "wrap" }}>
-          <div className="grow">
+        <div className="event-card-top">
+          <div className="event-card-main">
             <div className="eventTitle">{evt.title}</div>
             <div className="eventMeta muted">
               <span className="badge badge-date" suppressHydrationWarning>
@@ -316,10 +316,7 @@ export default function EventList({
             </div>
           </div>
           {loggedIn ? (
-            <div
-              className="rsvp"
-              style={{ width: "100%", justifyContent: "flex-end" }}
-            >
+            <div className="event-rsvp-toggle">
               <button
                 className={status === "yes" ? "active-yes" : ""}
                 aria-pressed={status === "yes"}
@@ -347,15 +344,7 @@ export default function EventList({
           ) : null}
         </div>
         {loggedIn ? (
-          <div
-            className="rsvp"
-            style={{
-              justifyContent: "flex-end",
-              marginTop: 8,
-              gap: 8,
-              flexWrap: "wrap",
-            }}
-          >
+          <div className="event-card-toolbar">
             <ReportPreview eventId={evt.id} />
             <MvpVoteButton eventId={evt.id} />
           </div>
@@ -364,9 +353,7 @@ export default function EventList({
           <GenerateReportButton eventId={evt.id} opponent={evt.title} />
         ) : null}
         {evt.description ? (
-          <div className="muted" style={{ marginTop: 8 }}>
-            {evt.description}
-          </div>
+          <div className="event-description muted">{evt.description}</div>
         ) : null}
         {loggedIn ? (
           <details
@@ -432,19 +419,11 @@ export default function EventList({
 
   return (
     <div className="list">
-      <div
-        className="row"
-        style={{
-          marginBottom: 12,
-          alignItems: "center",
-          gap: 8,
-          flexWrap: "wrap",
-        }}
-      >
+      <div className="event-list-refresh">
         <button onClick={() => void loadAll()} disabled={isRefreshing}>
           {isRefreshing ? "Vernieuwen…" : "Vernieuwen"}
         </button>
-        <span className="muted" style={{ fontSize: 13 }}>
+        <span className="event-refresh-tip muted">
           Tip: open de app opnieuw of druk op Vernieuwen
         </span>
       </div>

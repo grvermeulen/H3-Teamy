@@ -110,35 +110,21 @@ export default function GenerateReportButton({
   if (!isAdmin) return null;
 
   return (
-    <div
-      className="rsvp"
-      style={{
-        justifyContent: "flex-end",
-        marginTop: 8,
-        gap: 8,
-        flexWrap: "wrap",
-      }}
-    >
+    <div className="event-report-row">
       <input
         type="file"
         accept="image/*"
         onChange={(e) => setImageFile(e.target.files?.[0] || null)}
-        style={{ maxWidth: "100%", minWidth: 0, flex: "1 1 auto" }}
       />
       <button
         onClick={onGenerate}
         disabled={loading}
         className={done ? "active-yes" : undefined}
-        style={{ minWidth: 160 }}
       >
         {loading ? "Genereren…" : done ? "Gegenereerd" : "Verslag genereren"}
       </button>
       {notice ? (
-        <div
-          role="alert"
-          className="muted"
-          style={{ flexBasis: "100%", marginTop: 4, color: "var(--negative)" }}
-        >
+        <div role="alert" className="event-report-notice muted">
           {notice}
         </div>
       ) : null}

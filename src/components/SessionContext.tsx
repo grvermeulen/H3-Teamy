@@ -17,7 +17,7 @@ export type SessionState = {
   refresh: () => Promise<void>;
 };
 
-const SessionContext = createContext<SessionState>({
+export const SessionContext = createContext<SessionState>({
   loading: true,
   loggedIn: false,
   isAdmin: false,
