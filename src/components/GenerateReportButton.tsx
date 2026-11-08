@@ -2,12 +2,19 @@
 
 import { useState } from "react";
 import { useSession } from "./SessionContext";
+import { extractTeamsFromEventTitle } from "../lib/matchTitleTeams";
+import { formatReportGenerateError } from "../lib/reportClientErrors";
+import {
+  extractedTeamsMismatchFixture,
+  extractHasScoresAndEvents,
+} from "../lib/reportExtractValidation";
 
 export default function GenerateReportButton({
   eventId,
   opponent,
 }: {
   eventId: string;
+  /** Kalenderwedstrijdtitel (thuis/uit) voor fallback en mismatch-check. */
   opponent?: string;
 }) {
   const { isAdmin } = useSession();
@@ -24,7 +31,11 @@ export default function GenerateReportButton({
     setLoading(true);
     setNotice(null);
     try {
-      let payload: any = { eventId };
+      const titleTeams = extractTeamsFromEventTitle(opponent);
+      let payload: Record<string, unknown> = { eventId };
+      if (opponent) {
+        payload.matchTitle = opponent;
+      }
       if (imageFile) {
         const form = new FormData();
         form.set("image", imageFile);
@@ -32,27 +43,39 @@ export default function GenerateReportButton({
           method: "POST",
           body: form,
         });
-        if (er.ok) {
-          const data = await er.json();
-          setExtracted(data?.result || null);
-          const result = data?.result;
-
-          // Basic match data passed straight through
-          if (result?.homeTeam) payload.homeTeam = result.homeTeam;
-          if (result?.awayTeam) payload.awayTeam = result.awayTeam;
-          if (result?.homeScore != null)
-            payload.homeScore = Number(result.homeScore);
-          if (result?.awayScore != null)
-            payload.awayScore = Number(result.awayScore);
-          if (result?.date) payload.date = result.date;
-
-          if (result?.events?.length) payload.events = result.events;
-          // Pass the full normalized result as well for server-side merging
-          if (result) payload.result = result;
+        if (!er.ok) {
+          setNotice(
+            "Screenshot kon niet worden gelezen. Probeer een scherpere foto of een andere export.",
+          );
+          return;
         }
+        const data = await er.json();
+        setExtracted(data?.result || null);
+        const result = data?.result;
+
+        if (titleTeams && result && extractedTeamsMismatchFixture(titleTeams, result)) {
+          setNotice(
+            "De gekozen screenshot lijkt niet bij deze wedstrijd te horen (andere teamnamen). Kies de screenshot van deze wedstrijd of selecteer de juiste kaart.",
+          );
+          return;
+        }
+
+        if (!result || !extractHasScoresAndEvents(result)) {
+          setNotice(
+            "In de screenshot ontbreken een herkenbare eindstand en wedstrijdgebeurtenissen. Controleer of je de volledige KNZB/Sportlink-score hebt gekozen.",
+          );
+          return;
+        }
+
+        if (result.homeTeam) payload.homeTeam = result.homeTeam;
+        if (result.awayTeam) payload.awayTeam = result.awayTeam;
+        if (result.homeScore != null) payload.homeScore = Number(result.homeScore);
+        if (result.awayScore != null) payload.awayScore = Number(result.awayScore);
+        if (result.date) payload.date = result.date;
+        if (result.events?.length) payload.events = result.events;
+        payload.result = result;
       }
 
-      // If no image was provided, ensure we have at least minimal structured input
       if (!imageFile) {
         const hasScores =
           typeof payload.homeScore === "number" &&
@@ -66,6 +89,12 @@ export default function GenerateReportButton({
           return;
         }
       }
+
+      if (titleTeams) {
+        if (!payload.homeTeam) payload.homeTeam = titleTeams.home;
+        if (!payload.awayTeam) payload.awayTeam = titleTeams.away;
+      }
+
       const res = await fetch("/api/report/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -73,7 +102,7 @@ export default function GenerateReportButton({
       });
       if (!res.ok) {
         const info = await res.text();
-        setNotice(`Genereren mislukt: ${info}`);
+        setNotice(formatReportGenerateError(res.status, info));
         return;
       }
       const data = (await res.json()) as {
@@ -98,7 +127,6 @@ export default function GenerateReportButton({
         }
       }
       setDone(true);
-      // Notify other components to refresh report content
       window.dispatchEvent(
         new CustomEvent("report:updated", { detail: { eventId } }),
       );
