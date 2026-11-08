@@ -3,11 +3,18 @@
 import { useState } from "react";
 import { useSession } from "./SessionContext";
 import { extractTeamsFromEventTitle } from "../lib/matchTitleTeams";
-import { formatReportGenerateError } from "../lib/reportClientErrors";
+import {
+  formatReportExtractClientError,
+  formatReportGenerateError,
+} from "../lib/reportClientErrors";
+import { createReportExtractAttemptId } from "../lib/reportExtractAttemptId";
+import type { ReportExtractDiagnosticResponse } from "../lib/reportExtractDiagnostics";
 import {
   extractedTeamsMismatchFixture,
   extractHasScoresAndEvents,
+  type ExtractedMatchResult,
 } from "../lib/reportExtractValidation";
+import { reportExtractSupportRef } from "../lib/reportExtractAttemptId";
 
 export default function GenerateReportButton({
   eventId,
@@ -37,30 +44,103 @@ export default function GenerateReportButton({
         payload.matchTitle = opponent;
       }
       if (imageFile) {
+        const attemptId = createReportExtractAttemptId();
         const form = new FormData();
         form.set("image", imageFile);
-        const er = await fetch("/api/report/extract", {
-          method: "POST",
-          body: form,
-        });
-        if (!er.ok) {
+        let er: Response;
+        try {
+          er = await fetch("/api/report/extract", {
+            method: "POST",
+            headers: { "X-Report-Extract-Attempt": attemptId },
+            body: form,
+          });
+        } catch (error: unknown) {
+          const isAbort =
+            (error instanceof DOMException && error.name === "AbortError") ||
+            (error instanceof Error && error.name === "AbortError");
           setNotice(
-            "Screenshot kon niet worden gelezen. Probeer een scherpere foto of een andere export.",
+            formatReportExtractClientError({
+              kind: isAbort ? "abort" : "network",
+              diagnostic: {
+                attemptId,
+                requestId: "",
+                supportRef: attemptId.replace(/-/g, "").slice(0, 8),
+              },
+            }),
           );
           return;
         }
-        const data = await er.json();
-        setExtracted(data?.result || null);
-        const result = data?.result;
+        const headerRequestId =
+          er.headers.get("X-Report-Extract-Request-Id") ?? "";
+        const bodyText = await er.text();
+        const parseBody = (): {
+          result?: unknown;
+          diagnostic?: ReportExtractDiagnosticResponse;
+        } | null => {
+          try {
+            return JSON.parse(bodyText) as {
+              result?: unknown;
+              diagnostic?: ReportExtractDiagnosticResponse;
+            };
+          } catch {
+            return null;
+          }
+        };
+        if (!er.ok) {
+          const parsed = parseBody();
+          const diagnostic =
+            parsed?.diagnostic ??
+            (headerRequestId
+              ? {
+                  attemptId,
+                  requestId: headerRequestId,
+                  supportRef: reportExtractSupportRef(
+                    attemptId,
+                    headerRequestId,
+                  ),
+                }
+              : {
+                  attemptId,
+                  requestId: "",
+                  supportRef: attemptId.replace(/-/g, "").slice(0, 8),
+                });
+          const kind =
+            parsed == null ? ("non_json" as const) : ("http" as const);
+          setNotice(
+            formatReportExtractClientError({
+              kind,
+              httpStatus: er.status,
+              bodyText: parsed == null ? bodyText : JSON.stringify(parsed),
+              diagnostic,
+            }),
+          );
+          return;
+        }
+        const data = parseBody();
+        if (!data?.result) {
+          setNotice(
+            formatReportExtractClientError({
+              kind: "non_json",
+              httpStatus: er.status,
+              bodyText,
+              diagnostic: data?.diagnostic ?? null,
+            }),
+          );
+          return;
+        }
+        setExtracted(
+          (data.result as { homeScore?: number; awayScore?: number }) || null,
+        );
+        const result = data.result as ExtractedMatchResult;
 
-        if (titleTeams && result && extractedTeamsMismatchFixture(titleTeams, result)) {
+        if (titleTeams && extractedTeamsMismatchFixture(titleTeams, result)) {
           setNotice(
             "De gekozen screenshot lijkt niet bij deze wedstrijd te horen (andere teamnamen). Kies de screenshot van deze wedstrijd of selecteer de juiste kaart.",
           );
           return;
         }
 
-        if (!result || !extractHasScoresAndEvents(result)) {
+        if (!extractHasScoresAndEvents(result)) {
           setNotice(
             "In de screenshot ontbreken een herkenbare eindstand en wedstrijdgebeurtenissen. Controleer of je de volledige KNZB/Sportlink-score hebt gekozen.",
           );
@@ -69,8 +149,10 @@ export default function GenerateReportButton({
 
         if (result.homeTeam) payload.homeTeam = result.homeTeam;
         if (result.awayTeam) payload.awayTeam = result.awayTeam;
-        if (result.homeScore != null) payload.homeScore = Number(result.homeScore);
-        if (result.awayScore != null) payload.awayScore = Number(result.awayScore);
+        if (result.homeScore != null)
+          payload.homeScore = Number(result.homeScore);
+        if (result.awayScore != null)
+          payload.awayScore = Number(result.awayScore);
         if (result.date) payload.date = result.date;
         if (result.events?.length) payload.events = result.events;
         payload.result = result;

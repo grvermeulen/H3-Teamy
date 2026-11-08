@@ -315,17 +315,78 @@ async function fitImageForVisionLimits(
   }
 }
 
+export type ExtractReportStage =
+  | {
+      phase: "vision_preprocess";
+      inputWidth: number;
+      inputHeight: number;
+      outputWidth: number;
+      outputHeight: number;
+      outputBytes: number;
+      outputMimeType: string;
+      resized: boolean;
+    }
+  | {
+      phase: "provider_done";
+      providerUsed: ConcreteProvider;
+      latencyMs: number;
+    };
+
+export type ExtractReportFromImageOptions = {
+  onStage?: (stage: ExtractReportStage) => void;
+};
+
 async function callAiVisionExtraction(args: {
   model: string;
   file: File;
+  onStage?: ExtractReportFromImageOptions["onStage"];
 }): Promise<ExtractResult> {
   const { generateObject } = await import("./ai/client");
   const rawBuffer = Buffer.from(await args.file.arrayBuffer());
   const rawMimeType = args.file.type || "image/png";
+  let inputWidth = 0;
+  let inputHeight = 0;
+  try {
+    const sharpModule = await import("sharp");
+    const meta = await sharpModule.default(rawBuffer).metadata();
+    inputWidth = meta.width ?? 0;
+    inputHeight = meta.height ?? 0;
+  } catch {
+    /* sharp metadata optioneel in tests */
+  }
   const { buffer, mimeType } = await fitImageForVisionLimits(
     rawBuffer,
     rawMimeType,
   );
+  if (args.onStage && inputWidth > 0 && inputHeight > 0) {
+    try {
+      const sharpModule = await import("sharp");
+      const outMeta = await sharpModule.default(buffer).metadata();
+      args.onStage({
+        phase: "vision_preprocess",
+        inputWidth,
+        inputHeight,
+        outputWidth: outMeta.width ?? 0,
+        outputHeight: outMeta.height ?? 0,
+        outputBytes: buffer.byteLength,
+        outputMimeType: mimeType,
+        resized:
+          buffer.byteLength !== rawBuffer.byteLength ||
+          mimeType !== rawMimeType,
+      });
+    } catch {
+      args.onStage({
+        phase: "vision_preprocess",
+        inputWidth,
+        inputHeight,
+        outputWidth: inputWidth,
+        outputHeight: inputHeight,
+        outputBytes: buffer.byteLength,
+        outputMimeType: mimeType,
+        resized: false,
+      });
+    }
+  }
   try {
     const { object } = await generateObject({
       model: args.model,
@@ -385,11 +446,19 @@ async function callOcrWorker(args: {
 async function runVlm(
   file: File,
   config: ExtractProviderConfig,
+  options?: ExtractReportFromImageOptions,
 ): Promise<ExtractProviderSuccess> {
   const startedAt = nowMs();
   const result = await callAiVisionExtraction({
     model: config.openAiModel,
     file,
+    onStage: options?.onStage,
+  });
+  const latencyMs = nowMs() - startedAt;
+  options?.onStage?.({
+    phase: "provider_done",
+    providerUsed: "vlm",
+    latencyMs,
   });
   return {
     result,
@@ -398,7 +467,7 @@ async function runVlm(
     model: config.openAiModel,
     openAiModelSubstitutedFrom: config.openAiModelSubstitutedFrom,
     fallbackUsed: false,
-    latencyMs: nowMs() - startedAt,
+    latencyMs,
   };
 }
 
@@ -434,10 +503,11 @@ async function runOcr(
  */
 export async function extractReportFromImage(
   file: File,
+  options?: ExtractReportFromImageOptions,
 ): Promise<ExtractProviderSuccess> {
   const config = getExtractProviderConfig();
   if (config.provider === "vlm") {
-    return runVlm(file, config);
+    return runVlm(file, config, options);
   }
   if (config.provider === "ocr") {
     return runOcr(file, config);
@@ -445,7 +515,7 @@ export async function extractReportFromImage(
 
   const startedAt = nowMs();
   try {
-    const primary = await runVlm(file, config);
+    const primary = await runVlm(file, config, options);
     return { ...primary, fallbackUsed: false, latencyMs: nowMs() - startedAt };
   } catch (vlmError: unknown) {
     Sentry.captureException(vlmError, {

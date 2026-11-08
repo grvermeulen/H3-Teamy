@@ -48,6 +48,9 @@ The extract route records:
 
 - Sentry exceptions with provider/model/fallback/latency metadata.
 - Structured server log event `report_extract_completed` for successful calls.
+- Trace lines `report_extract_trace` with correlators `attemptId`, `requestId`, optional `vercelRequestId` (`x-vercel-id`), phases (`entry`, `multipart_*`, `preprocess_*`, `provider_*`, `completed`/`failed`), allowlisted `errorClass`, and safe image metadata (MIME, bytes, dimensions only — no filenames, pixels, or team/player text).
+
+Clients send header `X-Report-Extract-Attempt` (UUID); responses include `X-Report-Extract-Request-Id` and JSON `diagnostic.supportRef` for UI support references.
 
 ## WhatsApp Notification (WaAPI)
 

@@ -24,6 +24,67 @@ describe("GenerateReportButton integratie", () => {
     vi.unstubAllGlobals();
   });
 
+  it("toont NL extract-fout met referentie bij mislukte extract", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("/api/report/extract")) {
+        return new Response(
+          JSON.stringify({
+            error: "openai_failed",
+            message: "OpenAI request failed",
+            diagnostic: {
+              attemptId: "11111111-1111-4111-8111-111111111111",
+              requestId: "22222222-2222-4222-8222-222222222222",
+              supportRef: "11111111-22222222",
+              errorClass: "provider_timeout",
+            },
+          }),
+          {
+            status: 502,
+            headers: {
+              "X-Report-Extract-Request-Id":
+                "22222222-2222-4222-8222-222222222222",
+            },
+          },
+        );
+      }
+      return new Response("{}", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <GenerateReportButton eventId="evt-1" opponent="De Rijn H3 - Flevo H3" />,
+    );
+    const fileInput = screen
+      .getByRole("button", { name: /Verslag genereren/i })
+      .parentElement!.querySelector('input[type="file"]') as HTMLInputElement;
+    await fireEvent.change(fileInput, {
+      target: {
+        files: [new File(["x"], "fixture.jpeg", { type: "image/jpeg" })],
+      },
+    });
+    await fireEvent.click(
+      screen.getByRole("button", { name: /Verslag genereren/i }),
+    );
+
+    await waitFor(() => {
+      const text = screen.getByRole("alert").textContent ?? "";
+      expect(text).toMatch(/referentie: 11111111-22222222/);
+      expect(text).not.toContain("OpenAI");
+    });
+    const extractCall = fetchMock.mock.calls.find((c) =>
+      String(c[0]).includes("/api/report/extract"),
+    );
+    const init = extractCall?.[1] as RequestInit | undefined;
+    const headers = init?.headers;
+    const attemptHeader =
+      headers instanceof Headers
+        ? headers.get("X-Report-Extract-Attempt")
+        : (headers as Record<string, string> | undefined)?.[
+            "X-Report-Extract-Attempt"
+          ];
+    expect(attemptHeader).toBeTruthy();
+  });
+
   it("blokkeert generate bij incomplete extract; geen raw JSON", async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (String(url).includes("/api/report/extract")) {
@@ -50,14 +111,14 @@ describe("GenerateReportButton integratie", () => {
 
     const fileInput = screen
       .getByRole("button", { name: /Verslag genereren/i })
-      .parentElement!.querySelector(
-        'input[type="file"]',
-      ) as HTMLInputElement;
+      .parentElement!.querySelector('input[type="file"]') as HTMLInputElement;
     const file = new File(["x"], "fixture-screenshot.jpeg", {
       type: "image/jpeg",
     });
     await fireEvent.change(fileInput, { target: { files: [file] } });
-    await fireEvent.click(screen.getByRole("button", { name: /Verslag genereren/i }));
+    await fireEvent.click(
+      screen.getByRole("button", { name: /Verslag genereren/i }),
+    );
 
     await waitFor(() => {
       expect(screen.getByRole("alert")).toBeInTheDocument();
@@ -66,7 +127,9 @@ describe("GenerateReportButton integratie", () => {
     expect(text).toMatch(/screenshot|eindstand|wedstrijdgebeurtenissen/i);
     expect(text).not.toContain("report_input_incomplete");
     expect(
-      fetchMock.mock.calls.some((c) => String(c[0]).includes("/api/report/generate")),
+      fetchMock.mock.calls.some((c) =>
+        String(c[0]).includes("/api/report/generate"),
+      ),
     ).toBe(false);
   });
 });

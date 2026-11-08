@@ -22,9 +22,26 @@ vi.mock("@/lib/reportExtractProvider", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/reportExtractImageProbe", () => ({
+  probeExtractImageUpload: vi.fn(),
+}));
+
+import { probeExtractImageUpload } from "@/lib/reportExtractImageProbe";
+
 describe("POST /api/report/extract", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(probeExtractImageUpload).mockResolvedValue({
+      ok: true,
+      mimeType: "image/jpeg",
+      bytes: 6,
+      width: 100,
+      height: 200,
+      visionResizePlanned: false,
+      outputMimeType: "image/jpeg",
+      outputWidth: 100,
+      outputHeight: 200,
+    });
   });
 
   function makeRequest(
@@ -47,10 +64,18 @@ describe("POST /api/report/extract", () => {
     );
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
+    const body = await response.json();
+    expect(body).toMatchObject({
       error: "invalid_content_type",
       message: "Verwacht multipart/form-data met een afbeelding.",
+      diagnostic: expect.objectContaining({
+        supportRef: expect.any(String),
+        attemptId: expect.any(String),
+        requestId: expect.any(String),
+        errorClass: "multipart_rejected",
+      }),
     });
+    expect(response.headers.get("X-Report-Extract-Request-Id")).toBeTruthy();
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
     expect(vi.mocked(extractReportFromImage)).not.toHaveBeenCalled();
   });
@@ -64,10 +89,9 @@ describe("POST /api/report/extract", () => {
     );
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: "invalid_form_data",
-      message: "Kon het uploadformulier niet verwerken.",
-    });
+    const body = await response.json();
+    expect(body.error).toBe("invalid_form_data");
+    expect(body.diagnostic?.errorClass).toBe("multipart_rejected");
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
     expect(vi.mocked(extractReportFromImage)).not.toHaveBeenCalled();
   });
@@ -83,9 +107,9 @@ describe("POST /api/report/extract", () => {
     );
 
     expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: "image_required",
-    });
+    const body = await response.json();
+    expect(body.error).toBe("image_required");
+    expect(body.diagnostic?.errorClass).toBe("image_missing");
     expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
   });
 
@@ -98,20 +122,33 @@ describe("POST /api/report/extract", () => {
     vi.mocked(extractReportFromImage).mockResolvedValue({
       result: { homeScore: 2, awayScore: 1 },
       rawText: "2-1",
-      providerUsed: "openai",
+      providerUsed: "vlm",
       model: "gpt-4o",
       fallbackUsed: false,
       latencyMs: 12,
     });
 
-    const response = await POST(makeRequest({ body: form }));
+    const response = await POST(
+      makeRequest({
+        body: form,
+        headers: {
+          "X-Report-Extract-Attempt": "11111111-1111-4111-8111-111111111111",
+        },
+      }),
+    );
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      result: { homeScore: 2, awayScore: 1 },
-      raw_text: "2-1",
-      meta: { providerUsed: "openai", model: "gpt-4o", fallbackUsed: false },
+    const body = await response.json();
+    expect(body.result).toEqual({ homeScore: 2, awayScore: 1 });
+    expect(body.meta).toEqual({
+      providerUsed: "vlm",
+      model: "gpt-4o",
+      fallbackUsed: false,
     });
+    expect(body.diagnostic?.attemptId).toBe(
+      "11111111-1111-4111-8111-111111111111",
+    );
+    expect(response.headers.get("X-Report-Extract-Request-Id")).toBeTruthy();
     expect(vi.mocked(extractReportFromImage)).toHaveBeenCalledTimes(1);
   });
 
@@ -134,12 +171,47 @@ describe("POST /api/report/extract", () => {
     const response = await POST(makeRequest({ body: form }));
 
     expect(response.status).toBe(502);
+    const body = await response.json();
+    expect(body.error).toBe("provider_failed");
+    expect(body.diagnostic?.errorClass).toBe("provider_request_failed");
+    expect(body).not.toHaveProperty("info");
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(Sentry.captureException)).toHaveBeenCalledWith(
       expect.any(ExtractProviderError),
       expect.objectContaining({
         tags: expect.objectContaining({ module: "report_extract" }),
+        extra: expect.not.objectContaining({ info: expect.anything() }),
       }),
     );
+  });
+
+  it("logt entry en preprocess_fail bij onleesbare upload", async () => {
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.mocked(probeExtractImageUpload).mockResolvedValue({
+      ok: false,
+      mimeType: "image/jpeg",
+      bytes: 3,
+      errorClass: "preprocess_unreadable",
+    });
+    const form = new FormData();
+    form.set("image", new File(["bad"], "x.jpg", { type: "image/jpeg" }));
+
+    const response = await POST(makeRequest({ body: form }));
+
+    expect(response.status).toBe(422);
+    const traceEvents = infoSpy.mock.calls
+      .map((c) => c[0])
+      .filter((e) => e === "report_extract_trace");
+    expect(traceEvents.length).toBeGreaterThanOrEqual(2);
+    const phases = infoSpy.mock.calls
+      .map((c) =>
+        typeof c[1] === "object" && c[1]
+          ? (c[1] as { phase?: string }).phase
+          : "",
+      )
+      .filter(Boolean);
+    expect(phases).toContain("entry");
+    expect(phases).toContain("preprocess_fail");
+    infoSpy.mockRestore();
   });
 });

@@ -15,6 +15,7 @@ export type ExtractedMatchResult = {
   awayTeam?: string | null;
   homeScore?: number | null;
   awayScore?: number | null;
+  date?: string | null;
   events?: unknown[] | null;
 };
 
@@ -35,12 +36,13 @@ export function teamNamesLikelyMatch(a: string, b: string): boolean {
   return overlap.length >= Math.min(2, Math.min(ta.length, tb.length));
 }
 
-export function extractHasScoresAndEvents(result: ExtractedMatchResult): boolean {
+export function extractHasScoresAndEvents(
+  result: ExtractedMatchResult,
+): boolean {
   const hasScores =
     typeof result.homeScore === "number" &&
     typeof result.awayScore === "number";
-  const hasEvents =
-    Array.isArray(result.events) && result.events.length > 0;
+  const hasEvents = Array.isArray(result.events) && result.events.length > 0;
   return hasScores && hasEvents;
 }
 
