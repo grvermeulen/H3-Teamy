@@ -13,16 +13,28 @@ export const DEFAULT_TEXT_GATEWAY_MODEL = "openai/gpt-4o";
 
 /**
  * Screenshot extraction default when `REPORT_EXTRACT_OPENAI_MODEL` is unset.
- * Prod #914 used `openai/gpt-5.6-sol` in code; preview met `gpt-4o` faalde minder
- * vaak op dezelfde gateway — geen geïsoleerde model-A/B. Expliciete env blijft leidend.
+ * Gateway ondersteunt structured output + vision op `google/gemini-2.5-flash`
+ * (gpt-4o wordt door OpenAI uitgefaseerd per 2027; expliciete env blijft leidend).
  */
-export const DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL = "openai/gpt-4o";
+export const DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL = "google/gemini-2.5-flash";
 
 /**
- * Vision-capable fallback when the primary extract model fails on AI Gateway
- * (free-tier denial, missing snapshot, etc.) — see Sentry JAVASCRIPT-NEXTJS-5J.
+ * Default vision-fallback na primaire extract-fout (quota, timeout, schema, …).
+ * Override via `REPORT_EXTRACT_VISION_FALLBACK_MODEL`; zet op `none` om uit te zetten.
  */
-export const REPORT_EXTRACT_VISION_FALLBACK_MODEL = DEFAULT_TEXT_GATEWAY_MODEL;
+export const DEFAULT_REPORT_EXTRACT_VISION_FALLBACK_MODEL = "openai/gpt-6-luna";
+
+/** @deprecated Gebruik {@link DEFAULT_REPORT_EXTRACT_VISION_FALLBACK_MODEL}. */
+export const REPORT_EXTRACT_VISION_FALLBACK_MODEL =
+  DEFAULT_REPORT_EXTRACT_VISION_FALLBACK_MODEL;
+
+const VISION_FALLBACK_ENV_DISABLED = new Set([
+  "",
+  "none",
+  "false",
+  "off",
+  "disabled",
+]);
 
 const STRUCTURED_FALLBACK = DEFAULT_STRUCTURED_GATEWAY_MODEL;
 const TEXT_FALLBACK = DEFAULT_TEXT_GATEWAY_MODEL;
@@ -74,9 +86,12 @@ export function normalizeGatewayModelId(modelId: string): string {
 /**
  * Infers the AI Gateway provider from a bare model id.
  */
-export function inferGatewayProvider(modelId: string): "anthropic" | "openai" {
+export type GatewayModelProvider = "anthropic" | "google" | "openai";
+
+export function inferGatewayProvider(modelId: string): GatewayModelProvider {
   const id = normalizeGatewayModelId(modelId);
   if (id.startsWith("claude-")) return "anthropic";
+  if (id.startsWith("gemini-")) return "google";
   return "openai";
 }
 
@@ -86,13 +101,20 @@ export function inferGatewayProvider(modelId: string): "anthropic" | "openai" {
  */
 export function toGatewayModelString(
   model: string,
-  defaultProvider: "anthropic" | "openai",
+  defaultProvider: GatewayModelProvider,
 ): string {
   const trimmed = model.trim();
   if (trimmed.includes("/")) {
-    const provider = trimmed.slice(0, trimmed.indexOf("/"));
+    const slash = trimmed.indexOf("/");
+    const provider = trimmed.slice(0, slash);
     const id = normalizeGatewayModelId(trimmed);
-    return `${provider}/${id}`;
+    if (
+      provider === "anthropic" ||
+      provider === "google" ||
+      provider === "openai"
+    ) {
+      return `${provider}/${id}`;
+    }
   }
   const provider = inferGatewayProvider(trimmed);
   const id = normalizeGatewayModelId(trimmed);
@@ -104,9 +126,7 @@ function fallbackForKind(kind: GatewayModelKind): string {
   return kind === "structured" ? STRUCTURED_FALLBACK : TEXT_FALLBACK;
 }
 
-function defaultProviderForKind(
-  kind: GatewayModelKind,
-): "anthropic" | "openai" {
+function defaultProviderForKind(kind: GatewayModelKind): GatewayModelProvider {
   return kind === "structured" ? "anthropic" : "openai";
 }
 
@@ -168,8 +188,9 @@ export function getReportGenerateGatewayModel(): string {
 
 /**
  * Model for screenshot/VLM `generateObject` in report extract. Honors
- * `REPORT_EXTRACT_OPENAI_MODEL` when set; remaps stale or provider-mismatched
- * ids to the current OpenAI vision default.
+ * `REPORT_EXTRACT_OPENAI_MODEL` when set (OpenAI, Google, of Anthropic gateway-ids).
+ * Remapt alleen lege/ongeldige of legacy geblokkeerde ids naar
+ * {@link DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL}.
  */
 export function getReportExtractGatewayModel(): string {
   const fromEnv = process.env.REPORT_EXTRACT_OPENAI_MODEL?.trim();
@@ -177,16 +198,30 @@ export function getReportExtractGatewayModel(): string {
 }
 
 /**
- * Optionele vision-fallback na primaire VLM-fout. Alleen gebruikt wanneer
- * `REPORT_EXTRACT_VISION_FALLBACK_MODEL` is gezet (niet stil overschreven).
+ * Vision-fallback na primaire VLM-fout. Standaard {@link DEFAULT_REPORT_EXTRACT_VISION_FALLBACK_MODEL}
+ * tenzij `REPORT_EXTRACT_VISION_FALLBACK_MODEL=none` (of leeg) expliciet fallback uitzet.
  */
 export function getReportExtractVisionFallbackModel(): string | undefined {
-  const fromEnv = process.env.REPORT_EXTRACT_VISION_FALLBACK_MODEL?.trim();
-  if (!fromEnv) return undefined;
-  return resolveReportExtractGatewayModel(fromEnv).model;
+  const raw = process.env.REPORT_EXTRACT_VISION_FALLBACK_MODEL;
+  if (raw === undefined) {
+    return resolveReportExtractGatewayModel(
+      DEFAULT_REPORT_EXTRACT_VISION_FALLBACK_MODEL,
+    ).model;
+  }
+  const trimmed = raw.trim();
+  if (VISION_FALLBACK_ENV_DISABLED.has(trimmed.toLowerCase())) {
+    return undefined;
+  }
+  return resolveReportExtractGatewayModel(trimmed).model;
 }
 
-/** Keeps screenshot extraction on OpenAI and repairs stale/provider-mismatched overrides. */
+const SUPPORTED_EXTRACT_PROVIDERS = new Set<GatewayModelProvider>([
+  "anthropic",
+  "google",
+  "openai",
+]);
+
+/** Gateway-vision default; repairs only empty, mismatched, or legacy blocked ids. */
 export function resolveReportExtractGatewayModel(
   raw: string,
 ): ResolvedGatewayModel {
@@ -194,21 +229,38 @@ export function resolveReportExtractGatewayModel(
   if (!requested) return { model: DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL };
 
   const slash = requested.indexOf("/");
-  const provider = slash >= 0 ? requested.slice(0, slash) : "openai";
+  const providerPrefix = slash >= 0 ? requested.slice(0, slash) : "";
   const id = gatewayModelId(requested);
-  const invalidForOpenAi =
-    !id ||
-    provider !== "openai" ||
-    id.startsWith("claude-") ||
-    id === "gpt-5-chat-latest" ||
-    id === "gpt-5.2-2025-12-11";
 
-  if (!invalidForOpenAi) {
-    return { model: toGatewayModelString(id, "openai") };
+  if (!id) {
+    return {
+      model: DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL,
+      substitutedFrom: requested,
+    };
   }
+
+  if (providerPrefix === "openai" && id.startsWith("claude-")) {
+    return {
+      model: DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL,
+      substitutedFrom: requested,
+    };
+  }
+
+  if (id === "gpt-5-chat-latest" || id === "gpt-5.2-2025-12-11") {
+    return {
+      model: DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL,
+      substitutedFrom: requested,
+    };
+  }
+
+  const provider: GatewayModelProvider = SUPPORTED_EXTRACT_PROVIDERS.has(
+    providerPrefix as GatewayModelProvider,
+  )
+    ? (providerPrefix as GatewayModelProvider)
+    : inferGatewayProvider(id);
+
   return {
-    model: DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL,
-    substitutedFrom: requested,
+    model: `${provider}/${normalizeGatewayModelId(requested.includes("/") ? requested : id)}`,
   };
 }
 
@@ -238,7 +290,7 @@ function gatewayErrorMessage(error: unknown): string {
 
 /**
  * True when a report-extract `generateObject` call should retry on the
- * vision fallback model (`gpt-4o`) instead of surfacing immediately.
+ * vision fallback model instead of surfacing immediately.
  */
 export function isReportExtractGatewayModelError(error: unknown): boolean {
   if (isGatewayFreeTierAccessError(error)) return true;

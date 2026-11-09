@@ -52,6 +52,7 @@ describe("reportExtractProvider", () => {
     delete process.env.OCR_WORKER_URL;
     delete process.env.OCR_WORKER_TOKEN;
     delete process.env.REPORT_EXTRACT_PROVIDER;
+    vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "none");
   });
 
   afterEach(() => {
@@ -80,24 +81,24 @@ describe("reportExtractProvider", () => {
       );
     });
 
-    it("defaults REPORT_EXTRACT_OPENAI_MODEL to gpt-4o when unset", () => {
-      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", undefined);
+    it("defaults REPORT_EXTRACT_OPENAI_MODEL to gemini-2.5-flash when unset", () => {
+      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "");
       const cfg = getExtractProviderConfig();
-      expect(cfg.openAiModel).toBe("openai/gpt-4o");
+      expect(cfg.openAiModel).toBe("google/gemini-2.5-flash");
       expect(cfg.openAiModelSubstitutedFrom).toBeUndefined();
     });
 
-    it("remaps removed gateway snapshot to gpt-4o", () => {
+    it("remaps removed gateway snapshot to gemini default", () => {
       vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "gpt-5.2-2025-12-11");
       const cfg = getExtractProviderConfig();
-      expect(cfg.openAiModel).toBe("openai/gpt-4o");
+      expect(cfg.openAiModel).toBe("google/gemini-2.5-flash");
       expect(cfg.openAiModelSubstitutedFrom).toBe("gpt-5.2-2025-12-11");
     });
 
-    it("remaps the legacy chat alias to gpt-4o", () => {
+    it("remaps the legacy chat alias to gemini default", () => {
       vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "gpt-5-chat-latest");
       const cfg = getExtractProviderConfig();
-      expect(cfg.openAiModel).toBe("openai/gpt-4o");
+      expect(cfg.openAiModel).toBe("google/gemini-2.5-flash");
       expect(cfg.openAiModelSubstitutedFrom).toBe("gpt-5-chat-latest");
     });
 
@@ -108,27 +109,35 @@ describe("reportExtractProvider", () => {
       expect(cfg.openAiModelSubstitutedFrom).toBeUndefined();
     });
 
+    it("gebruikt standaard luna-fallback wanneer env ontbreekt", () => {
+      vi.unstubAllEnvs();
+      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "gpt-4o");
+      delete process.env.REPORT_EXTRACT_VISION_FALLBACK_MODEL;
+      const cfg = getExtractProviderConfig();
+      expect(cfg.visionFallbackModel).toBe("openai/gpt-6-luna");
+    });
+
     it("leest vision-fallback uit REPORT_EXTRACT_VISION_FALLBACK_MODEL", () => {
       vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "gpt-4o");
       const cfg = getExtractProviderConfig();
       expect(cfg.visionFallbackModel).toBe("openai/gpt-4o");
     });
 
-    it("remaps claude-sonnet-4-6 to the OpenAI extraction default", () => {
+    it("bevat anthropic/claude-sonnet-4-6 ongewijzigd", () => {
       vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "claude-sonnet-4-6");
       const cfg = getExtractProviderConfig();
-      expect(cfg.openAiModel).toBe("openai/gpt-4o");
-      expect(cfg.openAiModelSubstitutedFrom).toBe("claude-sonnet-4-6");
+      expect(cfg.openAiModel).toBe("anthropic/claude-sonnet-4.6");
+      expect(cfg.openAiModelSubstitutedFrom).toBeUndefined();
     });
   });
 
   describe("resolveReportExtractOpenAiModel", () => {
-    it("returns openai/gpt-4o for empty input", () => {
+    it("returns gemini default for empty input", () => {
       expect(resolveReportExtractOpenAiModel("")).toEqual({
-        model: "openai/gpt-4o",
+        model: "google/gemini-2.5-flash",
       });
       expect(resolveReportExtractOpenAiModel("  ")).toEqual({
-        model: "openai/gpt-4o",
+        model: "google/gemini-2.5-flash",
       });
     });
 
@@ -136,7 +145,7 @@ describe("reportExtractProvider", () => {
       expect(
         resolveReportExtractOpenAiModel("openai/gpt-5.2-2025-12-11"),
       ).toEqual({
-        model: "openai/gpt-4o",
+        model: "google/gemini-2.5-flash",
         substitutedFrom: "openai/gpt-5.2-2025-12-11",
       });
     });
@@ -145,7 +154,7 @@ describe("reportExtractProvider", () => {
       expect(
         resolveReportExtractOpenAiModel("openai/gpt-5-chat-latest"),
       ).toEqual({
-        model: "openai/gpt-4o",
+        model: "google/gemini-2.5-flash",
         substitutedFrom: "openai/gpt-5-chat-latest",
       });
     });
@@ -156,18 +165,23 @@ describe("reportExtractProvider", () => {
       });
     });
 
-    it("remaps bare Claude ids to the OpenAI extraction default", () => {
+    it("passes through google gemini ids", () => {
+      expect(
+        resolveReportExtractOpenAiModel("google/gemini-2.5-flash"),
+      ).toEqual({ model: "google/gemini-2.5-flash" });
+    });
+
+    it("passes through bare Claude ids on anthropic provider", () => {
       expect(resolveReportExtractOpenAiModel("claude-sonnet-4-6")).toEqual({
-        model: "openai/gpt-4o",
-        substitutedFrom: "claude-sonnet-4-6",
+        model: "anthropic/claude-sonnet-4.6",
       });
     });
 
-    it("remaps Claude ids even when incorrectly prefixed as OpenAI", () => {
+    it("remaps Claude ids when incorrectly prefixed as OpenAI", () => {
       expect(
         resolveReportExtractOpenAiModel("openai/claude-sonnet-4-6"),
       ).toEqual({
-        model: "openai/gpt-4o",
+        model: "google/gemini-2.5-flash",
         substitutedFrom: "openai/claude-sonnet-4-6",
       });
     });
@@ -264,7 +278,7 @@ describe("reportExtractProvider", () => {
       expect(out.result.homeScore).toBe(5);
     });
 
-    it("uses gpt-4o when extract model env was a removed snapshot", async () => {
+    it("uses gemini default when extract model env was a removed snapshot", async () => {
       vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "gpt-5.2-2025-12-11");
       mockedGenerateObject.mockResolvedValueOnce({
         object: {
@@ -279,7 +293,7 @@ describe("reportExtractProvider", () => {
         model: string;
         messages: Array<{ content: Array<{ type: string }> }>;
       };
-      expect(args.model).toBe("openai/gpt-4o");
+      expect(args.model).toBe("google/gemini-2.5-flash");
       expect(args.messages[0].content[1].type).toBe("file");
       expect(out.providerUsed).toBe("vlm");
       expect(out.fallbackUsed).toBe(false);
@@ -288,7 +302,7 @@ describe("reportExtractProvider", () => {
       expect(out.result.homeTeam).toBe("A");
     });
 
-    it("replaces a stale Claude extract model with the OpenAI default", async () => {
+    it("roept anthropic/claude-sonnet-4.6 aan wanneer env dat vraagt", async () => {
       vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "claude-sonnet-4-6");
       mockedGenerateObject.mockResolvedValueOnce({
         object: {
@@ -302,9 +316,9 @@ describe("reportExtractProvider", () => {
       const args = mockedGenerateObject.mock.calls[0][0] as {
         model: string;
       };
-      expect(args.model).toBe("openai/gpt-4o");
-      expect(out.model).toBe("openai/gpt-4o");
-      expect(out.openAiModelSubstitutedFrom).toBe("claude-sonnet-4-6");
+      expect(args.model).toBe("anthropic/claude-sonnet-4.6");
+      expect(out.model).toBe("anthropic/claude-sonnet-4.6");
+      expect(out.openAiModelSubstitutedFrom).toBeUndefined();
     });
 
     it("behoudt vision fallbackUsed in hybrid mode na succesvolle VLM-retry", async () => {
@@ -312,7 +326,7 @@ describe("reportExtractProvider", () => {
       process.env.OCR_WORKER_URL = "https://ocr.example.com";
       process.env.OCR_WORKER_TOKEN = "ocr-token";
       vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/gpt-5.6-sol");
-      vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "gpt-4o");
+      vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "openai/gpt-6-luna");
       const { APICallError } = await import("ai");
 
       mockedGenerateObject
@@ -387,8 +401,9 @@ describe("reportExtractProvider", () => {
     });
 
     it("retries met REPORT_EXTRACT_VISION_FALLBACK_MODEL na primaire VLM-fout", async () => {
-      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/gpt-5.6-sol");
-      vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "gpt-4o");
+      const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+      vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "google/gemini-2.5-flash");
+      vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "openai/gpt-6-luna");
       const { APICallError } = await import("ai");
       mockedGenerateObject
         .mockRejectedValueOnce(
@@ -416,9 +431,28 @@ describe("reportExtractProvider", () => {
       expect(mockedGenerateObject).toHaveBeenCalledTimes(2);
       expect(
         (mockedGenerateObject.mock.calls[1][0] as { model: string }).model,
-      ).toBe("openai/gpt-4o");
+      ).toBe("openai/gpt-6-luna");
       expect(out.fallbackUsed).toBe(true);
+      expect(out.model).toBe("openai/gpt-6-luna");
       expect(out.result.homeTeam).toBe("Home");
+
+      const fallbackTrace = infoSpy.mock.calls
+        .map((c) => c[1])
+        .find(
+          (p) =>
+            typeof p === "object" &&
+            p !== null &&
+            (p as { phase?: string }).phase === "vision_model_fallback",
+        ) as
+        | {
+            errorClass?: string;
+            provider?: { fallbackModel?: string; model?: string };
+          }
+        | undefined;
+      expect(fallbackTrace?.provider?.model).toBe("google/gemini-2.5-flash");
+      expect(fallbackTrace?.provider?.fallbackModel).toBe("openai/gpt-6-luna");
+      expect(fallbackTrace?.errorClass).toBeDefined();
+      infoSpy.mockRestore();
     });
 
     it("surfaces OCR worker errors as typed provider errors", async () => {
