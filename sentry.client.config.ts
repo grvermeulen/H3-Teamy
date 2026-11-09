@@ -14,6 +14,10 @@ import {
 } from "@/lib/sentryBenignPointerLockNoise";
 import { shouldDropBenignTurbopackDevCompileNoiseForSentry } from "@/lib/sentryBenignTurbopackDevCompileNoise";
 import { shouldDropBenignNonJsonOkResponseNoiseForSentry } from "@/lib/sentryBenignNonJsonOkResponse";
+import {
+  BENIGN_SERVICE_WORKER_SCRIPT_LOAD_FAILED_IGNORE_RE,
+  shouldDropBenignServiceWorkerNoiseEvent,
+} from "@/lib/sentryBenignServiceWorkerNoise";
 
 /**
  * Parseert traces sample rate (0–1) uit env; default 0.1 voor productie.
@@ -34,6 +38,7 @@ Sentry.init({
     BROWSER_EXTENSION_RUNTIME_SEND_MESSAGE_IGNORE_RE,
     BENIGN_POINTER_LOCK_WRONG_DOCUMENT_IGNORE_RE,
     BENIGN_TRANSIENT_CLIENT_FETCH_IGNORE_RE,
+    BENIGN_SERVICE_WORKER_SCRIPT_LOAD_FAILED_IGNORE_RE,
   ],
 
   beforeSend(event, hint) {
@@ -50,6 +55,9 @@ Sentry.init({
       return null;
     }
     if (shouldDropBenignNonJsonOkResponseNoiseForSentry(event, hint)) {
+      return null;
+    }
+    if (shouldDropBenignServiceWorkerNoiseEvent(event, hint)) {
       return null;
     }
     return event;
