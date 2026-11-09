@@ -69,7 +69,7 @@
     "@simplewebauthn/browser": "^14.0.0",
     "@simplewebauthn/server": "^14.0.3",
     "@tailwindcss/postcss": "^4.3.4",
-    "@vercel/speed-insights": "^2.0.0",
+    "@vercel/speed-insights": "^2.1.0",
     "ably": "^2.30.0",
     "ai": "^7.0.163",
     "bcryptjs": "^3.0.3",
