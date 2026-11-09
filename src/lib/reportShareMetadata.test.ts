@@ -34,4 +34,12 @@ describe("buildMatchReportMetadata", () => {
     );
     expect(description.endsWith("waterpolo…")).toBe(true);
   });
+
+  it("never cuts an emoji in half when the report has no space to cut at", () => {
+    const description = String(
+      buildMatchReportMetadata("💪".repeat(100)).description,
+    );
+
+    expect(description).toBe(`${"💪".repeat(79)}…`);
+  });
 });
