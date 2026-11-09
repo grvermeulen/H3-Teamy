@@ -22,8 +22,8 @@ The app uses `await Promise.resolve(params)` for `eventId` so Next.js 15+ async 
 `/api/report/extract` supports a runtime provider flag so extraction can switch without code changes.
 
 - `REPORT_EXTRACT_PROVIDER=vlm|ocr|hybrid` (default: `vlm`)
-- `REPORT_EXTRACT_OPENAI_MODEL=<model-name>` (optional; default `openai/gpt-4o` wanneer unset — prod #914 gebruikte in code `gpt-5.6-sol`; expliciete env blijft leidend).
-- `REPORT_EXTRACT_VISION_FALLBACK_MODEL=<model-name>` (optional; één VLM-retry na primaire falen, met `fallbackUsed: true` en `vision_model_fallback`-trace).
+- `REPORT_EXTRACT_OPENAI_MODEL=<model-name>` (optional; default `google/gemini-2.5-flash` wanneer unset — gateway-ids `google/`, `openai/` of `anthropic/` worden gehonoreerd; legacy `gpt-5-chat-latest`/`gpt-5.2-2025-12-11` en `openai/claude-*` worden naar de default gemapt).
+- `REPORT_EXTRACT_VISION_FALLBACK_MODEL=<model-name>` (optional; default `openai/gpt-6-luna`; zet op `none` om fallback uit te zetten — één VLM-retry na primaire falen, `fallbackUsed: true`, trace `vision_model_fallback` met `errorClass` + `fallbackModel`).
 
 **Gecontroleerde model-vergelijking (preview):** zet per branch `REPORT_EXTRACT_OPENAI_MODEL` op preview (Vercel dashboard of `vercel env add … --environment preview --git-branch <branch>`), redeploy, `POST /api/report/extract` met hetzelfde bestand, geen fallback-env. Lokaal: `VISION_AB_IMAGE=tests/fixtures/Home-Match-1.JPG npx tsx scripts/run-vision-model-ab-once.ts <model|default>` met `AI_GATEWAY_API_KEY` of Vercel-runtime OIDC.
 

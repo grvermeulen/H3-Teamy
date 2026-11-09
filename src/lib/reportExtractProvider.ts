@@ -8,6 +8,7 @@ import {
   getReportExtractVisionFallbackModel,
   resolveReportExtractGatewayModel,
 } from "./ai/gatewayModels";
+import { classifyExtractProviderFailure } from "./reportExtractDiagnostics";
 
 // OpenAI's structured-output (strict mode) via the Vercel AI Gateway requires
 // every property listed in `properties` to also appear in `required`. Optional
@@ -140,8 +141,8 @@ export type ResolvedReportExtractOpenAiModel = {
 
 /**
  * Resolves `REPORT_EXTRACT_OPENAI_MODEL` to a gateway-supported `provider/model`
- * string. Uses `openai/gpt-4o` when unset and remaps stale, legacy, unstable
- * vision ids, or non-OpenAI ids to that gateway default.
+ * string. Gebruikt {@link DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL} wanneer unset;
+ * expliciete OpenAI-, Google- of Anthropic-gateway-ids blijven behouden.
  *
  * @param raw - Value of `REPORT_EXTRACT_OPENAI_MODEL` (may be empty).
  * @returns Full gateway model string for `generateObject`, and the original env value when rewritten.
@@ -167,7 +168,7 @@ export function resolveReportExtractOpenAiModel(
  * When `REPORT_EXTRACT_OPENAI_MODEL` is unset, gebruikt
  * {@link DEFAULT_REPORT_EXTRACT_GATEWAY_MODEL}. Expliciete env-waarden (incl.
  * `gpt-5.6-sol`) worden niet stil herschreven. Optioneel
- * `REPORT_EXTRACT_VISION_FALLBACK_MODEL` voor één retry na VLM-fout.
+ * `REPORT_EXTRACT_VISION_FALLBACK_MODEL` voor één retry na VLM-fout (default luna).
  */
 export function getExtractProviderConfig(): ExtractProviderConfig {
   const provider = parseProvider(process.env.REPORT_EXTRACT_PROVIDER);
@@ -307,10 +308,9 @@ async function callAiTextNormalization(args: {
 }
 
 /**
- * Anthropic vision models reject images where any dimension exceeds 8000 px.
- * `sharp` downscales the longest side to fit so a single stitched screenshot
- * (often very tall) doesn't break extraction with Claude/Sonnet, while gpt-4o
- * keeps working unchanged. PNG is preserved so text rendering stays sharp.
+ * Sommige vision-modellen (o.a. Anthropic) weigeren dimensies > 8000 px;
+ * Gemini en OpenAI tolereren grotere inputs, maar dezelfde cap (7800) houdt
+ * stitched screenshots binnen alle actieve extract-modellen.
  */
 async function fitImageForVisionLimits(
   buffer: Buffer,
@@ -529,19 +529,25 @@ async function runVlm(
       throw primaryError;
     }
 
+    const primaryErrorClass = classifyExtractProviderFailure({
+      info: primaryError.info,
+      providerTelemetry: primaryError.providerTelemetry,
+    });
     console.info("report_flow_trace", {
       event: "report_flow_trace",
       flowId: options?.flowId ?? "server-generated",
       scope: "extract",
       phase: "vision_model_fallback",
       outcome: "error",
+      errorClass: primaryErrorClass,
+      errorCode: primaryError.code,
       provider: {
         providerUsed: "vlm",
         model: config.openAiModel,
+        fallbackModel,
         fallbackUsed: true,
       },
       providerTelemetry: primaryError.providerTelemetry,
-      errorCode: primaryError.code,
     });
 
     const result = await invoke(fallbackModel);
