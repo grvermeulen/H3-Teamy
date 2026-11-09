@@ -265,6 +265,21 @@ describe("setupServiceWorker", () => {
     expect(reload).not.toHaveBeenCalled();
   });
 
+  it("does not report a benign sw.js script load failure to Sentry", async () => {
+    const container = installFakeContainer();
+    const failure = new TypeError(
+      "Script https://heren-3-de-rijn.com/sw.js load failed",
+    );
+    container.register.mockRejectedValue(failure);
+
+    setupServiceWorker("production");
+
+    await vi.waitFor(() => {
+      expect(container.register).toHaveBeenCalledTimes(1);
+    });
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
   it("reports a failed cleanup to Sentry", async () => {
     const container = installFakeContainer();
     const failure = new Error("registrations unavailable");
