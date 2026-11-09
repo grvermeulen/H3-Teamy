@@ -55,7 +55,6 @@
 - /api/speelboek/drills/[id]/questions
 - /api/speelboek/drills/[id]/questions/[questionId]
 - /api/speelboek/program/[date]
-- /api/speelboek/program/[date]/share
 - /api/speelboek/program/upcoming
 - /api/test-image
 - /api/trainer/status
