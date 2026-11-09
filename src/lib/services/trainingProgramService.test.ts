@@ -1,15 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DRILLS } from "../speelboek/drills";
 import {
-  buildProgramMessage,
   getProgram,
   getUpcomingProgram,
   setProgram,
-  shareProgram,
 } from "./trainingProgramService";
 import { getAllDrills } from "./speelboekService";
 import { getStoredDrill } from "./speelboekStore";
-import { getWaapiAppUrl, sendWhatsAppGroupMessage } from "./waapiService";
 
 const { db } = vi.hoisted(() => ({
   db: {
@@ -35,10 +31,6 @@ vi.mock("./speelboekService", async (importOriginal) => {
     getAllDrills: vi.fn(actual.getAllDrills),
   };
 });
-vi.mock("./waapiService", () => ({
-  sendWhatsAppGroupMessage: vi.fn(),
-  getWaapiAppUrl: vi.fn(),
-}));
 
 const row = (drillId: string, position: number) => ({
   id: `row-${position}`,
@@ -135,54 +127,5 @@ describe("trainingProgramService", () => {
     ]);
     expect(vi.mocked(getAllDrills)).toHaveBeenCalled();
     expect(vi.mocked(getStoredDrill)).not.toHaveBeenCalled();
-  });
-
-  it("builds a WhatsApp message with deep links", () => {
-    const message = buildProgramMessage(
-      {
-        date: "2026-11-05",
-        items: [
-          {
-            ...row("tip-in", 0),
-            drill: DRILLS.find((d) => d.id === "tip-in")!,
-          },
-          { ...row("weg", 1), drill: null },
-        ],
-      },
-      "https://h3.example",
-      "woensdag",
-    );
-    expect(message).toBe(
-      [
-        "Training woensdag: dit gaan we oefenen",
-        "• Tip-in (10 min) – https://h3.example/speelboek/tip-in",
-        "",
-        "Bekijk alles in het speelboek: https://h3.example/speelboek",
-      ].join("\n"),
-    );
-  });
-
-  it("shares the programme, refusing empty ones or missing config", async () => {
-    db.trainingProgramItem.findMany.mockResolvedValue([]);
-    expect(await shareProgram("2026-11-05", "woensdag")).toMatchObject({
-      sent: false,
-      details: "empty_program",
-    });
-
-    db.trainingProgramItem.findMany.mockResolvedValue([row("tip-in", 0)]);
-    vi.mocked(getWaapiAppUrl).mockReturnValue(null);
-    expect(await shareProgram("2026-11-05", "woensdag")).toEqual({
-      sent: false,
-      reason: "missing_config",
-    });
-
-    vi.mocked(getWaapiAppUrl).mockReturnValue("https://h3.example");
-    vi.mocked(sendWhatsAppGroupMessage).mockResolvedValue({ sent: true });
-    expect(await shareProgram("2026-11-05", "woensdag")).toEqual({
-      sent: true,
-    });
-    expect(sendWhatsAppGroupMessage).toHaveBeenCalledWith(
-      expect.stringContaining("https://h3.example/speelboek/tip-in"),
-    );
   });
 });

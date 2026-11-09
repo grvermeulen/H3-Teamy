@@ -9,7 +9,7 @@ Drills come from two sources: static TypeScript (`src/lib/speelboek/drills/`)
 and trainer-made drills stored in Postgres (`SpeelboekDrill`). Trainers build
 drills in an editor, optionally seeded by an AI draft from a typed/dictated
 description and/or a whiteboard photo, attach drills to a training as a
-programme (shareable to the WhatsApp group), and players can tick a drill off
+programme (shared in WhatsApp through a `wa.me` link), and players can tick a drill off
 ("Ik snap 'm") or ask the trainer a question. Concept and mockups live in
 `docs/specs/speelboek/`.
 
@@ -21,10 +21,10 @@ programme (shareable to the WhatsApp group), and players can tick a drill off
 - API (`src/app/api/speelboek/**`, all `force-dynamic`):
   - `GET/POST drills`, `GET/PUT/DELETE drills/[id]` (write = trainer; static ids → 409)
   - `GET drills/[id]/engagement`, `PUT drills/[id]/ack`, `POST drills/[id]/questions`, `PATCH drills/[id]/questions/[questionId]` (resolve, trainer), `GET acks` (my ticked drills)
-  - `GET/PUT program/[date]`, `POST program/[date]/share` (WhatsApp, trainer), `GET program/upcoming`
+  - `GET/PUT program/[date]`, `GET program/upcoming`
   - `POST ai/draft` (trainer, rate limit `speelboek-ai-draft` 6/min, `maxDuration` 60s)
 - Services: `speelboekService.ts` (merge static + stored: `getAllDrills`, `findDrill`, `getCounterpart`, `isStaticDrill`), `speelboekStore.ts` (Prisma CRUD, slug ids), `trainingProgramService.ts`, `drillEngagementService.ts`
-- Client-safe helpers: `src/lib/speelboek/library.ts` (`filterDrills`, `groupByCategory`, `isRecentlyAdded`, `rosterLabels`, `LibraryDrill`), `editor.ts` (pure editor state transitions), `lineup.ts` (standard 6-v-6), `apiGuards.ts` (route guards)
+- Client-safe helpers: `src/lib/speelboek/library.ts` (`filterDrills`, `groupByCategory`, `isRecentlyAdded`, `rosterLabels`, `LibraryDrill`), `editor.ts` (pure editor state transitions), `programShare.ts` (WhatsApp text for a programme; `TrainingProgramEditor` shares it through `WhatsAppShareLink` once saved), `lineup.ts` (standard 6-v-6), `apiGuards.ts` (route guards)
 - AI: `src/lib/ai/speelboekDraft.ts` (`AiDrillDraftSchema`, `SPEELBOEK_DRAFT_SYSTEM_PROMPT`, `toDrillInput`, `draftDrill`) via `generateObject` + `getStructuredGatewayModel()`
 - Schema/types: `src/lib/schemas/speelboek.ts`; Prisma models in `prisma/schema.prisma`
 

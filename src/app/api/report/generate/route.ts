@@ -14,8 +14,6 @@ import {
 } from "../../../../lib/reportGenerateDiagnostics";
 import { getReport, setReport, kvGetJson } from "../../../../lib/kv";
 import { MVP_PLACEHOLDER } from "../../../../lib/mvpNarrative";
-import { reportWaapiNotificationToSentry } from "../../../../lib/waapiNotificationSentry";
-import { sendMatchReportToWhatsAppGroup } from "../../../../lib/services/waapiService";
 import { getActiveUsers } from "../../../../lib/services/userService";
 import { isDbUnavailableError } from "../../../../lib/dbUnavailableError";
 import type { TeamEvent } from "../../../../types";
@@ -392,17 +390,17 @@ function prepareNarrativeInput(
 }
 
 /**
- * Genereert een Nederlandstalig wedstrijdverslag uit de geleverde JSON en
- * verstuurt een notificatie naar de WhatsApp-groep.
+ * Genereert een Nederlandstalig wedstrijdverslag uit de geleverde JSON en geeft
+ * tegenstander en stand terug, zodat de admin het verslag in WhatsApp kan delen.
  *
  * Verwacht een `ReportBody` met `eventId`, scores en events. Spelersnamen in
  * "us"-events worden gematcht tegen de actuele roster (fuzzy via Levenshtein,
  * drempel 0.72); bij een onmatchbare naam vervalt deze, zodat het AI-prompt
  * algemene formuleringen gebruikt. Een geslaagde generatie cachet het verslag
- * via `setReport` en vuurt `sendMatchReportToWhatsAppGroup`.
+ * via `setReport`.
  *
  * @param req - Next.js request met JSON-body (`ReportBody`).
- * @returns 200 met `{ ok, report, whatsappNotification }`,
+ * @returns 200 met `{ ok, report, match }`,
  *   400 bij ongeldige JSON of ontbrekende `eventId`,
  *   422 wanneer scores of events ontbreken,
  *   502 wanneer het AI-model faalt,
@@ -856,23 +854,6 @@ Regels:
       persistence: { outcome: "saved", category: "kv" },
     });
 
-    const notificationResult = await sendMatchReportToWhatsAppGroup({
-      eventId,
-      opponentTeam: narrativeInput.opponentTeam,
-      ourScore: narrativeInput.ourScore,
-      opponentScore: narrativeInput.opponentScore,
-    });
-    reportWaapiNotificationToSentry(notificationResult);
-
-    logReportGenerateTrace({
-      flowId,
-      requestId,
-      vercelRequestId,
-      phase: "notify",
-      startedAt,
-      persistence: { outcome: "saved", category: "kv" },
-    });
-
     logReportGenerateTrace({
       flowId,
       requestId,
@@ -889,15 +870,11 @@ Regels:
         ok: true,
         report,
         diagnostic: buildGenerateDiagnosticResponse({ flowId, requestId }),
-        whatsappNotification: notificationResult.sent
-          ? { sent: true as const }
-          : {
-              sent: false as const,
-              reason: notificationResult.reason,
-              ...(notificationResult.details
-                ? { details: notificationResult.details }
-                : {}),
-            },
+        match: {
+          opponentTeam: narrativeInput.opponentTeam,
+          ourScore: narrativeInput.ourScore,
+          opponentScore: narrativeInput.opponentScore,
+        },
       },
       200,
       requestId,

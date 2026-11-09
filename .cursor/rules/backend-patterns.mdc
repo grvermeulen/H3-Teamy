@@ -164,7 +164,7 @@ function handleApiError(error: unknown): NextResponse {
 
 ## Retry with Backoff
 
-For external API calls (OpenAI, WaAPI, OCR worker, Sportlink):
+For external API calls (OpenAI, OCR worker, Sportlink):
 
 ```typescript
 async function fetchWithRetry<T>(

@@ -22,13 +22,6 @@ vi.mock("../../../../lib/kv", () => ({
 const setReport = kvMocks.setReport;
 const getReport = kvMocks.getReport;
 
-vi.mock("../../../../lib/services/waapiService", () => ({
-  sendMatchReportToWhatsAppGroup: vi.fn(async () => ({
-    sent: false,
-    reason: "disabled",
-  })),
-}));
-
 vi.mock("../../../../lib/services/userService", () => ({
   getActiveUsers: vi.fn(async () => []),
 }));
