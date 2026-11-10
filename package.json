@@ -68,7 +68,7 @@
     "@sentry/nextjs": "^11.11.0",
     "@simplewebauthn/browser": "^14.0.0",
     "@simplewebauthn/server": "^14.1.0",
-    "@tailwindcss/postcss": "^4.3.4",
+    "@tailwindcss/postcss": "^4.3.5",
     "@vercel/speed-insights": "^2.1.0",
     "ably": "^2.30.0",
     "ai": "^7.0.164",
