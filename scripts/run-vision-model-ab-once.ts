@@ -33,7 +33,7 @@ if (modelArg && modelArg !== "default") {
 } else {
   delete process.env.REPORT_EXTRACT_OPENAI_MODEL;
 }
-delete process.env.REPORT_EXTRACT_VISION_FALLBACK_MODEL;
+process.env.REPORT_EXTRACT_VISION_FALLBACK_MODEL = "none";
 delete process.env.REPORT_EXTRACT_PROVIDER;
 
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));

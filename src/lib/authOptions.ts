@@ -8,9 +8,9 @@ import { prisma } from "./db";
 import { isDbUnavailableError } from "./dbUnavailableError";
 import {
   isPrismaCredentialError,
-  isTransientPostgresConnectError,
   withPgConnectRetry,
 } from "./prismaConnectRetry";
+import { isTransientPrismaConnectSentryNoise } from "./sentryTransientPrismaConnectNoise";
 import { verifyPasskeyExchangeToken } from "./passkeyExchangeToken";
 import { USER_CORE_SELECT } from "./userPrismaSelect";
 
@@ -20,7 +20,7 @@ function reportCredentialsAuthorizeError(
 ): void {
   if (
     isDbUnavailableError(error) ||
-    isTransientPostgresConnectError(error) ||
+    isTransientPrismaConnectSentryNoise(error) ||
     isPrismaCredentialError(error)
   ) {
     return;

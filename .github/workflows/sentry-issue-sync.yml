@@ -42,6 +42,14 @@ jobs:
           SENTRY_RESOLVE_ISSUE_IDS: ${{ github.event_name == 'workflow_dispatch' && inputs.resolve_issue_ids || '' }}
         run: npx tsx scripts/sentry-resolve-benign-client-fetch.ts
 
+      - name: Resolve benign service worker registration noise (Sentry)
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: h3-teamy
+          SENTRY_PROJECT: javascript-nextjs
+          SENTRY_RESOLVE_ISSUE_IDS: ${{ github.event_name == 'workflow_dispatch' && inputs.resolve_issue_ids || '' }}
+        run: npx tsx scripts/sentry-resolve-benign-service-worker.ts
+
       - name: Resolve benign non-JSON OK response noise (Sentry)
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}

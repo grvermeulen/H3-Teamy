@@ -153,9 +153,9 @@ describe("getReportExtractGatewayModel", () => {
     vi.unstubAllEnvs();
   });
 
-  it("uses gpt-4o default when env unset", () => {
+  it("uses gemini default when env unset", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "");
-    expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
+    expect(getReportExtractGatewayModel()).toBe("google/gemini-2.5-flash");
   });
 
   it("honors explicit gpt-5.6-sol env override", () => {
@@ -163,28 +163,38 @@ describe("getReportExtractGatewayModel", () => {
     expect(getReportExtractGatewayModel()).toBe("openai/gpt-5.6-sol");
   });
 
+  it("honors google gemini env override", () => {
+    vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "google/gemini-2.5-flash");
+    expect(getReportExtractGatewayModel()).toBe("google/gemini-2.5-flash");
+  });
+
   it("remaps the legacy GPT-5 chat alias", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/gpt-5-chat-latest");
-    expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
+    expect(getReportExtractGatewayModel()).toBe("google/gemini-2.5-flash");
   });
 
   it("remaps provider-mismatched Claude ids", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/claude-sonnet-4-6");
-    expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
+    expect(getReportExtractGatewayModel()).toBe("google/gemini-2.5-flash");
   });
 
   it("remaps an empty OpenAI model id", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/");
-    expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
+    expect(getReportExtractGatewayModel()).toBe("google/gemini-2.5-flash");
   });
 
-  it("remaps a bare Claude env override to the OpenAI extraction default", () => {
+  it("keeps bare Claude env override on anthropic", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "claude-sonnet-4-6");
-    expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
+    expect(getReportExtractGatewayModel()).toBe("anthropic/claude-sonnet-4.6");
   });
 
-  it("returns undefined fallback when env unset", () => {
-    vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "");
+  it("uses luna fallback default when env unset", () => {
+    delete process.env.REPORT_EXTRACT_VISION_FALLBACK_MODEL;
+    expect(getReportExtractVisionFallbackModel()).toBe("openai/gpt-6-luna");
+  });
+
+  it("returns undefined fallback when env none", () => {
+    vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "none");
     expect(getReportExtractVisionFallbackModel()).toBeUndefined();
   });
 

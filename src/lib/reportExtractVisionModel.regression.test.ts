@@ -29,10 +29,12 @@ describe("report extract vision model regression", () => {
     delete process.env.REPORT_EXTRACT_VISION_FALLBACK_MODEL;
   });
 
-  it("rode basis: unset env was 5.6-sol op #914; nu documented default gpt-4o", () => {
+  it("rode basis: unset env default is google/gemini-2.5-flash", () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "");
-    expect(getReportExtractGatewayModel()).toBe("openai/gpt-4o");
-    expect(resolveReportExtractGatewayModel("").model).toBe("openai/gpt-4o");
+    expect(getReportExtractGatewayModel()).toBe("google/gemini-2.5-flash");
+    expect(resolveReportExtractGatewayModel("").model).toBe(
+      "google/gemini-2.5-flash",
+    );
   });
 
   it("expliciete env gpt-5.6-sol blijft ongewijzigd", () => {
@@ -42,7 +44,7 @@ describe("report extract vision model regression", () => {
 
   it("groen: vision-fallback na getypeerde primaire APICallError", async () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/gpt-5.6-sol");
-    vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "openai/gpt-4o");
+    vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "openai/gpt-6-luna");
 
     const apiErr = new APICallError({
       message: "upstream",
@@ -67,15 +69,16 @@ describe("report extract vision model regression", () => {
     const first = mockedGenerateObject.mock.calls[0][0] as { model: string };
     const second = mockedGenerateObject.mock.calls[1][0] as { model: string };
     expect(first.model).toBe("openai/gpt-5.6-sol");
-    expect(second.model).toBe("openai/gpt-4o");
+    expect(second.model).toBe("openai/gpt-6-luna");
     expect(out.fallbackUsed).toBe(true);
-    expect(out.model).toBe("openai/gpt-4o");
+    expect(out.model).toBe("openai/gpt-6-luna");
     expect(out.result.homeScore).toBe(1);
     expect(out.result.awayScore).toBe(2);
   });
 
   it("zonder fallback-config opnieuw throw na primaire fout", async () => {
     vi.stubEnv("REPORT_EXTRACT_OPENAI_MODEL", "openai/gpt-5.6-sol");
+    vi.stubEnv("REPORT_EXTRACT_VISION_FALLBACK_MODEL", "none");
     mockedGenerateObject.mockRejectedValueOnce(
       new APICallError({
         message: "upstream",

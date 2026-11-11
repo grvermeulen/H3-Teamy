@@ -36,6 +36,7 @@ export type ReportFlowTracePayload = {
   provider?: {
     providerUsed?: string;
     model?: string;
+    fallbackModel?: string;
     fallbackUsed?: boolean;
   };
   uploadIngress?: MultipartIngressDiagnostics;

@@ -1,4 +1,4 @@
-import * as Sentry from "@sentry/nextjs";
+import { captureServiceWorkerException } from "./sentryClientCapture";
 
 /** Path of the service worker script, served verbatim from `public/sw.js`. */
 export const SERVICE_WORKER_URL = "/sw.js";
@@ -77,7 +77,7 @@ async function registerServiceWorker(
       });
     });
   } catch (error: unknown) {
-    Sentry.captureException(error, SENTRY_CONTEXT);
+    captureServiceWorkerException(error, SENTRY_CONTEXT);
   }
 }
 
@@ -100,7 +100,7 @@ async function unregisterServiceWorkers(
     await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
     if (wasControlled) window.location.reload();
   } catch (error: unknown) {
-    Sentry.captureException(error, SENTRY_CONTEXT);
+    captureServiceWorkerException(error, SENTRY_CONTEXT);
   }
 }
 

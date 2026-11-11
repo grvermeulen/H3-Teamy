@@ -34,6 +34,18 @@ function readTransientPrismaCodeFromEvent(
   return undefined;
 }
 
+/**
+ * Herken lege `PrismaClientKnownRequestError`-events wanneer Sentry geen `originalException` meer heeft
+ * (bv. JAVASCRIPT-NEXTJS-5M: titel `PrismaClientKnownRequestError:` zonder message).
+ */
+function isSerializedEmptyPrismaClientKnownRequest(event: ErrorEvent): boolean {
+  const values = event.exception?.values;
+  if (!values?.length) return false;
+  const head = values[0];
+  if (head.type !== "PrismaClientKnownRequestError") return false;
+  return String(head.value ?? "").trim().length === 0;
+}
+
 function isSerializedTransientPrismaException(event: ErrorEvent): boolean {
   const eventCode = readTransientPrismaCodeFromEvent(event);
   if (eventCode !== undefined && TRANSIENT_PRISMA_KNOWN_CODES.has(eventCode)) {
@@ -92,5 +104,6 @@ export function shouldDropTransientPrismaConnectNoiseForSentry(
   hint: EventHint,
 ): boolean {
   if (isTransientPrismaConnectSentryNoise(hint.originalException)) return true;
+  if (isSerializedEmptyPrismaClientKnownRequest(event)) return true;
   return isSerializedTransientPrismaException(event);
 }
