@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "./SessionContext";
 import MatchReportShareLink from "./MatchReportShareLink";
+import { readResponseJson } from "../lib/safeClientJson";
 import { extractTeamsFromEventTitle } from "../lib/matchTitleTeams";
 import {
   formatReportExtractClientError,
@@ -348,7 +349,9 @@ export default function GenerateReportButton({
         outcome: "success",
         httpStatus: res.status,
       });
-      const data = (await res.json()) as { match?: GeneratedMatch } | null;
+      const data = (await readResponseJson(res)) as {
+        match?: GeneratedMatch;
+      } | null;
       setGeneratedMatch(data?.match ?? {});
       logReportFlowClientTrace({
         flowId,

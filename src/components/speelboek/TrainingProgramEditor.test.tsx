@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { describeRelativeDay } from "../../lib/training";
 import TrainingProgramEditor from "./TrainingProgramEditor";
@@ -76,4 +82,60 @@ describe("TrainingProgramEditor delen", () => {
       screen.getByRole("button", { name: "Deel in WhatsApp" }),
     ).toBeDisabled();
   });
+
+  it("houdt delen dicht als er tijdens het opslaan nog is bewerkt", async () => {
+    let finishPut: (res: Response) => void = () => {};
+    stubProgramFetch(() => new Promise((resolve) => (finishPut = resolve)));
+    render(<TrainingProgramEditor date={TRAINING_DATE} />);
+    const minutes = await screen.findByLabelText("Minuten voor Tip-in");
+
+    fireEvent.change(minutes, { target: { value: "15" } });
+    fireEvent.click(screen.getByRole("button", { name: "Programma opslaan" }));
+    fireEvent.change(minutes, { target: { value: "20" } });
+    await act(async () => finishPut(jsonResponse(savedProgram("Tip-in", 15))));
+
+    expect(
+      screen.queryByRole("link", { name: "Deel in WhatsApp" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("deelt de oefeningstitels zoals ze zijn opgeslagen", async () => {
+    stubProgramFetch(async () =>
+      jsonResponse(savedProgram("Tip-in vanaf links", 15)),
+    );
+    render(<TrainingProgramEditor date={TRAINING_DATE} />);
+    const minutes = await screen.findByLabelText("Minuten voor Tip-in");
+
+    fireEvent.change(minutes, { target: { value: "15" } });
+    fireEvent.click(screen.getByRole("button", { name: "Programma opslaan" }));
+
+    const link = await screen.findByRole("link", { name: "Deel in WhatsApp" });
+    const text = new URL(link.getAttribute("href") ?? "").searchParams.get(
+      "text",
+    );
+    expect(text).toContain(
+      `• Tip-in vanaf links (15 min) – ${window.location.origin}/speelboek/tip-in`,
+    );
+  });
 });
+
+function savedProgram(title: string, minutes: number) {
+  const [item] = programResponse.items;
+  return {
+    date: TRAINING_DATE,
+    items: [{ ...item, minutes, drill: { ...item.drill, title } }],
+  };
+}
+
+/** GET answers with `programResponse`; the PUT answer comes from `put`. */
+function stubProgramFetch(put: () => Promise<Response>): void {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (!String(url).includes("/api/speelboek/program/")) {
+        return jsonResponse({ drills: [] });
+      }
+      return init?.method === "PUT" ? put() : jsonResponse(programResponse);
+    }),
+  );
+}

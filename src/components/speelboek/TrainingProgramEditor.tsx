@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Route } from "next";
 import type { ProgramItemInput } from "../../lib/schemas/speelboek";
-import { fetchJsonIfOkOr } from "../../lib/safeClientJson";
+import { fetchJsonIfOkOr, readResponseJson } from "../../lib/safeClientJson";
 import { CATEGORY_LABELS } from "../../lib/speelboek/lineup";
 import type { LibraryDrill } from "../../lib/speelboek/library";
 import { buildProgramShareText } from "../../lib/speelboek/programShare";
@@ -42,6 +42,20 @@ function programShareText(date: string, rows: Row[], origin: string): string {
   });
 }
 
+/** Takes drill titles and categories from the saved programme, keeping local order and minutes. */
+function withSavedTitles(rows: Row[], saved: ProgramItem[]): Row[] {
+  return rows.map((row) => {
+    const drill = saved.find((i) => i.drillId === row.drillId)?.drill;
+    return drill
+      ? {
+          ...row,
+          title: drill.title,
+          category: CATEGORY_LABELS[drill.category],
+        }
+      : row;
+  });
+}
+
 /**
  * Trainer block on the training page: pick drills from the speelboek for this
  * training, order them, give each a duration, save, and share the list in
@@ -53,6 +67,7 @@ export default function TrainingProgramEditor({ date }: Props) {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const editVersion = useRef(0);
   const origin = useSiteOrigin();
 
   useEffect(() => {
@@ -92,6 +107,7 @@ export default function TrainingProgramEditor({ date }: Props) {
 
   function update(mutate: (rows: Row[]) => Row[]): void {
     setRows((r) => (r ? mutate(r) : r));
+    editVersion.current += 1;
     setDirty(true);
   }
 
@@ -126,6 +142,7 @@ export default function TrainingProgramEditor({ date }: Props) {
 
   async function save(): Promise<void> {
     if (!rows) return;
+    const savingVersion = editVersion.current;
     setSaving(true);
     setError(null);
     try {
@@ -144,7 +161,11 @@ export default function TrainingProgramEditor({ date }: Props) {
         setError("Programma opslaan is niet gelukt.");
         return;
       }
-      setDirty(false);
+      const saved = (await readResponseJson(res)) as ProgramResponse | null;
+      if (saved?.items) {
+        setRows((r) => (r ? withSavedTitles(r, saved.items) : r));
+      }
+      setDirty(editVersion.current !== savingVersion);
       showToast("Programma opgeslagen", "success");
     } finally {
       setSaving(false);
