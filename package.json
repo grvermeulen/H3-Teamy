@@ -105,19 +105,19 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@types/three": "^0.187.0",
-    "@vitejs/plugin-react": "^6.2.1",
+    "@vitejs/plugin-react": "^6.3.0",
     "@vitest/coverage-v8": "^5.1.0",
     "dotenv-cli": "^11.1.0",
     "eslint": "^9.39.5",
     "eslint-config-next": "16.4.5",
     "husky": "^9.1.6",
     "jsdom": "^31.0.0",
-    "osm2geojson-lite": "2.0.1",
+    "osm2geojson-lite": "2.1.2",
     "prettier": "^3.9.10",
     "ts-node": "^10.9.2",
     "tsx": "^4.23.15",
     "typescript": "6.0.3",
-    "vite": "8.3.6",
+    "vite": "8.3.7",
     "vitest": "^5.0.0"
   }
 }
