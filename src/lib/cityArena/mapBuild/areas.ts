@@ -21,7 +21,22 @@ export type ExtractedAreas = {
   ground: GroundArea[];
 };
 
-type GeoFeature = ReturnType<typeof osm2geojson>["features"][number];
+type Osm2GeoJsonResult = ReturnType<typeof osm2geojson>;
+
+/** `completeFeature: true` yields a collection; other option combos do not. */
+type GeoFeatureCollection = Extract<
+  NonNullable<Osm2GeoJsonResult>,
+  { type: "FeatureCollection" }
+>;
+
+type GeoFeature = GeoFeatureCollection["features"][number];
+
+function featureCollection(
+  value: Osm2GeoJsonResult,
+): GeoFeatureCollection | null {
+  if (value == null || value.type !== "FeatureCollection") return null;
+  return value;
+}
 
 /** Land-use → ground kind; `null` for the implicit `urban` default and unrelated tags. */
 export function groundKindOf(
@@ -111,12 +126,15 @@ function outerRings(feature: GeoFeature): number[][][] {
 /** Converts an Overpass response to classified outer-ring polygons. */
 export function extractAreas(json: OverpassJson): ExtractedAreas {
   const cleaned = dropNonMultipolygonRelations(dedupeElements(json));
-  const collection = osm2geojson(cleaned, {
-    completeFeature: true,
-    renderTagged: true,
-    excludeWay: true,
-  });
   const areas: ExtractedAreas = { buildings: [], water: [], ground: [] };
+  const collection = featureCollection(
+    osm2geojson(cleaned, {
+      completeFeature: true,
+      renderTagged: true,
+      excludeWay: true,
+    }),
+  );
+  if (!collection) return areas;
   for (const feature of collection.features) {
     const rings = outerRings(feature);
     if (rings.length === 0) continue;
