@@ -1,14 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Route } from "next";
 import type { ProgramItemInput } from "../../lib/schemas/speelboek";
 import { fetchJsonIfOkOr, readResponseJson } from "../../lib/safeClientJson";
 import { CATEGORY_LABELS } from "../../lib/speelboek/lineup";
 import type { LibraryDrill } from "../../lib/speelboek/library";
+import { buildProgramShareText } from "../../lib/speelboek/programShare";
 import type { ProgramItem } from "../../lib/services/trainingProgramService";
+import { describeRelativeDay } from "../../lib/training";
 import { Button, showToast } from "../ui";
+import { useSiteOrigin } from "../useSiteOrigin";
+import WhatsAppShareLink from "../WhatsAppShareLink";
 
 type Props = {
   /** Training date, `YYYY-MM-DD`. */
@@ -26,18 +30,45 @@ type ProgramResponse = {
   ackCounts?: Record<string, number>;
 };
 
+function programShareText(date: string, rows: Row[], origin: string): string {
+  return buildProgramShareText({
+    appUrl: origin,
+    dayLabel: describeRelativeDay(new Date(`${date}T12:00:00`)),
+    items: rows.map(({ drillId, title, minutes }) => ({
+      drillId,
+      title,
+      minutes,
+    })),
+  });
+}
+
+/** Takes drill titles and categories from the saved programme, keeping local order and minutes. */
+function withSavedTitles(rows: Row[], saved: ProgramItem[]): Row[] {
+  return rows.map((row) => {
+    const drill = saved.find((i) => i.drillId === row.drillId)?.drill;
+    return drill
+      ? {
+          ...row,
+          title: drill.title,
+          category: CATEGORY_LABELS[drill.category],
+        }
+      : row;
+  });
+}
+
 /**
  * Trainer block on the training page: pick drills from the speelboek for this
- * training, order them, give each a duration, save, and send the list to the
- * team WhatsApp group. Shows how many players ticked each drill off.
+ * training, order them, give each a duration, save, and share the list in
+ * WhatsApp. Shows how many players ticked each drill off.
  */
 export default function TrainingProgramEditor({ date }: Props) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [drills, setDrills] = useState<LibraryDrill[]>([]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [sharing, setSharing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const editVersion = useRef(0);
+  const origin = useSiteOrigin();
 
   useEffect(() => {
     let cancelled = false;
@@ -76,6 +107,7 @@ export default function TrainingProgramEditor({ date }: Props) {
 
   function update(mutate: (rows: Row[]) => Row[]): void {
     setRows((r) => (r ? mutate(r) : r));
+    editVersion.current += 1;
     setDirty(true);
   }
 
@@ -110,6 +142,7 @@ export default function TrainingProgramEditor({ date }: Props) {
 
   async function save(): Promise<void> {
     if (!rows) return;
+    const savingVersion = editVersion.current;
     setSaving(true);
     setError(null);
     try {
@@ -128,35 +161,14 @@ export default function TrainingProgramEditor({ date }: Props) {
         setError("Programma opslaan is niet gelukt.");
         return;
       }
-      setDirty(false);
+      const saved = (await readResponseJson(res)) as ProgramResponse | null;
+      if (saved?.items) {
+        setRows((r) => (r ? withSavedTitles(r, saved.items) : r));
+      }
+      setDirty(editVersion.current !== savingVersion);
       showToast("Programma opgeslagen", "success");
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function share(): Promise<void> {
-    setSharing(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/speelboek/program/${date}/share`, {
-        method: "POST",
-      });
-      const json = (await readResponseJson(res)) as {
-        sent: boolean;
-        reason?: string;
-      } | null;
-      if (json?.sent) {
-        showToast("Programma naar de WhatsApp-groep gestuurd", "success");
-      } else {
-        setError(
-          json?.reason === "disabled" || json?.reason === "missing_config"
-            ? "WhatsApp-berichten staan uit voor deze omgeving."
-            : "Versturen naar WhatsApp is niet gelukt.",
-        );
-      }
-    } finally {
-      setSharing(false);
     }
   }
 
@@ -302,14 +314,11 @@ export default function TrainingProgramEditor({ date }: Props) {
             >
               Programma opslaan
             </Button>
-            <Button
-              disabled={dirty || rows.length === 0}
-              loading={sharing}
-              loadingLabel="Versturen…"
-              onClick={() => void share()}
-            >
-              Stuur naar WhatsApp-groep
-            </Button>
+            {dirty || rows.length === 0 || !origin ? (
+              <Button disabled>Deel in WhatsApp</Button>
+            ) : (
+              <WhatsAppShareLink text={programShareText(date, rows, origin)} />
+            )}
           </div>
         </>
       )}

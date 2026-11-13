@@ -2,11 +2,6 @@ import { prisma } from "../db";
 import type { Drill, ProgramItemInput } from "../schemas/speelboek";
 import { toYMD } from "../training";
 import { getAllDrills } from "./speelboekService";
-import {
-  getWaapiAppUrl,
-  sendWhatsAppGroupMessage,
-  type NotificationResult,
-} from "./waapiService";
 
 /** One programme line with its drill resolved (null when the drill no longer exists). */
 export type ProgramItem = {
@@ -181,54 +176,4 @@ export async function getUpcomingProgram(
     }
   }
   return null;
-}
-
-/**
- * Builds the WhatsApp text for a programme: drill titles with deep links.
- *
- * @param program - Programme to announce.
- * @param appUrl - Public base URL without trailing slash.
- * @param dayLabel - Human label for the date, e.g. `"vanavond"` or `"woensdag"`.
- */
-export function buildProgramMessage(
-  program: TrainingProgram,
-  appUrl: string,
-  dayLabel: string,
-): string {
-  const lines: string[] = [];
-  for (const item of program.items) {
-    if (!item.drill) continue;
-    const mins = item.minutes ? ` (${item.minutes} min)` : "";
-    lines.push(
-      `• ${item.drill.title}${mins} – ${appUrl}/speelboek/${item.drillId}`,
-    );
-  }
-  return [
-    `Training ${dayLabel}: dit gaan we oefenen`,
-    ...lines,
-    "",
-    `Bekijk alles in het speelboek: ${appUrl}/speelboek`,
-  ].join("\n");
-}
-
-/**
- * Sends the programme for a date to the team WhatsApp group.
- *
- * @param date - `YYYY-MM-DD`.
- * @param dayLabel - Human label for the date in the message.
- */
-export async function shareProgram(
-  date: string,
-  dayLabel: string,
-): Promise<NotificationResult> {
-  const program = await getProgram(date);
-  program.items = program.items.filter((i) => i.drill !== null);
-  if (program.items.length === 0) {
-    return { sent: false, reason: "request_failed", details: "empty_program" };
-  }
-  const appUrl = getWaapiAppUrl();
-  if (!appUrl) return { sent: false, reason: "missing_config" };
-  return sendWhatsAppGroupMessage(
-    buildProgramMessage(program, appUrl, dayLabel),
-  );
 }

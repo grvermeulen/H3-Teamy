@@ -76,8 +76,9 @@ Vaste opbouw per techniek:
 - Haakt in op de bestaande trainingspagina (`/trainer/attendance/[date]`):
   naast de opkomst komt een **programma** met blokken en duur, waarin
   oefeningen uit het speelboek worden gekoppeld.
-- **Stuur naar WhatsApp-groep** hergebruikt de WaAPI-integratie: een linkje
-  met "Vanavond: Tip-in, 4-2 man-meer".
+- **Deel in WhatsApp** opent WhatsApp met het programma al ingevuld (een
+  `wa.me`-link, bijv. "Vanavond: Tip-in, 4-2 man-meer"); de trainer kiest
+  de groep en verstuurt zelf. Er wordt niets automatisch verstuurd.
 - Na de training: hoeveel spelers hebben afgevinkt, welke vragen staan open.
 
 ### 5 · Trainer: nieuwe oefening (keuze)

@@ -24,7 +24,6 @@ export type ReportGenerateTracePhase =
   | "persist_start"
   | "persist_ok"
   | "persist_fail"
-  | "notify"
   | "completed"
   | "failed";
 

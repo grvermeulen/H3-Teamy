@@ -24,6 +24,23 @@ export type ChangelogEntry = {
  * doesn't reappear. Versions without an entry never trigger the tour.
  */
 export const CHANGELOG: Record<string, ChangelogEntry> = {
+  "0.7.1": {
+    title: "Delen in WhatsApp",
+    steps: [
+      {
+        title: "Verslag delen met één tik",
+        body: "Na het genereren van een wedstrijdverslag verschijnt 'Deel in WhatsApp'. WhatsApp opent met het bericht al klaar: kies de teamgroep en verstuur.",
+      },
+      {
+        title: "Ook achteraf te delen",
+        body: "Elke verslagpagina heeft dezelfde knop. In WhatsApp zie je nu een voorbeeld met de eerste regels van het verslag.",
+      },
+      {
+        title: "Voor trainers: programma delen",
+        body: "Op de opkomstpagina deel je een opgeslagen trainingsprogramma met 'Deel in WhatsApp'. Er gaat niets meer automatisch naar de groep: je verstuurt het zelf.",
+      },
+    ],
+  },
   "0.7.0": {
     title: "Het Speelboek",
     steps: [

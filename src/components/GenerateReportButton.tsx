@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "./SessionContext";
+import MatchReportShareLink from "./MatchReportShareLink";
+import { readResponseJson } from "../lib/safeClientJson";
 import { extractTeamsFromEventTitle } from "../lib/matchTitleTeams";
 import {
   formatReportExtractClientError,
@@ -24,6 +26,12 @@ import {
   materializeScreenshotUploadFile,
 } from "../lib/reportScreenshotUploadFile";
 
+type GeneratedMatch = {
+  opponentTeam?: string;
+  ourScore?: number;
+  opponentScore?: number;
+};
+
 export default function GenerateReportButton({
   eventId,
   opponent,
@@ -35,6 +43,9 @@ export default function GenerateReportButton({
   const { isAdmin } = useSession();
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [generatedMatch, setGeneratedMatch] = useState<GeneratedMatch | null>(
+    null,
+  );
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageMaterializing, setImageMaterializing] = useState(false);
   const [extracted, setExtracted] = useState<{
@@ -115,8 +126,7 @@ export default function GenerateReportButton({
     }
     setLoading(true);
     setNotice(null);
-    const flowId =
-      selectionFlowIdRef.current ?? createReportExtractAttemptId();
+    const flowId = selectionFlowIdRef.current ?? createReportExtractAttemptId();
     logReportFlowClientTrace({
       flowId,
       phase: "flow_start",
@@ -339,27 +349,10 @@ export default function GenerateReportButton({
         outcome: "success",
         httpStatus: res.status,
       });
-      const data = (await res.json()) as {
-        whatsappNotification?: {
-          sent: boolean;
-          reason?: string;
-          details?: string;
-        };
-      };
-      if (data?.whatsappNotification?.sent === false) {
-        const reason = data.whatsappNotification.reason ?? "onbekend";
-        const details = data.whatsappNotification.details?.trim();
-        if (reason === "api_unauthenticated") {
-          setNotice(
-            details ??
-              "Het verslag is opgeslagen, maar de WhatsApp-melding kon niet worden verzonden: het WaAPI-token is ongeldig. Werk WAAPI_API_TOKEN bij in Vercel.",
-          );
-        } else {
-          setNotice(
-            `Het verslag is opgeslagen, maar de WhatsApp-melding is niet verzonden (${reason}).${details ? ` ${details}` : ""}`,
-          );
-        }
-      }
+      const data = (await readResponseJson(res)) as {
+        match?: GeneratedMatch;
+      } | null;
+      setGeneratedMatch(data?.match ?? {});
       logReportFlowClientTrace({
         flowId,
         phase: "flow_completed",
@@ -402,6 +395,15 @@ export default function GenerateReportButton({
               ? "Gegenereerd"
               : "Verslag genereren"}
       </button>
+      {done && generatedMatch ? (
+        <MatchReportShareLink
+          eventId={eventId}
+          opponentTeam={generatedMatch.opponentTeam}
+          ourScore={generatedMatch.ourScore}
+          opponentScore={generatedMatch.opponentScore}
+          variant="primary"
+        />
+      ) : null}
       {notice ? (
         <div role="alert" className="event-report-notice muted">
           {notice}

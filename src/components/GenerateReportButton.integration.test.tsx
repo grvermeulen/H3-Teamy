@@ -26,6 +26,46 @@ async function waitForMaterializedGenerateButton() {
   });
 }
 
+/** Uploads a screenshot, generates, and returns the WhatsApp share text. */
+async function generateAndReadShareText(
+  generateBody: string,
+): Promise<string | null> {
+  const extracted = {
+    homeTeam: "De Rijn H3",
+    awayTeam: "Flevo H3",
+    homeScore: 9,
+    awayScore: 4,
+    events: [{ quarter: 1, time: "01:00", team: "home", type: "goal" }],
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) =>
+      String(url).includes("/api/report/extract")
+        ? new Response(JSON.stringify({ result: extracted }), { status: 200 })
+        : new Response(generateBody, { status: 200 }),
+    ),
+  );
+
+  render(
+    <GenerateReportButton eventId="evt-1" opponent="De Rijn H3 - Flevo H3" />,
+  );
+  const fileInput = screen
+    .getByRole("button", { name: /Verslag genereren/i })
+    .parentElement!.querySelector('input[type="file"]') as HTMLInputElement;
+  await fireEvent.change(fileInput, {
+    target: {
+      files: [new File(["x"], "fixture.jpeg", { type: "image/jpeg" })],
+    },
+  });
+  await waitForMaterializedGenerateButton();
+  await fireEvent.click(
+    screen.getByRole("button", { name: /Verslag genereren/i }),
+  );
+
+  const link = await screen.findByRole("link", { name: "Deel in WhatsApp" });
+  return new URL(link.getAttribute("href") ?? "").searchParams.get("text");
+}
+
 describe("GenerateReportButton integratie", () => {
   afterEach(() => {
     cleanup();
@@ -92,6 +132,28 @@ describe("GenerateReportButton integratie", () => {
             "X-Report-Extract-Attempt"
           ];
     expect(attemptHeader).toBeTruthy();
+  });
+
+  it("biedt na genereren een WhatsApp-deellink naar het verslag", async () => {
+    const text = await generateAndReadShareText(
+      JSON.stringify({
+        ok: true,
+        report: { content: "Verslag." },
+        match: { opponentTeam: "Flevo H3", ourScore: 9, opponentScore: 4 },
+      }),
+    );
+
+    expect(text).toBe(
+      `Wedstrijdverslag van De Rijn Heren 3 tegen Flevo H3 staat klaar (9-4). Lees het hier: ${window.location.origin}/report/evt-1`,
+    );
+  });
+
+  it("biedt een algemene deellink als het antwoord niet te lezen is", async () => {
+    const text = await generateAndReadShareText("<html>Bad gateway</html>");
+
+    expect(text).toBe(
+      `Wedstrijdverslag van De Rijn Heren 3 staat klaar. Lees het hier: ${window.location.origin}/report/evt-1`,
+    );
   });
 
   it("blokkeert generate bij incomplete extract; geen raw JSON", async () => {
