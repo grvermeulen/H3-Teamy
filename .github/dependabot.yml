@@ -8,7 +8,7 @@ updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "monthly"
     open-pull-requests-limit: 10
     ignore:
       - dependency-name: "eslint"
@@ -36,7 +36,7 @@ updates:
   - package-ecosystem: "pip"
     directory: "/ocr-worker"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     groups:
       pytorch:
         patterns:
