@@ -2,8 +2,8 @@ import type { ErrorEvent, EventHint } from "@sentry/nextjs";
 import { isNodeClientDisconnectWriteNoise } from "./nodeClientDisconnectWriteNoise";
 
 /**
- * Bepaalt of een server-side Sentry-event overeenkomt met een `EPIPE`-write
- * na client-disconnect en niet naar ingest gestuurd moet worden.
+ * Bepaalt of een server-side Sentry-event overeenkomt met een `EPIPE`- of
+ * `ETIMEDOUT`-write na client-disconnect en niet naar ingest gestuurd moet worden.
  *
  * @param _event - Sentry-foutevent.
  * @param hint - Hint met oorspronkelijke exception.

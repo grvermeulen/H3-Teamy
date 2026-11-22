@@ -24,7 +24,7 @@ export async function register(): Promise<void> {
  */
 const captureRequestError = Sentry.captureRequestError;
 
-/** Slaat verwachte DB-503, transient Prisma-connectie- en client-disconnect `EPIPE`-writes over. */
+/** Slaat verwachte DB-503, transient Prisma-connectie- en client-disconnect write-ruis over. */
 export const onRequestError: typeof captureRequestError = (
   ...args: Parameters<typeof captureRequestError>
 ) => {
