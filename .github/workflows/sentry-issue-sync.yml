@@ -58,6 +58,14 @@ jobs:
           SENTRY_RESOLVE_ISSUE_IDS: ${{ github.event_name == 'workflow_dispatch' && inputs.resolve_issue_ids || '' }}
         run: npx tsx scripts/sentry-resolve-benign-non-json-ok-response.ts
 
+      - name: Resolve client-disconnect write noise (Sentry)
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: h3-teamy
+          SENTRY_PROJECT: javascript-nextjs
+          SENTRY_RESOLVE_ISSUE_IDS: ${{ github.event_name == 'workflow_dispatch' && inputs.resolve_issue_ids || '' }}
+        run: npx tsx scripts/sentry-resolve-client-disconnect-write.ts
+
       - name: Resolve transient Prisma connect noise (Sentry)
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
